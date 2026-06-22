@@ -1,50 +1,64 @@
-import { UUID_REGEX } from "../../../config/constants.js";
+import { UUID_REGEX } from '../../../config/constants.js';
 import {
   getLastfmApiKey,
   lastfmRequest,
   musicbrainzGetArtistAppearsOnReleaseGroups,
   musicbrainzGetArtistReleaseGroups,
   musicbrainzGetArtistNameByMbid,
-} from "../../../services/apiClients.js";
-import { dbOps } from "../../../config/db-helpers.js";
-import { cacheMiddleware } from "../../../middleware/cache.js";
-import { requireAuth } from "../../../middleware/requirePermission.js";
-import { buildArtistRequestKey, pendingArtistRequests } from "../utils.js";
-import { getArtistByMbid } from "../../../services/providers/brainzmashProvider.js";
+} from '../../../services/apiClients.js';
+import { dbOps } from '../../../config/db-helpers.js';
+import { cacheMiddleware } from '../../../middleware/cache.js';
+import { requireAuth } from '../../../middleware/requirePermission.js';
+import { buildArtistRequestKey, pendingArtistRequests } from '../utils.js';
+import { getArtistByMbid } from '../../../services/providers/brainzmashProvider.js';
 
-export default function registerDetails(router) {
-  const toLegacyRelations = (metadataArtist) =>
+ 
+type Handler = (...args: any[]) => any;
+
+interface Req {
+  params: Record<string, string>;
+  query: Record<string, string>;
+  body?: Record<string, unknown>;
+}
+
+interface Res {
+  status(code: number): Res;
+  json(data: unknown): Res;
+  setHeader(name: string, value: string): void;
+}
+
+export default function registerDetails(router: Record<string, (...args: unknown[]) => unknown>) {
+  const toLegacyRelations = (metadataArtist: Record<string, unknown> | null) =>
     Array.isArray(metadataArtist?.links)
-      ? metadataArtist.links
-          .filter((link) => link?.target)
-          .map((link) => ({
-            type: link.type || "external",
-            url: { resource: link.target },
+      ? (metadataArtist!.links as Record<string, unknown>[])
+          .filter((link: Record<string, unknown> | null) => link?.target)
+          .map((link: Record<string, unknown> | null) => ({
+            type: link!.type || 'external',
+            url: { resource: link!.target },
           }))
       : [];
 
-  const getLastfmTags = async (mbid, artistName = "") => {
+  const getLastfmTags = async (mbid: string, artistName = '') => {
     if (!getLastfmApiKey()) return [];
-    let data = await lastfmRequest("artist.getTopTags", { mbid }).catch(() => null);
-    if (!data?.toptags?.tag && artistName) {
-      data = await lastfmRequest("artist.getTopTags", { artist: artistName }).catch(
-        () => null,
-      );
+    let data: Record<string, unknown> | null = await lastfmRequest('artist.getTopTags', { mbid }).catch(() => null);
+    if (!(data?.toptags as Record<string, unknown>)?.tag && artistName) {
+      data = await lastfmRequest('artist.getTopTags', { artist: artistName }).catch(() => null);
     }
-    const tags = data?.toptags?.tag
-      ? Array.isArray(data.toptags.tag)
-        ? data.toptags.tag
-        : [data.toptags.tag]
+    const topTags = (data?.toptags as Record<string, unknown> | undefined)?.tag;
+    const rawTags: unknown[] = topTags
+      ? Array.isArray(topTags)
+        ? topTags as unknown[]
+        : [topTags]
       : [];
-    return tags
-      .map((tag) => ({
-        name: String(tag?.name || "").trim(),
-        count: Number(tag?.count || 0),
+    return rawTags
+      .map((tag: unknown) => ({
+        name: String((tag as Record<string, unknown>)?.name || '').trim(),
+        count: Number((tag as Record<string, unknown>)?.count || 0),
       }))
       .filter((tag) => tag.name);
   };
 
-  const getArtistTagPayload = async (mbid, artistName = "", metadataArtist = null) => {
+  const getArtistTagPayload = async (mbid: string, artistName = '', metadataArtist: Record<string, unknown> | null = null) => {
     const lastfmTags = await getLastfmTags(mbid, artistName);
     if (lastfmTags.length > 0) {
       return {
@@ -52,41 +66,40 @@ export default function registerDetails(router) {
         genres: lastfmTags.map((tag) => tag.name),
       };
     }
-    const fallbackGenres = Array.isArray(metadataArtist?.genres)
-      ? metadataArtist.genres.filter(Boolean)
+    const fallbackGenres: unknown[] = Array.isArray(metadataArtist?.genres)
+      ? (metadataArtist!.genres as unknown[]).filter(Boolean)
       : [];
     return {
-      tags: fallbackGenres.map((genre) => ({ name: genre, count: 0 })),
-      genres: fallbackGenres,
+      tags: fallbackGenres.map((genre: unknown) => ({ name: String(genre || ''), count: 0 })),
+      genres: fallbackGenres as string[],
     };
   };
 
-  const parseSelectedReleaseTypes = (value) =>
-    typeof value === "string" && value.trim()
+  const parseSelectedReleaseTypes = (value: unknown): string[] | null =>
+    typeof value === 'string' && value.trim()
       ? value
-          .split(",")
+          .split(',')
           .map((entry) => entry.trim())
           .filter(Boolean)
       : null;
 
-  const parseAppearsOnLimit = (value) => {
-    const parsed = Number.parseInt(value, 10);
+  const parseAppearsOnLimit = (value: unknown): number | null => {
+    const parsed = Number.parseInt(value as string, 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   };
 
-  router.get("/", async (req, res) => {
+  router.get('/', ((_req: Req, res: Res) => {
     res.status(404).json({
-      error: "Not found",
-      message:
-        "Use /api/artists/:mbid to get artist details, or /api/search/artists to search",
+      error: 'Not found',
+      message: 'Use /api/artists/:mbid to get artist details, or /api/search/artists to search',
     });
-  });
+  }) as Handler);
 
-  router.get("/:mbid/overrides", requireAuth, async (req, res) => {
+  router.get('/:mbid/overrides', requireAuth as Handler, ((req: Req, res: Res) => {
     const { mbid } = req.params;
     if (!UUID_REGEX.test(mbid)) {
       return res.status(400).json({
-        error: "Invalid MBID format",
+        error: 'Invalid MBID format',
         message: `"${mbid}" is not a valid MusicBrainz ID. MBIDs must be UUIDs.`,
       });
     }
@@ -96,39 +109,36 @@ export default function registerDetails(router) {
       musicbrainzId: override?.musicbrainzId || null,
       deezerArtistId: override?.deezerArtistId || null,
     });
-  });
+  }) as Handler);
 
-  router.put("/:mbid/overrides", requireAuth, async (req, res) => {
+  router.put('/:mbid/overrides', requireAuth as Handler, ((req: Req, res: Res) => {
     const { mbid } = req.params;
     if (!UUID_REGEX.test(mbid)) {
       return res.status(400).json({
-        error: "Invalid MBID format",
+        error: 'Invalid MBID format',
         message: `"${mbid}" is not a valid MusicBrainz ID. MBIDs must be UUIDs.`,
       });
     }
 
+    const body = req.body as Record<string, unknown> | undefined;
     const rawMusicbrainzId =
-      req.body?.musicbrainzId != null
-        ? String(req.body.musicbrainzId).trim()
-        : "";
+      body?.musicbrainzId != null ? String(body.musicbrainzId).trim() : '';
     const rawDeezerArtistId =
-      req.body?.deezerArtistId != null
-        ? String(req.body.deezerArtistId).trim()
-        : "";
+      body?.deezerArtistId != null ? String(body.deezerArtistId).trim() : '';
 
     const musicbrainzId = rawMusicbrainzId || null;
     const deezerArtistId = rawDeezerArtistId || null;
 
     if (musicbrainzId && !UUID_REGEX.test(musicbrainzId)) {
       return res.status(400).json({
-        error: "Invalid MusicBrainz ID format",
+        error: 'Invalid MusicBrainz ID format',
         message: `"${musicbrainzId}" is not a valid MusicBrainz ID. MBIDs must be UUIDs.`,
       });
     }
 
     if (deezerArtistId && !/^\d+$/.test(deezerArtistId)) {
       return res.status(400).json({
-        error: "Invalid Deezer Artist ID",
+        error: 'Invalid Deezer Artist ID',
         message: `"${deezerArtistId}" must be a numeric Deezer artist ID.`,
       });
     }
@@ -149,46 +159,43 @@ export default function registerDetails(router) {
     });
     dbOps.deleteImage(mbid);
     return res.json(saved);
-  });
+  }) as Handler);
 
-  router.get("/:mbid", cacheMiddleware(300), async (req, res) => {
+  router.get('/:mbid', cacheMiddleware(300) as Handler, (async (req: Req, res: Res) => {
     try {
       const { mbid } = req.params;
       const responseMode =
-        typeof req.query.mode === "string" && req.query.mode.trim()
+        typeof req.query.mode === 'string' && req.query.mode.trim()
           ? req.query.mode.trim().toLowerCase()
-          : "full";
-      const coreOnly = responseMode === "core";
-      const selectedReleaseTypes = parseSelectedReleaseTypes(
-        req.query.releaseTypes,
-      );
+          : 'full';
+      const coreOnly = responseMode === 'core';
+      const selectedReleaseTypes = parseSelectedReleaseTypes(req.query.releaseTypes);
       const appearsOnLimit = parseAppearsOnLimit(req.query.appearsOnLimit);
       const requestKey = buildArtistRequestKey({
         mbid,
         mode: responseMode,
-        selectedReleaseTypes,
-        appearsOnLimit,
+        selectedReleaseTypes: selectedReleaseTypes as unknown as null | undefined,
+        appearsOnLimit: appearsOnLimit as unknown as null | undefined,
       });
 
       if (!UUID_REGEX.test(mbid)) {
         console.log(`[Artists Route] Invalid MBID format: ${mbid}`);
         return res.status(400).json({
-          error: "Invalid MBID format",
+          error: 'Invalid MBID format',
           message: `"${mbid}" is not a valid MusicBrainz ID. MBIDs must be UUIDs.`,
         });
       }
 
       if (pendingArtistRequests.has(requestKey)) {
-        console.log(
-          `[Artists Route] Request for ${requestKey} already in progress, waiting...`,
-        );
+        console.log(`[Artists Route] Request for ${requestKey} already in progress, waiting...`);
         try {
           const data = await pendingArtistRequests.get(requestKey);
-          res.setHeader("Content-Type", "application/json");
+          res.setHeader('Content-Type', 'application/json');
           return res.json(data);
-        } catch (error) {
+        } catch (err: unknown) {
+          const error = err as { response?: { status?: number; data?: { error?: string } }; message?: string };
           return res.status(error.response?.status || 500).json({
-            error: "Failed to fetch artist details",
+            error: 'Failed to fetch artist details',
             message: error.response?.data?.error || error.message,
           });
         }
@@ -196,75 +203,62 @@ export default function registerDetails(router) {
 
       console.log(`[Artists Route] Fetching artist details for MBID: ${mbid}`);
 
-      const { lidarrClient } =
-        await import("../../../services/lidarrClient.js");
-      const { libraryManager } =
-        await import("../../../services/libraryManager.js");
+      const { lidarrClient } = await import('../../../services/lidarrClient.js');
+      const { libraryManager } = await import('../../../services/libraryManager.js');
 
-      let data = null;
+      let data: Record<string, unknown> | null = null;
       const override = dbOps.getArtistOverride(mbid);
-      const resolvedMbid = override?.musicbrainzId || mbid;
+      const resolvedMbid: string = (override as Record<string, unknown>)?.musicbrainzId as string || mbid;
 
-      let lidarrArtist = null;
-      let lidarrAlbums = [];
+      let lidarrData: Record<string, unknown> | null = null;
 
-      if (lidarrClient.isConfigured()) {
+      if ((lidarrClient as unknown as Record<string, (...args: unknown[]) => unknown>).isConfigured()) {
         try {
-          lidarrArtist = await lidarrClient.getArtistByMbid(mbid);
-          if (lidarrArtist) {
-            console.log(
-              `[Artists Route] Found artist in Lidarr: ${lidarrArtist.artistName}`,
-            );
-            const libraryArtist = await libraryManager.getArtist(mbid);
-            if (libraryArtist) {
-              lidarrAlbums = await libraryManager.getAlbums(
-                libraryArtist.id,
-                lidarrArtist,
-              );
+          const raw = await (lidarrClient as unknown as Record<string, (...args: unknown[]) => unknown>).getArtistByMbid(mbid);
+          lidarrData = raw as Record<string, unknown> | null;
+          if (lidarrData) {
+            console.log(`[Artists Route] Found artist in Lidarr: ${lidarrData.artistName}`);
+            const libArtist = await (libraryManager as unknown as Record<string, (...args: unknown[]) => unknown>).getArtist(mbid) as Record<string, unknown> | null;
+            if (libArtist) {
+              await (libraryManager as unknown as Record<string, (...args: unknown[]) => unknown>).getAlbums(libArtist.id, lidarrData);
             }
           }
-        } catch (error) {
-          console.warn(
-            `[Artists Route] Failed to fetch from Lidarr: ${error.message}`,
-          );
+        } catch (err: unknown) {
+          console.warn(`[Artists Route] Failed to fetch from Lidarr: ${(err as Error).message}`);
         }
       }
 
-      if (lidarrArtist) {
-        const artistMbid =
-          override?.musicbrainzId || lidarrArtist.foreignArtistId || mbid;
-        const metadataArtist = coreOnly
+      if (lidarrData) {
+        const artistMbid: string = (override as Record<string, unknown>)?.musicbrainzId as string || lidarrData.foreignArtistId as string || mbid;
+        const metadataArtist: Record<string, unknown> | null = coreOnly
           ? null
           : await getArtistByMbid(artistMbid).catch(() => null);
         const releaseGroups = await musicbrainzGetArtistReleaseGroups(
           artistMbid,
-          selectedReleaseTypes,
+          selectedReleaseTypes as unknown as string[] | null,
           { includeTrackCounts: !appearsOnLimit },
         );
         const appearsOnReleaseGroups = coreOnly
           ? []
-          : await musicbrainzGetArtistAppearsOnReleaseGroups(
-              artistMbid,
-              releaseGroups,
-              { limit: appearsOnLimit },
-            );
+          : await musicbrainzGetArtistAppearsOnReleaseGroups(artistMbid, releaseGroups as Record<string, unknown>[], {
+              limit: appearsOnLimit as unknown as number | undefined,
+            });
         const tagPayload = coreOnly
           ? { tags: [], genres: [] }
           : await getArtistTagPayload(
               artistMbid,
-              metadataArtist?.name || lidarrArtist.artistName,
+              (metadataArtist?.name || lidarrData.artistName) as string,
               metadataArtist,
             );
         const payload = {
           id: artistMbid,
-          name: metadataArtist?.name || lidarrArtist.artistName,
-          "sort-name":
-            metadataArtist?.sortName || metadataArtist?.name || lidarrArtist.artistName,
-          disambiguation: metadataArtist?.disambiguation || "",
-          "type-id": null,
+          name: metadataArtist?.name || lidarrData.artistName,
+          'sort-name': metadataArtist?.sortName || metadataArtist?.name || lidarrData.artistName,
+          disambiguation: metadataArtist?.disambiguation || '',
+          'type-id': null,
           type: metadataArtist?.type || null,
           country: null,
-          "life-span": {
+          'life-span': {
             begin: null,
             end: null,
             ended: false,
@@ -272,67 +266,65 @@ export default function registerDetails(router) {
           tags: tagPayload.tags,
           genres: tagPayload.genres,
           links: Array.isArray(metadataArtist?.links) ? metadataArtist.links : [],
-          "release-groups": releaseGroups,
-          "appears-on-release-groups": appearsOnReleaseGroups,
+          'release-groups': releaseGroups,
+          'appears-on-release-groups': appearsOnReleaseGroups,
           relations: toLegacyRelations(metadataArtist),
           rating: metadataArtist?.rating || null,
-          "release-group-count": releaseGroups.length,
-          "release-count": releaseGroups.length,
+          'release-group-count': (releaseGroups as unknown[]).length,
+          'release-count': (releaseGroups as unknown[]).length,
           _lidarrData: {
-            id: lidarrArtist.id,
-            monitored: lidarrArtist.monitored,
-            statistics: lidarrArtist.statistics,
+            id: lidarrData.id,
+            monitored: lidarrData.monitored,
+            statistics: lidarrData.statistics,
           },
           ...(metadataArtist?.overview ? { bio: metadataArtist.overview } : {}),
         };
 
-        res.setHeader("Content-Type", "application/json");
+        res.setHeader('Content-Type', 'application/json');
         res.json(payload);
         return;
       }
 
       const fetchPromise = (async () => {
-        const metadataArtist = coreOnly
+        const metadataArtist: Record<string, unknown> | null = coreOnly
           ? null
           : await getArtistByMbid(resolvedMbid).catch(() => null);
         const name =
-          (req.query.artistName || "").trim() ||
+          (req.query.artistName || '').trim() ||
           metadataArtist?.name ||
           (await musicbrainzGetArtistNameByMbid(resolvedMbid)) ||
-          "Unknown Artist";
+          'Unknown Artist';
         const tagPayload = coreOnly
           ? { tags: [], genres: [] }
-          : await getArtistTagPayload(resolvedMbid, name, metadataArtist);
+          : await getArtistTagPayload(resolvedMbid, name as string, metadataArtist);
         const releaseGroups = await musicbrainzGetArtistReleaseGroups(
           resolvedMbid,
-          selectedReleaseTypes,
+          selectedReleaseTypes as unknown as string[] | null,
           { includeTrackCounts: !appearsOnLimit },
         );
         const appearsOnReleaseGroups = coreOnly
           ? []
-          : await musicbrainzGetArtistAppearsOnReleaseGroups(
-              resolvedMbid,
-              releaseGroups,
-              { limit: appearsOnLimit },
-            );
+          : await musicbrainzGetArtistAppearsOnReleaseGroups(resolvedMbid, releaseGroups as Record<string, unknown>[], {
+              limit: appearsOnLimit as unknown as number | undefined,
+            });
         return {
           id: resolvedMbid,
           name,
-          "sort-name": metadataArtist?.sortName || name,
-          disambiguation: metadataArtist?.disambiguation || "",
-          "type-id": null,
+          'sort-name': metadataArtist?.sortName || name,
+          disambiguation: metadataArtist?.disambiguation || '',
+          'type-id': null,
           type: metadataArtist?.type || null,
           country: null,
-          "life-span": { begin: null, end: null, ended: false },
+          'life-span': { begin: null, end: null, ended: false },
           tags: tagPayload.tags,
           genres: tagPayload.genres,
           links: Array.isArray(metadataArtist?.links) ? metadataArtist.links : [],
-          "release-groups": releaseGroups,
-          "appears-on-release-groups": appearsOnReleaseGroups,
+          'release-groups': releaseGroups,
+          'appears-on-release-groups': appearsOnReleaseGroups,
           relations: toLegacyRelations(metadataArtist),
           rating: metadataArtist?.rating || null,
-          "release-group-count": releaseGroups.length,
-          "release-count": releaseGroups.length,
+          'release-group-count': (releaseGroups as unknown[]).length,
+          'release-count': (releaseGroups as unknown[]).length,
           bio: metadataArtist?.overview || undefined,
         };
       })();
@@ -341,43 +333,41 @@ export default function registerDetails(router) {
 
       try {
         data = await fetchPromise;
-        res.setHeader("Content-Type", "application/json");
+        res.setHeader('Content-Type', 'application/json');
         res.json(data);
-      } catch (error) {
-        const artistNameParam = (req.query.artistName || "").trim();
+      } catch {
+        const artistNameParam = (req.query.artistName || '').trim();
         const fallback = {
           id: resolvedMbid,
-          name: artistNameParam || "Unknown Artist",
-          "sort-name": artistNameParam || "Unknown Artist",
-          disambiguation: "",
-          "type-id": null,
+          name: artistNameParam || 'Unknown Artist',
+          'sort-name': artistNameParam || 'Unknown Artist',
+          disambiguation: '',
+          'type-id': null,
           type: null,
           country: null,
-          "life-span": { begin: null, end: null, ended: false },
+          'life-span': { begin: null, end: null, ended: false },
           tags: [],
           genres: [],
           links: [],
-          "release-groups": [],
-          "appears-on-release-groups": [],
+          'release-groups': [],
+          'appears-on-release-groups': [],
           relations: [],
-          "release-group-count": 0,
-          "release-count": 0,
+          'release-group-count': 0,
+          'release-count': 0,
         };
-        res.setHeader("Content-Type", "application/json");
+        res.setHeader('Content-Type', 'application/json');
         res.json(fallback);
       } finally {
         pendingArtistRequests.delete(requestKey);
       }
-    } catch (error) {
-      console.error(
-        `[Artists Route] Unexpected error in artist details route:`,
-        error.message,
-      );
+    } catch (err: unknown) {
+      const error = err as { message?: string; stack?: string };
+      console.error(`[Artists Route] Unexpected error in artist details route:`, error.message);
       console.error(`[Artists Route] Error stack:`, error.stack);
       res.status(500).json({
-        error: "Failed to fetch artist details",
+        error: 'Failed to fetch artist details',
         message: error.message,
       });
     }
-  });
+  }) as Handler);
 }

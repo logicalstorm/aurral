@@ -1,17 +1,202 @@
-import { shouldReplaceExistingImage } from "./artistImageHydration.js";
-import { GENRE_KEYWORDS } from "../config/constants.js";
+import { shouldReplaceExistingImage } from './artistImageHydration.js';
+import { GENRE_KEYWORDS } from '../config/constants.js';
 
-const MBID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+interface SeedRef {
+  artistName: string;
+  source: string;
+  weight: number;
+  profileBucket?: string | null;
+}
 
-const SOURCE_BASE_WEIGHTS = {
+interface SeedEntry {
+  mbid: string | null;
+  artistName: string;
+  source: string;
+  identityKeys: string[];
+  playcount: number;
+  weight: number;
+  affinityWeight: number;
+  profileBucket: string | null;
+  similarityMultiplier?: number;
+  tagAffinityMultiplier?: number;
+  discoveryDepth?: number;
+  match?: number;
+}
+
+interface AccumulatorEntry {
+  id: string | null;
+  name: string;
+  type: string;
+  image: string | null;
+  bestMatch: number;
+  rawContribution: number;
+  scoreSimilarity: number;
+  scoreTagAffinity: number;
+  tagOverlapCount: number;
+  tags: Set<string>;
+  seedWeights: number[];
+  matchedTagWeights: Map<string, number>;
+  discoveryDepth: number;
+  sourceTypes: Set<string>;
+  supportingSeeds: Map<string, SeedRef>;
+}
+
+interface ArtistDescriptor {
+  id?: string | null;
+  mbid?: string | null;
+  foreignArtistId?: string | null;
+  name?: string | null;
+  artistName?: string | null;
+  source?: string | null;
+  playcount?: number | null;
+  affinityWeight?: number | null;
+  profileBucket?: string | null;
+  image?: string | null;
+  imageUrl?: string | null;
+  listeners?: number | null;
+  popularityLabel?: string | null;
+  popularityRank?: string | null;
+  score?: number | null;
+  scoreTotal?: number | null;
+  scoreSimilarity?: number | null;
+  scoreTagAffinity?: number | null;
+  scoreSeedCoverage?: number | null;
+  scoreNovelty?: number | null;
+  scorePopularityPenalty?: number | null;
+  seedCount?: number | null;
+  confidence?: number | null;
+  discoveryTier?: string | null;
+  discoveryDepth?: number | null;
+  navigateTo?: string | null;
+  sourceArtist?: string | null;
+  sourceArtists?: string[] | null;
+  sourceType?: string | null;
+  sourceTypes?: string[] | null;
+  sourceMix?: string[] | null;
+  reasonCodes?: string[] | null;
+  tags?: string[] | null;
+  matchedTags?: string[] | null;
+  supportingSeeds?: SeedRef[] | null;
+  match?: number | null;
+  similarityMultiplier?: number | null;
+  tagAffinityMultiplier?: number | null;
+  firstDiscoveredAt?: string | null;
+  discoveredAt?: string | null;
+  lastRecommendedAt?: string | null;
+  recommendationPoolState?: string | null;
+  scoreFreshnessBoost?: number | null;
+  scoreAgingPenalty?: number | null;
+  scoreDiversityPenalty?: number | null;
+  recommendationPoolRank?: number | null;
+  hiddenByFeedback?: boolean | null;
+  candidateTagsHydrated?: boolean | null;
+  tagSource?: string | null;
+  __rerankBaseScore?: number;
+  __rerankFeedbackAdjustment?: number;
+  __rerankHidden?: boolean;
+  __rerankTags?: string[];
+  __rerankSeeds?: string[];
+}
+
+interface FeedbackEntry {
+  action?: string | null;
+  artistId?: string | null;
+  artistName?: string | null;
+  tagContext?: string[] | null;
+  seedContext?: string[] | null;
+  expiresAt?: string | null;
+}
+
+interface ReasonParams {
+  tagOverlapCount: number;
+  seedCoverage: number;
+  sourceTypes: string[];
+  scoreNovelty: number;
+  scorePopularityPenalty: number;
+  discoveryMode: string;
+  discoveryDepth: number;
+}
+
+interface CandidateParams {
+  candidate?: ArtistDescriptor | null;
+  seed?: SeedEntry | null;
+  sourceTags?: string[];
+  profileTagWeights?: Map<string, number>;
+  existingArtistKeys?: Set<string>;
+}
+
+interface PoolMetadata {
+  firstDiscoveredAt: string | null;
+  lastRecommendedAt: string | null;
+}
+
+interface PoolMetaOptions {
+  fresh?: boolean;
+  index?: number;
+  metadata?: PoolMetadata | null;
+  runStartedAt?: string;
+  runStartedMs?: number;
+}
+
+interface MergeRetainedParams {
+  freshRecommendations?: ArtistDescriptor[];
+  existingRecommendations?: ArtistDescriptor[];
+  existingArtistKeys?: Set<string>;
+  limit?: number;
+  runStartedAt?: string;
+  discoveryMode?: string;
+  feedback?: FeedbackEntry[];
+}
+
+interface RerankOptions {
+  discoveryMode?: string;
+  feedback?: FeedbackEntry[];
+}
+
+interface FinalizedRecommendation {
+  id: string | null;
+  name: string;
+  type: string;
+  image: string | null;
+  tags: string[];
+  matchedTags: string[];
+  supportingSeeds: SeedRef[];
+  seedCount: number;
+  score: number;
+  scoreTotal: number;
+  scoreSimilarity: number;
+  scoreTagAffinity: number;
+  scoreSeedCoverage: number;
+  scoreNovelty: number;
+  scoreDiversityPenalty: number;
+  scorePopularityPenalty: number;
+  sourceArtist: string | null;
+  sourceArtists: string[];
+  sourceType: string;
+  sourceTypes: string[];
+  sourceMix: string[];
+  discoveryDepth: number;
+  bestMatch: number;
+  reasonCodes: string[];
+  discoveryTier: string;
+  confidence: number;
+}
+
+interface DiscoveryTagsOptions {
+  limit?: number;
+  minArtists?: number;
+}
+
+const MBID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const SOURCE_BASE_WEIGHTS: Record<string, number> = {
   library: 1,
   lastfm: 1.2,
   listenbrainz: 1.3,
   koito: 1.3,
 };
 
-const DISCOVERY_MODE_MULTIPLIERS = {
+const DISCOVERY_MODE_MULTIPLIERS: Record<string, Record<string, number>> = {
   safer: {
     similarity: 1.2,
     tagAffinity: 0.9,
@@ -38,43 +223,49 @@ const DISCOVERY_MODE_MULTIPLIERS = {
   },
 };
 
-const normalizeText = (value) =>
-  String(value || "")
+const normalizeText = (value: unknown): string =>
+  String(value || '')
     .trim()
     .toLowerCase();
 
-const normalizeMbid = (value) => {
+const normalizeMbid = (value: unknown): string | null => {
   const normalized = normalizeText(value);
   return MBID_REGEX.test(normalized) ? normalized : null;
 };
 
-const buildSeedIdentityKeys = (mbid, artistName) => {
-  const keys = [];
+const buildSeedIdentityKeys = (mbid: string | null, artistName: string): string[] => {
+  const keys: string[] = [];
   if (mbid) keys.push(`mbid:${mbid}`);
   const normalizedName = normalizeText(artistName);
   if (normalizedName) keys.push(`name:${normalizedName}`);
   return keys;
 };
 
-const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
 
-const normalizeDiscoveryMode = (value) => {
+const normalizeDiscoveryMode = (value: unknown): string => {
   const mode = normalizeText(value);
-  return DISCOVERY_MODE_MULTIPLIERS[mode] ? mode : "balanced";
+  return DISCOVERY_MODE_MULTIPLIERS[mode] ? mode : 'balanced';
 };
 
-const sortByValueThenName = (entries) =>
+const sortByValueThenName = (
+  entries: Iterable<[string, number]>,
+): [string, number][] =>
   [...entries].sort((left, right) => {
     if (right[1] !== left[1]) return right[1] - left[1];
-    return String(left[0] || "").localeCompare(String(right[0] || ""));
+    return String(left[0] || '').localeCompare(String(right[0] || ''));
   });
 
-const topKeysFromMap = (map, limit = 4) =>
+const topKeysFromMap = (
+  map: Map<string, number>,
+  limit: number = 4,
+): string[] =>
   sortByValueThenName(map.entries())
     .slice(0, limit)
     .map(([key]) => key);
 
-const summarizeSourceArtists = (sourceArtists) => {
+const summarizeSourceArtists = (sourceArtists: Iterable<string>): string | null => {
   const artists = [...sourceArtists].filter(Boolean);
   if (artists.length === 0) return null;
   if (artists.length === 1) return artists[0];
@@ -82,7 +273,7 @@ const summarizeSourceArtists = (sourceArtists) => {
   return `${artists[0]}, ${artists[1]} +${artists.length - 2} more`;
 };
 
-const mergeTags = (target, sourceTags = []) => {
+const mergeTags = (target: Set<string>, sourceTags: string[] = []): void => {
   for (const tag of sourceTags) {
     const normalized = normalizeText(tag);
     if (!normalized) continue;
@@ -91,30 +282,30 @@ const mergeTags = (target, sourceTags = []) => {
   }
 };
 
-const normalizeTagList = (tags = []) =>
-  (Array.isArray(tags) ? tags : [])
-    .map(normalizeText)
-    .filter(Boolean);
+const normalizeTagList = (tags: unknown = []): string[] =>
+  (Array.isArray(tags) ? tags : []).map(normalizeText).filter(Boolean);
 
-export const normalizeArtistIdentityKeys = (artist) => {
-  const keys = [];
+export const normalizeArtistIdentityKeys = (
+  artist: ArtistDescriptor | null | undefined,
+): string[] => {
+  const keys: string[] = [];
   const mbids = [artist?.id, artist?.mbid, artist?.foreignArtistId]
     .map(normalizeMbid)
     .filter(Boolean);
   for (const mbid of mbids) {
-    keys.push(`mbid:${mbid}`);
+    if (mbid) keys.push(`mbid:${mbid}`);
   }
-  const names = [artist?.name, artist?.artistName]
-    .map(normalizeText)
-    .filter(Boolean);
+  const names = [artist?.name, artist?.artistName].map(normalizeText).filter(Boolean);
   for (const name of names) {
     keys.push(`name:${name}`);
   }
   return [...new Set(keys)];
 };
 
-export const buildExistingArtistKeySet = (artists = []) => {
-  const keys = new Set();
+export const buildExistingArtistKeySet = (
+  artists: ArtistDescriptor[] = [],
+): Set<string> => {
+  const keys = new Set<string>();
   for (const artist of Array.isArray(artists) ? artists : []) {
     for (const key of normalizeArtistIdentityKeys(artist)) {
       keys.add(key);
@@ -124,11 +315,11 @@ export const buildExistingArtistKeySet = (artists = []) => {
 };
 
 export const applyHydratedCandidateTags = (
-  recommendation,
-  candidateTags = [],
-  profileTagWeights = new Map(),
-  options = {},
-) => {
+  recommendation: ArtistDescriptor | null,
+  candidateTags: string[] = [],
+  profileTagWeights: Map<string, number> = new Map(),
+  options: { tagAffinityMultiplier?: number } = {},
+): ArtistDescriptor | null => {
   const normalizedTags = normalizeTagList(candidateTags);
   if (!recommendation || normalizedTags.length === 0) return recommendation;
 
@@ -137,38 +328,32 @@ export const applyHydratedCandidateTags = (
       ...recommendation,
       tags: normalizedTags,
       candidateTagsHydrated: true,
-      tagSource: "lastfm_artist",
+      tagSource: 'lastfm_artist',
     };
   }
 
-  const matchedTagWeights = new Map();
+  const matchedTagWeights = new Map<string, number>();
   for (const tag of normalizedTags) {
     if (!profileTagWeights.has(tag)) continue;
     matchedTagWeights.set(tag, Number(profileTagWeights.get(tag) || 0));
   }
   const matchedTags = topKeysFromMap(matchedTagWeights, 4);
   const tagWeightSum = matchedTags.reduce(
-    (sum, tag) => sum + Number(profileTagWeights.get(tag) || 0),
+    (sum: number, tag: string) => sum + Number(profileTagWeights.get(tag) || 0),
     0,
   );
   const tagAffinityMultiplier = clamp(
     Number(
-      options.tagAffinityMultiplier ??
-        (Number(recommendation.discoveryDepth || 1) >= 2 ? 0.55 : 1),
+      options.tagAffinityMultiplier ?? (Number(recommendation.discoveryDepth || 1) >= 2 ? 0.55 : 1),
     ),
     0,
     1,
   );
   const scoreTagAffinity =
-    Math.min(45, tagWeightSum * 6 + matchedTags.length * 3) *
-    tagAffinityMultiplier;
+    Math.min(45, tagWeightSum * 6 + matchedTags.length * 3) * tagAffinityMultiplier;
   const previousScoreTagAffinity = Number(recommendation.scoreTagAffinity || 0);
-  const previousTotal = Number(
-    recommendation.scoreTotal || recommendation.score || 0,
-  );
-  const scoreTotal = Math.round(
-    previousTotal - previousScoreTagAffinity + scoreTagAffinity,
-  );
+  const previousTotal = Number(recommendation.scoreTotal || recommendation.score || 0);
+  const scoreTotal = Math.round(previousTotal - previousScoreTagAffinity + scoreTagAffinity);
 
   return {
     ...recommendation,
@@ -178,61 +363,64 @@ export const applyHydratedCandidateTags = (
     scoreTotal,
     score: scoreTotal,
     candidateTagsHydrated: true,
-    tagSource: "lastfm_artist",
+    tagSource: 'lastfm_artist',
   };
 };
 
-const calculateSeedWeight = (seed, index) => {
-  const source = normalizeText(seed?.source) || "library";
+const calculateSeedWeight = (
+  seed: Record<string, unknown> | null | undefined,
+  index: number,
+): number => {
+  const source = normalizeText(seed?.source) || 'library';
   const baseWeight = SOURCE_BASE_WEIGHTS[source] || 1;
 
-  if (source === "library") {
+  if (source === 'library') {
     const recencyBoost = Math.max(0, 0.5 - Math.max(index, 0) * 0.02);
     return Number((baseWeight + recencyBoost).toFixed(4));
   }
 
   const playcount = Math.max(0, Number(seed?.playcount || 0));
-  const playcountBoost =
-    playcount > 0 ? Math.min(1.4, Math.log10(playcount + 1) * 0.4) : 0.15;
+  const playcountBoost = playcount > 0 ? Math.min(1.4, Math.log10(playcount + 1) * 0.4) : 0.15;
   return Number((baseWeight + playcountBoost).toFixed(4));
 };
 
 export const buildDiscoverySeedList = ({
-  libraryArtists = [],
-  historyArtists = [],
-} = {}) => {
-  const combined = [
+  libraryArtists = [] as ArtistDescriptor[],
+  historyArtists = [] as ArtistDescriptor[],
+}: {
+  libraryArtists?: ArtistDescriptor[];
+  historyArtists?: ArtistDescriptor[];
+} = {}): SeedEntry[] => {
+  const combined: ArtistDescriptor[] = [
     ...(Array.isArray(historyArtists) ? historyArtists : []),
     ...(Array.isArray(libraryArtists) ? libraryArtists : []),
   ];
-  const seen = new Set();
-  const seeds = [];
+  const seen = new Set<string>();
+  const seeds: SeedEntry[] = [];
 
   for (let index = 0; index < combined.length; index += 1) {
-    const artist = combined[index];
-    const mbid = normalizeMbid(
-      artist?.mbid || artist?.id || artist?.foreignArtistId,
-    );
-    const artistName = String(artist?.artistName || artist?.name || "").trim();
+    const artist: ArtistDescriptor = combined[index];
+    const mbid = normalizeMbid(artist?.mbid || artist?.id || artist?.foreignArtistId);
+    const artistName = String(artist?.artistName || artist?.name || '').trim();
     if (!artistName) continue;
 
     const identityKeys = buildSeedIdentityKeys(mbid, artistName);
     if (identityKeys.length === 0) continue;
-    const source = normalizeText(artist?.source) || "library";
+    const source = normalizeText(artist?.source) || 'library';
     const nextWeight = calculateSeedWeight(
       {
         source,
         playcount: artist?.playcount,
       },
-      source === "library" ? index : 0,
+      source === 'library' ? index : 0,
     );
     const profileBucket = normalizeText(artist?.profileBucket) || null;
 
     const existingKey = identityKeys.find((key) => seen.has(key));
     if (existingKey) {
-      const existing = seeds.find((entry) =>
+      const existing = seeds.find((entry: SeedEntry) =>
         Array.isArray(entry.identityKeys)
-          ? entry.identityKeys.some((key) => identityKeys.includes(key))
+          ? entry.identityKeys.some((key: string) => identityKeys.includes(key))
           : entry.mbid === mbid,
       );
       if (existing) {
@@ -245,7 +433,7 @@ export const buildDiscoverySeedList = ({
           Number(existing.affinityWeight || 0),
           Number(artist?.affinityWeight || 0),
         );
-        if (existing.source === "library" && source !== "library") {
+        if (existing.source === 'library' && source !== 'library') {
           existing.source = source;
         }
         if (!existing.profileBucket && profileBucket) {
@@ -272,10 +460,7 @@ export const buildDiscoverySeedList = ({
       identityKeys,
       playcount: Math.max(0, Number(artist?.playcount || 0)),
       weight: nextWeight,
-      affinityWeight: Math.max(
-        nextWeight,
-        Number(artist?.affinityWeight || 0) || nextWeight,
-      ),
+      affinityWeight: Math.max(nextWeight, Number(artist?.affinityWeight || 0) || nextWeight),
       profileBucket,
     });
   }
@@ -302,36 +487,36 @@ const buildReasonCodes = ({
   scorePopularityPenalty,
   discoveryMode,
   discoveryDepth,
-}) => {
-  const codes = [];
-  if (tagOverlapCount >= 2) codes.push("tag_affinity_strong");
-  else if (tagOverlapCount >= 1) codes.push("tag_affinity");
-  if (seedCoverage >= 3) codes.push("multi_seed");
-  else if (seedCoverage >= 2) codes.push("seed_consensus");
-  if (discoveryDepth >= 2) codes.push("two_hop");
-  if ((sourceTypes || []).some((entry) => entry !== "library")) {
-    codes.push("history_aligned");
+}: ReasonParams): string[] => {
+  const codes: string[] = [];
+  if (tagOverlapCount >= 2) codes.push('tag_affinity_strong');
+  else if (tagOverlapCount >= 1) codes.push('tag_affinity');
+  if (seedCoverage >= 3) codes.push('multi_seed');
+  else if (seedCoverage >= 2) codes.push('seed_consensus');
+  if (discoveryDepth >= 2) codes.push('two_hop');
+  if ((sourceTypes || []).some((entry: string) => entry !== 'library')) {
+    codes.push('history_aligned');
   }
-  if (scoreNovelty >= 18) codes.push("deeper_pick");
-  if (scorePopularityPenalty >= 8) codes.push("mainstream_overlap");
-  if (discoveryMode === "deeper") codes.push("mode_deeper");
-  if (discoveryMode === "safer") codes.push("mode_safer");
+  if (scoreNovelty >= 18) codes.push('deeper_pick');
+  if (scorePopularityPenalty >= 8) codes.push('mainstream_overlap');
+  if (discoveryMode === 'deeper') codes.push('mode_deeper');
+  if (discoveryMode === 'safer') codes.push('mode_safer');
   return [...new Set(codes)];
 };
 
 export const addRecommendationCandidate = (
-  accumulator,
+  accumulator: Map<string, AccumulatorEntry>,
   {
-    candidate,
-    seed,
-    sourceTags = [],
-    profileTagWeights = new Map(),
-    existingArtistKeys = new Set(),
-  } = {},
-) => {
+    candidate = null,
+    seed = null,
+    sourceTags = [] as string[],
+    profileTagWeights = new Map<string, number>(),
+    existingArtistKeys = new Set<string>(),
+  }: CandidateParams = {},
+): void => {
   if (!accumulator || !candidate || !seed) return;
 
-  const name = String(candidate?.name || "").trim();
+  const name = String(candidate?.name || '').trim();
   const mbid = normalizeMbid(candidate?.mbid);
   if (!name && !mbid) return;
 
@@ -339,7 +524,7 @@ export const addRecommendationCandidate = (
     id: mbid,
     name,
   });
-  if (candidateKeys.some((key) => existingArtistKeys.has(key))) return;
+  if (candidateKeys.some((key: string) => existingArtistKeys.has(key))) return;
 
   const candidateKey = mbid || `name:${normalizeText(name)}`;
   if (!candidateKey) return;
@@ -364,18 +549,14 @@ export const addRecommendationCandidate = (
   const normalizedTags = (Array.isArray(sourceTags) ? sourceTags : [])
     .map(normalizeText)
     .filter(Boolean);
-  const matchedTags = normalizedTags.filter((tag) => profileTagWeights.has(tag));
+  const matchedTags = normalizedTags.filter((tag: string) => profileTagWeights.has(tag));
   const tagWeightSum = matchedTags.reduce(
-    (sum, tag) => sum + Number(profileTagWeights.get(tag) || 0),
+    (sum: number, tag: string) => sum + Number(profileTagWeights.get(tag) || 0),
     0,
   );
-  const scoreSimilarity = Math.max(
-    0,
-    matchScore * 100 * seedWeight * similarityMultiplier,
-  );
+  const scoreSimilarity = Math.max(0, matchScore * 100 * seedWeight * similarityMultiplier);
   const scoreTagAffinity =
-    Math.min(45, tagWeightSum * 6 + matchedTags.length * 3) *
-    tagAffinityMultiplier;
+    Math.min(45, tagWeightSum * 6 + matchedTags.length * 3) * tagAffinityMultiplier;
   const perSeedContribution = scoreSimilarity + scoreTagAffinity + affinityWeight * 4;
 
   const existing = accumulator.get(candidateKey);
@@ -388,12 +569,12 @@ export const addRecommendationCandidate = (
     existing.seedWeights.push(seedWeight);
     existing.supportingSeeds.set(seed.artistName, {
       artistName: seed.artistName,
-      source: seed.source || "library",
+      source: seed.source || 'library',
       weight: seedWeight,
       profileBucket: seed.profileBucket || null,
     });
-    existing.sourceTypes.add(seed.source || "library");
-    matchedTags.forEach((tag) => {
+    existing.sourceTypes.add(seed.source || 'library');
+    matchedTags.forEach((tag: string) => {
       existing.matchedTagWeights.set(
         tag,
         Math.max(
@@ -416,16 +597,16 @@ export const addRecommendationCandidate = (
     return;
   }
 
-  const tags = new Set();
+  const tags = new Set<string>();
   mergeTags(tags, normalizedTags);
-  const matchedTagWeights = new Map();
-  matchedTags.forEach((tag) => {
+  const matchedTagWeights = new Map<string, number>();
+  matchedTags.forEach((tag: string) => {
     matchedTagWeights.set(tag, Number(profileTagWeights.get(tag) || 0));
   });
   accumulator.set(candidateKey, {
     id: mbid,
     name,
-    type: "Artist",
+    type: 'Artist',
     image: candidate?.image || null,
     bestMatch: matchScore,
     rawContribution: perSeedContribution,
@@ -436,13 +617,13 @@ export const addRecommendationCandidate = (
     seedWeights: [seedWeight],
     matchedTagWeights,
     discoveryDepth,
-    sourceTypes: new Set([seed.source || "library"]),
+    sourceTypes: new Set([seed.source || 'library']),
     supportingSeeds: new Map([
       [
         seed.artistName,
         {
           artistName: seed.artistName,
-          source: seed.source || "library",
+          source: seed.source || 'library',
           weight: seedWeight,
           profileBucket: seed.profileBucket || null,
         },
@@ -451,13 +632,15 @@ export const addRecommendationCandidate = (
   });
 };
 
-const finalizeRecommendationEntry = (entry, discoveryMode = "balanced") => {
+const finalizeRecommendationEntry = (
+  entry: AccumulatorEntry,
+  discoveryMode: string = 'balanced',
+): FinalizedRecommendation => {
   const supportCount = entry.supportingSeeds.size;
   const matchedTags = topKeysFromMap(entry.matchedTagWeights, 4);
   const averageSeedWeight =
     entry.seedWeights.length > 0
-      ? entry.seedWeights.reduce((sum, value) => sum + value, 0) /
-        entry.seedWeights.length
+      ? entry.seedWeights.reduce((sum: number, value: number) => sum + value, 0) / entry.seedWeights.length
       : 0;
   const scoreSeedCoverage = Math.min(
     28,
@@ -494,7 +677,7 @@ const finalizeRecommendationEntry = (entry, discoveryMode = "balanced") => {
     98,
   );
   const discoveryTier =
-    scoreNovelty >= 18 ? "deeper" : entry.bestMatch >= 0.72 ? "safer" : "balanced";
+    scoreNovelty >= 18 ? 'deeper' : entry.bestMatch >= 0.72 ? 'safer' : 'balanced';
 
   const baseTotal =
     entry.scoreSimilarity +
@@ -506,7 +689,7 @@ const finalizeRecommendationEntry = (entry, discoveryMode = "balanced") => {
   return {
     id: entry.id || null,
     name: entry.name,
-    type: "Artist",
+    type: 'Artist',
     image: entry.image || null,
     tags: [...entry.tags],
     matchedTags,
@@ -524,8 +707,7 @@ const finalizeRecommendationEntry = (entry, discoveryMode = "balanced") => {
     scorePopularityPenalty: Math.round(scorePopularityPenalty),
     sourceArtist: summarizeSourceArtists(entry.supportingSeeds.keys()),
     sourceArtists: [...entry.supportingSeeds.keys()],
-    sourceType:
-      entry.sourceTypes.size === 1 ? [...entry.sourceTypes][0] : "blended",
+    sourceType: entry.sourceTypes.size === 1 ? [...entry.sourceTypes][0] : 'blended',
     sourceTypes: [...entry.sourceTypes],
     sourceMix: [...entry.sourceTypes],
     discoveryDepth: Number(entry.discoveryDepth || 1),
@@ -537,15 +719,15 @@ const finalizeRecommendationEntry = (entry, discoveryMode = "balanced") => {
 };
 
 export const finalizeRecommendationAccumulator = (
-  accumulator,
-  limit = 100,
-  options = {},
-) => {
+  accumulator: Map<string, AccumulatorEntry>,
+  limit: number = 100,
+  options: { discoveryMode?: string } = {},
+): FinalizedRecommendation[] => {
   const discoveryMode = normalizeDiscoveryMode(options?.discoveryMode);
   return [...accumulator.values()]
-    .map((entry) => finalizeRecommendationEntry(entry, discoveryMode))
-    .filter((entry) => entry.name)
-    .sort((left, right) => {
+    .map((entry: AccumulatorEntry) => finalizeRecommendationEntry(entry, discoveryMode))
+    .filter((entry: FinalizedRecommendation) => entry.name)
+    .sort((left: FinalizedRecommendation, right: FinalizedRecommendation) => {
       if (right.scoreTotal !== left.scoreTotal) {
         return right.scoreTotal - left.scoreTotal;
       }
@@ -560,16 +742,19 @@ export const finalizeRecommendationAccumulator = (
     .slice(0, Math.max(1, Number(limit) || 100));
 };
 
-const normalizeFeedbackList = (value) =>
-  (Array.isArray(value) ? value : [])
-    .filter((entry) => entry && typeof entry === "object")
-    .filter((entry) => {
+const normalizeFeedbackList = (value: unknown): FeedbackEntry[] =>
+  (Array.isArray(value) ? value as FeedbackEntry[] : [])
+    .filter((entry: FeedbackEntry) => entry && typeof entry === 'object')
+    .filter((entry: FeedbackEntry) => {
       if (!entry.expiresAt) return true;
       const time = new Date(entry.expiresAt).getTime();
       return Number.isFinite(time) ? time > Date.now() : true;
     });
 
-const feedbackBoostForCandidate = (candidate, feedbackList = []) => {
+const feedbackBoostForCandidate = (
+  candidate: ArtistDescriptor,
+  feedbackList: FeedbackEntry[] = [],
+): { adjustment: number; hidden: boolean } => {
   let adjustment = 0;
   let hidden = false;
   const candidateKeys = new Set(normalizeArtistIdentityKeys(candidate));
@@ -585,25 +770,25 @@ const feedbackBoostForCandidate = (candidate, feedbackList = []) => {
       mbid: feedback.artistId,
       name: feedback.artistName,
     });
-    const exactMatch = feedbackKeys.some((key) => candidateKeys.has(key));
+    const exactMatch = feedbackKeys.some((key: string) => candidateKeys.has(key));
     const tagContext = (Array.isArray(feedback.tagContext) ? feedback.tagContext : [])
       .map(normalizeText)
       .filter(Boolean);
-    const tagOverlap = tagContext.filter((tag) => candidateTagSet.has(tag)).length;
+    const tagOverlap = tagContext.filter((tag: string) => candidateTagSet.has(tag)).length;
     const seedContext = (Array.isArray(feedback.seedContext) ? feedback.seedContext : [])
       .map(normalizeText)
       .filter(Boolean);
-    const seedOverlap = (candidate.supportingSeeds || []).filter((seed) =>
-      seedContext.includes(normalizeText(seed.artistName)),
+    const seedOverlap = (candidate.supportingSeeds || []).filter(
+      (seed: SeedRef) => seedContext.includes(normalizeText(seed.artistName)),
     ).length;
     const contextualMatch = tagOverlap > 0 || seedOverlap > 0;
 
     switch (feedback.action) {
-      case "more_like_this":
+      case 'more_like_this':
         if (exactMatch) adjustment += 16;
         else if (contextualMatch) adjustment += 10 + tagOverlap * 2;
         break;
-      case "less_like_this":
+      case 'less_like_this':
         if (exactMatch) {
           hidden = true;
           adjustment -= 100000;
@@ -619,89 +804,23 @@ const feedbackBoostForCandidate = (candidate, feedbackList = []) => {
   return { adjustment, hidden };
 };
 
-const rerankSingleRecommendation = (
-  recommendation,
-  selected,
-  options = {},
-) => {
-  const mode = normalizeDiscoveryMode(options.discoveryMode);
-  const multipliers = DISCOVERY_MODE_MULTIPLIERS[mode];
-  const candidateTags = new Set(
-    (Array.isArray(recommendation.matchedTags)
-      ? recommendation.matchedTags
-      : recommendation.tags || []
-    )
-      .map(normalizeText)
-      .filter(Boolean),
-  );
-  const candidateSeeds = new Set(
-    (Array.isArray(recommendation.supportingSeeds)
-      ? recommendation.supportingSeeds
-      : []
-    )
-      .map((entry) => normalizeText(entry?.artistName))
-      .filter(Boolean),
-  );
-
-  let diversityPenalty = 0;
-  for (const previous of selected) {
-    const previousTags = new Set(
-      (Array.isArray(previous.matchedTags)
-        ? previous.matchedTags
-        : previous.tags || []
-      )
-        .map(normalizeText)
-        .filter(Boolean),
-    );
-    const previousSeeds = new Set(
-      (Array.isArray(previous.supportingSeeds) ? previous.supportingSeeds : [])
-        .map((entry) => normalizeText(entry?.artistName))
-        .filter(Boolean),
-    );
-    const tagOverlap = [...candidateTags].filter((tag) => previousTags.has(tag))
-      .length;
-    const seedOverlap = [...candidateSeeds].filter((seed) => previousSeeds.has(seed))
-      .length;
-    diversityPenalty += tagOverlap * 1.8 + seedOverlap * 2.6;
-  }
-
-  const { adjustment, hidden } = feedbackBoostForCandidate(
-    recommendation,
-    options.feedback || [],
-  );
-
-  const baseScore =
-    Number(recommendation.scoreSimilarity || 0) * multipliers.similarity +
-    Number(recommendation.scoreTagAffinity || 0) * multipliers.tagAffinity +
-    Number(recommendation.scoreSeedCoverage || 0) * multipliers.seedCoverage +
-    Number(recommendation.scoreNovelty || 0) * multipliers.novelty -
-    Number(recommendation.scorePopularityPenalty || 0) *
-      multipliers.popularityPenalty +
-    Number(recommendation.scoreFreshnessBoost || 0) -
-    Number(recommendation.scoreAgingPenalty || 0);
-
-  const scoreTotal = Math.round(
-    baseScore - diversityPenalty * multipliers.diversityPenalty + adjustment,
-  );
-
-  return {
-    ...recommendation,
-    scoreDiversityPenalty: Math.round(diversityPenalty),
-    scoreTotal,
-    score: scoreTotal,
-    hiddenByFeedback: hidden,
-  };
-};
+interface InternalCandidate extends ArtistDescriptor {
+  __rerankBaseScore: number;
+  __rerankFeedbackAdjustment: number;
+  __rerankHidden: boolean;
+  __rerankTags: string[];
+  __rerankSeeds: string[];
+}
 
 export const rerankRecommendations = (
-  recommendations = [],
-  limit = 100,
-  options = {},
-) => {
+  recommendations: ArtistDescriptor[] = [],
+  limit: number = 100,
+  options: RerankOptions = {},
+): ArtistDescriptor[] => {
   const mode = normalizeDiscoveryMode(options.discoveryMode);
-  const multipliers = DISCOVERY_MODE_MULTIPLIERS[mode];
-  const input = (Array.isArray(recommendations) ? recommendations : [])
-    .map((entry) => ({
+  const multipliers = DISCOVERY_MODE_MULTIPLIERS[mode] || DISCOVERY_MODE_MULTIPLIERS.balanced;
+  const input: InternalCandidate[] = (Array.isArray(recommendations) ? recommendations : [])
+    .map((entry: ArtistDescriptor) => ({
       ...entry,
       matchedTags: Array.isArray(entry?.matchedTags)
         ? [...entry.matchedTags]
@@ -711,9 +830,9 @@ export const rerankRecommendations = (
       supportingSeeds: Array.isArray(entry?.supportingSeeds)
         ? [...entry.supportingSeeds]
         : Array.isArray(entry?.sourceArtists)
-          ? entry.sourceArtists.map((artistName) => ({
+          ? entry.sourceArtists.map((artistName: string) => ({
               artistName,
-              source: entry?.sourceType || "library",
+              source: entry?.sourceType || 'library',
               weight: 1,
             }))
           : [],
@@ -729,20 +848,20 @@ export const rerankRecommendations = (
           : entry?.sourceType
             ? [entry.sourceType]
             : [],
-      reasonCodes: Array.isArray(entry?.reasonCodes)
-        ? [...entry.reasonCodes]
-        : [],
+      reasonCodes: Array.isArray(entry?.reasonCodes) ? [...entry.reasonCodes] : [],
       discoveryTier: entry?.discoveryTier || mode,
       discoveryDepth: Number(entry?.discoveryDepth || 1) || 1,
       confidence: Number(entry?.confidence || 0) || 0,
-    }))
-    .map((entry) => {
+      __rerankBaseScore: 0,
+      __rerankFeedbackAdjustment: 0,
+      __rerankHidden: false,
+      __rerankTags: [],
+      __rerankSeeds: [],
+    } as InternalCandidate))
+    .map((entry: InternalCandidate): InternalCandidate => {
       const candidateTags = [
         ...new Set(
-          (Array.isArray(entry.matchedTags)
-            ? entry.matchedTags
-            : entry.tags || []
-          )
+          (Array.isArray(entry.matchedTags) ? entry.matchedTags : entry.tags || [])
             .map(normalizeText)
             .filter(Boolean),
         ),
@@ -750,21 +869,17 @@ export const rerankRecommendations = (
       const candidateSeeds = [
         ...new Set(
           (Array.isArray(entry.supportingSeeds) ? entry.supportingSeeds : [])
-            .map((seed) => normalizeText(seed?.artistName))
+            .map((seed: SeedRef) => normalizeText(seed?.artistName))
             .filter(Boolean),
         ),
       ];
-      const { adjustment, hidden } = feedbackBoostForCandidate(
-        entry,
-        options.feedback || [],
-      );
+      const { adjustment, hidden } = feedbackBoostForCandidate(entry, options.feedback || []);
       const baseScore =
         Number(entry.scoreSimilarity || 0) * multipliers.similarity +
         Number(entry.scoreTagAffinity || 0) * multipliers.tagAffinity +
         Number(entry.scoreSeedCoverage || 0) * multipliers.seedCoverage +
         Number(entry.scoreNovelty || 0) * multipliers.novelty -
-        Number(entry.scorePopularityPenalty || 0) *
-          multipliers.popularityPenalty +
+        Number(entry.scorePopularityPenalty || 0) * multipliers.popularityPenalty +
         Number(entry.scoreFreshnessBoost || 0) -
         Number(entry.scoreAgingPenalty || 0);
       return {
@@ -776,22 +891,22 @@ export const rerankRecommendations = (
         __rerankSeeds: candidateSeeds,
       };
     })
-    .filter((entry) => !entry.__rerankHidden)
-    .sort((left, right) => {
+    .filter((entry: InternalCandidate) => !entry.__rerankHidden)
+    .sort((left: InternalCandidate, right: InternalCandidate) => {
       const leftScore = Number(left.scoreTotal || left.score || 0);
       const rightScore = Number(right.scoreTotal || right.score || 0);
       if (rightScore !== leftScore) return rightScore - leftScore;
       if ((right.seedCount || 0) !== (left.seedCount || 0)) {
         return (right.seedCount || 0) - (left.seedCount || 0);
       }
-      return String(left.name || "").localeCompare(String(right.name || ""));
+      return String(left.name || '').localeCompare(String(right.name || ''));
     });
 
-  const selected = [];
-  const pool = [...input];
-  const selectedTagCounts = new Map();
-  const selectedSeedCounts = new Map();
-  const scoreCandidate = (candidate) => {
+  const selected: InternalCandidate[] = [];
+  const pool: InternalCandidate[] = [...input];
+  const selectedTagCounts = new Map<string, number>();
+  const selectedSeedCounts = new Map<string, number>();
+  const scoreCandidate = (candidate: InternalCandidate): InternalCandidate => {
     let diversityPenalty = 0;
     for (const tag of candidate.__rerankTags) {
       diversityPenalty += (selectedTagCounts.get(tag) || 0) * 1.8;
@@ -801,7 +916,7 @@ export const rerankRecommendations = (
     }
     const scoreTotal = Math.round(
       candidate.__rerankBaseScore -
-        diversityPenalty * multipliers.diversityPenalty +
+        diversityPenalty * (multipliers.diversityPenalty || 1) +
         candidate.__rerankFeedbackAdjustment,
     );
     return {
@@ -812,18 +927,18 @@ export const rerankRecommendations = (
       hiddenByFeedback: false,
     };
   };
-  const stripRerankMetadata = (candidate) => {
+  const stripRerankMetadata = (candidate: InternalCandidate): ArtistDescriptor => {
     const {
-      __rerankBaseScore,
-      __rerankFeedbackAdjustment,
-      __rerankHidden,
-      __rerankTags,
-      __rerankSeeds,
+      __rerankBaseScore: _base,
+      __rerankFeedbackAdjustment: _adj,
+      __rerankHidden: _hidden,
+      __rerankTags: _tags,
+      __rerankSeeds: _seeds,
       ...clean
     } = candidate;
     return clean;
   };
-  const addSelectedSignals = (candidate) => {
+  const addSelectedSignals = (candidate: InternalCandidate): void => {
     for (const tag of candidate.__rerankTags) {
       selectedTagCounts.set(tag, (selectedTagCounts.get(tag) || 0) + 1);
     }
@@ -832,19 +947,13 @@ export const rerankRecommendations = (
     }
   };
 
-  while (
-    pool.length > 0 &&
-    selected.length < Math.max(1, Number(limit) || 100)
-  ) {
+  while (pool.length > 0 && selected.length < Math.max(1, Number(limit) || 100)) {
     let bestIndex = 0;
-    let bestCandidate = scoreCandidate(pool[0]);
+    let bestCandidate: InternalCandidate = scoreCandidate(pool[0]);
 
     for (let index = 1; index < pool.length; index += 1) {
       const candidate = scoreCandidate(pool[index]);
-      if (
-        bestCandidate.hiddenByFeedback ||
-        candidate.scoreTotal > bestCandidate.scoreTotal
-      ) {
+      if (bestCandidate.hiddenByFeedback || (candidate.scoreTotal != null && bestCandidate.scoreTotal != null && candidate.scoreTotal > bestCandidate.scoreTotal)) {
         bestCandidate = candidate;
         bestIndex = index;
       }
@@ -859,30 +968,33 @@ export const rerankRecommendations = (
 };
 
 export const filterRecommendationsForServe = (
-  recommendations = [],
-  feedback = [],
-) =>
+  recommendations: ArtistDescriptor[] = [],
+  feedback: FeedbackEntry[] = [],
+): ArtistDescriptor[] =>
   (Array.isArray(recommendations) ? recommendations : []).filter(
-    (recommendation) =>
+    (recommendation: ArtistDescriptor) =>
       !feedbackBoostForCandidate(recommendation, feedback).hidden,
   );
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const parseTimeMs = (value, fallback = Date.now()) => {
-  const time = new Date(value || "").getTime();
+const parseTimeMs = (value: unknown, fallback: number = Date.now()): number => {
+  const time = new Date(value as string || '').getTime();
   return Number.isFinite(time) ? time : fallback;
 };
 
-const getRecommendationPoolKeys = (recommendation) => {
+const getRecommendationPoolKeys = (recommendation: ArtistDescriptor): string[] => {
   const keys = normalizeArtistIdentityKeys(recommendation);
   if (keys.length > 0) return keys;
   const name = normalizeText(recommendation?.name);
   return name ? [`name:${name}`] : [];
 };
 
-export const syncRecommendationImages = (target = [], sources = []) => {
-  const imageByKey = new Map();
+export const syncRecommendationImages = (
+  target: ArtistDescriptor[] = [],
+  sources: ArtistDescriptor[] = [],
+): ArtistDescriptor[] => {
+  const imageByKey = new Map<string, string>();
   for (const recommendation of Array.isArray(sources) ? sources : []) {
     const image = recommendation?.image || recommendation?.imageUrl;
     if (!image) continue;
@@ -904,14 +1016,14 @@ export const syncRecommendationImages = (target = [], sources = []) => {
   return target;
 };
 
-const buildRecommendationPoolMetadataMap = (recommendations = []) => {
-  const metadata = new Map();
-  for (const recommendation of Array.isArray(recommendations)
-    ? recommendations
-    : []) {
+const buildRecommendationPoolMetadataMap = (
+  recommendations: ArtistDescriptor[] = [],
+): Map<string, PoolMetadata> => {
+  const metadata = new Map<string, PoolMetadata>();
+  for (const recommendation of Array.isArray(recommendations) ? recommendations : []) {
     const keys = getRecommendationPoolKeys(recommendation);
     if (keys.length === 0) continue;
-    const entry = {
+    const entry: PoolMetadata = {
       firstDiscoveredAt:
         recommendation.firstDiscoveredAt ||
         recommendation.discoveredAt ||
@@ -930,7 +1042,10 @@ const buildRecommendationPoolMetadataMap = (recommendations = []) => {
   return metadata;
 };
 
-const findRecommendationPoolMetadata = (recommendation, metadataMap) => {
+const findRecommendationPoolMetadata = (
+  recommendation: ArtistDescriptor,
+  metadataMap: Map<string, PoolMetadata>,
+): PoolMetadata | null => {
   for (const key of getRecommendationPoolKeys(recommendation)) {
     const metadata = metadataMap.get(key);
     if (metadata) return metadata;
@@ -939,15 +1054,9 @@ const findRecommendationPoolMetadata = (recommendation, metadataMap) => {
 };
 
 const applyRecommendationPoolMetadata = (
-  recommendation,
-  {
-    fresh = false,
-    index = 0,
-    metadata = null,
-    runStartedAt,
-    runStartedMs,
-  } = {},
-) => {
+  recommendation: ArtistDescriptor,
+  { fresh = false, index = 0, metadata = null, runStartedAt, runStartedMs = Date.now() }: PoolMetaOptions = {},
+): ArtistDescriptor => {
   const firstDiscoveredAt =
     metadata?.firstDiscoveredAt ||
     recommendation.firstDiscoveredAt ||
@@ -964,53 +1073,45 @@ const applyRecommendationPoolMetadata = (
     discoveredAt: recommendation.discoveredAt || firstDiscoveredAt,
     lastRecommendedAt: fresh
       ? runStartedAt
-      : metadata?.lastRecommendedAt ||
-        recommendation.lastRecommendedAt ||
-        firstDiscoveredAt,
-    recommendationPoolState: fresh ? "fresh" : "retained",
+      : metadata?.lastRecommendedAt || recommendation.lastRecommendedAt || firstDiscoveredAt,
+    recommendationPoolState: fresh ? 'fresh' : 'retained',
     scoreFreshnessBoost: Number(freshnessBoost.toFixed(2)),
     scoreAgingPenalty: Number(agingPenalty.toFixed(2)),
   };
 };
 
 export const mergeRetainedRecommendationPool = ({
-  freshRecommendations = [],
-  existingRecommendations = [],
-  existingArtistKeys = new Set(),
+  freshRecommendations = [] as ArtistDescriptor[],
+  existingRecommendations = [] as ArtistDescriptor[],
+  existingArtistKeys = new Set<string>(),
   limit = 500,
   runStartedAt = new Date().toISOString(),
-  discoveryMode = "balanced",
-  feedback = [],
-} = {}) => {
+  discoveryMode = 'balanced',
+  feedback = [] as FeedbackEntry[],
+}: MergeRetainedParams = {}): ArtistDescriptor[] => {
   const normalizedLimit = Math.max(1, Number(limit) || 500);
   const runStartedMs = parseTimeMs(runStartedAt);
-  const existingMetadata = buildRecommendationPoolMetadataMap(
-    existingRecommendations,
+  const existingMetadata = buildRecommendationPoolMetadataMap(existingRecommendations);
+  const fresh = (Array.isArray(freshRecommendations) ? freshRecommendations : []).map(
+    (recommendation: ArtistDescriptor, index: number) =>
+      applyRecommendationPoolMetadata(recommendation, {
+        fresh: true,
+        index,
+        metadata: findRecommendationPoolMetadata(recommendation, existingMetadata),
+        runStartedAt,
+        runStartedMs,
+      }),
   );
-  const fresh = (Array.isArray(freshRecommendations)
-    ? freshRecommendations
-    : []
-  ).map((recommendation, index) =>
-    applyRecommendationPoolMetadata(recommendation, {
-      fresh: true,
-      index,
-      metadata: findRecommendationPoolMetadata(recommendation, existingMetadata),
-      runStartedAt,
-      runStartedMs,
-    }),
+  const retained = (Array.isArray(existingRecommendations) ? existingRecommendations : []).map(
+    (recommendation: ArtistDescriptor, index: number) =>
+      applyRecommendationPoolMetadata(recommendation, {
+        fresh: false,
+        index,
+        runStartedAt,
+        runStartedMs,
+      }),
   );
-  const retained = (Array.isArray(existingRecommendations)
-    ? existingRecommendations
-    : []
-  ).map((recommendation, index) =>
-    applyRecommendationPoolMetadata(recommendation, {
-      fresh: false,
-      index,
-      runStartedAt,
-      runStartedMs,
-    }),
-  );
-  const merged = mergeResolvedRecommendations(
+  const merged: ArtistDescriptor[] = mergeResolvedRecommendations(
     [...fresh, ...retained],
     existingArtistKeys,
   );
@@ -1018,40 +1119,36 @@ export const mergeRetainedRecommendationPool = ({
   return rerankRecommendations(merged, normalizedLimit, {
     discoveryMode,
     feedback,
-  }).map((recommendation, index) => ({
+  }).map((recommendation: ArtistDescriptor, index: number) => ({
     ...recommendation,
     recommendationPoolRank: index + 1,
   }));
 };
 
 export const mergeResolvedRecommendations = (
-  recommendations = [],
-  existingArtistKeys = new Set(),
-) => {
-  const merged = new Map();
-  const aliases = new Map();
+  recommendations: ArtistDescriptor[] = [],
+  existingArtistKeys: Set<string> = new Set(),
+): ArtistDescriptor[] => {
+  const merged = new Map<string, ArtistDescriptor>();
+  const aliases = new Map<string, string>();
 
-  for (const recommendation of Array.isArray(recommendations)
-    ? recommendations
-    : []) {
+  for (const recommendation of Array.isArray(recommendations) ? recommendations : []) {
     const keys = normalizeArtistIdentityKeys(recommendation);
-    if (keys.some((key) => existingArtistKeys.has(key))) continue;
+    if (keys.some((key: string) => existingArtistKeys.has(key))) continue;
 
-    const identityKeys = [
+    const identityKeys: string[] = [
       normalizeMbid(recommendation?.id),
       `name:${normalizeText(recommendation?.name)}`,
-    ].filter(Boolean);
+    ].filter((val: string | null): val is string => typeof val === 'string');
     if (identityKeys.length === 0) continue;
     const existingIdentity = identityKeys.find((key) => aliases.has(key));
-    const identity = existingIdentity || identityKeys[0];
+    const identity: string = existingIdentity || identityKeys[0]!;
 
     const existing = merged.get(identity);
     if (!existing) {
-      const entry = {
+      const entry: ArtistDescriptor = {
         ...recommendation,
-        tags: Array.isArray(recommendation?.tags)
-          ? [...recommendation.tags]
-          : [],
+        tags: Array.isArray(recommendation?.tags) ? [...recommendation.tags] : [],
         matchedTags: Array.isArray(recommendation?.matchedTags)
           ? [...recommendation.matchedTags]
           : [],
@@ -1066,9 +1163,7 @@ export const mergeResolvedRecommendations = (
         supportingSeeds: Array.isArray(recommendation?.supportingSeeds)
           ? [...recommendation.supportingSeeds]
           : [],
-        sourceMix: Array.isArray(recommendation?.sourceMix)
-          ? [...recommendation.sourceMix]
-          : [],
+        sourceMix: Array.isArray(recommendation?.sourceMix) ? [...recommendation.sourceMix] : [],
         reasonCodes: Array.isArray(recommendation?.reasonCodes)
           ? [...recommendation.reasonCodes]
           : [],
@@ -1089,10 +1184,8 @@ export const mergeResolvedRecommendations = (
     existing.navigateTo =
       existing.navigateTo || recommendation.navigateTo || recommendation.id || null;
     existing.image = existing.image || recommendation.image || null;
-    existing.popularityLabel =
-      existing.popularityLabel || recommendation.popularityLabel || null;
-    existing.popularityRank =
-      existing.popularityRank || recommendation.popularityRank || null;
+    existing.popularityLabel = existing.popularityLabel || recommendation.popularityLabel || null;
+    existing.popularityRank = existing.popularityRank || recommendation.popularityRank || null;
     existing.listeners = Math.max(
       Number(existing.listeners || 0),
       Number(recommendation.listeners || 0),
@@ -1101,10 +1194,7 @@ export const mergeResolvedRecommendations = (
       Number(existing.playcount || 0),
       Number(recommendation.playcount || 0),
     );
-    existing.score = Math.max(
-      Number(existing.score || 0),
-      Number(recommendation.score || 0),
-    );
+    existing.score = Math.max(Number(existing.score || 0), Number(recommendation.score || 0));
     existing.scoreTotal = Math.max(
       Number(existing.scoreTotal || 0),
       Number(recommendation.scoreTotal || recommendation.score || 0),
@@ -1137,15 +1227,14 @@ export const mergeResolvedRecommendations = (
       Number(existing.confidence || 0),
       Number(recommendation.confidence || 0),
     );
-    existing.discoveryTier =
-      existing.discoveryTier || recommendation.discoveryTier || "balanced";
+    existing.discoveryTier = existing.discoveryTier || recommendation.discoveryTier || 'balanced';
     existing.discoveryDepth = Math.min(
       Number(existing.discoveryDepth || recommendation.discoveryDepth || 1) || 1,
       Number(recommendation.discoveryDepth || 1) || 1,
     );
     existing.sourceArtists = [
       ...new Set([
-        ...existing.sourceArtists,
+        ...(existing.sourceArtists || []),
         ...(Array.isArray(recommendation?.sourceArtists)
           ? recommendation.sourceArtists
           : recommendation?.sourceArtist
@@ -1155,7 +1244,7 @@ export const mergeResolvedRecommendations = (
     ];
     existing.sourceTypes = [
       ...new Set([
-        ...existing.sourceTypes,
+        ...(existing.sourceTypes || []),
         ...(Array.isArray(recommendation?.sourceTypes)
           ? recommendation.sourceTypes
           : recommendation?.sourceType
@@ -1166,38 +1255,32 @@ export const mergeResolvedRecommendations = (
     existing.sourceMix = [
       ...new Set([
         ...(existing.sourceMix || []),
-        ...(Array.isArray(recommendation?.sourceMix)
-          ? recommendation.sourceMix
-          : []),
+        ...(Array.isArray(recommendation?.sourceMix) ? recommendation.sourceMix : []),
       ]),
     ];
     existing.reasonCodes = [
       ...new Set([
         ...(existing.reasonCodes || []),
-        ...(Array.isArray(recommendation?.reasonCodes)
-          ? recommendation.reasonCodes
-          : []),
+        ...(Array.isArray(recommendation?.reasonCodes) ? recommendation.reasonCodes : []),
       ]),
     ];
     existing.tags = [
       ...new Set([
-        ...existing.tags,
+        ...(existing.tags || []),
         ...(Array.isArray(recommendation?.tags) ? recommendation.tags : []),
       ]),
     ];
     existing.matchedTags = [
       ...new Set([
         ...(existing.matchedTags || []),
-        ...(Array.isArray(recommendation?.matchedTags)
-          ? recommendation.matchedTags
-          : []),
+        ...(Array.isArray(recommendation?.matchedTags) ? recommendation.matchedTags : []),
       ]),
     ];
     existing.supportingSeeds = [
       ...new Map(
         [...(existing.supportingSeeds || []), ...(recommendation.supportingSeeds || [])]
-          .filter((seed) => seed?.artistName)
-          .map((seed) => [normalizeText(seed.artistName), seed]),
+          .filter((seed: SeedRef) => seed?.artistName)
+          .map((seed: SeedRef) => [normalizeText(seed.artistName), seed]),
       ).values(),
     ];
     for (const key of identityKeys) {
@@ -1205,13 +1288,13 @@ export const mergeResolvedRecommendations = (
     }
   }
 
-  return [...merged.values()].map((entry) => ({
+  return [...merged.values()].map((entry: ArtistDescriptor) => ({
     ...entry,
     sourceArtist: summarizeSourceArtists(entry.sourceArtists || []),
     sourceType:
       Array.isArray(entry.sourceTypes) && entry.sourceTypes.length === 1
         ? entry.sourceTypes[0]
-        : "blended",
+        : 'blended',
     sourceMix:
       Array.isArray(entry.sourceMix) && entry.sourceMix.length > 0
         ? entry.sourceMix
@@ -1226,19 +1309,17 @@ export const mergeResolvedRecommendations = (
           : [],
     supportingSeeds: Array.isArray(entry.supportingSeeds)
       ? entry.supportingSeeds
-          .sort((left, right) => Number(right.weight || 0) - Number(left.weight || 0))
+          .sort((left: SeedRef, right: SeedRef) => Number(right.weight || 0) - Number(left.weight || 0))
           .slice(0, 4)
-          : [],
+      : [],
   }));
 };
 
-const collectRecommendationTags = (recommendation) => {
-  const seen = new Set();
-  const tags = [];
+const collectRecommendationTags = (recommendation: ArtistDescriptor): string[] => {
+  const seen = new Set<string>();
+  const tags: string[] = [];
   for (const tag of [
-    ...(Array.isArray(recommendation?.matchedTags)
-      ? recommendation.matchedTags
-      : []),
+    ...(Array.isArray(recommendation?.matchedTags) ? recommendation.matchedTags : []),
     ...(Array.isArray(recommendation?.tags) ? recommendation.tags : []),
   ]) {
     const normalized = normalizeText(tag);
@@ -1249,46 +1330,49 @@ const collectRecommendationTags = (recommendation) => {
   return tags;
 };
 
-const recommendationArtistKey = (recommendation) =>
+const recommendationArtistKey = (recommendation: ArtistDescriptor): string | null =>
   normalizeMbid(recommendation?.id || recommendation?.mbid) ||
   normalizeText(recommendation?.name || recommendation?.artistName);
 
-const isGenreLikeTag = (tag) => {
+const isGenreLikeTag = (tag: string): boolean => {
   const normalized = normalizeText(tag);
   if (!normalized) return false;
-  return GENRE_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  return GENRE_KEYWORDS.some((keyword: string) => normalized.includes(keyword));
 };
 
-const deriveTagArtistCounts = (recommendations = []) => {
-  const counts = new Map();
+const deriveTagArtistCounts = (
+  recommendations: ArtistDescriptor[] = [],
+): Map<string, Set<string>> => {
+  const counts = new Map<string, Set<string>>();
   for (const recommendation of recommendations) {
     const artistKey = recommendationArtistKey(recommendation);
     if (!artistKey) continue;
     for (const tag of collectRecommendationTags(recommendation)) {
-      if (!counts.has(tag)) counts.set(tag, new Set());
-      counts.get(tag).add(artistKey);
+      if (!counts.has(tag)) counts.set(tag, new Set<string>());
+      counts.get(tag)!.add(artistKey);
     }
   }
   return counts;
 };
 
 export const deriveDiscoveryTagsFromPool = (
-  recommendations = [],
-  { limit = 30, minArtists = 2 } = {},
-) =>
+  recommendations: ArtistDescriptor[] = [],
+  { limit = 30, minArtists = 2 }: DiscoveryTagsOptions = {},
+): string[] =>
   sortByValueThenName(
-    [...deriveTagArtistCounts(recommendations).entries()].map(
-      ([tag, artists]) => [tag, artists.size],
-    ),
+    [...deriveTagArtistCounts(recommendations).entries()].map(([tag, artists]) => [
+      tag,
+      artists.size,
+    ]),
   )
     .filter(([, count]) => count >= minArtists)
     .slice(0, limit)
     .map(([tag]) => tag);
 
 export const deriveDiscoveryGenresFromPool = (
-  recommendations = [],
-  { limit = 32, minArtists = 4 } = {},
-) =>
+  recommendations: ArtistDescriptor[] = [],
+  { limit = 32, minArtists = 4 }: DiscoveryTagsOptions = {},
+): string[] =>
   sortByValueThenName(
     [...deriveTagArtistCounts(recommendations).entries()]
       .filter(([tag]) => isGenreLikeTag(tag))

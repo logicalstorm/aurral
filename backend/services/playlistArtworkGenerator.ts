@@ -1,39 +1,36 @@
-import { randomUUID } from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { dbOps } from "../config/db-helpers.js";
-import { buildPlaylistArtworkWebpBuffer } from "./playlistArtwork.js";
-import {
-  fetchImageBuffer,
-  renderStylizedPhotoArtwork,
-} from "./stylizedPhotoArtwork.js";
+import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { dbOps } from '../config/db-helpers.js';
+import { buildPlaylistArtworkWebpBuffer } from './playlistArtwork.js';
+import { fetchImageBuffer, renderStylizedPhotoArtwork } from './stylizedPhotoArtwork.js';
 
-export const PLAYLIST_ARTWORK_STYLES = ["aurral", "photo"];
+export const PLAYLIST_ARTWORK_STYLES = ['aurral', 'photo'];
 
 export function getPlaylistArtworkStyle() {
-  if (process.env.NODE_ENV === "test") {
-    return "aurral";
+  if (process.env.NODE_ENV === 'test') {
+    return 'aurral';
   }
   const settings = dbOps.getSettings() || {};
   const style = String(
-    settings?.playlistArtwork?.style ||
-      settings?.integrations?.lastfm?.discoverFlowArtworkStyle ||
-      "photo",
+    (settings as Record<string, any>)?.playlistArtwork?.style ||
+      (settings as Record<string, any>)?.integrations?.lastfm?.discoverFlowArtworkStyle ||
+      'photo',
   )
     .trim()
     .toLowerCase();
-  return PLAYLIST_ARTWORK_STYLES.includes(style) ? style : "photo";
+  return PLAYLIST_ARTWORK_STYLES.includes(style) ? style : 'photo';
 }
 
 export function getArtworkExtensionForStyle(style = getPlaylistArtworkStyle()) {
-  return style === "photo" ? ".jpg" : ".webp";
+  return style === 'photo' ? '.jpg' : '.webp';
 }
 
-export function getArtworkContentTypeForExtension(extension) {
-  const normalized = String(extension || "").toLowerCase();
-  if (normalized === ".webp") return "image/webp";
-  if (normalized === ".jpg" || normalized === ".jpeg") return "image/jpeg";
-  return "image/png";
+export function getArtworkContentTypeForExtension(extension: string) {
+  const normalized = String(extension || '').toLowerCase();
+  if (normalized === '.webp') return 'image/webp';
+  if (normalized === '.jpg' || normalized === '.jpeg') return 'image/jpeg';
+  return 'image/png';
 }
 
 export async function resolvePlaylistSourceImageUrl() {
@@ -42,17 +39,25 @@ export async function resolvePlaylistSourceImageUrl() {
 
 export async function buildGeneratedPlaylistArtworkBuffer({
   title,
-  kind = "Playlist",
-  signature,
-  relatedArtists = [],
+  kind = 'Playlist',
+  _signature,
+  _relatedArtists = [],
   style = null,
-  rotateSourceImage = false,
+  _rotateSourceImage = false,
   paletteSeed = null,
+}: {
+  title?: string;
+  kind?: string;
+  _signature?: string;
+  _relatedArtists?: string[];
+  style?: string | null;
+  _rotateSourceImage?: boolean;
+  paletteSeed?: string | null;
 }) {
   const resolvedStyle = style || getPlaylistArtworkStyle();
-  const displayTitle = String(title || "").trim() || "Untitled";
+  const displayTitle = String(title || '').trim() || 'Untitled';
 
-  if (resolvedStyle === "aurral") {
+  if (resolvedStyle === 'aurral') {
     return buildPlaylistArtworkWebpBuffer({
       playlistName: displayTitle,
       kind,
@@ -68,7 +73,7 @@ export async function buildGeneratedPlaylistArtworkBuffer({
   });
 }
 
-const resolveArtworkOutputPath = (outputPath, style) => {
+const resolveArtworkOutputPath = (outputPath: string, style: string) => {
   const extension = getArtworkExtensionForStyle(style);
   const directory = path.dirname(outputPath);
   const baseName = path.basename(outputPath, path.extname(outputPath));
@@ -78,12 +83,21 @@ const resolveArtworkOutputPath = (outputPath, style) => {
 export async function writeGeneratedPlaylistArtwork({
   outputPath,
   title,
-  kind = "Playlist",
+  kind = 'Playlist',
   signature,
   relatedArtists = [],
   style = null,
   rotateSourceImage = false,
   paletteSeed = null,
+}: {
+  outputPath: string;
+  title?: string;
+  kind?: string;
+  signature?: string;
+  relatedArtists?: string[];
+  style?: string | null;
+  rotateSourceImage?: boolean;
+  paletteSeed?: string | null;
 }) {
   const resolvedStyle = style || getPlaylistArtworkStyle();
   const targetPath = resolveArtworkOutputPath(outputPath, resolvedStyle);
@@ -91,20 +105,18 @@ export async function writeGeneratedPlaylistArtwork({
   const baseName = path.basename(targetPath, path.extname(targetPath));
   const keepExtension = path.extname(targetPath);
 
-  for (const extension of [".jpg", ".webp", ".png"]) {
+  for (const extension of ['.jpg', '.webp', '.png']) {
     if (extension === keepExtension) continue;
-    await fs
-      .unlink(path.join(directory, `${baseName}${extension}`))
-      .catch(() => {});
+    await fs.unlink(path.join(directory, `${baseName}${extension}`)).catch(() => {});
   }
 
   const buffer = await buildGeneratedPlaylistArtworkBuffer({
     title,
     kind,
-    signature,
-    relatedArtists,
-    style: resolvedStyle,
-    rotateSourceImage,
+    _signature: signature,
+    _relatedArtists: relatedArtists,
+    style: resolvedStyle as string,
+    _rotateSourceImage: rotateSourceImage,
     paletteSeed,
   });
   await fs.writeFile(targetPath, buffer);

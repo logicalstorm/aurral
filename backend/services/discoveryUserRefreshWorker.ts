@@ -1,7 +1,7 @@
-import { dbOps } from "../config/db-helpers.js";
-import { getDiscoveryUserRefreshQueue, getWorkerId } from "./honkerDb.js";
-import { updateUserDiscoveryCache } from "./discoveryService.js";
-import { getListenHistoryCacheNamespace } from "./listeningHistory.js";
+import { dbOps } from '../config/db-helpers.js';
+import { getDiscoveryUserRefreshQueue, getWorkerId } from './honkerDb.js';
+import { updateUserDiscoveryCache } from './discoveryService.js';
+import { getListenHistoryCacheNamespace } from './listeningHistory.js';
 import {
   createIdleAbortController,
   getWorkerIdleStopMs,
@@ -9,36 +9,33 @@ import {
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
   withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
+} from './honkerWorkerRuntime.js';
 
-const WORKER_NAME = "discovery-user-refresh";
+const WORKER_NAME = 'discovery-user-refresh';
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
-let idleController = null;
+let idleController: ReturnType<typeof createIdleAbortController> | null = null;
 
-function wasRefreshedSince(profile, requestedAt) {
+function wasRefreshedSince(profile: string, requestedAt: number) {
   const cacheNamespace = getListenHistoryCacheNamespace(profile);
   if (!cacheNamespace || !Number.isFinite(requestedAt) || requestedAt <= 0) {
     return false;
   }
-  const lastUpdated = Date.parse(
-    dbOps.getDiscoveryCache(cacheNamespace)?.lastUpdated || "",
-  );
+  const lastUpdated = Date.parse(dbOps.getDiscoveryCache(cacheNamespace)?.lastUpdated || '');
   return Number.isFinite(lastUpdated) && lastUpdated >= requestedAt;
 }
 
-async function processDiscoveryUserRefresh(payload = {}) {
-  const profile = payload?.listenHistoryProfile || null;
+async function processDiscoveryUserRefresh(payload: Record<string, unknown> = {}) {
+  const profile = payload?.['listenHistoryProfile'] || null;
   if (!profile) {
     return { skipped: true };
   }
-  if (wasRefreshedSince(profile, Number(payload?.requestedAt))) {
-    return { skipped: true, reason: "already_refreshed" };
+  if (wasRefreshedSince(profile as string, Number(payload?.['requestedAt']))) {
+    return { skipped: true, reason: 'already_refreshed' };
   }
-  await updateUserDiscoveryCache(profile, {
-    feedbackUserId: payload?.feedbackUserId || null,
+  await updateUserDiscoveryCache(profile as string, {
+    feedbackUserId: (payload?.['feedbackUserId'] as string) || undefined,
   });
   return { refreshed: true };
 }
@@ -58,12 +55,10 @@ async function runLoop() {
       idleController.disarm();
       if (!running || stopRequested) break;
       try {
-        await withJobHeartbeat(job, queue, () =>
-          processDiscoveryUserRefresh(job.payload),
-        );
+        await withJobHeartbeat(job, queue, () => processDiscoveryUserRefresh(job.payload as Record<string, unknown>));
         job.ack();
-      } catch (error) {
-        const message = error?.message || String(error);
+      } catch (error: unknown) {
+        const message = (error as { message?: string })?.message || String(error);
         if (job.attempts >= 4) {
           job.fail(message);
         } else {
@@ -74,14 +69,13 @@ async function runLoop() {
     }
   } catch (error) {
     if (!idleController?.idleStopped && !stopRequested) {
-      console.error("[discoveryUserRefreshWorker] loop error:", error);
+      console.error('[discoveryUserRefreshWorker] loop error:', error);
     }
   } finally {
     const idleStopped = idleController?.idleStopped === true;
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
     const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startDiscoveryUserRefreshWorker, {
@@ -94,7 +88,7 @@ export function startDiscoveryUserRefreshWorker() {
   if (running || isHonkerShuttingDown()) return;
   running = true;
   stopRequested = false;
-  loopPromise = runLoop();
+  runLoop();
 }
 
 export function stopDiscoveryUserRefreshWorker() {

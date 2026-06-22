@@ -1,16 +1,15 @@
-import { getMaxFocusPlaylists } from "./discoveryService.js";
-import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
+import { getMaxFocusPlaylists } from './discoveryService.js';
+import { flowPlaylistConfig } from './weeklyFlowPlaylistConfig.js';
 import {
   DISCOVER_PLAYLIST_PRESETS,
-  RELEASE_RADAR_PRESET,
   getDiscoverPlaylistPreset,
-} from "../config/discoverPlaylistPresets.js";
+} from '../config/discoverPlaylistPresets.js';
 
 const FOCUS_PLAYLIST_SIZE = 20;
 const FOCUS_MIX = { discover: 0, mix: 0, trending: 0, focus: 100 };
-const LISTENING_HISTORY_PLAYLIST_ID = "focus-listening-history";
+const LISTENING_HISTORY_PLAYLIST_ID = 'focus-listening-history';
 
-const serializeTrack = (track) => ({
+const serializeTrack = (track: Record<string, unknown> | null) => ({
   artistName: track?.artistName || null,
   trackName: track?.trackName || null,
   albumName: track?.albumName || null,
@@ -21,25 +20,25 @@ const serializeTrack = (track) => ({
   reason: track?.reason || null,
 });
 
-const slugify = (value) =>
-  String(value || "")
+const slugify = (value: unknown) =>
+  String(value || '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
-const titleCase = (value) =>
-  String(value || "")
-    .split(" ")
+const titleCase = (value: unknown) =>
+  String(value || '')
+    .split(' ')
     .filter(Boolean)
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join(" ");
+    .map((part: string) => part[0]?.toUpperCase() + part.slice(1))
+    .join(' ');
 
-const uniqueStrings = (values, limit = 10) => {
-  const seen = new Set();
-  const out = [];
+const uniqueStrings = (values: unknown[], limit = 10): string[] => {
+  const seen = new Set<string>();
+  const out: string[] = [];
   for (const value of values) {
-    const text = String(value || "").trim();
+    const text = String(value || '').trim();
     const key = text.toLowerCase();
     if (!text || seen.has(key)) continue;
     seen.add(key);
@@ -49,38 +48,7 @@ const uniqueStrings = (values, limit = 10) => {
   return out;
 };
 
-const buildPlaylistPreview = (preset, tracks, plan = null) => {
-  const mix = preset.mix || { discover: 0, mix: 0, trending: 0, focus: 0 };
-  const tags = uniqueStrings(preset.tags || []);
-  const relatedArtists = uniqueStrings(preset.relatedArtists || []);
-  const recipe =
-    preset.id === RELEASE_RADAR_PRESET.id
-      ? { releaseRadar: tracks.length }
-      : plan?.diagnostics?.targets || {
-          discover: 0,
-          mix: 0,
-          trending: 0,
-          focus: 0,
-        };
-  return {
-    presetId: preset.id,
-    name: preset.name,
-    description: preset.description || null,
-    type:
-      preset.type ||
-      (preset.id === RELEASE_RADAR_PRESET.id ? "release_radar" : "flow"),
-    mix,
-    size: Math.max(1, Math.round(Number(preset.size) || 30)),
-    deepDive: preset.deepDive === true,
-    tags,
-    relatedArtists,
-    recipe,
-    tracks: tracks.map(serializeTrack),
-    trackCount: tracks.length,
-  };
-};
-
-const areTagsSimilar = (left, right) => {
+const areTagsSimilar = (left: string, right: string) => {
   const a = slugify(left);
   const b = slugify(right);
   if (!a || !b) return false;
@@ -88,9 +56,9 @@ const areTagsSimilar = (left, right) => {
   return a.includes(b) || b.includes(a);
 };
 
-const diversifyTasteTags = (topGenres = [], topTags = []) => {
+const diversifyTasteTags = (topGenres: string[] = [], topTags: string[] = []): string[] => {
   const merged = uniqueStrings([...topGenres, ...topTags], 12);
-  const out = [];
+  const out: string[] = [];
   for (const tag of merged) {
     if (out.some((existing) => areTagsSimilar(existing, tag))) continue;
     out.push(tag);
@@ -98,14 +66,14 @@ const diversifyTasteTags = (topGenres = [], topTags = []) => {
   return out;
 };
 
-const isHistorySeedSource = (source) => {
-  const normalized = String(source || "")
+const isHistorySeedSource = (source: unknown) => {
+  const normalized = String(source || '')
     .trim()
     .toLowerCase();
-  return normalized.length > 0 && normalized !== "library";
+  return normalized.length > 0 && normalized !== 'library';
 };
 
-const resolveFocusSlotBudgets = (maxFocusPlaylists) => {
+const resolveFocusSlotBudgets = (maxFocusPlaylists: number) => {
   const maxFocus = Math.max(0, Math.floor(Number(maxFocusPlaylists) || 0));
   if (maxFocus === 0) {
     return { maxFocus: 0, tag: 0, artist: 0, crossover: 0 };
@@ -116,11 +84,32 @@ const resolveFocusSlotBudgets = (maxFocusPlaylists) => {
   return { maxFocus, tag, artist, crossover };
 };
 
-const resolveHistoryTopArtists = ({
-  historyTopArtists = [],
-  basedOn = [],
-  limit = 3,
-} = {}) => {
+interface BasedOnEntry {
+  source?: unknown;
+  name?: unknown;
+  artistName?: unknown;
+}
+
+interface RecommendationEntry {
+  matchedTags?: unknown;
+  tags?: unknown;
+  name?: unknown;
+  artistName?: unknown;
+}
+
+interface DiscoverPreset {
+  id?: string;
+  name?: string;
+  description?: string;
+  mix?: Record<string, unknown>;
+  tags?: unknown[];
+  relatedArtists?: unknown[];
+  deepDive?: boolean;
+  size?: number;
+  type?: string;
+}
+
+const resolveHistoryTopArtists = ({ historyTopArtists = [], basedOn = [], limit = 3 }: { historyTopArtists?: unknown[]; basedOn?: BasedOnEntry[]; limit?: number } = {}): string[] => {
   const explicit = uniqueStrings(historyTopArtists, limit);
   if (explicit.length >= limit) return explicit;
   const fromBasedOn = uniqueStrings(
@@ -139,7 +128,14 @@ const buildFocusedPlaylistCandidates = ({
   recommendations = [],
   historyTopArtists = [],
   maxFocusPlaylists = getMaxFocusPlaylists(),
-} = {}) => {
+}: {
+  topGenres?: string[];
+  topTags?: string[];
+  basedOn?: BasedOnEntry[];
+  recommendations?: RecommendationEntry[];
+  historyTopArtists?: unknown[];
+  maxFocusPlaylists?: number;
+} = {}): DiscoverPreset[] => {
   const tasteTags = diversifyTasteTags(topGenres, topTags);
   const historyArtists = resolveHistoryTopArtists({
     historyTopArtists,
@@ -157,22 +153,21 @@ const buildFocusedPlaylistCandidates = ({
     artist: artistBudget,
     crossover: crossoverBudget,
   } = resolveFocusSlotBudgets(autoFocusBudget);
-  const candidates = [];
-  const seenIds = new Set();
-  const usedTagPairs = new Set();
-  const usedArtistKeys = new Set();
+  const candidates: DiscoverPreset[] = [];
+  const seenIds = new Set<string>();
+  const usedTagPairs = new Set<string>();
+  const usedArtistKeys = new Set<string>();
   let tagSlots = 0;
   let artistSlots = 0;
   let crossoverSlots = 0;
 
   const autoFocusCount = () =>
-    candidates.filter((entry) => entry.id !== LISTENING_HISTORY_PLAYLIST_ID)
-      .length;
+    candidates.filter((entry) => entry.id !== LISTENING_HISTORY_PLAYLIST_ID).length;
 
   const canAddAutoFocus = () => autoFocusCount() < maxFocus;
 
-  const pushCandidate = (preset) => {
-    const id = String(preset?.id || "").trim();
+  const pushCandidate = (preset: DiscoverPreset) => {
+    const id = String(preset?.id || '').trim();
     if (!id || seenIds.has(id)) return false;
     const tags = uniqueStrings(preset.tags || []);
     const relatedArtists = uniqueStrings(preset.relatedArtists || []);
@@ -184,24 +179,20 @@ const buildFocusedPlaylistCandidates = ({
       tags,
       relatedArtists,
       size: preset.size || FOCUS_PLAYLIST_SIZE,
-      type: "focus",
+      type: 'focus',
     });
     return true;
   };
 
-  const addAutoFocusCandidate = (preset) => {
+  const addAutoFocusCandidate = (preset: DiscoverPreset) => {
     if (!canAddAutoFocus()) return false;
     return pushCandidate(preset);
   };
 
-  const historyArtistKeys = new Set(
-    historyArtists.map((artist) => slugify(artist)),
-  );
+  const historyArtistKeys = new Set(historyArtists.map((artist) => slugify(artist)));
   const librarySeedArtists = uniqueStrings(
     basedOn
-      .filter(
-        (entry) => String(entry?.source || "").toLowerCase() === "library",
-      )
+      .filter((entry) => String(entry?.source || '').toLowerCase() === 'library')
       .map((entry) => entry?.name || entry?.artistName),
     8,
   );
@@ -216,10 +207,10 @@ const buildFocusedPlaylistCandidates = ({
   );
 
   if (historyArtists.length > 0) {
-    const label = historyArtists.join(", ");
+    const label = historyArtists.join(', ');
     pushCandidate({
       id: LISTENING_HISTORY_PLAYLIST_ID,
-      name: "Listening History",
+      name: 'Listening History',
       description: `Tracks related to ${label}`,
       mix: { ...FOCUS_MIX },
       tags: [],
@@ -251,11 +242,9 @@ const buildFocusedPlaylistCandidates = ({
   for (let index = 0; index < tasteTags.length - 1; index += 1) {
     if (tagSlots >= tagBudget || !canAddAutoFocus()) break;
     const left = tasteTags[index];
-    const right = tasteTags.find(
-      (tag, tagIndex) => tagIndex > index && !areTagsSimilar(left, tag),
-    );
+    const right = tasteTags.find((tag, tagIndex) => tagIndex > index && !areTagsSimilar(left, tag));
     if (!right) continue;
-    const pairKey = [slugify(left), slugify(right)].sort().join("::");
+    const pairKey = [slugify(left), slugify(right)].sort().join('::');
     if (usedTagPairs.has(pairKey)) continue;
     usedTagPairs.add(pairKey);
     if (
@@ -293,16 +282,12 @@ const buildFocusedPlaylistCandidates = ({
     }
   }
 
-  if (
-    relatedSeedArtists.length >= 2 &&
-    artistSlots < artistBudget &&
-    canAddAutoFocus()
-  ) {
+  if (relatedSeedArtists.length >= 2 && artistSlots < artistBudget && canAddAutoFocus()) {
     const left = relatedSeedArtists[0];
     const right =
       relatedSeedArtists.find((artist) => slugify(artist) !== slugify(left)) ||
       relatedSeedArtists[1];
-    const pairKey = [slugify(left), slugify(right)].sort().join("::");
+    const pairKey = [slugify(left), slugify(right)].sort().join('::');
     if (!usedArtistKeys.has(pairKey)) {
       if (
         addAutoFocusCandidate({
@@ -325,8 +310,7 @@ const buildFocusedPlaylistCandidates = ({
     const artistName = relatedSeedArtists[index];
     const artistKey = slugify(artistName);
     if (!artistKey || usedArtistKeys.has(`cross:${artistKey}`)) continue;
-    const tag =
-      tasteTags[(index + 1) % Math.max(tasteTags.length, 1)] || tasteTags[0];
+    const tag = tasteTags[(index + 1) % Math.max(tasteTags.length, 1)] || tasteTags[0];
     if (!tag) continue;
     usedArtistKeys.add(`cross:${artistKey}`);
     if (
@@ -345,7 +329,7 @@ const buildFocusedPlaylistCandidates = ({
   }
 
   const recPool = (Array.isArray(recommendations) ? recommendations : [])
-    .filter((entry) => {
+    .filter((entry: RecommendationEntry) => {
       const tags = [
         ...(Array.isArray(entry?.matchedTags) ? entry.matchedTags : []),
         ...(Array.isArray(entry?.tags) ? entry.tags : []),
@@ -357,26 +341,18 @@ const buildFocusedPlaylistCandidates = ({
   for (let index = 0; index < recPool.length; index += 1) {
     if (!canAddAutoFocus()) break;
     const recommendation = recPool[index];
-    const targetArtist = String(
-      recommendation?.name || recommendation?.artistName || "",
-    ).trim();
+    const targetArtist = String(recommendation?.name || recommendation?.artistName || '').trim();
     if (!targetArtist) continue;
     const recTags = uniqueStrings(
       [
-        ...(Array.isArray(recommendation.matchedTags)
-          ? recommendation.matchedTags
-          : []),
-        ...(Array.isArray(recommendation.tags)
-          ? recommendation.tags.slice(0, 2)
-          : []),
+        ...(Array.isArray(recommendation.matchedTags) ? recommendation.matchedTags : []),
+        ...(Array.isArray(recommendation.tags) ? recommendation.tags.slice(0, 2) : []),
       ],
       2,
     );
-    const diversifiedRecTags = [];
+    const diversifiedRecTags: string[] = [];
     for (const tag of recTags) {
-      if (
-        diversifiedRecTags.some((existing) => areTagsSimilar(existing, tag))
-      ) {
+      if (diversifiedRecTags.some((existing) => areTagsSimilar(existing, tag))) {
         continue;
       }
       diversifiedRecTags.push(tag);
@@ -386,11 +362,9 @@ const buildFocusedPlaylistCandidates = ({
     const anchorArtist = relatedSeedArtists.find(
       (artist) => slugify(artist) !== slugify(targetArtist),
     );
-    const tagLabel = diversifiedRecTags
-      .map((tag) => titleCase(tag))
-      .join(" + ");
+    const tagLabel = diversifiedRecTags.map((tag) => titleCase(tag)).join(' + ');
     addAutoFocusCandidate({
-      id: `focus-path:${slugify(targetArtist)}:${slugify(diversifiedRecTags.join("-"))}`,
+      id: `focus-path:${slugify(targetArtist)}:${slugify(diversifiedRecTags.join('-'))}`,
       name:
         diversifiedRecTags.length > 1
           ? `${tagLabel} → ${targetArtist}`
@@ -414,7 +388,13 @@ export function getDiscoverPlaylistPresetsForBuild({
   basedOn = [],
   recommendations = [],
   historyTopArtists = [],
-} = {}) {
+}: {
+  topGenres?: string[];
+  topTags?: string[];
+  basedOn?: BasedOnEntry[];
+  recommendations?: RecommendationEntry[];
+  historyTopArtists?: unknown[];
+} = {}): DiscoverPreset[] {
   const focusCandidates = buildFocusedPlaylistCandidates({
     topGenres,
     topTags,
@@ -425,36 +405,33 @@ export function getDiscoverPlaylistPresetsForBuild({
   return [...DISCOVER_PLAYLIST_PRESETS, ...focusCandidates];
 }
 
-export function annotateDiscoverPlaylistsForUser(playlists, user) {
-  const flows = flowPlaylistConfig.getFlowsForUser(user);
-  const adoptedFlowByPresetId = new Map();
+export function annotateDiscoverPlaylistsForUser(playlists: Record<string, unknown>[], user: Record<string, unknown>): Record<string, unknown>[] {
+  const flows = flowPlaylistConfig.getFlowsForUser(user) as unknown as Record<string, unknown>[];
+  const adoptedFlowByPresetId = new Map<string, unknown>();
   for (const flow of flows) {
-    const presetId = String(flow?.discoverPresetId || "").trim();
+    const presetId = String(flow?.discoverPresetId || '').trim();
     if (!presetId) continue;
     adoptedFlowByPresetId.set(presetId, flow.id);
   }
-  const adoptedPlaylistByPresetId = new Map();
-  for (const playlist of flowPlaylistConfig.getSharedPlaylistsForUser(user)) {
-    const presetId = String(playlist?.discoverPresetId || "").trim();
+  const adoptedPlaylistByPresetId = new Map<string, unknown>();
+  for (const playlist of flowPlaylistConfig.getSharedPlaylistsForUser(user) as unknown as Record<string, unknown>[]) {
+    const presetId = String(playlist?.discoverPresetId || '').trim();
     if (!presetId) continue;
     adoptedPlaylistByPresetId.set(presetId, playlist.id);
   }
-  return (Array.isArray(playlists) ? playlists : []).map((playlist) => ({
+  return (Array.isArray(playlists) ? playlists : []).map((playlist: Record<string, unknown>) => ({
     ...playlist,
-    adoptedFlowId: adoptedFlowByPresetId.get(playlist.presetId) || null,
-    adoptedPlaylistId:
-      adoptedPlaylistByPresetId.get(playlist.presetId) || null,
+    adoptedFlowId: adoptedFlowByPresetId.get(playlist.presetId as string) || null,
+    adoptedPlaylistId: adoptedPlaylistByPresetId.get(playlist.presetId as string) || null,
   }));
 }
 
-export function getCachedDiscoverPlaylist(cache, presetId) {
-  const playlists = Array.isArray(cache?.discoverPlaylists)
-    ? cache.discoverPlaylists
-    : [];
-  return playlists.find((playlist) => playlist.presetId === presetId) || null;
+export function getCachedDiscoverPlaylist(cache: Record<string, unknown>, presetId: string) {
+  const playlists = Array.isArray(cache?.discoverPlaylists) ? cache.discoverPlaylists as Record<string, unknown>[] : [];
+  return playlists.find((playlist: Record<string, unknown>) => playlist.presetId === presetId) || null;
 }
 
-export function buildFlowPayloadFromPreset(preset, presetId) {
+export function buildFlowPayloadFromPreset(preset: Record<string, unknown>, presetId: string) {
   return {
     name: preset.name,
     mix: preset.mix,
@@ -464,7 +441,7 @@ export function buildFlowPayloadFromPreset(preset, presetId) {
     relatedArtists: preset.relatedArtists || [],
     discoverPresetId: presetId,
     scheduleDays: [5],
-    scheduleTime: "00:00",
+    scheduleTime: '00:00',
   };
 }
 

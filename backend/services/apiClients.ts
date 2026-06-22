@@ -1,7 +1,7 @@
-import axios from "axios";
-import Bottleneck from "bottleneck";
-import NodeCache from "node-cache";
-import { dbOps } from "../config/db-helpers.js";
+import axios from 'axios';
+import Bottleneck from 'bottleneck';
+import NodeCache from 'node-cache';
+import { dbOps } from '../config/db-helpers.js';
 import {
   MUSICBRAINZ_API,
   AURRAL_MUSICBRAINZ_API,
@@ -10,7 +10,7 @@ import {
   LISTENBRAINZ_API,
   APP_NAME,
   APP_VERSION,
-} from "../config/constants.js";
+} from '../config/constants.js';
 import {
   getAlbumByMbid as getMetadataAlbumByMbid,
   getArtistNameByMbid as getMetadataArtistNameByMbid,
@@ -20,8 +20,8 @@ import {
   listArtistAlbums as listMetadataArtistAlbums,
   resolveAlbumByArtistAndTitle,
   resolveArtistByName as resolveMetadataArtistByName,
-} from "./providers/brainzmashProvider.js";
-import { selectBestAlbumImage } from "./imageService.js";
+} from './providers/brainzmashProvider.js';
+import { selectBestAlbumImage } from './imageService.js';
 
 const mbCache = new NodeCache({ stdTTL: 300, checkperiod: 60, maxKeys: 500 });
 const lastfmCache = new NodeCache({
@@ -49,22 +49,6 @@ const musicbrainzReleaseGroupsCache = new NodeCache({
   checkperiod: 120,
   maxKeys: 500,
 });
-const PRIMARY_RELEASE_TYPES = ["Album", "EP", "Single"];
-const SECONDARY_RELEASE_TYPES = [
-  "Live",
-  "Remix",
-  "Compilation",
-  "Demo",
-  "Broadcast",
-  "Soundtrack",
-  "Spokenword",
-  "Other",
-];
-const itunesAlbumArtCache = new NodeCache({
-  stdTTL: 24 * 60 * 60,
-  checkperiod: 10 * 60,
-  maxKeys: 2000,
-});
 
 const METADATA_PROVIDER_HEALTH_CONFIG = {
   failureThreshold: 3,
@@ -74,49 +58,67 @@ const METADATA_PROVIDER_HEALTH_CONFIG = {
   probeTimeoutMs: 3000,
 };
 
-const createProviderHealthState = () => ({
+interface ProviderHealthState {
+  failoverActive: boolean;
+  consecutiveFailures: number;
+  consecutiveSuccesses: number;
+  lastCheckedAt: string | null;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  lastFailureReason: string;
+  lastTransitionAt: string | null;
+  probeInFlight: Promise<boolean> | null;
+}
+
+const createProviderHealthState = (): ProviderHealthState => ({
   failoverActive: false,
   consecutiveFailures: 0,
   consecutiveSuccesses: 0,
   lastCheckedAt: null,
   lastSuccessAt: null,
   lastFailureAt: null,
-  lastFailureReason: "",
+  lastFailureReason: '',
   lastTransitionAt: null,
   probeInFlight: null,
 });
 
-const metadataProviderHealth = {
+const metadataProviderHealth: Record<string, ProviderHealthState> = {
   musicbrainz: createProviderHealthState(),
 };
 
-let metadataProviderProbeTimer = null;
-
 export const getLastfmApiKey = () => {
   const settings = dbOps.getSettings();
-  return settings.integrations?.lastfm?.apiKey || process.env.LASTFM_API_KEY;
+  const integrations = settings.integrations as Record<string, unknown> | undefined;
+  const val = integrations?.lastfm
+    ? (integrations.lastfm as Record<string, unknown>).apiKey
+    : null;
+  return (val as string | undefined) || process.env.LASTFM_API_KEY;
 };
 
 export const getTicketmasterApiKey = () => {
   const settings = dbOps.getSettings();
-  const configuredValue = settings.integrations?.ticketmaster?.apiKey;
+  const integrations = settings.integrations as Record<string, unknown> | undefined;
+  const configuredValue = integrations?.ticketmaster
+    ? (integrations.ticketmaster as Record<string, unknown>).apiKey
+    : undefined;
   if (configuredValue !== undefined && configuredValue !== null) {
     return String(configuredValue).trim();
   }
-  return String(process.env.TICKETMASTER_API_KEY || "").trim();
+  return String(process.env.TICKETMASTER_API_KEY || '').trim();
 };
 
-export const getMusicBrainzContact = () => {
+export const getMusicBrainzContact = (): string => {
   const settings = dbOps.getSettings();
+  const integrations = settings.integrations as Record<string, unknown> | undefined;
   return (
-    settings.integrations?.musicbrainz?.email ||
-    process.env.CONTACT_EMAIL ||
-    "user@example.com"
+    (integrations?.musicbrainz
+      ? (integrations.musicbrainz as Record<string, unknown>).email
+      : undefined) as string | undefined || process.env.CONTACT_EMAIL || 'user@example.com'
   );
 };
 
 const normalizeMusicbrainzApiBaseUrl = (value: unknown) => {
-  const raw = String(value || "").trim();
+  const raw = String(value || '').trim();
   if (!raw) return MUSICBRAINZ_API;
 
   let parsed;
@@ -126,54 +128,52 @@ const normalizeMusicbrainzApiBaseUrl = (value: unknown) => {
     return MUSICBRAINZ_API;
   }
 
-  const trimmedPath = parsed.pathname.replace(/\/+$/, "");
-  parsed.pathname = trimmedPath.endsWith("/ws/2")
-    ? trimmedPath
-    : `${trimmedPath || ""}/ws/2`;
+  const trimmedPath = parsed.pathname.replace(/\/+$/, '');
+  parsed.pathname = trimmedPath.endsWith('/ws/2') ? trimmedPath : `${trimmedPath || ''}/ws/2`;
 
-  return parsed.toString().replace(/\/+$/, "");
+  return parsed.toString().replace(/\/+$/, '');
 };
 
 const nowIso = () => new Date().toISOString();
 
 const getMetadataProviderSelection = (serviceKey: string) => {
   const settings = dbOps.getSettings();
-  if (serviceKey === "musicbrainz") {
-    const provider =
-      settings.integrations?.musicbrainz?.provider || "aurralHosted";
-    if (provider === "official") {
+  const integrations = settings.integrations as Record<string, unknown> | undefined;
+  if (serviceKey === 'musicbrainz') {
+    const mb = integrations?.musicbrainz as Record<string, unknown> | undefined;
+    const provider = (mb?.provider as string) || 'aurralHosted';
+    if (provider === 'official') {
       return {
-        mode: "manual",
+        mode: 'manual',
         provider,
-        activeProvider: "official",
+        activeProvider: 'official',
         activeBaseUrl: MUSICBRAINZ_API,
       };
     }
-    if (provider === "custom") {
+    if (provider === 'custom') {
       return {
-        mode: "manual",
+        mode: 'manual',
         provider,
-        activeProvider: "custom",
+        activeProvider: 'custom',
         activeBaseUrl: normalizeMusicbrainzApiBaseUrl(
-          settings.integrations?.musicbrainz?.customUrl,
+          mb?.customUrl,
         ),
       };
     }
     const state = metadataProviderHealth.musicbrainz;
     return {
-      mode: "auto",
+      mode: 'auto',
       provider,
-      activeProvider: state.failoverActive ? "official" : "aurralHosted",
-      activeBaseUrl: state.failoverActive
-        ? MUSICBRAINZ_API
-        : AURRAL_MUSICBRAINZ_API,
+      activeProvider: state.failoverActive ? 'official' : 'aurralHosted',
+      activeBaseUrl: state.failoverActive ? MUSICBRAINZ_API : AURRAL_MUSICBRAINZ_API,
     };
   }
+  return undefined;
 };
 
 const markMetadataProviderProbeResult = (
-  serviceKey,
-  { success, reason = "" },
+  serviceKey: string,
+  { success, reason = '' }: { success: boolean; reason?: string },
 ) => {
   const state = metadataProviderHealth[serviceKey];
   if (!state) return;
@@ -184,18 +184,15 @@ const markMetadataProviderProbeResult = (
     state.consecutiveFailures = 0;
     state.consecutiveSuccesses += 1;
     state.lastSuccessAt = state.lastCheckedAt;
-    state.lastFailureReason = "";
+    state.lastFailureReason = '';
 
     if (
       state.failoverActive &&
-      state.consecutiveSuccesses >=
-        METADATA_PROVIDER_HEALTH_CONFIG.recoverySuccessThreshold
+      state.consecutiveSuccesses >= METADATA_PROVIDER_HEALTH_CONFIG.recoverySuccessThreshold
     ) {
       state.failoverActive = false;
       state.lastTransitionAt = state.lastCheckedAt;
-      console.warn(
-        `${serviceKey} hosted endpoint recovered; switching back to hosted`,
-      );
+      console.warn(`${serviceKey} hosted endpoint recovered; switching back to hosted`);
     }
     return;
   }
@@ -203,12 +200,11 @@ const markMetadataProviderProbeResult = (
   state.consecutiveSuccesses = 0;
   state.consecutiveFailures += 1;
   state.lastFailureAt = state.lastCheckedAt;
-  state.lastFailureReason = String(reason || "").trim();
+  state.lastFailureReason = String(reason || '').trim();
 
   if (
     !state.failoverActive &&
-    state.consecutiveFailures >=
-      METADATA_PROVIDER_HEALTH_CONFIG.failureThreshold
+    state.consecutiveFailures >= METADATA_PROVIDER_HEALTH_CONFIG.failureThreshold
   ) {
     state.failoverActive = true;
     state.lastTransitionAt = state.lastCheckedAt;
@@ -219,34 +215,33 @@ const markMetadataProviderProbeResult = (
 };
 
 const probeMusicbrainzHostedHealth = async () => {
-  const selection = getMetadataProviderSelection("musicbrainz");
-  if (selection.provider !== "aurralHosted") return null;
+  const selection = getMetadataProviderSelection('musicbrainz');
+  if (!selection || selection.provider !== 'aurralHosted') return null;
 
   const state = metadataProviderHealth.musicbrainz;
   if (state.probeInFlight) return state.probeInFlight;
 
-  const contact =
-    (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
+  const contact = (getMusicBrainzContact() || '').trim() || 'https://github.com/aurral';
   const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
 
   state.probeInFlight = axios
     .get(`${AURRAL_MUSICBRAINZ_API}/artist`, {
       params: {
-        fmt: "json",
+        fmt: 'json',
         query: 'artist:"radiohead"',
         limit: 1,
       },
-      headers: { "User-Agent": userAgent },
+      headers: { 'User-Agent': userAgent },
       timeout: METADATA_PROVIDER_HEALTH_CONFIG.probeTimeoutMs,
     })
     .then(() => {
-      markMetadataProviderProbeResult("musicbrainz", { success: true });
+      markMetadataProviderProbeResult('musicbrainz', { success: true });
       return true;
     })
     .catch((error) => {
       const status = error?.response?.status;
       const reason = status ? `HTTP ${status}` : error?.code || error?.message;
-      markMetadataProviderProbeResult("musicbrainz", {
+      markMetadataProviderProbeResult('musicbrainz', {
         success: false,
         reason,
       });
@@ -259,40 +254,7 @@ const probeMusicbrainzHostedHealth = async () => {
   return state.probeInFlight;
 };
 
-const runMetadataProviderHealthProbes = () =>
-  Promise.allSettled([probeMusicbrainzHostedHealth()]);
-
-const getMetadataProviderProbeIntervalMs = () => {
-  const states = Object.values(metadataProviderHealth);
-  return states.some((state) => state.failoverActive)
-    ? METADATA_PROVIDER_HEALTH_CONFIG.unhealthyProbeIntervalMs
-    : METADATA_PROVIDER_HEALTH_CONFIG.healthyProbeIntervalMs;
-};
-
-const ensureMetadataProviderProbeLoop = () => {
-  if (metadataProviderProbeTimer) return;
-
-  const tick = async () => {
-    await runMetadataProviderHealthProbes();
-    clearInterval(metadataProviderProbeTimer);
-    metadataProviderProbeTimer = setInterval(
-      tick,
-      getMetadataProviderProbeIntervalMs(),
-    );
-    metadataProviderProbeTimer.unref?.();
-  };
-
-  metadataProviderProbeTimer = setInterval(
-    tick,
-    getMetadataProviderProbeIntervalMs(),
-  );
-  metadataProviderProbeTimer.unref?.();
-  queueMicrotask(() => {
-    tick().catch(() => {});
-  });
-};
-
-const getMusicbrainzProvider = () => "brainzmash";
+const getMusicbrainzProvider = () => 'brainzmash';
 
 export const getMusicbrainzApiBaseUrl = () => {
   return getMetadataBaseUrl();
@@ -315,28 +277,18 @@ export const getMetadataProviderHealthSnapshot = () => {
 };
 
 export const __setMetadataProviderHealthStateForTests = (
-  serviceKey,
-  patch = {},
+  serviceKey: string,
+  patch: Partial<ProviderHealthState> = {},
 ) => {
   if (!metadataProviderHealth[serviceKey]) return;
-  Object.assign(
-    metadataProviderHealth[serviceKey],
-    createProviderHealthState(),
-    patch,
-  );
+  Object.assign(metadataProviderHealth[serviceKey], createProviderHealthState(), patch);
 };
 
 // Legacy MusicBrainz probing is intentionally disabled on the BrainzMash-native path.
 
-const requestMusicbrainz = async (
-  baseUrl,
-  endpoint,
-  queryParams,
-  userAgent,
-  forceIpv4 = false,
-) =>
+const requestMusicbrainz = async (baseUrl: string, endpoint: string, queryParams: string, userAgent: string, forceIpv4 = false) =>
   axios.get(`${baseUrl}${endpoint}?${queryParams}`, {
-    headers: { "User-Agent": userAgent },
+    headers: { 'User-Agent': userAgent },
     timeout: 5000,
     ...(forceIpv4 ? { family: 4 } : {}),
   });
@@ -346,22 +298,6 @@ const mbLimiter = new Bottleneck({
   minTime: 1000,
 });
 
-const configureMusicbrainzLimiter = async () => {
-  const { activeProvider } = getMetadataProviderSelection("musicbrainz");
-  if (activeProvider === "official") {
-    await mbLimiter.updateSettings({
-      maxConcurrent: 1,
-      minTime: 1000,
-    });
-    return;
-  }
-
-  await mbLimiter.updateSettings({
-    maxConcurrent: 20,
-    minTime: 0,
-  });
-};
-
 const lastfmLimiter = new Bottleneck({
   maxConcurrent: 5,
   minTime: 200,
@@ -370,16 +306,8 @@ const listenbrainzLimiter = new Bottleneck({
   maxConcurrent: 4,
   minTime: 250,
 });
-const itunesLimiter = new Bottleneck({
-  reservoir: 20,
-  reservoirRefreshAmount: 20,
-  reservoirRefreshInterval: 1000,
-  maxConcurrent: 20,
-  minTime: 0,
-});
 
 let musicbrainzLast503Log = 0;
-const musicbrainzInflightRequests = new Map();
 const musicbrainzRetryLogAt = new Map();
 const musicbrainzErrorLogAt = new Map();
 const lastfmInflightRequests = new Map();
@@ -392,10 +320,10 @@ const LASTFM_MAX_RETRIES = 2;
 const LISTENBRAINZ_TIMEOUT_MS = 6000;
 const LISTENBRAINZ_MAX_RETRIES = 2;
 
-const getProviderRequestCacheKey = (prefix: string, endpointOrPath, params = {}) =>
+const getProviderRequestCacheKey = (prefix: string, endpointOrPath: string, params: Record<string, unknown> = {}) =>
   `${prefix}:${endpointOrPath}:${JSON.stringify(params)}`;
 
-const shouldEmitThrottledLog = (logMap: Record<string,unknown>, key, throttleMs = 15000) => {
+const shouldEmitThrottledLog = (logMap: Map<string, number>, key: string, throttleMs = 15000) => {
   const now = Date.now();
   const last = logMap.get(key) || 0;
   if (now - last < throttleMs) return false;
@@ -404,61 +332,56 @@ const shouldEmitThrottledLog = (logMap: Record<string,unknown>, key, throttleMs 
 };
 
 const musicbrainzRequestWithRetry = async (
-  endpoint,
-  params = {},
+  endpoint: string,
+  params: Record<string, unknown> = {},
   retryCount = 0,
   forceIpv4 = false,
 ) => {
-  const cacheKey = getProviderRequestCacheKey("mb", endpoint, params);
+  const cacheKey = getProviderRequestCacheKey('mb', endpoint, params);
   const cached = mbCache.get(cacheKey);
   if (cached) return cached;
 
   const MAX_RETRIES = 3;
   const queryParams = new URLSearchParams({
-    fmt: "json",
+    fmt: 'json',
     ...params,
   });
 
-  const isConnectionError = (error: unknown) => {
+  const stripQuery = queryParams.toString();
+   
+  const isConnectionError = (err: any) => {
     const connectionErrors = [
-      "ECONNRESET",
-      "ETIMEDOUT",
-      "ECONNREFUSED",
-      "ENOTFOUND",
-      "EAI_AGAIN",
-      "ERR_BAD_RESPONSE",
-      "ERR_NETWORK",
-      "ERR_CONNECTION_REFUSED",
-      "ERR_CONNECTION_TIMED_OUT",
-      "ERR_INTERNET_DISCONNECTED",
+      'ECONNRESET',
+      'ETIMEDOUT',
+      'ECONNREFUSED',
+      'ENOTFOUND',
+      'EAI_AGAIN',
+      'ERR_BAD_RESPONSE',
+      'ERR_NETWORK',
+      'ERR_CONNECTION_REFUSED',
+      'ERR_CONNECTION_TIMED_OUT',
+      'ERR_INTERNET_DISCONNECTED',
     ];
+    const code = err?.code as string | undefined;
+    const message = err?.message as string | undefined;
     return (
-      connectionErrors.some(
-        (err) => error.code === err || error.message.includes(err),
-      ) ||
-      (error.code &&
-        (error.code.startsWith("E") || error.code.startsWith("ERR_")))
+      connectionErrors.some((e) => code === e || (message || '').includes(e)) ||
+      (code && (code.startsWith('E') || code.startsWith('ERR_')))
     );
   };
 
-  const contact =
-    (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
+  const contact = (getMusicBrainzContact() || '').trim() || 'https://github.com/aurral';
   const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
-  const shouldTryFallbackBaseUrl = (error: unknown) =>
-    isConnectionError(error) ||
-    (error.response &&
-      [429, 500, 502, 503, 504].includes(error.response.status));
+   
+  const shouldTryFallbackBaseUrl = (err: any) =>
+    isConnectionError(err) ||
+    (err.response && [429, 500, 502, 503, 504].includes(err.response.status));
 
   const baseUrl = getMusicbrainzApiBaseUrl();
-  let error;
+   
+  let error: any;
   try {
-    const response = await requestMusicbrainz(
-      baseUrl,
-      endpoint,
-      queryParams,
-      userAgent,
-      forceIpv4,
-    );
+    const response = await requestMusicbrainz(baseUrl, endpoint, stripQuery, userAgent, forceIpv4);
     const responseData = response.data;
 
     mbCache.set(cacheKey, responseData);
@@ -466,9 +389,8 @@ const musicbrainzRequestWithRetry = async (
   } catch (requestError) {
     error = requestError;
     if (
-      getMusicbrainzProvider() === "aurralHosted" &&
-      getMetadataProviderSelection("musicbrainz").activeProvider ===
-        "aurralHosted" &&
+      getMusicbrainzProvider() === 'aurralHosted' &&
+      getMetadataProviderSelection('musicbrainz')?.activeProvider === 'aurralHosted' &&
       shouldTryFallbackBaseUrl(requestError)
     ) {
       probeMusicbrainzHostedHealth().catch(() => {});
@@ -479,8 +401,7 @@ const musicbrainzRequestWithRetry = async (
   const shouldRetry =
     retryCount < MAX_RETRIES &&
     (connectionError ||
-      (error.response &&
-        [429, 500, 502, 503, 504].includes(error.response.status)));
+      (error.response && [429, 500, 502, 503, 504].includes(error.response.status)));
 
   if (shouldRetry) {
     const delay = 300 * Math.pow(2, retryCount);
@@ -500,7 +421,7 @@ const musicbrainzRequestWithRetry = async (
       endpoint,
       params,
       retryCount + 1,
-      forceIpv4 || connectionError,
+      forceIpv4 || Boolean(connectionError),
     );
   }
 
@@ -519,7 +440,7 @@ const musicbrainzRequestWithRetry = async (
     const errorType = status ? `HTTP ${status}` : error.code || error.message;
     const logKey = `${errorType}:final`;
     if (shouldEmitThrottledLog(musicbrainzErrorLogAt, logKey)) {
-      console.error("MusicBrainz API error:", error.message);
+      console.error('MusicBrainz API error:', error.message);
     }
   }
   throw error;
@@ -528,13 +449,7 @@ const musicbrainzRequestWithRetry = async (
 export const musicbrainzRequest = async (endpoint: string, params = {}) =>
   legacyMusicbrainzRequest(endpoint, params);
 
-const normalizeItunesArtworkUrl = (url: string) =>
-  String(url || "")
-    .trim()
-    .replace(/\/100x100([a-z]+)(?=[/?#]|$)/i, "/600x600$1")
-    .replace(/\/\d+x\d+([a-z]+)(?=[/?#]|$)/i, "/600x600$1");
-
-export async function fetchItunesAlbumArt(artistName: string, albumName) {
+export async function fetchItunesAlbumArt(artistName: string, albumName: string) {
   const _artist = artistName;
   const _album = albumName;
   return null;
@@ -544,11 +459,11 @@ export async function fetchCoverArtArchiveReleaseGroup(releaseGroupMbid: string)
   if (!releaseGroupMbid) return null;
   try {
     const album = await getMetadataAlbumByMbid(releaseGroupMbid);
-    const image = selectBestAlbumImage(album?.images);
+    const image = selectBestAlbumImage((album as Record<string, unknown> | null)?.images as unknown[]) as { url?: string; kind?: string } | null;
     if (image?.url) {
       return {
         imageUrl: image.url,
-        types: [image.kind || "Front"],
+        types: [image.kind || 'Front'],
       };
     }
     return { imageUrl: null, types: [], notFound: true };
@@ -557,8 +472,9 @@ export async function fetchCoverArtArchiveReleaseGroup(releaseGroupMbid: string)
   }
 }
 
-export const lastfmRequest = lastfmLimiter.wrap(
-  async (method: string, params = {}, options = {}) => {
+ 
+export const lastfmRequest: (method: string, params?: Record<string, unknown>, options?: Record<string, unknown>) => Promise<any> = lastfmLimiter.wrap(
+  async (method: string, params: Record<string, unknown> = {}, options: Record<string, unknown> = {}) => {
     const apiKey = getLastfmApiKey();
     if (!apiKey) return null;
 
@@ -575,21 +491,22 @@ export const lastfmRequest = lastfmLimiter.wrap(
       : LASTFM_MAX_RETRIES;
 
     const requestPromise = (async () => {
-      const isRetryable = (error: unknown) => {
+       
+      const isRetryable = (error: any) => {
         const status = error.response?.status;
         const code = error.code;
         return (
-          code === "ECONNABORTED" ||
-          code === "ETIMEDOUT" ||
-          code === "ECONNRESET" ||
-          code === "ENOTFOUND" ||
-          code === "EAI_AGAIN" ||
+          code === 'ECONNABORTED' ||
+          code === 'ETIMEDOUT' ||
+          code === 'ECONNRESET' ||
+          code === 'ENOTFOUND' ||
+          code === 'EAI_AGAIN' ||
           [408, 425, 429, 500, 502, 503, 504].includes(status)
         );
       };
-      const getLogKey = (details: Record<string,unknown>) =>
-        `${details.method}:${details.status || "none"}:${details.code || "none"}`;
-      const logError = (message: string, details) => {
+      const getLogKey = (details: Record<string, unknown>) =>
+        `${details.method}:${details.status || 'none'}:${details.code || 'none'}`;
+      const logError = (message: string, details: Record<string, unknown>) => {
         const key = getLogKey(details);
         const now = Date.now();
         const last = lastfmErrorLogAt.get(key) || 0;
@@ -597,14 +514,15 @@ export const lastfmRequest = lastfmLimiter.wrap(
         lastfmErrorLogAt.set(key, now);
         console.error(message, details);
       };
-      let lastError = null;
+       
+      let lastError: any = null;
       for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
         try {
           const response = await axios.get(LASTFM_API, {
             params: {
               method,
               api_key: apiKey,
-              format: "json",
+              format: 'json',
               ...params,
             },
             timeout: timeoutMs,
@@ -623,17 +541,15 @@ export const lastfmRequest = lastfmLimiter.wrap(
       }
       const status = lastError?.response?.status || null;
       const payloadError =
-        lastError?.response?.data?.message ||
-        lastError?.response?.data?.error ||
-        null;
+        lastError?.response?.data?.message || lastError?.response?.data?.error || null;
       const details = {
         method,
         status,
         code: lastError?.code || null,
-        message: lastError?.message || "Unknown Last.fm error",
+        message: lastError?.message || 'Unknown Last.fm error',
         error: payloadError,
       };
-      if (details.code === "ECONNABORTED") {
+      if (details.code === 'ECONNABORTED') {
         logError(`Last.fm API timeout (${method})`, details);
       } else {
         logError(`Last.fm API error (${method})`, details);
@@ -649,110 +565,105 @@ export const lastfmRequest = lastfmLimiter.wrap(
   },
 );
 
-export const listenbrainzRequest = listenbrainzLimiter.wrap(
-  async (path: string, params = {}) => {
-    const cacheKey = `lb:${path}:${JSON.stringify(params)}`;
-    const cached = listenbrainzCache.get(cacheKey);
-    if (cached) return cached;
-    const inflight = listenbrainzInflightRequests.get(cacheKey);
-    if (inflight) return inflight;
+ 
+export const listenbrainzRequest: (path: string, params?: Record<string, unknown>) => Promise<any> = listenbrainzLimiter.wrap(async (path: string, params: Record<string, unknown> = {}) => {
+  const cacheKey = `lb:${path}:${JSON.stringify(params)}`;
+  const cached = listenbrainzCache.get(cacheKey);
+  if (cached) return cached;
+  const inflight = listenbrainzInflightRequests.get(cacheKey);
+  if (inflight) return inflight;
 
-    const requestPromise = (async () => {
-      const isRetryable = (error: unknown) => {
-        const status = error.response?.status;
-        const code = error.code;
-        return (
-          code === "ECONNABORTED" ||
-          code === "ETIMEDOUT" ||
-          code === "ECONNRESET" ||
-          code === "ENOTFOUND" ||
-          code === "EAI_AGAIN" ||
-          [408, 425, 429, 500, 502, 503, 504].includes(status)
-        );
-      };
-      const getLogKey = (details: Record<string,unknown>) =>
-        `${details.path}:${details.status || "none"}:${details.code || "none"}`;
-      const logError = (message: string, details) => {
-        const key = getLogKey(details);
-        const now = Date.now();
-        const last = listenbrainzErrorLogAt.get(key) || 0;
-        if (now - last < 15000) return;
-        listenbrainzErrorLogAt.set(key, now);
-        console.error(message, details);
-      };
+  const requestPromise = (async () => {
+     
+    const isRetryable = (error: any) => {
+      const status = error.response?.status;
+      const code = error.code;
+      return (
+        code === 'ECONNABORTED' ||
+        code === 'ETIMEDOUT' ||
+        code === 'ECONNRESET' ||
+        code === 'ENOTFOUND' ||
+        code === 'EAI_AGAIN' ||
+        [408, 425, 429, 500, 502, 503, 504].includes(status)
+      );
+    };
+    const getLogKey = (details: Record<string, unknown>) =>
+      `${details.path}:${details.status || 'none'}:${details.code || 'none'}`;
+    const logError = (message: string, details: Record<string, unknown>) => {
+      const key = getLogKey(details);
+      const now = Date.now();
+      const last = listenbrainzErrorLogAt.get(key) || 0;
+      if (now - last < 15000) return;
+      listenbrainzErrorLogAt.set(key, now);
+      console.error(message, details);
+    };
 
-      let lastError = null;
-      for (
-        let retryCount = 0;
-        retryCount <= LISTENBRAINZ_MAX_RETRIES;
-        retryCount++
-      ) {
-        try {
-          const response = await axios.get(`${LISTENBRAINZ_API}${path}`, {
-            params,
-            timeout: LISTENBRAINZ_TIMEOUT_MS,
-            validateStatus: (status) =>
-              (status >= 200 && status < 300) || status === 204,
-          });
-          const payload = response.status === 204 ? null : response.data;
-          listenbrainzCache.set(cacheKey, payload);
-          return payload;
-        } catch (error) {
-          lastError = error;
-          if (retryCount < LISTENBRAINZ_MAX_RETRIES && isRetryable(error)) {
-            const backoffMs = 300 * Math.pow(2, retryCount) + retryCount * 200;
-            await new Promise((resolve) => setTimeout(resolve, backoffMs));
-            continue;
-          }
-          break;
+     
+    let lastError: any = null;
+    for (let retryCount = 0; retryCount <= LISTENBRAINZ_MAX_RETRIES; retryCount++) {
+      try {
+        const response = await axios.get(`${LISTENBRAINZ_API}${path}`, {
+          params,
+          timeout: LISTENBRAINZ_TIMEOUT_MS,
+          validateStatus: (status: number) => (status >= 200 && status < 300) || status === 204,
+        });
+        const payload = response.status === 204 ? null : response.data;
+        listenbrainzCache.set(cacheKey, payload);
+        return payload;
+      } catch (error) {
+        lastError = error;
+        if (retryCount < LISTENBRAINZ_MAX_RETRIES && isRetryable(error)) {
+          const backoffMs = 300 * Math.pow(2, retryCount) + retryCount * 200;
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          continue;
         }
+        break;
       }
-
-      const details = {
-        path,
-        status: lastError?.response?.status || null,
-        code: lastError?.code || null,
-        message: lastError?.message || "Unknown ListenBrainz error",
-        error:
-          lastError?.response?.data?.error ||
-          lastError?.response?.data?.message ||
-          null,
-      };
-      logError("ListenBrainz API error:", details);
-      throw lastError;
-    })();
-
-    listenbrainzInflightRequests.set(cacheKey, requestPromise);
-    try {
-      return await requestPromise;
-    } finally {
-      listenbrainzInflightRequests.delete(cacheKey);
     }
-  },
-);
 
-async function getDeezerArtist(artistName: string) {
+    const details = {
+      path,
+      status: lastError?.response?.status || null,
+      code: lastError?.code || null,
+      message: lastError?.message || 'Unknown ListenBrainz error',
+      error: lastError?.response?.data?.error || lastError?.response?.data?.message || null,
+    };
+    logError('ListenBrainz API error:', details);
+    throw lastError;
+  })();
+
+  listenbrainzInflightRequests.set(cacheKey, requestPromise);
+  try {
+    return await requestPromise;
+  } finally {
+    listenbrainzInflightRequests.delete(cacheKey);
+  }
+});
+
+async function getDeezerArtist(artistName: string): Promise<{ id: number; name: string; imageUrl: string | null } | null> {
   const normalizedName = artistName.toLowerCase().trim();
   const cached = deezerArtistCache.get(normalizedName);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) return cached as { id: number; name: string; imageUrl: string | null } | null;
 
   try {
-    const searchRes = await axios.get("https://api.deezer.com/search/artist", {
+    const searchRes = await axios.get('https://api.deezer.com/search/artist', {
       params: { q: artistName, limit: 5 },
       timeout: 3000,
     });
-    const artists = searchRes.data?.data;
+     
+    const artists = searchRes.data?.data as any[];
     if (!artists?.length) {
       deezerArtistCache.set(normalizedName, null);
       return null;
     }
 
-    const searchLower = normalizedName.replace(/^the\s+/i, "");
-    let bestMatch = null;
+    const searchLower = normalizedName.replace(/^the\s+/i, '');
+     
+    let bestMatch: any = null;
 
     for (const a of artists) {
       if (!a?.id) continue;
-      const aNameLower = (a.name || "").toLowerCase().replace(/^the\s+/i, "");
+      const aNameLower = (a.name || '').toLowerCase().replace(/^the\s+/i, '');
       if (aNameLower === searchLower || aNameLower === normalizedName) {
         bestMatch = a;
         break;
@@ -774,33 +685,27 @@ async function getDeezerArtist(artistName: string) {
     const result = {
       id: bestMatch.id,
       name: bestMatch.name,
-      imageUrl:
-        bestMatch.picture_big ||
-        bestMatch.picture_medium ||
-        bestMatch.picture ||
-        null,
+      imageUrl: bestMatch.picture_big || bestMatch.picture_medium || bestMatch.picture || null,
     };
     deezerArtistCache.set(normalizedName, result);
     return result;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
 
-export async function getDeezerArtistById(artistId: string) {
-  const normalizedId = String(artistId || "").trim();
+export async function getDeezerArtistById(artistId: string): Promise<{ id: number; name: string; imageUrl: string | null } | null> {
+  const normalizedId = String(artistId || '').trim();
   if (!normalizedId) return null;
   const cacheKey = `id:${normalizedId}`;
   const cached = deezerArtistCache.get(cacheKey);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) return cached as { id: number; name: string; imageUrl: string | null } | null;
   try {
-    const res = await axios.get(
-      `https://api.deezer.com/artist/${normalizedId}`,
-      {
-        timeout: 3000,
-      },
-    );
-    const data = res.data;
+    const res = await axios.get(`https://api.deezer.com/artist/${normalizedId}`, {
+      timeout: 3000,
+    });
+     
+    const data = res.data as any;
     if (!data?.id) {
       deezerArtistCache.set(cacheKey, null);
       return null;
@@ -812,7 +717,7 @@ export async function getDeezerArtistById(artistId: string) {
     };
     deezerArtistCache.set(cacheKey, result);
     return result;
-  } catch (e) {
+  } catch {
     deezerArtistCache.set(cacheKey, null);
     return null;
   }
@@ -841,7 +746,7 @@ const wikidataTitleCache = new NodeCache({
  * Returns bio string or null. Deezer's public API may not include bio for all artists.
  */
 export async function deezerGetArtistBio(artistName: string) {
-  if (!artistName || typeof artistName !== "string") return null;
+  if (!artistName || typeof artistName !== 'string') return null;
   const artist = await getDeezerArtist(artistName);
   if (!artist?.id) return null;
   const cacheKey = `dz-bio:${artist.id}`;
@@ -852,37 +757,32 @@ export async function deezerGetArtistBio(artistName: string) {
       timeout: 3000,
     });
     const data = res.data;
-    const bio =
-      (data && (data.biography || data.bio || data.description)) || null;
-    const value = typeof bio === "string" && bio.trim() ? bio.trim() : null;
+    const bio = (data && (data.biography || data.bio || data.description)) || null;
+    const value = typeof bio === 'string' && bio.trim() ? bio.trim() : null;
     deezerBioCache.set(cacheKey, value);
     return value;
-  } catch (e) {
+  } catch {
     deezerBioCache.set(cacheKey, null);
     return null;
   }
 }
 
 export async function deezerGetArtistBioById(artistId: string) {
-  const normalizedId = String(artistId || "").trim();
+  const normalizedId = String(artistId || '').trim();
   if (!normalizedId) return null;
   const cacheKey = `dz-bio:${normalizedId}`;
   const cached = deezerBioCache.get(cacheKey);
   if (cached !== undefined) return cached;
   try {
-    const res = await axios.get(
-      `https://api.deezer.com/artist/${normalizedId}`,
-      {
-        timeout: 3000,
-      },
-    );
+    const res = await axios.get(`https://api.deezer.com/artist/${normalizedId}`, {
+      timeout: 3000,
+    });
     const data = res.data;
-    const bio =
-      (data && (data.biography || data.bio || data.description)) || null;
-    const value = typeof bio === "string" && bio.trim() ? bio.trim() : null;
+    const bio = (data && (data.biography || data.bio || data.description)) || null;
+    const value = typeof bio === 'string' && bio.trim() ? bio.trim() : null;
     deezerBioCache.set(cacheKey, value);
     return value;
-  } catch (e) {
+  } catch {
     deezerBioCache.set(cacheKey, null);
     return null;
   }
@@ -895,18 +795,17 @@ async function wikidataGetWikipediaTitleByMbid(mbid: string) {
   if (cached !== undefined) return cached;
   try {
     const query = [
-      "PREFIX wdt: <http://www.wikidata.org/prop/direct/>",
-      "PREFIX schema: <http://schema.org/>",
+      'PREFIX wdt: <http://www.wikidata.org/prop/direct/>',
+      'PREFIX schema: <http://schema.org/>',
       `SELECT ?article WHERE { ?band wdt:P434 "${mbid}" . ?article schema:about ?band . ?article schema:isPartOf <https://en.wikipedia.org/> . } LIMIT 1`,
-    ].join(" ");
-    const contact =
-      (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
+    ].join(' ');
+    const contact = (getMusicBrainzContact() || '').trim() || 'https://github.com/aurral';
     const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
-    const res = await axios.get("https://query.wikidata.org/sparql", {
-      params: { query, format: "json" },
+    const res = await axios.get('https://query.wikidata.org/sparql', {
+      params: { query, format: 'json' },
       headers: {
-        "User-Agent": userAgent,
-        Accept: "application/sparql-results+json",
+        'User-Agent': userAgent,
+        Accept: 'application/sparql-results+json',
       },
       timeout: 5000,
     });
@@ -916,12 +815,12 @@ async function wikidataGetWikipediaTitleByMbid(mbid: string) {
       wikidataTitleCache.set(cacheKey, null);
       return null;
     }
-    const slug = url.split("/").pop() || "";
-    const title = decodeURIComponent(slug).replace(/_/g, " ").trim();
+    const slug = url.split('/').pop() || '';
+    const title = decodeURIComponent(slug).replace(/_/g, ' ').trim();
     const value = title || null;
     wikidataTitleCache.set(cacheKey, value);
     return value;
-  } catch (e) {
+  } catch {
     wikidataTitleCache.set(cacheKey, null);
     return null;
   }
@@ -933,24 +832,21 @@ async function wikipediaGetBioByTitle(title: string) {
   const cached = wikiBioCache.get(cacheKey);
   if (cached !== undefined) return cached;
   try {
-    const urlTitle = encodeURIComponent(title.replace(/ /g, "_"));
-    const contact =
-      (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
+    const urlTitle = encodeURIComponent(title.replace(/ /g, '_'));
+    const contact = (getMusicBrainzContact() || '').trim() || 'https://github.com/aurral';
     const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
-    const res = await axios.get(
-      `https://en.wikipedia.org/api/rest_v1/page/summary/${urlTitle}`,
-      { timeout: 5000, headers: { "User-Agent": userAgent } },
-    );
+    const res = await axios.get(`https://en.wikipedia.org/api/rest_v1/page/summary/${urlTitle}`, {
+      timeout: 5000,
+      headers: { 'User-Agent': userAgent },
+    });
     const extract = res.data?.extract || null;
     const isDisambiguation =
-      res.data?.type === "disambiguation" || /may refer to/.test(extract || "");
+      res.data?.type === 'disambiguation' || /may refer to/.test(extract || '');
     const value =
-      typeof extract === "string" && extract.trim() && !isDisambiguation
-        ? extract.trim()
-        : null;
+      typeof extract === 'string' && extract.trim() && !isDisambiguation ? extract.trim() : null;
     wikiBioCache.set(cacheKey, value);
     return value;
-  } catch (e) {
+  } catch {
     wikiBioCache.set(cacheKey, null);
     return null;
   }
@@ -958,11 +854,11 @@ async function wikipediaGetBioByTitle(title: string) {
 
 export async function wikipediaGetArtistBioByMbid(mbid: string) {
   const title = await wikidataGetWikipediaTitleByMbid(mbid);
-  if (!title) return null;
+  if (!title || typeof title !== 'string') return null;
   return wikipediaGetBioByTitle(title);
 }
 
-async function resolveFirstNonEmpty(promises: unknown[]) {
+async function resolveFirstNonEmpty(promises: Promise<unknown>[]) {
   const pending = Array.isArray(promises) ? promises.length : 0;
   if (pending === 0) return null;
 
@@ -978,11 +874,11 @@ async function resolveFirstNonEmpty(promises: unknown[]) {
       }
     };
 
-    promises.forEach((promise: Promise<unknown>) => {
+    for (const promise of promises) {
       Promise.resolve(promise)
-        .then((value) => {
+        .then((value: unknown) => {
           if (settled) return;
-          if (typeof value === "string" && value.trim()) {
+          if (typeof value === 'string' && value.trim()) {
             settled = true;
             resolve(value.trim());
             return;
@@ -993,7 +889,7 @@ async function resolveFirstNonEmpty(promises: unknown[]) {
           if (settled) return;
           finishIfDone();
         });
-    });
+    }
   });
 }
 
@@ -1001,14 +897,14 @@ async function resolveFirstNonEmpty(promises: unknown[]) {
  * Strip basic HTML tags and decode entities from a string (e.g. Last.fm bio).
  */
 function stripHtml(html: unknown) {
-  if (typeof html !== "string") return "";
+  if (typeof html !== 'string') return '';
   return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .trim();
@@ -1020,19 +916,15 @@ function stripHtml(html: unknown) {
 export async function lastfmGetArtistBio(mbid: string) {
   if (!mbid) return null;
   try {
-    const data = await lastfmRequest("artist.getInfo", { mbid });
+    const data = await lastfmRequest('artist.getInfo', { mbid });
     const bio = data?.artist?.bio;
     if (!bio) return null;
     const summary =
-      typeof bio.summary === "string" && bio.summary.trim()
-        ? stripHtml(bio.summary.trim())
-        : null;
+      typeof bio.summary === 'string' && bio.summary.trim() ? stripHtml(bio.summary.trim()) : null;
     const content =
-      typeof bio.content === "string" && bio.content.trim()
-        ? stripHtml(bio.content.trim())
-        : null;
+      typeof bio.content === 'string' && bio.content.trim() ? stripHtml(bio.content.trim()) : null;
     return summary || content || null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -1040,12 +932,9 @@ export async function lastfmGetArtistBio(mbid: string) {
 /**
  * Get artist biography quickly by resolving the first available source.
  */
-export async function getArtistBio(_artistName: string, mbid) {
+export async function getArtistBio(_artistName: string, mbid: string) {
   if (!mbid) return null;
-  return resolveFirstNonEmpty([
-    wikipediaGetArtistBioByMbid(mbid),
-    lastfmGetArtistBio(mbid),
-  ]);
+  return resolveFirstNonEmpty([wikipediaGetArtistBioByMbid(mbid), lastfmGetArtistBio(mbid)]);
 }
 
 export async function deezerSearchArtist(artistName: string) {
@@ -1059,46 +948,48 @@ export async function deezerGetArtistTopTracks(artistName: string) {
     const artist = await getDeezerArtist(artistName);
     if (!artist) return [];
 
-    const topRes = await axios.get(
-      `https://api.deezer.com/artist/${artist.id}/top`,
-      { params: { limit: 5 }, timeout: 3000 },
-    );
-    const tracks = topRes.data?.data || [];
+    const topRes = await axios.get(`https://api.deezer.com/artist/${artist.id}/top`, {
+      params: { limit: 5 },
+      timeout: 3000,
+    });
+     
+    const tracks = (topRes.data?.data || []) as any[];
     return tracks
-      .filter((t: string) => t.preview)
+      .filter((t) => t.preview)
       .slice(0, 5)
-      .map((t: string) => ({
+      .map((t) => ({
         id: String(t.id),
         title: t.title,
         album: t.album?.title ?? null,
         preview_url: t.preview,
         duration_ms: (t.duration || 0) * 1000,
       }));
-  } catch (e) {
+  } catch {
     return [];
   }
 }
 
 export async function deezerGetArtistTopTracksById(artistId: string) {
-  const normalizedId = String(artistId || "").trim();
+  const normalizedId = String(artistId || '').trim();
   if (!normalizedId) return [];
   try {
-    const topRes = await axios.get(
-      `https://api.deezer.com/artist/${normalizedId}/top`,
-      { params: { limit: 5 }, timeout: 3000 },
-    );
-    const tracks = topRes.data?.data || [];
+    const topRes = await axios.get(`https://api.deezer.com/artist/${normalizedId}/top`, {
+      params: { limit: 5 },
+      timeout: 3000,
+    });
+     
+    const tracks = (topRes.data?.data || []) as any[];
     return tracks
-      .filter((t: string) => t.preview)
+      .filter((t) => t.preview)
       .slice(0, 5)
-      .map((t: string) => ({
+      .map((t) => ({
         id: String(t.id),
         title: t.title,
         album: t.album?.title ?? null,
         preview_url: t.preview,
         duration_ms: (t.duration || 0) * 1000,
       }));
-  } catch (e) {
+  } catch {
     return [];
   }
 }
@@ -1125,108 +1016,100 @@ const youtubeVideoCache = new NodeCache({
 });
 
 function normalizeTitle(title: string) {
-  return String(title || "")
+  return String(title || '')
     .toLowerCase()
     .replace(
-      /\s*[\(\[](deluxe|remaster|anniversary|expanded|bonus|edition|live|mono|stereo|\d{4}).*[\)\]]/gi,
-      "",
+      /* eslint-disable-next-line no-useless-escape */
+      /\s*[(\[](deluxe|remaster|anniversary|expanded|bonus|edition|live|mono|stereo|\d{4}).*[\])]/gi,
+      '',
     )
     .replace(
       /\s+-\s+(deluxe|remaster|anniversary|expanded|bonus|edition|live|mono|stereo|\d{4}).*$/gi,
-      "",
+      '',
     )
-    .replace(/[’']/g, "")
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\b(the|a|an)\b/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/[’']/g, '')
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(the|a|an)\b/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
 function getReleaseYear(value: unknown) {
-  const match = String(value || "").match(/\d{4}/);
+  const match = String(value || '').match(/\d{4}/);
   return match ? Number.parseInt(match[0], 10) : null;
 }
 
 function normalizeDeezerPrimaryType(value: unknown) {
-  const normalized = String(value || "album").toLowerCase();
-  if (normalized === "ep") return "EP";
-  if (normalized === "single") return "Single";
-  return "Album";
+  const normalized = String(value || 'album').toLowerCase();
+  if (normalized === 'ep') return 'EP';
+  if (normalized === 'single') return 'Single';
+  return 'Album';
 }
 
 function normalizeMbidTrackNumber(value: unknown) {
-  const raw = String(value || "").trim();
+  const raw = String(value || '').trim();
   const numeric = Number.parseInt(raw, 10);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 }
 
-function getTrackPosition(track: Record<string,unknown>) {
+function getTrackPosition(track: Record<string, unknown>) {
   const raw =
     track?.trackPosition ??
     track?.track_position ??
     track?.trackNumber ??
     track?.tracknumber ??
     track?.position;
-  const numeric = Number.parseInt(raw, 10);
+  const numeric = Number.parseInt(String(raw ?? ''), 10);
   if (Number.isFinite(numeric) && numeric > 0) return numeric;
   return normalizeMbidTrackNumber(raw);
 }
 
-function getTrackMedium(track: Record<string,unknown>) {
+function getTrackMedium(track: Record<string, unknown>) {
   const numeric = Number.parseInt(
-    track?.mediumNumber ??
-      track?.mediumnumber ??
-      track?.disk_number ??
-      track?.diskNumber,
+    String(track?.mediumNumber ?? track?.mediumnumber ?? track?.disk_number ?? track?.diskNumber ?? ''),
     10,
   );
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 }
 
-function getTrackDurationMs(track: Record<string,unknown>) {
-  const raw =
-    track?.durationMs ??
-    track?.duration_ms ??
-    track?.durationms ??
-    track?.length ??
-    null;
+function getTrackDurationMs(track: Record<string, unknown>) {
+  const raw = track?.durationMs ?? track?.duration_ms ?? track?.durationms ?? track?.length ?? null;
   const numeric = Number(raw);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 }
 
-function getTrackTitle(track: Record<string,unknown>) {
-  return track?.title || track?.trackName || track?.trackname || "";
+function getTrackTitle(track: Record<string, unknown>) {
+  return track?.title || track?.trackName || track?.trackname || '';
 }
 
-async function getDeezerAlbumsForArtist(artist: Record<string,unknown>) {
+async function getDeezerAlbumsForArtist(artist: { id: number; name: string; imageUrl: string | null }) {
   if (!artist?.id) return [];
   const cacheKey = `dz-albums:${artist.id}`;
   const cached = deezerAlbumCache.get(cacheKey);
-  if (cached) return cached;
+  if (cached) return cached as Record<string, unknown>[];
 
-  const res = await axios.get(
-    `https://api.deezer.com/artist/${artist.id}/albums`,
-    { params: { limit: 100 }, timeout: 3000 },
-  );
-  const raw = res.data?.data || [];
-  const allowed = ["album", "ep", "single"];
+  const res = await axios.get(`https://api.deezer.com/artist/${artist.id}/albums`, {
+    params: { limit: 100 },
+    timeout: 3000,
+  });
+   
+  const raw = (res.data?.data || []) as any[];
+  const allowed = ['album', 'ep', 'single'];
   const albums = raw
-    .filter((a: string) =>
-      allowed.includes((a.record_type || a.type || "").toLowerCase()),
-    )
-    .map((a: string) => {
+    .filter((a) => allowed.includes((a.record_type || a.type || '').toLowerCase()))
+    .map((a) => {
       const primaryType = normalizeDeezerPrimaryType(a.record_type || a.type);
-      const title = a.title || "";
-      const releaseDate = a.release_date || "";
+      const title = a.title || '';
+      const releaseDate = a.release_date || '';
       return {
         id: a.id,
         title,
-        "first-release-date": releaseDate ? releaseDate.slice(0, 4) : null,
-        "primary-type": primaryType,
-        "secondary-types": [],
+        'first-release-date': releaseDate ? releaseDate.slice(0, 4) : null,
+        'primary-type': primaryType,
+        'secondary-types': [],
         _coverUrl: a.cover_big || a.cover_medium || a.cover || null,
-        fans: typeof a.fans === "number" ? a.fans : 0,
+        fans: typeof a.fans === 'number' ? a.fans : 0,
         _normalizedTitle: normalizeTitle(title),
         _releaseDate: releaseDate,
       };
@@ -1237,40 +1120,31 @@ async function getDeezerAlbumsForArtist(artist: Record<string,unknown>) {
 }
 
 function selectBestDeezerAlbumMatch(
-  deezerAlbums,
-  { albumTitle = "", releaseType = "", releaseDate = "" } = {},
+  deezerAlbums: Record<string, unknown>[],
+  { albumTitle = '', releaseType = '', releaseDate = '' }: { albumTitle?: string; releaseType?: string; releaseDate?: string } = {},
 ) {
-  if (
-    !Array.isArray(deezerAlbums) ||
-    deezerAlbums.length === 0 ||
-    !albumTitle
-  ) {
+  if (!Array.isArray(deezerAlbums) || deezerAlbums.length === 0 || !albumTitle) {
     return null;
   }
   const targetTitle = normalizeTitle(albumTitle);
-  const targetType = String(releaseType || "").trim();
+  const targetType = String(releaseType || '').trim();
   const targetYear = getReleaseYear(releaseDate);
 
   const ranked = deezerAlbums
     .map((album) => {
-      const albumTitle = album._normalizedTitle || normalizeTitle(album.title);
+      const albumNormTitle = String(album._normalizedTitle || normalizeTitle(String(album.title || '')));
       let score = 0;
-      if (albumTitle === targetTitle) {
+      if (albumNormTitle === targetTitle) {
         score += 100;
-      } else if (
-        albumTitle.includes(targetTitle) ||
-        targetTitle.includes(albumTitle)
-      ) {
+      } else if (albumNormTitle.includes(targetTitle) || targetTitle.includes(albumNormTitle)) {
         score += 45;
       }
 
-      if (targetType && album["primary-type"] === targetType) {
+      if (targetType && album['primary-type'] === targetType) {
         score += 20;
       }
 
-      const albumYear = getReleaseYear(
-        album._releaseDate || album["first-release-date"],
-      );
+      const albumYear = getReleaseYear(album._releaseDate || album['first-release-date']);
       if (targetYear && albumYear) {
         const distance = Math.abs(targetYear - albumYear);
         if (distance === 0) score += 20;
@@ -1278,7 +1152,7 @@ function selectBestDeezerAlbumMatch(
         else if (distance <= 3) score += 3;
       }
 
-      score += Math.min(10, Math.log10(Math.max(1, album.fans || 0) + 1) * 2);
+      score += Math.min(10, Math.log10(Math.max(1, Number(album.fans) || 0) + 1) * 2);
       return { album, score };
     })
     .filter((entry) => entry.score >= 80)
@@ -1288,11 +1162,17 @@ function selectBestDeezerAlbumMatch(
 }
 
 async function resolveDeezerAlbumForPreview({
-  artistName = "",
+  artistName = '',
   deezerArtistId = null,
-  albumTitle = "",
-  releaseType = "",
-  releaseDate = "",
+  albumTitle = '',
+  releaseType = '',
+  releaseDate = '',
+}: {
+  artistName?: string;
+  deezerArtistId?: string | null;
+  albumTitle?: string;
+  releaseType?: string;
+  releaseDate?: string;
 } = {}) {
   const artist = deezerArtistId
     ? await getDeezerArtistById(deezerArtistId)
@@ -1300,16 +1180,16 @@ async function resolveDeezerAlbumForPreview({
   if (!artist) return null;
 
   const albums = await getDeezerAlbumsForArtist(artist);
-  return selectBestDeezerAlbumMatch(albums, {
+  return selectBestDeezerAlbumMatch(albums as Record<string, unknown>[], {
     albumTitle,
     releaseType,
     releaseDate,
   });
 }
 
-function scoreDeezerTrackMatch(track: Record<string,unknown>, deezerTrack) {
-  const targetTitle = normalizeTitle(getTrackTitle(track));
-  const candidateTitle = normalizeTitle(getTrackTitle(deezerTrack));
+function scoreDeezerTrackMatch(track: Record<string, unknown>, deezerTrack: Record<string, unknown>) {
+  const targetTitle = normalizeTitle(String(getTrackTitle(track) || ''));
+  const candidateTitle = normalizeTitle(String(getTrackTitle(deezerTrack) || ''));
   const trackPosition = getTrackPosition(track);
   const deezerPosition = getTrackPosition(deezerTrack);
   const trackMedium = getTrackMedium(track);
@@ -1321,10 +1201,7 @@ function scoreDeezerTrackMatch(track: Record<string,unknown>, deezerTrack) {
   if (targetTitle && candidateTitle) {
     if (targetTitle === candidateTitle) {
       score += 70;
-    } else if (
-      targetTitle.includes(candidateTitle) ||
-      candidateTitle.includes(targetTitle)
-    ) {
+    } else if (targetTitle.includes(candidateTitle) || candidateTitle.includes(targetTitle)) {
       score += 35;
     }
   }
@@ -1345,68 +1222,29 @@ function scoreDeezerTrackMatch(track: Record<string,unknown>, deezerTrack) {
   return score;
 }
 
-function attachDeezerTrackPreviews(tracks: unknown[], deezerTracks) {
+function attachDeezerTrackPreviews(tracks: Record<string, unknown>[], deezerTracks: Record<string, unknown>[]) {
   if (!Array.isArray(tracks) || tracks.length === 0) return tracks || [];
   if (!Array.isArray(deezerTracks) || deezerTracks.length === 0) return tracks;
 
-  const used = new Set();
+  const used = new Set<string>();
   return tracks.map((track) => {
     let best = null;
     for (const candidate of deezerTracks) {
-      if (!candidate?.preview_url || used.has(candidate.id)) continue;
+      if (!candidate?.preview_url || used.has(String(candidate.id))) continue;
       const score = scoreDeezerTrackMatch(track, candidate);
       if (!best || score > best.score) {
         best = { track: candidate, score };
       }
     }
     if (!best || best.score < 80) return track;
-    used.add(best.track.id);
+    used.add(String(best.track.id));
     return {
       ...track,
       preview_url: best.track.preview_url,
-      previewProvider: "deezer",
+      previewProvider: 'deezer',
       previewTrackId: best.track.id,
     };
   });
-}
-
-const ALLOWED_PRIMARY_TYPES = new Set(["album", "ep", "single"]);
-
-function normalizeArtistReleaseTypeSelection(selectedReleaseTypes = []) {
-  const list = Array.isArray(selectedReleaseTypes) ? selectedReleaseTypes : [];
-  const normalized = new Set(list.map((value) => String(value || "").trim()));
-  const primaryTypes = PRIMARY_RELEASE_TYPES.filter((type) =>
-    normalized.has(type),
-  );
-  const secondaryTypes = SECONDARY_RELEASE_TYPES.filter((type) =>
-    normalized.has(type),
-  );
-  return {
-    primaryTypes,
-    secondaryTypes,
-  };
-}
-
-function buildArtistReleaseGroupQuery(mbid: string, primaryTypes, secondaryTypes) {
-  const clauses = [`arid:${mbid}`];
-
-  if (Array.isArray(primaryTypes) && primaryTypes.length > 0) {
-    if (primaryTypes.length === 1) {
-      clauses.push(`primarytype:${primaryTypes[0].toLowerCase()}`);
-    } else {
-      clauses.push(
-        `(${primaryTypes
-          .map((type) => `primarytype:${type.toLowerCase()}`)
-          .join(" OR ")})`,
-      );
-    }
-  }
-
-  if (Array.isArray(secondaryTypes) && secondaryTypes.length === 0) {
-    clauses.push("-secondarytype:*");
-  }
-
-  return clauses.join(" AND ");
 }
 
 /**
@@ -1414,35 +1252,35 @@ function buildArtistReleaseGroupQuery(mbid: string, primaryTypes, secondaryTypes
  * Returns array of { id, title, "first-release-date", "primary-type", "secondary-types" }.
  */
 export async function musicbrainzGetArtistReleaseGroups(
-  mbid,
-  selectedReleaseTypes = null,
-  { includeTrackCounts = true, hydrateLimit = includeTrackCounts ? 30 : 6 } = {},
+  mbid: string,
+  selectedReleaseTypes: string[] | null = null,
+  opts: { includeTrackCounts?: boolean; hydrateLimit?: number } = {},
 ) {
+  const includeTrackCounts = opts.includeTrackCounts !== false;
+  const hydrateLimit = opts.hydrateLimit;
   const safeHydrateLimit =
     Number.isFinite(Number(hydrateLimit)) && Number(hydrateLimit) > 0
       ? Math.min(100, Math.floor(Number(hydrateLimit)))
       : includeTrackCounts
         ? 30
         : 6;
-  const cacheKey = `full:${mbid}:${JSON.stringify(selectedReleaseTypes || [])}:${includeTrackCounts ? "rated" : "dated"}:${safeHydrateLimit}`;
+  const cacheKey = `full:${mbid}:${JSON.stringify(selectedReleaseTypes || [])}:${includeTrackCounts ? 'rated' : 'dated'}:${safeHydrateLimit}`;
   const cached = musicbrainzReleaseGroupsCache.get(cacheKey);
   if (cached) return cached;
   try {
     const items = await listMetadataArtistAlbums(mbid, {
-      releaseTypes: selectedReleaseTypes || [],
+      releaseTypes: (selectedReleaseTypes || []) as string[],
       includeTrackCounts,
       hydrateLimit: safeHydrateLimit,
     });
-    const mapped = items.map((item: Record<string,unknown>) => ({
+    const mapped = items.map((item: Record<string, unknown>) => ({
       id: item.id,
-      title: item.title || "",
-      "first-release-date": item.firstReleaseDate || null,
-      "primary-type": item.type || "Album",
-      "secondary-types": Array.isArray(item.secondaryTypes)
-        ? item.secondaryTypes
-        : [],
+      title: item.title || '',
+      'first-release-date': item.firstReleaseDate || null,
+      'primary-type': item.type || 'Album',
+      'secondary-types': Array.isArray(item.secondaryTypes) ? item.secondaryTypes as string[] : ([] as string[]),
       rating: item.rating || null,
-      "artist-credit": item.artistName
+      'artist-credit': item.artistName
         ? [
             {
               name: item.artistName,
@@ -1460,71 +1298,70 @@ export async function musicbrainzGetArtistReleaseGroups(
   }
 }
 
-const artistCreditIncludesMbid = (artistCredit: Record<string,unknown>, mbid) => {
-  const normalizedMbid = String(mbid || "")
+const artistCreditIncludesMbid = (artistCredit: Record<string, unknown>, mbid: string) => {
+  const normalizedMbid = String(mbid || '')
     .trim()
     .toLowerCase();
   if (!normalizedMbid || !Array.isArray(artistCredit)) return false;
   return artistCredit.some(
-    (credit) =>
-      String(credit?.artist?.id || "")
+    (credit: Record<string, unknown>) => {
+      const artistId = (credit?.artist as Record<string, unknown> | undefined)?.id;
+      return String(artistId || '')
         .trim()
-        .toLowerCase() === normalizedMbid,
+        .toLowerCase() === normalizedMbid;
+    },
   );
 };
 
-const getReleaseGroupArtistId = (releaseGroup: Record<string,unknown>) => {
-  const artistCredit = Array.isArray(releaseGroup?.["artist-credit"])
-    ? releaseGroup["artist-credit"]
+const getReleaseGroupArtistId = (releaseGroup: Record<string, unknown>) => {
+  const artistCredit = Array.isArray(releaseGroup?.['artist-credit'])
+    ? releaseGroup['artist-credit']
     : [];
-  return String(artistCredit[0]?.artist?.id || "").trim() || null;
+  return String(artistCredit[0]?.artist?.id || '').trim() || null;
 };
 
-const officialMusicbrainzRecordingSearch = async (
-  mbid,
-  { limit = 100, offset = 0 } = {},
-) => {
-  const contact =
-    (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
+const officialMusicbrainzRecordingSearch = async (mbid: string, { limit = 100, offset = 0 }: { limit?: number; offset?: number } = {}) => {
+  const contact = (getMusicBrainzContact() || '').trim() || 'https://github.com/aurral';
   const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
-  const safeLimit = Math.min(
-    100,
-    Math.max(1, Number.parseInt(limit, 10) || 100),
-  );
-  const safeOffset = Math.max(0, Number.parseInt(offset, 10) || 0);
+  const safeLimit = Math.min(100, Math.max(1, Math.floor(Number(limit)) || 100));
+  const safeOffset = Math.max(0, Math.floor(Number(offset)) || 0);
   return mbLimiter.schedule(async () => {
     const response = await axios.get(`${MUSICBRAINZ_API}/recording`, {
       params: {
-        fmt: "json",
+        fmt: 'json',
         query: `arid:${mbid}`,
-        inc: "artist-credits+releases",
+        inc: 'artist-credits+releases',
         limit: safeLimit,
         offset: safeOffset,
       },
-      headers: { "User-Agent": userAgent },
+      headers: { 'User-Agent': userAgent },
       timeout: 8000,
     });
     return response.data;
   });
 };
 
-const mapAppearsOnReleaseGroup = (releaseGroup: Record<string,unknown>, release, recording, mbid) => {
-  const artistCredit = Array.isArray(releaseGroup?.["artist-credit"])
-    ? releaseGroup["artist-credit"]
-    : Array.isArray(release?.["artist-credit"])
-      ? release["artist-credit"]
+const mapAppearsOnReleaseGroup = (
+  releaseGroup: Record<string, unknown>,
+  release: Record<string, unknown>,
+  recording: Record<string, unknown>,
+  mbid: string,
+) => {
+  const artistCredit = Array.isArray(releaseGroup?.['artist-credit'])
+    ? releaseGroup['artist-credit']
+    : Array.isArray(release?.['artist-credit'])
+      ? release['artist-credit']
       : [];
   return {
     id: releaseGroup?.id,
-    title: releaseGroup?.title || release?.title || "Untitled release",
-    "first-release-date":
-      releaseGroup?.["first-release-date"] || release?.date || null,
-    "primary-type": releaseGroup?.["primary-type"] || "Album",
-    "secondary-types": Array.isArray(releaseGroup?.["secondary-types"])
-      ? releaseGroup["secondary-types"]
+    title: releaseGroup?.title || release?.title || 'Untitled release',
+    'first-release-date': releaseGroup?.['first-release-date'] || release?.date || null,
+    'primary-type': releaseGroup?.['primary-type'] || 'Album',
+    'secondary-types': Array.isArray(releaseGroup?.['secondary-types'])
+      ? releaseGroup['secondary-types']
       : [],
     rating: null,
-    "artist-credit": artistCredit,
+    'artist-credit': artistCredit,
     _appearsOn: true,
     _appearsOnTrack: recording?.title || null,
     _appearsOnArtistMbid: mbid,
@@ -1534,7 +1371,7 @@ const mapAppearsOnReleaseGroup = (releaseGroup: Record<string,unknown>, release,
             id: release.id,
             status: release.status || null,
             date: release.date || null,
-            title: release.title || releaseGroup?.title || "Untitled release",
+            title: release.title || releaseGroup?.title || 'Untitled release',
           },
         ]
       : [],
@@ -1542,22 +1379,19 @@ const mapAppearsOnReleaseGroup = (releaseGroup: Record<string,unknown>, release,
 };
 
 export async function musicbrainzGetArtistAppearsOnReleaseGroups(
-  mbid,
-  directReleaseGroups = [],
-  { limit = 24 } = {},
+  mbid: string,
+  directReleaseGroups: Record<string, unknown>[] = [],
+  { limit = 24 }: { limit?: number } = {},
 ) {
   if (!mbid) return [];
-  const safeLimit = Math.min(
-    250,
-    Math.max(1, Number.parseInt(limit, 10) || 24),
-  );
+  const safeLimit = Math.min(250, Math.max(1, Math.floor(Number(limit)) || 24));
   const cacheKey = `appears-on:${mbid}:${safeLimit}`;
   const cached = musicbrainzReleaseGroupsCache.get(cacheKey);
   if (cached) return cached;
 
   const directIds = new Set(
     (Array.isArray(directReleaseGroups) ? directReleaseGroups : [])
-      .map((item) => String(item?.id || "").trim())
+      .map((item: Record<string, unknown>) => String(item?.id || '').trim())
       .filter(Boolean),
   );
 
@@ -1574,14 +1408,12 @@ export async function musicbrainzGetArtistAppearsOnReleaseGroups(
       const recordings = Array.isArray(data?.recordings) ? data.recordings : [];
 
       for (const recording of recordings) {
-        if (!artistCreditIncludesMbid(recording?.["artist-credit"], mbid)) {
+        if (!artistCreditIncludesMbid(recording?.['artist-credit'], mbid)) {
           continue;
         }
-        for (const release of Array.isArray(recording?.releases)
-          ? recording.releases
-          : []) {
-          const releaseGroup = release?.["release-group"];
-          const releaseGroupId = String(releaseGroup?.id || "").trim();
+        for (const release of Array.isArray(recording?.releases) ? recording.releases : []) {
+          const releaseGroup = release?.['release-group'];
+          const releaseGroupId = String(releaseGroup?.id || '').trim();
           if (!releaseGroupId || directIds.has(releaseGroupId)) continue;
           if (getReleaseGroupArtistId(releaseGroup) === mbid) continue;
           if (!byReleaseGroupId.has(releaseGroupId)) {
@@ -1600,8 +1432,8 @@ export async function musicbrainzGetArtistAppearsOnReleaseGroups(
 
     const mapped = [...byReleaseGroupId.values()]
       .sort((left, right) =>
-        String(right["first-release-date"] || "").localeCompare(
-          String(left["first-release-date"] || ""),
+        String(right['first-release-date'] || '').localeCompare(
+          String(left['first-release-date'] || ''),
         ),
       )
       .slice(0, safeLimit);
@@ -1612,16 +1444,11 @@ export async function musicbrainzGetArtistAppearsOnReleaseGroups(
   }
 }
 
-export async function musicbrainzGetArtistReleaseGroupsPreview(
-  mbid,
-  limit = 50,
-) {
+export async function musicbrainzGetArtistReleaseGroupsPreview(mbid: string, limit: number | string = 50) {
   if (!mbid) return [];
-  const parsedLimit = Number.parseInt(limit, 10);
+  const parsedLimit = Math.floor(Number(limit));
   const safeLimit =
-    Number.isFinite(parsedLimit) && parsedLimit > 0
-      ? Math.min(100, parsedLimit)
-      : 50;
+    Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(100, parsedLimit) : 50;
   const items = await musicbrainzGetArtistReleaseGroups(mbid);
   return items.slice(0, safeLimit);
 }
@@ -1631,9 +1458,9 @@ export async function musicbrainzGetArtistReleaseGroupsPreview(
  * Mutates and returns the same array (adds _coverUrl, fans, _deezerAlbumId when matched).
  */
 export async function enrichReleaseGroupsWithDeezer(
-  mbReleaseGroups,
-  artistName,
-  deezerArtistId = null,
+  mbReleaseGroups: Record<string, unknown>[],
+  artistName: string,
+  deezerArtistId: string | null = null,
 ) {
   if (!mbReleaseGroups?.length || !artistName) return mbReleaseGroups;
   try {
@@ -1642,32 +1469,32 @@ export async function enrichReleaseGroupsWithDeezer(
       : await getDeezerArtist(artistName);
     if (!artist) return mbReleaseGroups;
 
-    const albums = await getDeezerAlbumsForArtist(artist);
+     
+    const albums = (await getDeezerAlbumsForArtist(artist)) as any[];
     const byKey = new Map();
     for (const a of albums) {
-      const primaryType = a["primary-type"] || "Album";
-      const title = a.title || "";
+      const primaryType = a['primary-type'] || 'Album';
+      const title = a.title || '';
       const key = `${primaryType}:${normalizeTitle(title)}`;
-      const fans = typeof a.fans === "number" ? a.fans : 0;
+      const fans = typeof a.fans === 'number' ? a.fans : 0;
       const coverUrl = a._coverUrl || null;
       const existing = byKey.get(key);
       if (
         !existing ||
         fans > existing.fans ||
-        (fans === existing.fans &&
-          (a._releaseDate || "") < (existing.release_date || ""))
+        (fans === existing.fans && (a._releaseDate || '') < (existing.release_date || ''))
       ) {
         byKey.set(key, {
           id: a.id,
           fans,
           coverUrl,
-          release_date: a._releaseDate || "",
+          release_date: a._releaseDate || '',
         });
       }
     }
 
     for (const rg of mbReleaseGroups) {
-      const key = `${rg["primary-type"]}:${normalizeTitle(rg.title)}`;
+      const key = `${rg['primary-type']}:${normalizeTitle(String(rg.title || ''))}`;
       const match = byKey.get(key);
       if (match) {
         rg._coverUrl = match.coverUrl;
@@ -1676,30 +1503,29 @@ export async function enrichReleaseGroupsWithDeezer(
       }
     }
     return mbReleaseGroups;
-  } catch (e) {
+  } catch {
     return mbReleaseGroups;
   }
 }
 
 export async function enrichReleaseGroupsWithLastfm(
-  mbReleaseGroups,
-  artistName,
-  artistMbid = null,
+  mbReleaseGroups: Record<string, unknown>[],
+  artistName: string,
+  artistMbid: string | null = null,
 ) {
-  if (!mbReleaseGroups?.length || !artistName || !getLastfmApiKey())
-    return mbReleaseGroups;
+  if (!mbReleaseGroups?.length || !artistName || !getLastfmApiKey()) return mbReleaseGroups;
   try {
     const params = artistMbid
       ? { mbid: artistMbid, limit: 200 }
       : { artist: artistName, limit: 200 };
-    const data = await lastfmRequest("artist.getTopAlbums", params);
+    const data = await lastfmRequest('artist.getTopAlbums', params);
     const raw = data?.topalbums?.album;
     const albums = Array.isArray(raw) ? raw : raw ? [raw] : [];
     if (!albums.length) return mbReleaseGroups;
 
     const byTitle = new Map();
     for (const album of albums) {
-      const title = album?.name || album?.title || "";
+      const title = album?.name || album?.title || '';
       if (!title) continue;
       const listeners = parseInt(album?.listeners || album?.playcount || 0, 10);
       if (!listeners) continue;
@@ -1710,14 +1536,14 @@ export async function enrichReleaseGroupsWithLastfm(
 
     for (const rg of mbReleaseGroups) {
       rg.fans = 0;
-      const key = normalizeTitle(rg.title);
+      const key = normalizeTitle(String(rg.title || ''));
       const listeners = byTitle.get(key);
-      if (typeof listeners === "number") {
+      if (typeof listeners === 'number') {
         rg.fans = listeners;
       }
     }
     return mbReleaseGroups;
-  } catch (e) {
+  } catch {
     return mbReleaseGroups;
   }
 }
@@ -1726,26 +1552,26 @@ export async function deezerGetArtistAlbums(artistName: string) {
   try {
     const artist = await getDeezerArtist(artistName);
     if (!artist) return [];
-    const mapped = (await getDeezerAlbumsForArtist(artist)).map((a: string) => ({
+     
+    const mapped = ((await getDeezerAlbumsForArtist(artist)) as any[]).map((a: any) => ({
       id: `dz-${a.id}`,
       title: a.title,
-      "first-release-date": a["first-release-date"],
-      "primary-type": a["primary-type"],
-      "secondary-types": [],
+      'first-release-date': a['first-release-date'],
+      'primary-type': a['primary-type'],
+      'secondary-types': [],
       _coverUrl: a._coverUrl,
       _fans: a.fans || 0,
       _normalizedTitle: a._normalizedTitle,
-      _releaseDate: a._releaseDate || "",
+      _releaseDate: a._releaseDate || '',
     }));
     const byKey = new Map();
     for (const item of mapped) {
-      const key = `${item["primary-type"]}:${item._normalizedTitle}`;
+      const key = `${item['primary-type']}:${item._normalizedTitle}`;
       const existing = byKey.get(key);
       if (
         !existing ||
         item._fans > existing._fans ||
-        (item._fans === existing._fans &&
-          item._releaseDate < existing._releaseDate)
+        (item._fans === existing._fans && item._releaseDate < existing._releaseDate)
       ) {
         byKey.set(key, item);
       }
@@ -1757,14 +1583,14 @@ export async function deezerGetArtistAlbums(artistName: string) {
       }),
     );
     return albums;
-  } catch (e) {
+  } catch {
     return [];
   }
 }
 
-export async function deezerGetAlbumTracks(deezerAlbumId: number) {
-  const id = String(deezerAlbumId).replace(/^dz-/, "");
-  if (!id || id === "dz") return [];
+export async function deezerGetAlbumTracks(deezerAlbumId: number | string) {
+  const id = String(deezerAlbumId).replace(/^dz-/, '');
+  if (!id || id === 'dz') return [];
   const cacheKey = `dz-tracks:${id}`;
   const cached = deezerAlbumTrackCache.get(cacheKey);
   if (cached) return cached;
@@ -1772,12 +1598,13 @@ export async function deezerGetAlbumTracks(deezerAlbumId: number) {
     const res = await axios.get(`https://api.deezer.com/album/${id}/tracks`, {
       timeout: 3000,
     });
-    const raw = res.data?.data || [];
-    const tracks = raw.map((t: string, i) => ({
+     
+    const raw = (res.data?.data || []) as any[];
+    const tracks = raw.map((t, i: number) => ({
       id: String(t.id),
       mbid: String(t.id),
-      title: t.title || "",
-      trackName: t.title || "",
+      title: t.title || '',
+      trackName: t.title || '',
       trackNumber: t.track_position || i + 1,
       position: t.track_position || i + 1,
       mediumNumber: t.disk_number || null,
@@ -1787,21 +1614,29 @@ export async function deezerGetAlbumTracks(deezerAlbumId: number) {
     }));
     deezerAlbumTrackCache.set(cacheKey, tracks);
     return tracks;
-  } catch (e) {
+  } catch {
     return [];
   }
 }
 
 export async function enrichTracksWithDeezerPreviews(
-  tracks,
+  tracks: Record<string, unknown>[],
   {
-    artistName = "",
+    artistName = '',
     deezerArtistId = null,
     deezerAlbumId = null,
-    albumTitle = "",
-    releaseType = "",
-    releaseDate = "",
-    cacheKey = "",
+    albumTitle = '',
+    releaseType = '',
+    releaseDate = '',
+    cacheKey = '',
+  }: {
+    artistName?: string;
+    deezerArtistId?: string | null;
+    deezerAlbumId?: string | null;
+    albumTitle?: string;
+    releaseType?: string;
+    releaseDate?: string;
+    cacheKey?: string;
   } = {},
 ) {
   if (!Array.isArray(tracks) || tracks.length === 0) return tracks || [];
@@ -1812,8 +1647,8 @@ export async function enrichTracksWithDeezerPreviews(
   if (cached) return cached;
 
   try {
-    let resolvedAlbumId = String(deezerAlbumId || "")
-      .replace(/^dz-/, "")
+    let resolvedAlbumId = String(deezerAlbumId || '')
+      .replace(/^dz-/, '')
       .trim();
     if (!resolvedAlbumId) {
       const album = await resolveDeezerAlbumForPreview({
@@ -1823,12 +1658,12 @@ export async function enrichTracksWithDeezerPreviews(
         releaseType,
         releaseDate,
       });
-      resolvedAlbumId = album?.id ? String(album.id) : "";
+      resolvedAlbumId = album?.id ? String(album.id) : '';
     }
     if (!resolvedAlbumId) return tracks;
 
     const deezerTracks = await deezerGetAlbumTracks(resolvedAlbumId);
-    const enriched = attachDeezerTrackPreviews(tracks, deezerTracks);
+    const enriched = attachDeezerTrackPreviews(tracks, deezerTracks as Record<string, unknown>[]);
     deezerPreviewMatchCache.set(normalizedCacheKey, enriched);
     return enriched;
   } catch {
@@ -1837,19 +1672,19 @@ export async function enrichTracksWithDeezerPreviews(
 }
 
 export async function lastfmGetArtistNameByMbid(mbid: string) {
-  const data = await lastfmRequest("artist.getInfo", { mbid });
+  const data = await lastfmRequest('artist.getInfo', { mbid });
   const name = data?.artist?.name;
-  return name && typeof name === "string" ? name.trim() : null;
+  return name && typeof name === 'string' ? name.trim() : null;
 }
 
 export async function lastfmGetArtistImageUrlByName(artistName: string) {
-  const name = String(artistName || "").trim();
+  const name = String(artistName || '').trim();
   if (!name) return null;
   try {
-    const data = await lastfmRequest("artist.getInfo", { artist: name });
+    const data = await lastfmRequest('artist.getInfo', { artist: name });
     const images = Array.isArray(data?.artist?.image) ? data.artist.image : [];
     for (let index = images.length - 1; index >= 0; index -= 1) {
-      const url = String(images[index]?.["#text"] || "").trim();
+      const url = String(images[index]?.['#text'] || '').trim();
       if (url) return url;
     }
     return null;
@@ -1864,17 +1699,17 @@ export async function musicbrainzGetArtistNameByMbid(mbid: string) {
   if (cached !== undefined) return cached;
   try {
     const name = await getMetadataArtistNameByMbid(mbid);
-    const normalized = name && typeof name === "string" ? name.trim() : null;
+    const normalized = name && typeof name === 'string' ? name.trim() : null;
     musicbrainzArtistNameCache.set(mbid, normalized);
     return normalized;
-  } catch (e) {
+  } catch {
     musicbrainzArtistNameCache.set(mbid, null);
     return null;
   }
 }
 
 function normalizeArtistNameKey(artistName: string) {
-  return String(artistName || "")
+  return String(artistName || '')
     .trim()
     .toLowerCase();
 }
@@ -1893,7 +1728,7 @@ export function musicbrainzGetCachedArtistMbidByName(artistName: string) {
 }
 
 export async function musicbrainzResolveArtistMbidByName(artistName: string) {
-  const rawName = String(artistName || "").trim();
+  const rawName = String(artistName || '').trim();
   if (!rawName) return null;
   const normalized = normalizeArtistNameKey(rawName);
   const cached = dbOps.getMusicbrainzArtistMbidCache(normalized);
@@ -1909,9 +1744,9 @@ export async function musicbrainzResolveArtistMbidByName(artistName: string) {
   }
   try {
     const resolved = await resolveMetadataArtistByName(rawName);
-    dbOps.setMusicbrainzArtistMbidCache(normalized, resolved);
+    dbOps.setMusicbrainzArtistMbidCache(normalized, resolved as string);
     return resolved;
-  } catch (e) {
+  } catch {
     if (cached) {
       return cached.mbid || null;
     }
@@ -1919,29 +1754,24 @@ export async function musicbrainzResolveArtistMbidByName(artistName: string) {
   }
 }
 
-function normalizeArtistAlbumKey(artistName: string, albumName) {
-  const a = String(artistName || "")
+function normalizeArtistAlbumKey(artistName: string, albumName: string) {
+  const a = String(artistName || '')
     .trim()
     .toLowerCase();
-  const b = String(albumName || "")
+  const b = String(albumName || '')
     .trim()
     .toLowerCase();
   return `aa:${a}\0${b}`;
 }
 
-export async function resolveDeezerAlbumToMbid(
-  artistName,
-  albumName,
-  deezerAlbumId,
-) {
-  const dzKey = `dz:${String(deezerAlbumId || "").replace(/^dz-/, "")}`;
+export async function resolveDeezerAlbumToMbid(artistName: string, albumName: string, deezerAlbumId: string) {
+  const dzKey = `dz:${String(deezerAlbumId || '').replace(/^dz-/, '')}`;
   const aaKey = normalizeArtistAlbumKey(artistName, albumName);
-  const cached =
-    dbOps.getDeezerMbidCache(dzKey) || dbOps.getDeezerMbidCache(aaKey);
+  const cached = dbOps.getDeezerMbidCache(dzKey) || dbOps.getDeezerMbidCache(aaKey);
   if (cached) return cached;
 
-  const artist = String(artistName || "").trim();
-  const album = String(albumName || "").trim();
+  const artist = String(artistName || '').trim();
+  const album = String(albumName || '').trim();
   if (!artist || !album) return null;
 
   try {
@@ -1950,17 +1780,17 @@ export async function resolveDeezerAlbumToMbid(
       albumTitle: album,
     });
     if (!id) return null;
-    dbOps.setDeezerMbidCache(dzKey, id);
-    dbOps.setDeezerMbidCache(aaKey, id);
+    dbOps.setDeezerMbidCache(dzKey, id as string);
+    dbOps.setDeezerMbidCache(aaKey, id as string);
     return id;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
 
-export async function youtubeFindTopSongVideo(artistName: string, trackTitle) {
-  const artist = String(artistName || "").trim();
-  const title = String(trackTitle || "").trim();
+export async function youtubeFindTopSongVideo(artistName: string, trackTitle: string) {
+  const artist = String(artistName || '').trim();
+  const title = String(trackTitle || '').trim();
   if (!artist || !title) return null;
 
   const cacheKey = `${artist.toLowerCase()}\0${title.toLowerCase()}`;
@@ -1969,20 +1799,16 @@ export async function youtubeFindTopSongVideo(artistName: string, trackTitle) {
 
   try {
     const query = `${artist} ${title} official video`;
-    const response = await axios.get("https://www.youtube.com/results", {
+    const response = await axios.get('https://www.youtube.com/results', {
       params: { search_query: query },
       timeout: 5000,
       headers: {
-        "Accept-Language": "en-US,en;q=0.9",
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
       },
     });
-    const matches = [
-      ...String(response.data || "").matchAll(
-        /"videoId":"([a-zA-Z0-9_-]{11})"/g,
-      ),
-    ];
+    const matches = [...String(response.data || '').matchAll(/"videoId":"([a-zA-Z0-9_-]{11})"/g)];
     const videoId = [...new Set(matches.map((match) => match[1]))][0] || null;
     const result = videoId
       ? {
@@ -1993,7 +1819,7 @@ export async function youtubeFindTopSongVideo(artistName: string, trackTitle) {
       : null;
     youtubeVideoCache.set(cacheKey, result);
     return result;
-  } catch (e) {
+  } catch {
     youtubeVideoCache.set(cacheKey, null, 300);
     return null;
   }
@@ -2005,9 +1831,9 @@ function toLastfmResultList(value: unknown) {
 }
 
 export async function lastfmSearchArtists(query: string, { limit = 5 } = {}) {
-  const trimmed = String(query || "").trim();
+  const trimmed = String(query || '').trim();
   if (!trimmed || !getLastfmApiKey()) return [];
-  const data = await lastfmRequest("artist.search", {
+  const data = await lastfmRequest('artist.search', {
     artist: trimmed,
     limit: Math.min(30, Math.max(1, limit)),
   });
@@ -2015,9 +1841,9 @@ export async function lastfmSearchArtists(query: string, { limit = 5 } = {}) {
 }
 
 export async function lastfmSearchAlbums(query: string, { limit = 5 } = {}) {
-  const trimmed = String(query || "").trim();
+  const trimmed = String(query || '').trim();
   if (!trimmed || !getLastfmApiKey()) return [];
-  const data = await lastfmRequest("album.search", {
+  const data = await lastfmRequest('album.search', {
     album: trimmed,
     limit: Math.min(30, Math.max(1, limit)),
   });
@@ -2025,9 +1851,9 @@ export async function lastfmSearchAlbums(query: string, { limit = 5 } = {}) {
 }
 
 export async function lastfmSearchTracks(query: string, { limit = 5 } = {}) {
-  const trimmed = String(query || "").trim();
+  const trimmed = String(query || '').trim();
   if (!trimmed || !getLastfmApiKey()) return [];
-  const data = await lastfmRequest("track.search", {
+  const data = await lastfmRequest('track.search', {
     track: trimmed,
     limit: Math.min(30, Math.max(1, limit)),
   });
@@ -2035,14 +1861,14 @@ export async function lastfmSearchTracks(query: string, { limit = 5 } = {}) {
 }
 
 export async function searchMusicbrainzRecordings(query: string, { limit = 5 } = {}) {
-  const trimmed = String(query || "").trim();
+  const trimmed = String(query || '').trim();
   if (!trimmed) return [];
   try {
     const data = await mbLimiter.schedule(() =>
-      musicbrainzRequestWithRetry("/recording", {
+      musicbrainzRequestWithRetry('/recording', {
         query: trimmed,
         limit: Math.min(25, Math.max(1, limit)),
-        inc: "artist-credits+releases",
+        inc: 'artist-credits+releases',
       }),
     );
     return Array.isArray(data?.recordings) ? data.recordings : [];

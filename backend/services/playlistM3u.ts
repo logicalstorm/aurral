@@ -1,37 +1,28 @@
-import fs from "fs/promises";
-import path from "path";
-import {
-  buildSharedTrackIdentity,
-  flowPlaylistConfig,
-} from "./weeklyFlowPlaylistConfig.js";
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
-import {
-  remapLegacyWeeklyFlowPath,
-  resolveWeeklyFlowRoot,
-} from "./weeklyFlowPaths.js";
-import { getM3uPathMode, normalizeM3uPathMode, resolveM3uTrackPath } from "./playlistM3uPaths.js";
+import fs from 'fs/promises';
+import path from 'path';
+import { buildSharedTrackIdentity, flowPlaylistConfig } from './weeklyFlowPlaylistConfig.js';
+import { downloadTracker } from './weeklyFlowDownloadTracker.js';
+import { remapLegacyWeeklyFlowPath, resolveWeeklyFlowRoot } from './weeklyFlowPaths.js';
+import { getM3uPathMode, normalizeM3uPathMode, resolveM3uTrackPath } from './playlistM3uPaths.js';
 
-export function formatExtinf(durationSeconds, title, artist) {
+export function formatExtinf(durationSeconds: number, title: string, artist: string) {
   const duration = Math.max(0, Math.floor(Number(durationSeconds) || 0));
-  const label =
-    artist && title ? `${artist} - ${title}` : title || artist || "";
+  const label = artist && title ? `${artist} - ${title}` : title || artist || '';
   return `#EXTINF:${duration},${label}`;
 }
 
-export function buildM3uContent(entries) {
-  const lines = ["#EXTM3U"];
+export function buildM3uContent(entries: Record<string, unknown>[]) {
+  const lines = ['#EXTM3U'];
   for (const entry of entries) {
     if (!entry?.path) continue;
-    const normalizedPath = String(entry.path).replace(/\\/g, "/");
-    lines.push(
-      formatExtinf(entry.durationSeconds, entry.title, entry.artist),
-    );
+    const normalizedPath = String(entry.path).replace(/\\/g, '/');
+    lines.push(formatExtinf(Number(entry.durationSeconds), String(entry.title || ''), String(entry.artist || '')));
     lines.push(normalizedPath);
   }
-  return `${lines.join("\n")}\n`;
+  return `${lines.join('\n')}\n`;
 }
 
-async function fileExists(filePath) {
+async function fileExists(filePath: string) {
   try {
     const stat = await fs.stat(filePath);
     return stat.isFile();
@@ -40,37 +31,31 @@ async function fileExists(filePath) {
   }
 }
 
-function sortJobsByCreatedAt(jobs) {
+function sortJobsByCreatedAt(jobs: Record<string, unknown>[]) {
   return [...jobs].sort((left, right) => {
     const leftCreated = Number(left?.createdAt || 0);
     const rightCreated = Number(right?.createdAt || 0);
     if (leftCreated !== rightCreated) return leftCreated - rightCreated;
-    return String(left?.id || "").localeCompare(String(right?.id || ""));
+    return String(left?.id || '').localeCompare(String(right?.id || ''));
   });
 }
 
-function jobToEntry(job, weeklyFlowRoot, m3uPathMode = getM3uPathMode()) {
-  const localPath = path.resolve(
-    remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot),
-  );
+function jobToEntry(job: Record<string, unknown>, weeklyFlowRoot: string, m3uPathMode = getM3uPathMode()) {
+  const localPath = path.resolve(remapLegacyWeeklyFlowPath(String(job.finalPath || ''), weeklyFlowRoot));
   return {
     path: resolveM3uTrackPath(job, localPath, m3uPathMode),
     title: job.trackName || null,
     artist: job.artistName || null,
-    durationSeconds: job.durationMs ? Math.round(job.durationMs / 1000) : 0,
+    durationSeconds: job.durationMs ? Math.round(Number(job.durationMs) / 1000) : 0,
   };
 }
 
-export async function collectPlaylistM3uEntries(playlistType, options = {}) {
-  const weeklyFlowRoot = path.resolve(
-    options.weeklyFlowRoot || resolveWeeklyFlowRoot(),
-  );
-  const m3uPathMode = normalizeM3uPathMode(options.m3uPathMode ?? getM3uPathMode());
+export async function collectPlaylistM3uEntries(playlistType: string, options: Record<string, unknown> = {}) {
+  const weeklyFlowRoot = path.resolve(String(options.weeklyFlowRoot || resolveWeeklyFlowRoot()));
+  const m3uPathMode = normalizeM3uPathMode(String(options.m3uPathMode ?? getM3uPathMode()));
   const doneJobs = downloadTracker
     .getByPlaylistType(playlistType)
-    .filter(
-      (job) => job?.status === "done" && typeof job?.finalPath === "string",
-    );
+    .filter((job) => job?.status === 'done' && typeof job?.finalPath === 'string');
   const jobsByIdentity = new Map();
   for (const job of sortJobsByCreatedAt(doneJobs)) {
     const identity = buildSharedTrackIdentity(job);
@@ -93,9 +78,7 @@ export async function collectPlaylistM3uEntries(playlistType, options = {}) {
 
   const entries = [];
   for (const job of orderedJobs) {
-    const localPath = path.resolve(
-      remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot),
-    );
+  const localPath = path.resolve(remapLegacyWeeklyFlowPath(String(job.finalPath || ''), weeklyFlowRoot));
     if (!(await fileExists(localPath))) continue;
     entries.push(jobToEntry(job, weeklyFlowRoot, m3uPathMode));
   }

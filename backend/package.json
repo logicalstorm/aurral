@@ -9,6 +9,9 @@
     "start": "tsx server.ts",
     "dev": "tsx watch server.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "auth:reset-admin-password": "tsx scripts/resetAdminPassword.ts"
   },
   "keywords": [
@@ -44,16 +47,19 @@
     "music-metadata": "^11.12.3",
     "node-cache": "^5.1.2",
     "sharp": "^0.34.5",
-    "ws": "^8.21.0",
-    "tsx": "^4.22.4"
+    "tsx": "^4.22.4",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/bcrypt": "^6.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.0.0",
     "@types/ws": "^8.18.1",
-    "typescript": "^6.0.3"
+    "eslint": "^9.39.4",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.1"
   }
 }

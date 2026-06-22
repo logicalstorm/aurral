@@ -1,33 +1,29 @@
-import fs from "fs/promises";
-import path from "path";
+import fs from 'fs/promises';
+import path from 'path';
 import {
   getStoredDownloadFolderPath,
   resolveDefaultPlaylistDownloadRoot,
   resolveEnvDownloadFolder,
-} from "./downloadFolderConfig.js";
+} from './downloadFolderConfig.js';
 
-export const PLAYLIST_LIBRARY_DIR = "aurral-weekly-flow";
-const LEGACY_LIBRARY_DIR = "aurral-weekly-flow";
-const PREVIOUS_V2_LIBRARY_DIR = "aurral-playlists";
-const LEGACY_DOCKER_PLAYLIST_ROOT = "/app/downloads";
+export const PLAYLIST_LIBRARY_DIR = 'aurral-weekly-flow';
+const LEGACY_LIBRARY_DIR = 'aurral-weekly-flow';
+const PREVIOUS_V2_LIBRARY_DIR = 'aurral-playlists';
+const LEGACY_DOCKER_PLAYLIST_ROOT = '/app/downloads';
 
 function defaultPlaylistRoot() {
   return resolveDefaultPlaylistDownloadRoot();
 }
 
-export function resolvePlaylistRoot(explicitRoot) {
-  const override = String(explicitRoot ?? "").trim();
+export function resolvePlaylistRoot(explicitRoot?: string) {
+  const override = String(explicitRoot ?? '').trim();
   if (override) {
-    return path.isAbsolute(override)
-      ? override
-      : path.resolve(process.cwd(), override);
+    return path.isAbsolute(override) ? override : path.resolve(process.cwd(), override);
   }
 
   const stored = getStoredDownloadFolderPath();
   if (stored) {
-    return path.isAbsolute(stored)
-      ? stored
-      : path.resolve(process.cwd(), stored);
+    return path.isAbsolute(stored) ? stored : path.resolve(process.cwd(), stored);
   }
 
   const envDownloadFolder = resolveEnvDownloadFolder();
@@ -38,59 +34,44 @@ export function resolvePlaylistRoot(explicitRoot) {
   return defaultPlaylistRoot();
 }
 
-export function remapLegacyPath(
-  finalPath,
-  playlistRoot = resolvePlaylistRoot(),
-) {
-  let resolved = path.resolve(String(finalPath || "").trim());
+export function remapLegacyPath(finalPath: string, playlistRoot = resolvePlaylistRoot()) {
+  let resolved = path.resolve(String(finalPath || '').trim());
   const root = path.resolve(playlistRoot);
   const legacyRoot = path.resolve(LEGACY_DOCKER_PLAYLIST_ROOT);
-  if (
-    resolved === legacyRoot ||
-    resolved.startsWith(`${legacyRoot}${path.sep}`)
-  ) {
+  if (resolved === legacyRoot || resolved.startsWith(`${legacyRoot}${path.sep}`)) {
     resolved = path.resolve(root, path.relative(legacyRoot, resolved));
   }
   if (resolved.includes(PREVIOUS_V2_LIBRARY_DIR)) {
     resolved = path.resolve(
       root,
-      path
-        .relative(root, resolved)
-        .replaceAll(PREVIOUS_V2_LIBRARY_DIR, PLAYLIST_LIBRARY_DIR),
+      path.relative(root, resolved).replaceAll(PREVIOUS_V2_LIBRARY_DIR, PLAYLIST_LIBRARY_DIR),
     );
   }
   if (resolved.includes(LEGACY_LIBRARY_DIR)) {
     resolved = path.resolve(
       root,
-      path
-        .relative(root, resolved)
-        .replaceAll(LEGACY_LIBRARY_DIR, PLAYLIST_LIBRARY_DIR),
+      path.relative(root, resolved).replaceAll(LEGACY_LIBRARY_DIR, PLAYLIST_LIBRARY_DIR),
     );
   }
   return resolved;
 }
 
-export function buildPlaylistDestination(playlistId, artistDir, albumDir) {
+export function buildPlaylistDestination(playlistId: string, artistDir: string, albumDir: string) {
   return path.posix.join(
     PLAYLIST_LIBRARY_DIR,
-    String(playlistId || "").trim(),
-    String(artistDir || "Unknown Artist"),
-    String(albumDir || "Unknown Album"),
+    String(playlistId || '').trim(),
+    String(artistDir || 'Unknown Artist'),
+    String(albumDir || 'Unknown Album'),
   );
 }
 
-export function isPathInsideRoot(candidatePath, rootPath) {
+export function isPathInsideRoot(candidatePath: string, rootPath: string) {
   const relative = path.relative(rootPath, candidatePath);
-  return (
-    relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
-  );
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
-export async function resolveExistingTrackPath(
-  finalPath,
-  playlistRoot = resolvePlaylistRoot(),
-) {
-  const direct = path.resolve(String(finalPath || "").trim());
+export async function resolveExistingTrackPath(finalPath: string, playlistRoot = resolvePlaylistRoot()) {
+  const direct = path.resolve(String(finalPath || '').trim());
   const root = path.resolve(playlistRoot);
   const candidates = [...new Set([direct, remapLegacyPath(direct, root)])];
 
@@ -105,21 +86,15 @@ export async function resolveExistingTrackPath(
       }
     } catch (e: unknown) {
       const errno = (e as NodeJS.ErrnoException)?.code;
-      if (errno && errno !== "ENOENT") {
-        console.warn(
-          `[resolveExistingTrackPath] Unexpected stat error for ${candidate}:`,
-          e,
-        );
+      if (errno && errno !== 'ENOENT') {
+        console.warn(`[resolveExistingTrackPath] Unexpected stat error for ${candidate}:`, e);
       }
     }
   }
   return null;
 }
 
-export async function migrateLegacyPaths(
-  playlistRoot = resolvePlaylistRoot(),
-  tracker,
-) {
+export async function migrateLegacyPaths(playlistRoot = resolvePlaylistRoot(), tracker: { getAll: () => Array<{ id: string; finalPath: string; status: string; albumName?: string | null }>; setDone: (id: string, path: string, albumName: string | null) => void }) {
   if (!tracker?.getAll || !tracker?.setDone) {
     return { scanned: 0, migrated: 0 };
   }
@@ -127,11 +102,8 @@ export async function migrateLegacyPaths(
   const jobs = tracker.getAll();
   let migrated = 0;
   for (const job of jobs) {
-    if (!job?.finalPath || job.status !== "done") continue;
-    const resolved = await resolveExistingTrackPath(
-      job.finalPath,
-      playlistRoot,
-    );
+    if (!job?.finalPath || job.status !== 'done') continue;
+    const resolved = await resolveExistingTrackPath(job.finalPath, playlistRoot);
     if (!resolved?.migratedFrom) continue;
     tracker.setDone(job.id, resolved.path, job.albumName || null);
     migrated += 1;

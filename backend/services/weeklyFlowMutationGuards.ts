@@ -1,39 +1,32 @@
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
-import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
-import { withHonkerLock } from "./honkerDb.js";
+import { downloadTracker } from './weeklyFlowDownloadTracker.js';
+import { weeklyFlowWorker } from './weeklyFlowWorker.js';
+import { withHonkerLock } from './honkerDb.js';
 
-const normalizePlaylistTypes = (playlistTypes) => [
+const normalizePlaylistTypes = (playlistTypes: string | string[]) => [
   ...new Set(
     (Array.isArray(playlistTypes) ? playlistTypes : [playlistTypes])
-      .map((playlistType) => String(playlistType || "").trim())
+      .map((playlistType) => String(playlistType || '').trim())
       .filter(Boolean),
   ),
 ];
 
-async function withPlaylistLocks(playlistTypes, operation) {
+async function withPlaylistLocks(playlistTypes: string[], operation: () => Promise<unknown> | unknown): Promise<unknown> {
   const sortedTypes = [...playlistTypes].sort();
-  const runAtIndex = async (index) => {
+  const runAtIndex = async (index: number): Promise<unknown> => {
     if (index >= sortedTypes.length) {
       return operation();
     }
     const playlistType = sortedTypes[index];
-    return withHonkerLock(
-      `playlist-mutation:${playlistType}`,
-      () => runAtIndex(index + 1),
-      {
-        ttlSeconds: 180,
-        waitTimeoutMs: 15 * 60 * 1000,
-        retryDelayMs: 250,
-      },
-    );
+    return withHonkerLock(`playlist-mutation:${playlistType}`, () => runAtIndex(index + 1), {
+      ttlSeconds: 180,
+      waitTimeoutMs: 15 * 60 * 1000,
+      retryDelayMs: 250,
+    });
   };
   return runAtIndex(0);
 }
 
-export async function beginPlaylistMutation(
-  playlistTypes,
-  { clearPending = true } = {},
-) {
+export async function beginPlaylistMutation(playlistTypes: string | string[], { clearPending = true }: Record<string, unknown> = {}) {
   const types = normalizePlaylistTypes(playlistTypes);
   for (const playlistType of types) {
     weeklyFlowWorker.blockPlaylist(playlistType);
@@ -44,9 +37,7 @@ export async function beginPlaylistMutation(
   }
   try {
     await Promise.all(
-      types.map((playlistType) =>
-        weeklyFlowWorker.waitForPlaylistIdle(playlistType),
-      ),
+      types.map((playlistType) => weeklyFlowWorker.waitForPlaylistIdle(playlistType)),
     );
   } catch (error) {
     for (const playlistType of types) {
@@ -62,11 +53,7 @@ export async function beginPlaylistMutation(
   };
 }
 
-export async function withPlaylistMutation(
-  playlistTypes,
-  operation,
-  options = {},
-) {
+export async function withPlaylistMutation(playlistTypes: string | string[], operation: () => Promise<unknown> | unknown, options: Record<string, unknown> = {}) {
   const types = normalizePlaylistTypes(playlistTypes);
   return withPlaylistLocks(types, async () => {
     const releaseMutation = await beginPlaylistMutation(types, options);

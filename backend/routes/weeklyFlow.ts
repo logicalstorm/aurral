@@ -1,95 +1,86 @@
-import express from "express";
-import { randomUUID } from "crypto";
-import fs from "fs";
-import fsp from "fs/promises";
-import path from "path";
-import { downloadTracker } from "../services/weeklyFlowDownloadTracker.js";
-import { weeklyFlowWorker } from "../services/weeklyFlowWorker.js";
-import { slskdClient } from "../services/slskdClient.js";
-import { startSlskdOrchestratorWorker } from "../services/slskdOrchestratorWorker.js";
-import { playlistManager } from "../services/weeklyFlowPlaylistManager.js";
+import express from 'express';
+import { randomUUID } from 'crypto';
+import fs from 'fs';
+import fsp from 'fs/promises';
+import path from 'path';
+import { downloadTracker } from '../services/weeklyFlowDownloadTracker.js';
+import { weeklyFlowWorker } from '../services/weeklyFlowWorker.js';
+import { slskdClient } from '../services/slskdClient.js';
+import { startSlskdOrchestratorWorker } from '../services/slskdOrchestratorWorker.js';
+import { playlistManager } from '../services/weeklyFlowPlaylistManager.js';
 import {
   buildSharedTrackIdentity,
   dedupeSharedTracks,
-  filterMissingSharedTracks,
   flowPlaylistConfig,
-} from "../services/weeklyFlowPlaylistConfig.js";
-import { weeklyFlowOperationQueue } from "../services/weeklyFlowOperationQueue.js";
+} from '../services/weeklyFlowPlaylistConfig.js';
+import { weeklyFlowOperationQueue } from '../services/weeklyFlowOperationQueue.js';
 import {
   createWeeklyFlowOperationToken,
   markLatestWeeklyFlowOperationToken,
   reconcileSharedPlaylistJobs,
-} from "../services/weeklyFlowOperations.js";
+} from '../services/weeklyFlowOperations.js';
 import {
   restartWorkerIfPending as restartWorkerIfPendingWithLocks,
   withPlaylistMutation,
-} from "../services/weeklyFlowMutationGuards.js";
-import { schedulePlaylistMbidEnrichment } from "../services/playlistMbidEnrichmentService.js";
-import { getWeeklyFlowStatusSnapshot } from "../services/weeklyFlowStatusSnapshot.js";
-import { PLAYLIST_LIBRARY_DIR } from "../services/playlistPaths.js";
+} from '../services/weeklyFlowMutationGuards.js';
+import { schedulePlaylistMbidEnrichment } from '../services/playlistMbidEnrichmentService.js';
+import { getWeeklyFlowStatusSnapshot } from '../services/weeklyFlowStatusSnapshot.js';
 import {
   remapLegacyWeeklyFlowPath,
   resolveExistingWeeklyFlowTrackPath,
-} from "../services/weeklyFlowPaths.js";
-import { noCache } from "../middleware/cache.js";
-import { hasPermission, verifyTokenAuth } from "../middleware/auth.js";
-import {
-  requireAuth,
-  requireAdmin,
-  requirePermission,
-} from "../middleware/requirePermission.js";
+} from '../services/weeklyFlowPaths.js';
+import { noCache } from '../middleware/cache.js';
+import { hasPermission, verifyTokenAuth } from '../middleware/auth.js';
+import { requireAuth, requireAdmin, requirePermission } from '../middleware/requirePermission.js';
 import {
   getUnavailableFlowSourceError,
   normalizeFlowMixForValidation,
-} from "../services/weeklyFlowValidation.js";
+} from '../services/weeklyFlowValidation.js';
 
 const router = express.Router();
-const EXISTING_FILE_MODE_OPTIONS = ["download", "reuse"];
-const AUDIO_CONTENT_TYPES = {
-  ".mp3": "audio/mpeg",
-  ".m4a": "audio/mp4",
-  ".aac": "audio/aac",
-  ".flac": "audio/flac",
-  ".ogg": "audio/ogg",
-  ".wav": "audio/wav",
+const EXISTING_FILE_MODE_OPTIONS = ['download', 'reuse'];
+const AUDIO_CONTENT_TYPES: Record<string, string> = {
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.flac': 'audio/flac',
+  '.ogg': 'audio/ogg',
+  '.wav': 'audio/wav',
 };
 
-const getFlowEntryName = (value) => {
-  if (typeof value === "string" || typeof value === "number") {
+const getFlowEntryName = (value: unknown): string | null => {
+  if (typeof value === 'string' || typeof value === 'number') {
     const text = String(value).trim();
     return text || null;
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
+  const obj = value as Record<string, unknown>;
   const candidates = [
-    value.name,
-    value.artistName,
-    value.artist,
-    value.tag,
-    value.label,
-    value.value,
+    obj.name,
+    obj.artistName,
+    obj.artist,
+    obj.tag,
+    obj.label,
+    obj.value,
   ];
   for (const candidate of candidates) {
-    const text = String(candidate || "").trim();
+    const text = String(candidate || '').trim();
     if (text) return text;
   }
   return null;
 };
 
-const normalizeFlowStringArray = (value) => {
+const normalizeFlowStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) {
-    return [
-      ...new Set(
-        value.map((entry) => getFlowEntryName(entry)).filter(Boolean),
-      ),
-    ];
+    return [...new Set(value.map((entry) => getFlowEntryName(entry)).filter(Boolean))] as string[];
   }
-  if (value && typeof value === "object") {
+  if (value && typeof value === 'object') {
     return [
       ...new Set(
         Object.keys(value)
-          .map((entry) => String(entry || "").trim())
+          .map((entry) => String(entry || '').trim())
           .filter(Boolean),
       ),
     ];
@@ -106,65 +97,61 @@ const validateFlowPayload = ({
   tags,
   relatedArtists,
   scheduleDays,
-} = {}) => {
+}: Record<string, unknown> = {}): string | null => {
   if (!name || !String(name).trim()) {
-    return "name is required";
+    return 'name is required';
   }
   const parsedSize = Number(size);
   if (!Number.isFinite(parsedSize) || parsedSize <= 0) {
-    return "size must be a positive number";
+    return 'size must be a positive number';
   }
   const normalizedMix = normalizeFlowMixForValidation(mix, recipe);
   const totalWeight = Object.values(normalizedMix).reduce((sum, value) => sum + value, 0);
   if (totalWeight <= 0) {
-    return "at least one source must be enabled";
+    return 'at least one source must be enabled';
   }
   const unavailableError = getUnavailableFlowSourceError(normalizedMix);
   if (unavailableError) return unavailableError;
   const normalizedTags = normalizeFlowStringArray(tags);
   const normalizedRelated = normalizeFlowStringArray(relatedArtists);
   if (normalizedMix.focus > 0 && normalizedTags.length === 0 && normalizedRelated.length === 0) {
-    return "Focus needs at least one genre tag or related artist";
+    return 'Focus needs at least one genre tag or related artist';
   }
   if (!Array.isArray(scheduleDays) || scheduleDays.length === 0) {
-    return "scheduleDays must include at least one day";
+    return 'scheduleDays must include at least one day';
   }
   return null;
 };
 
-const normalizeImportedTrackList = (value) => {
+const normalizeImportedTrackList = (value: unknown) => {
   if (!Array.isArray(value)) return [];
   return dedupeSharedTracks(value);
 };
 
-router.get("/stream/:jobId", noCache, async (req, res) => {
+router.get('/stream/:jobId', noCache, async (req, res) => {
   if (!verifyTokenAuth(req)) {
-    return res
-      .status(401)
-      .json({ error: "Unauthorized", message: "Authentication required" });
+    return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
   }
-  if (req.user && !hasPermission(req.user, "accessFlow")) {
-    return res
-      .status(403)
-      .json({ error: "Forbidden", message: "Permission required: accessFlow" });
+  if (req.user && !hasPermission(req.user, 'accessFlow')) {
+    return res.status(403).json({ error: 'Forbidden', message: 'Permission required: accessFlow' });
   }
-  const { jobId } = req.params;
+  const jobId = String(req.params.jobId);
   const job = downloadTracker.getJob(jobId);
   if (!job) {
-    return res.status(404).json({ error: "Track not found" });
+    return res.status(404).json({ error: 'Track not found' });
   }
   if (!canAccessPlaylistType(req.user, job.playlistType)) {
-    return res.status(404).json({ error: "Track not found" });
+    return res.status(404).json({ error: 'Track not found' });
   }
-  if (job.status !== "done" || !job.finalPath) {
-    return res.status(400).json({ error: "Track is not ready to stream" });
+  if (job.status !== 'done' || !job.finalPath) {
+    return res.status(400).json({ error: 'Track is not ready to stream' });
   }
   const resolved = await resolveExistingWeeklyFlowTrackPath(
     job.finalPath,
     weeklyFlowWorker.weeklyFlowRoot,
   );
   if (!resolved) {
-    return res.status(404).json({ error: "Track file missing" });
+    return res.status(404).json({ error: 'Track file missing' });
   }
   if (resolved.migratedFrom) {
     downloadTracker.setDone(job.id, resolved.path, job.albumName || null);
@@ -174,21 +161,18 @@ router.get("/stream/:jobId", noCache, async (req, res) => {
   try {
     stat = await fsp.stat(safePath);
     if (!stat.isFile()) {
-      return res.status(404).json({ error: "Track not found" });
+      return res.status(404).json({ error: 'Track not found' });
     }
   } catch {
-    return res.status(404).json({ error: "Track file missing" });
+    return res.status(404).json({ error: 'Track file missing' });
   }
   const ext = path.extname(safePath).toLowerCase();
-  res.setHeader(
-    "Content-Type",
-    AUDIO_CONTENT_TYPES[ext] || "application/octet-stream",
-  );
-  res.setHeader("Accept-Ranges", "bytes");
+  res.setHeader('Content-Type', AUDIO_CONTENT_TYPES[ext] || 'application/octet-stream');
+  res.setHeader('Accept-Ranges', 'bytes');
 
   const range = req.headers.range;
   if (!range) {
-    res.setHeader("Content-Length", stat.size);
+    res.setHeader('Content-Length', stat.size);
     fs.createReadStream(safePath).pipe(res);
     return;
   }
@@ -207,54 +191,49 @@ router.get("/stream/:jobId", noCache, async (req, res) => {
     return;
   }
   res.status(206);
-  res.setHeader("Content-Range", `bytes ${start}-${end}/${stat.size}`);
-  res.setHeader("Content-Length", end - start + 1);
+  res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
+  res.setHeader('Content-Length', end - start + 1);
   fs.createReadStream(safePath, { start, end }).pipe(res);
 });
 
-router.get("/artwork/:playlistId", noCache, async (req, res) => {
+router.get('/artwork/:playlistId', noCache, async (req, res) => {
   if (!verifyTokenAuth(req)) {
-    return res
-      .status(401)
-      .json({ error: "Unauthorized", message: "Authentication required" });
+    return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
   }
-  if (req.user && !hasPermission(req.user, "accessFlow")) {
-    return res
-      .status(403)
-      .json({ error: "Forbidden", message: "Permission required: accessFlow" });
+  if (req.user && !hasPermission(req.user, 'accessFlow')) {
+    return res.status(403).json({ error: 'Forbidden', message: 'Permission required: accessFlow' });
   }
 
-  const { playlistId } = req.params;
+  const playlistId = String(req.params.playlistId);
   if (!canAccessPlaylistType(req.user, playlistId)) {
-    return res.status(404).json({ error: "Playlist artwork not found" });
+    return res.status(404).json({ error: 'Playlist artwork not found' });
   }
   const artwork = await playlistManager.resolveArtworkFile(playlistId);
   if (!artwork) {
-    return res.status(404).json({ error: "Playlist artwork not found" });
+    return res.status(404).json({ error: 'Playlist artwork not found' });
   }
 
   const { getArtworkContentTypeForExtension } =
-    await import("../services/playlistArtworkGenerator.js");
+    await import('../services/playlistArtworkGenerator.js');
   res.type(getArtworkContentTypeForExtension(artwork.extension));
   res.sendFile(artwork.safePath);
 });
 
 const artworkUploadParser = express.raw({
-  limit: "8mb",
+  limit: '8mb',
   type: (req) => {
-    const contentType = String(req.headers["content-type"] || "").toLowerCase();
-    return contentType.startsWith("image/");
+    const contentType = String(req.headers['content-type'] || '').toLowerCase();
+    return contentType.startsWith('image/');
   },
 });
 
 router.use(requireAuth);
-router.use(requirePermission("accessFlow"));
+router.use(requirePermission('accessFlow'));
 const DEFAULT_LIMIT = 30;
-const QUEUE_LIMIT = 50;
 const SLSKD_NOT_CONFIGURED_MESSAGE =
-  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
+  'slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.';
 
-const markFlowMutationToken = (flowId) => {
+const markFlowMutationToken = (flowId: string) => {
   const token = createWeeklyFlowOperationToken();
   const tokenScope = `flow:${flowId}:mutation`;
   markLatestWeeklyFlowOperationToken(tokenScope, token);
@@ -263,14 +242,11 @@ const markFlowMutationToken = (flowId) => {
 
 const restartWorkerIfPending = restartWorkerIfPendingWithLocks;
 
-const pauseSharedPlaylistRetryCycle = async (playlistId) => {
+const pauseSharedPlaylistRetryCycle = async (playlistId: string) => {
   weeklyFlowWorker.setRetryCyclePaused(playlistId, true);
   let cancelledJobs = 0;
   await withPlaylistMutation(playlistId, async () => {
-    cancelledJobs = downloadTracker.failActiveJobsForPlaylist(
-      playlistId,
-      "Retry cycle paused",
-    );
+    cancelledJobs = downloadTracker.failActiveJobsForPlaylist(playlistId, 'Retry cycle paused');
   });
   if (weeklyFlowWorker.running) {
     weeklyFlowWorker.wake();
@@ -280,14 +256,13 @@ const pauseSharedPlaylistRetryCycle = async (playlistId) => {
   return cancelledJobs;
 };
 
-const getAccessibleFlow = (user, flowId) =>
-  flowPlaylistConfig.getFlowForUser(user, flowId);
+const getAccessibleFlow = (user: unknown, flowId: string) => flowPlaylistConfig.getFlowForUser(user, flowId);
 
-const getAccessibleSharedPlaylist = (user, playlistId) =>
+const getAccessibleSharedPlaylist = (user: unknown, playlistId: string) =>
   flowPlaylistConfig.getSharedPlaylistForUser(user, playlistId);
 
-const canAccessPlaylistType = (user, playlistType) => {
-  const key = String(playlistType || "").trim();
+const canAccessPlaylistType = (user: unknown, playlistType: string) => {
+  const key = String(playlistType || '').trim();
   if (!key) return false;
   const flow = flowPlaylistConfig.getFlow(key);
   if (flow) {
@@ -300,71 +275,72 @@ const canAccessPlaylistType = (user, playlistType) => {
   return false;
 };
 
-router.put("/artwork/:playlistId", artworkUploadParser, async (req, res) => {
+router.put('/artwork/:playlistId', artworkUploadParser, async (req, res) => {
   const { playlistId } = req.params;
   if (!canAccessPlaylistType(req.user, playlistId)) {
-    return res.status(404).json({ error: "Playlist not found" });
+    return res.status(404).json({ error: 'Playlist not found' });
   }
   if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
     return res.status(400).json({
-      error: "Bad Request",
-      message: "Image body is required",
+      error: 'Bad Request',
+      message: 'Image body is required',
     });
   }
   try {
     await playlistManager.saveArtworkUpload(playlistId, req.body);
     return res.json({ ok: true });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     return res.status(400).json({
-      error: "Bad Request",
-      message: error?.message || "Failed to save artwork",
+      error: 'Bad Request',
+      message: err.message || 'Failed to save artwork',
     });
   }
 });
 
-router.delete("/artwork/:playlistId", async (req, res) => {
+router.delete('/artwork/:playlistId', async (req, res) => {
   const { playlistId } = req.params;
   if (!canAccessPlaylistType(req.user, playlistId)) {
-    return res.status(404).json({ error: "Playlist not found" });
+    return res.status(404).json({ error: 'Playlist not found' });
   }
   try {
     await playlistManager.removeArtwork(playlistId);
     return res.json({ ok: true });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     return res.status(400).json({
-      error: "Bad Request",
-      message: error?.message || "Failed to remove artwork",
+      error: 'Bad Request',
+      message: err.message || 'Failed to remove artwork',
     });
   }
 });
 
-router.post("/artwork/:playlistId/generate", async (req, res) => {
+router.post('/artwork/:playlistId/generate', async (req, res) => {
   const { playlistId } = req.params;
   if (!canAccessPlaylistType(req.user, playlistId)) {
-    return res.status(404).json({ error: "Playlist not found" });
+    return res.status(404).json({ error: 'Playlist not found' });
   }
   try {
     await playlistManager.generateArtwork(playlistId);
     return res.json({ ok: true });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     return res.status(400).json({
-      error: "Bad Request",
-      message: error?.message || "Failed to generate artwork",
+      error: 'Bad Request',
+      message: err.message || 'Failed to generate artwork',
     });
   }
 });
 
-const filterJobsForUser = (user, jobs) =>
-  (Array.isArray(jobs) ? jobs : []).filter((job) =>
-    canAccessPlaylistType(user, job?.playlistType),
-  );
+const filterJobsForUser = (user: unknown, jobs: unknown[]) =>
+  (Array.isArray(jobs) ? jobs : []).filter((job) => canAccessPlaylistType(user, (job as Record<string, unknown>)?.playlistType as string));
 
-const queueFlowEnableRefresh = (flowId) => {
+const queueFlowEnableRefresh = (flowId: string) => {
   const { token, tokenScope } = markFlowMutationToken(flowId);
   weeklyFlowOperationQueue
     .enqueuePayload(
       {
-        kind: "enable-flow-refresh",
+        kind: 'enable-flow-refresh',
         label: `enable:${flowId}`,
         flowId,
         tokenScope,
@@ -372,20 +348,17 @@ const queueFlowEnableRefresh = (flowId) => {
       },
       { waitForCompletion: false },
     )
-    .catch((error) => {
-      console.error(
-        `[WeeklyFlow] Failed to generate tracks for ${flowId}:`,
-        error.message,
-      );
+    .catch((error: Error) => {
+      console.error(`[WeeklyFlow] Failed to generate tracks for ${flowId}:`, error.message);
     });
 };
 
-const queueFlowDisableCleanup = (flowId) => {
+const queueFlowDisableCleanup = (flowId: string) => {
   const { token, tokenScope } = markFlowMutationToken(flowId);
   weeklyFlowOperationQueue
     .enqueuePayload(
       {
-        kind: "disable-flow-cleanup",
+        kind: 'disable-flow-cleanup',
         label: `disable:${flowId}`,
         flowId,
         tokenScope,
@@ -393,26 +366,23 @@ const queueFlowDisableCleanup = (flowId) => {
       },
       { waitForCompletion: false },
     )
-    .catch((error) => {
-      console.error(
-        `[WeeklyFlow] Failed to disable flow cleanup for ${flowId}:`,
-        error.message,
-      );
+    .catch((error: Error) => {
+      console.error(`[WeeklyFlow] Failed to disable flow cleanup for ${flowId}:`, error.message);
     });
 };
 
-router.post("/start/:flowId", async (req, res) => {
+router.post('/start/:flowId', async (req, res) => {
   try {
     const { flowId } = req.params;
     const { limit } = req.body;
     const flow = getAccessibleFlow(req.user, flowId);
     if (!flow) {
-      return res.status(404).json({ error: "Flow not found" });
+      return res.status(404).json({ error: 'Flow not found' });
     }
 
     if (!slskdClient.isConfigured()) {
       return res.status(400).json({
-        error: "slskd not configured",
+        error: 'slskd not configured',
         message: SLSKD_NOT_CONFIGURED_MESSAGE,
       });
     }
@@ -425,8 +395,8 @@ router.post("/start/:flowId", async (req, res) => {
     }
 
     const { token, tokenScope } = markFlowMutationToken(flowId);
-    const result = await weeklyFlowOperationQueue.enqueuePayload({
-      kind: "manual-start-flow",
+    const result = (await weeklyFlowOperationQueue.enqueuePayload({
+      kind: 'manual-start-flow',
       label: `manual-start:${flowId}`,
       flowId,
       tokenScope,
@@ -435,14 +405,14 @@ router.post("/start/:flowId", async (req, res) => {
         Number.isFinite(Number(limit)) && Number(limit) > 0
           ? Number(limit)
           : flow.size || DEFAULT_LIMIT,
-    });
+    })) as Record<string, unknown>;
 
     if (result?.missing) {
-      return res.status(404).json({ error: "Flow not found" });
+      return res.status(404).json({ error: 'Flow not found' });
     }
     if (result?.cancelled) {
       return res.status(409).json({
-        error: "Flow start superseded by another change",
+        error: 'Flow start superseded by another change',
       });
     }
     if (result?.empty) {
@@ -470,27 +440,25 @@ router.post("/start/:flowId", async (req, res) => {
       reserveTracks: result?.reserveTracks || 0,
     });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     res.status(500).json({
-      error: "Failed to start weekly flow",
-      message: error.message,
+      error: 'Failed to start weekly flow',
+      message: err.message,
     });
   }
 });
 
-router.get("/status", noCache, (req, res) => {
-  const includeJobs =
-    req.query.includeJobs === "1" || req.query.includeJobs === "true";
+router.get('/status', noCache, (req, res) => {
+  const includeJobs = req.query.includeJobs === '1' || req.query.includeJobs === 'true';
   const flowId = req.query.flowId ? String(req.query.flowId) : null;
   const parsedLimit = Number(req.query.jobsLimit);
   const jobsLimit =
-    Number.isFinite(parsedLimit) && parsedLimit > 0
-      ? Math.min(Math.floor(parsedLimit), 500)
-      : null;
+    Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(Math.floor(parsedLimit), 500) : null;
   const snapshot = getWeeklyFlowStatusSnapshot({
-    user: req.user,
+    user: req.user as any,
     includeJobs,
-    flowId,
-    jobsLimit,
+    flowId: flowId as any,
+    jobsLimit: jobsLimit as any,
   });
   res.json({
     ...snapshot,
@@ -498,19 +466,10 @@ router.get("/status", noCache, (req, res) => {
   });
 });
 
-router.post("/flows", async (req, res) => {
+router.post('/flows', async (req, res) => {
   try {
-    const {
-      name,
-      mix,
-      size,
-      deepDive,
-      recipe,
-      tags,
-      relatedArtists,
-      scheduleDays,
-      scheduleTime,
-    } = req.body || {};
+    const { name, mix, size, deepDive, recipe, tags, relatedArtists, scheduleDays, scheduleTime } =
+      req.body || {};
     const validationError = validateFlowPayload(req.body || {});
     if (validationError) {
       return res.status(400).json({ error: validationError, message: validationError });
@@ -525,42 +484,34 @@ router.post("/flows", async (req, res) => {
       relatedArtists,
       scheduleDays,
       scheduleTime,
-      ownerUserId: req.user.id,
+      ownerUserId: (req.user as Record<string, unknown>).id,
     });
     await playlistManager.ensureSmartPlaylists();
     res.json({ success: true, flow });
   } catch (error) {
-    if (error?.code === "FLOW_NAME_CONFLICT") {
+    const err = error as { message?: string; code?: string };
+    if (err.code === 'FLOW_NAME_CONFLICT') {
       return res.status(400).json({
-        error: "Flow name already exists",
-        message: error.message,
+        error: 'Flow name already exists',
+        message: err.message,
       });
     }
     res.status(500).json({
-      error: "Failed to create flow",
-      message: error.message,
+      error: 'Failed to create flow',
+      message: err.message,
     });
   }
 });
 
-router.put("/flows/:flowId", async (req, res) => {
+router.put('/flows/:flowId', async (req, res) => {
   try {
     const { flowId } = req.params;
     const existingFlow = getAccessibleFlow(req.user, flowId);
     if (!existingFlow) {
-      return res.status(404).json({ error: "Flow not found" });
+      return res.status(404).json({ error: 'Flow not found' });
     }
-    const {
-      name,
-      mix,
-      size,
-      deepDive,
-      recipe,
-      tags,
-      relatedArtists,
-      scheduleDays,
-      scheduleTime,
-    } = req.body || {};
+    const { name, mix, size, deepDive, recipe, tags, relatedArtists, scheduleDays, scheduleTime } =
+      req.body || {};
     const validationError = validateFlowPayload({
       ...existingFlow,
       ...req.body,
@@ -580,70 +531,72 @@ router.put("/flows/:flowId", async (req, res) => {
       scheduleTime,
     });
     if (!updated) {
-      return res.status(404).json({ error: "Flow not found" });
+      return res.status(404).json({ error: 'Flow not found' });
     }
     await playlistManager.ensureSmartPlaylists();
     res.json({ success: true, flow: updated });
   } catch (error) {
-    if (error?.code === "FLOW_NAME_CONFLICT") {
+    const err = error as { message?: string; code?: string };
+    if (err.code === 'FLOW_NAME_CONFLICT') {
       return res.status(400).json({
-        error: "Flow name already exists",
-        message: error.message,
+        error: 'Flow name already exists',
+        message: err.message,
       });
     }
     res.status(500).json({
-      error: "Failed to update flow",
-      message: error.message,
+      error: 'Failed to update flow',
+      message: err.message,
     });
   }
 });
 
-router.delete("/flows/:flowId", async (req, res) => {
+router.delete('/flows/:flowId', async (req, res) => {
   try {
     const { flowId } = req.params;
     if (!getAccessibleFlow(req.user, flowId)) {
-      return res.status(404).json({ error: "Flow not found" });
+      return res.status(404).json({ error: 'Flow not found' });
     }
     const { token, tokenScope } = markFlowMutationToken(flowId);
-    const deleted = await weeklyFlowOperationQueue.enqueuePayload({
-      kind: "delete-flow",
+    const deleted = (await weeklyFlowOperationQueue.enqueuePayload({
+      kind: 'delete-flow',
       label: `delete:${flowId}`,
       flowId,
       tokenScope,
       token,
-    });
+    })) as Record<string, unknown>;
     if (deleted?.queued) {
       return res.json({ success: true, flowId, queued: true });
     }
     if (deleted?.cancelled) {
       return res.status(409).json({
-        error: "Flow delete superseded by another change",
+        error: 'Flow delete superseded by another change',
       });
     }
     if (!deleted) {
-      return res.status(404).json({ error: "Flow not found" });
+      return res.status(404).json({ error: 'Flow not found' });
     }
     res.json({ success: true, flowId });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     res.status(500).json({
-      error: "Failed to delete flow",
-      message: error.message,
+      error: 'Failed to delete flow',
+      message: err.message,
     });
   }
 });
 
-router.put("/flows/:flowId/enabled", async (req, res) => {
+router.put('/flows/:flowId/enabled', async (req, res) => {
   try {
     const { flowId } = req.params;
     const { enabled } = req.body;
 
-    if (typeof enabled !== "boolean") {
-      return res.status(400).json({ error: "enabled must be a boolean" });
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'enabled must be a boolean' });
     }
 
     const flow = getAccessibleFlow(req.user, flowId);
     if (!flow) {
-      return res.status(404).json({ error: "Flow not found" });
+      return res.status(404).json({ error: 'Flow not found' });
     }
 
     if (enabled) {
@@ -656,7 +609,7 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
       }
       if (!slskdClient.isConfigured()) {
         return res.status(400).json({
-          error: "slskd not configured",
+          error: 'slskd not configured',
           message: SLSKD_NOT_CONFIGURED_MESSAGE,
         });
       }
@@ -671,7 +624,7 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
         flowId,
         enabled: true,
         tracksQueued: 0,
-        message: "Flow enabled. Tracks will start queueing shortly.",
+        message: 'Flow enabled. Tracks will start queueing shortly.',
       });
 
       queueFlowEnableRefresh(flowId);
@@ -687,31 +640,32 @@ router.put("/flows/:flowId/enabled", async (req, res) => {
       queueFlowDisableCleanup(flowId);
     }
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     res.status(500).json({
-      error: "Failed to update flow",
-      message: error.message,
+      error: 'Failed to update flow',
+      message: err.message,
     });
   }
 });
 
-router.post("/flows/:flowId/static-playlist", async (req, res) => {
+router.post('/flows/:flowId/static-playlist', async (req, res) => {
   let playlist = null;
   try {
     const { flowId } = req.params;
     const flow = getAccessibleFlow(req.user, flowId);
     if (!flow) {
-      return res.status(404).json({ error: "Flow not found" });
+      return res.status(404).json({ error: 'Flow not found' });
     }
 
-    const requestedName = String(req.body?.name || "").trim();
+    const requestedName = String(req.body?.name || '').trim();
     const flowJobs = downloadTracker.getByPlaylistType(flowId);
     const completedJobs = flowJobs.filter(
-      (job) => job?.status === "done" && typeof job?.finalPath === "string",
+      (job) => job?.status === 'done' && typeof job?.finalPath === 'string',
     );
     if (completedJobs.length === 0) {
       return res.status(400).json({
-        error: "No completed tracks available",
-        message: "Generate at least one completed flow track before saving it",
+        error: 'No completed tracks available',
+        message: 'Generate at least one completed flow track before saving it',
       });
     }
 
@@ -739,7 +693,7 @@ router.post("/flows/:flowId/static-playlist", async (req, res) => {
       sourceName: flow.name,
       sourceFlowId: flowId,
       tracks,
-      ownerUserId: flow.ownerUserId ?? req.user.id,
+      ownerUserId: flow.ownerUserId ?? (req.user as Record<string, unknown>).id,
     });
 
     for (const job of uniqueCompletedJobs) {
@@ -776,7 +730,7 @@ router.post("/flows/:flowId/static-playlist", async (req, res) => {
     await playlistManager.ensureSmartPlaylists();
     await playlistManager.scheduleScanLibrary(true);
     schedulePlaylistMbidEnrichment(playlist.id, {
-      reason: "flow-static-playlist",
+      reason: 'flow-static-playlist',
       priority: 5,
     });
 
@@ -786,6 +740,7 @@ router.post("/flows/:flowId/static-playlist", async (req, res) => {
       trackCount: uniqueCompletedJobs.length,
     });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     if (playlist?.id) {
       try {
         await playlistManager.weeklyReset([playlist.id]);
@@ -793,51 +748,46 @@ router.post("/flows/:flowId/static-playlist", async (req, res) => {
         await playlistManager.ensureSmartPlaylists();
       } catch {}
     }
-    if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
+    if (err.code === 'SHARED_PLAYLIST_NAME_CONFLICT') {
       return res.status(400).json({
-        error: "Shared playlist name already exists",
-        message: error.message,
+        error: 'Shared playlist name already exists',
+        message: err.message,
       });
     }
     res.status(500).json({
-      error: "Failed to create static playlist",
-      message: error.message,
+      error: 'Failed to create static playlist',
+      message: err.message,
     });
   }
 });
 
-router.post("/shared-playlists", async (req, res) => {
+router.post('/shared-playlists', async (req, res) => {
   try {
-    const {
-      name,
-      sourceName = null,
-      sourceFlowId = null,
-      tracks,
-    } = req.body || {};
-    const safeName = String(name || "").trim();
+    const { name, sourceName = null, sourceFlowId = null, tracks } = req.body || {};
+    const safeName = String(name || '').trim();
     const normalizedTracks = normalizeImportedTrackList(tracks);
     const rawTracksProvided = Array.isArray(tracks);
 
     if (!safeName) {
-      return res.status(400).json({ error: "name is required" });
+      return res.status(400).json({ error: 'name is required' });
     }
     if (rawTracksProvided && tracks.length > 0 && normalizedTracks.length === 0) {
       return res.status(400).json({
-        error: "tracks are invalid",
-        message: "Add at least one valid track",
+        error: 'tracks are invalid',
+        message: 'Add at least one valid track',
       });
     }
 
-    const result = await weeklyFlowOperationQueue.enqueuePayload({
-      kind: "shared-playlist-create",
-      label: "shared-playlist:create",
+    const result = (await weeklyFlowOperationQueue.enqueuePayload({
+      kind: 'shared-playlist-create',
+      label: 'shared-playlist:create',
       playlistId: randomUUID(),
       name: safeName,
       sourceName,
       sourceFlowId,
       tracks: normalizedTracks,
-      ownerUserId: req.user.id,
-    });
+      ownerUserId: (req.user as Record<string, unknown>).id,
+    })) as Record<string, unknown>;
 
     res.json({
       success: true,
@@ -848,56 +798,52 @@ router.post("/shared-playlists", async (req, res) => {
       queued: result?.queued === true,
     });
   } catch (error) {
-    if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
+    const err = error as { message?: string; code?: string };
+    if (err.code === 'SHARED_PLAYLIST_NAME_CONFLICT') {
       return res.status(400).json({
-        error: "Shared playlist name already exists",
-        message: error.message,
+        error: 'Shared playlist name already exists',
+        message: err.message,
       });
     }
     res.status(500).json({
-      error: "Failed to create shared playlist",
-      message: error.message,
+      error: 'Failed to create shared playlist',
+      message: err.message,
     });
   }
 });
 
-router.post("/shared-playlists/import", async (req, res) => {
+router.post('/shared-playlists/import', async (req, res) => {
   try {
-    const {
-      name,
-      sourceName = null,
-      sourceFlowId = null,
-      tracks,
-    } = req.body || {};
-    const safeName = String(name || "").trim();
+    const { name, sourceName = null, sourceFlowId = null, tracks } = req.body || {};
+    const safeName = String(name || '').trim();
     const normalizedTracks = normalizeImportedTrackList(tracks);
 
     if (!safeName) {
-      return res.status(400).json({ error: "name is required" });
+      return res.status(400).json({ error: 'name is required' });
     }
     if (normalizedTracks.length === 0) {
       return res.status(400).json({
-        error: "tracks are required",
-        message: "Import file must include at least one track",
+        error: 'tracks are required',
+        message: 'Import file must include at least one track',
       });
     }
     if (!slskdClient.isConfigured()) {
       return res.status(400).json({
-        error: "slskd not configured",
+        error: 'slskd not configured',
         message: SLSKD_NOT_CONFIGURED_MESSAGE,
       });
     }
 
-    const result = await weeklyFlowOperationQueue.enqueuePayload({
-      kind: "shared-playlist-create",
-      label: "shared-playlist:import",
+    const result = (await weeklyFlowOperationQueue.enqueuePayload({
+      kind: 'shared-playlist-create',
+      label: 'shared-playlist:import',
       playlistId: randomUUID(),
       name: safeName,
       sourceName,
       sourceFlowId,
       tracks: normalizedTracks,
-      ownerUserId: req.user.id,
-    });
+      ownerUserId: (req.user as Record<string, unknown>).id,
+    })) as Record<string, unknown>;
 
     res.json({
       success: true,
@@ -908,49 +854,50 @@ router.post("/shared-playlists/import", async (req, res) => {
       queued: result?.queued === true,
     });
   } catch (error) {
-    if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
+    const err = error as { message?: string; code?: string };
+    if (err.code === 'SHARED_PLAYLIST_NAME_CONFLICT') {
       return res.status(400).json({
-        error: "Shared playlist name already exists",
-        message: error.message,
+        error: 'Shared playlist name already exists',
+        message: err.message,
       });
     }
     res.status(500).json({
-      error: "Failed to import shared playlist",
-      message: error.message,
+      error: 'Failed to import shared playlist',
+      message: err.message,
     });
   }
 });
 
-router.post("/shared-playlists/:playlistId/tracks", async (req, res) => {
+router.post('/shared-playlists/:playlistId/tracks', async (req, res) => {
   try {
     const { playlistId } = req.params;
     const playlist = getAccessibleSharedPlaylist(req.user, playlistId);
     if (!playlist) {
-      return res.status(404).json({ error: "Shared playlist not found" });
+      return res.status(404).json({ error: 'Shared playlist not found' });
     }
     const rawTracks = req.body?.tracks;
     const normalizedTracks = normalizeImportedTrackList(rawTracks);
     if (Array.isArray(rawTracks) && rawTracks.length > 0 && normalizedTracks.length === 0) {
       return res.status(400).json({
-        error: "tracks are invalid",
-        message: "Add at least one valid track",
+        error: 'tracks are invalid',
+        message: 'Add at least one valid track',
       });
     }
     if (normalizedTracks.length === 0) {
       return res.status(400).json({
-        error: "tracks are required",
-        message: "Add at least one valid track",
+        error: 'tracks are required',
+        message: 'Add at least one valid track',
       });
     }
 
-    const result = await weeklyFlowOperationQueue.enqueuePayload({
-      kind: "shared-playlist-append-tracks",
+    const result = (await weeklyFlowOperationQueue.enqueuePayload({
+      kind: 'shared-playlist-append-tracks',
       label: `shared-playlist:${playlistId}:tracks:add`,
       playlistId,
       tracks: normalizedTracks,
-    });
+    })) as Record<string, unknown>;
     if (result?.missing) {
-      return res.status(404).json({ error: "Shared playlist not found" });
+      return res.status(404).json({ error: 'Shared playlist not found' });
     }
 
     res.json({
@@ -962,39 +909,34 @@ router.post("/shared-playlists/:playlistId/tracks", async (req, res) => {
       queued: result?.queued === true,
     });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     res.status(500).json({
-      error: "Failed to add playlist tracks",
-      message: error.message,
+      error: 'Failed to add playlist tracks',
+      message: err.message,
     });
   }
 });
 
-router.put("/shared-playlists/:playlistId", async (req, res) => {
+router.put('/shared-playlists/:playlistId', async (req, res) => {
   try {
     const { playlistId } = req.params;
     const { name, tracks } = req.body || {};
-    const hasNameUpdate = Object.prototype.hasOwnProperty.call(
-      req.body || {},
-      "name",
-    );
-    const hasTracksUpdate = Object.prototype.hasOwnProperty.call(
-      req.body || {},
-      "tracks",
-    );
+    const hasNameUpdate = Object.prototype.hasOwnProperty.call(req.body || {}, 'name');
+    const hasTracksUpdate = Object.prototype.hasOwnProperty.call(req.body || {}, 'tracks');
     if (!hasNameUpdate && !hasTracksUpdate) {
       return res.status(400).json({
-        error: "At least one playlist field is required",
+        error: 'At least one playlist field is required',
       });
     }
     const currentPlaylist = getAccessibleSharedPlaylist(req.user, playlistId);
     if (!currentPlaylist) {
-      return res.status(404).json({ error: "Shared playlist not found" });
+      return res.status(404).json({ error: 'Shared playlist not found' });
     }
     const safeName = hasNameUpdate
-      ? String(name || "").trim()
-      : String(currentPlaylist.name || "").trim();
+      ? String(name || '').trim()
+      : String(currentPlaylist.name || '').trim();
     if (!safeName) {
-      return res.status(400).json({ error: "name is required" });
+      return res.status(400).json({ error: 'name is required' });
     }
     const normalizedTracks = hasTracksUpdate
       ? normalizeImportedTrackList(tracks)
@@ -1006,22 +948,22 @@ router.put("/shared-playlists/:playlistId", async (req, res) => {
       normalizedTracks.length === 0
     ) {
       return res.status(400).json({
-        error: "tracks are invalid",
-        message: "Playlist update must include at least one valid track",
+        error: 'tracks are invalid',
+        message: 'Playlist update must include at least one valid track',
       });
     }
 
-    const result = await weeklyFlowOperationQueue.enqueuePayload({
-      kind: "shared-playlist-update",
+    const result = (await weeklyFlowOperationQueue.enqueuePayload({
+      kind: 'shared-playlist-update',
       label: `shared-playlist:${playlistId}:update`,
       playlistId,
       name: safeName,
       tracks: normalizedTracks,
       hasNameUpdate,
       hasTracksUpdate,
-    });
+    })) as Record<string, unknown>;
     if (result?.missing) {
-      return res.status(404).json({ error: "Shared playlist not found" });
+      return res.status(404).json({ error: 'Shared playlist not found' });
     }
     res.json({
       success: true,
@@ -1030,94 +972,93 @@ router.put("/shared-playlists/:playlistId", async (req, res) => {
       queued: result?.queued === true,
     });
   } catch (error) {
-    if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
+    const err = error as { message?: string; code?: string };
+    if (err.code === 'SHARED_PLAYLIST_NAME_CONFLICT') {
       return res.status(400).json({
-        error: "Shared playlist name already exists",
-        message: error.message,
+        error: 'Shared playlist name already exists',
+        message: err.message,
       });
     }
     res.status(500).json({
-      error: "Failed to update shared playlist",
-      message: error.message,
+      error: 'Failed to update shared playlist',
+      message: err.message,
     });
   }
 });
 
-router.delete(
-  "/shared-playlists/:playlistId/tracks/:jobId",
-  async (req, res) => {
-    try {
-      const { playlistId, jobId } = req.params;
-      const playlist = getAccessibleSharedPlaylist(req.user, playlistId);
-      if (!playlist) {
-        return res.status(404).json({ error: "Shared playlist not found" });
-      }
-      const job = downloadTracker.getJob(jobId);
-      if (!job || job.playlistType !== playlistId) {
-        return res.status(404).json({ error: "Track not found" });
-      }
-      const result = await weeklyFlowOperationQueue.enqueuePayload({
-        kind: "shared-playlist-delete-track",
-        label: `shared-playlist:${playlistId}:track:${jobId}:delete`,
-        playlistId,
-        jobId,
-      });
-      if (result?.missingPlaylist) {
-        return res.status(404).json({ error: "Shared playlist not found" });
-      }
-      if (result?.missingJob) {
-        return res.status(404).json({ error: "Track not found" });
-      }
-
-      res.json({
-        success: true,
-        playlist: result?.playlist || playlist,
-        removedJobId: result?.removedJobId || jobId,
-        queued: result?.queued === true,
-      });
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to remove shared playlist track",
-        message: error.message,
-      });
+router.delete('/shared-playlists/:playlistId/tracks/:jobId', async (req, res) => {
+  try {
+    const { playlistId, jobId } = req.params;
+    const playlist = getAccessibleSharedPlaylist(req.user, playlistId);
+    if (!playlist) {
+      return res.status(404).json({ error: 'Shared playlist not found' });
     }
-  },
-);
+    const job = downloadTracker.getJob(jobId);
+    if (!job || job.playlistType !== playlistId) {
+      return res.status(404).json({ error: 'Track not found' });
+    }
+    const result = (await weeklyFlowOperationQueue.enqueuePayload({
+      kind: 'shared-playlist-delete-track',
+      label: `shared-playlist:${playlistId}:track:${jobId}:delete`,
+      playlistId,
+      jobId,
+    })) as Record<string, unknown>;
+    if (result?.missingPlaylist) {
+      return res.status(404).json({ error: 'Shared playlist not found' });
+    }
+    if (result?.missingJob) {
+      return res.status(404).json({ error: 'Track not found' });
+    }
 
-router.post("/flows/:flowId/tracks/:jobId/research", async (req, res) => {
+    res.json({
+      success: true,
+      playlist: result?.playlist || playlist,
+      removedJobId: result?.removedJobId || jobId,
+      queued: result?.queued === true,
+    });
+  } catch (error) {
+    const err = error as { message?: string; code?: string };
+    res.status(500).json({
+      error: 'Failed to remove shared playlist track',
+      message: err.message,
+    });
+  }
+});
+
+router.post('/flows/:flowId/tracks/:jobId/research', async (req, res) => {
   try {
     const { flowId, jobId } = req.params;
     const flow = getAccessibleFlow(req.user, flowId);
     if (!flow) {
-      return res.status(404).json({ error: "Flow not found" });
+      return res.status(404).json({ error: 'Flow not found' });
     }
 
     const job = downloadTracker.getJob(jobId);
     if (!job || job.playlistType !== flowId) {
-      return res.status(404).json({ error: "Track not found" });
+      return res.status(404).json({ error: 'Track not found' });
     }
 
-    if (job.status === "pending" || job.status === "downloading") {
+    if (job.status === 'pending' || job.status === 'downloading') {
       return res.status(409).json({
-        error: "Track is already being processed",
+        error: 'Track is already being processed',
       });
     }
 
-    const result = await weeklyFlowOperationQueue.enqueuePayload({
-      kind: "shared-playlist-research-track",
+    const result = (await weeklyFlowOperationQueue.enqueuePayload({
+      kind: 'shared-playlist-research-track',
       label: `flow:${flowId}:track:${jobId}:research`,
       playlistId: flowId,
       jobId,
-    });
+    })) as Record<string, unknown>;
     if (result?.missingPlaylist) {
-      return res.status(404).json({ error: "Flow not found" });
+      return res.status(404).json({ error: 'Flow not found' });
     }
     if (result?.missingJob) {
-      return res.status(404).json({ error: "Track not found" });
+      return res.status(404).json({ error: 'Track not found' });
     }
     if (result?.alreadyProcessing) {
       return res.status(409).json({
-        error: "Track is already being processed",
+        error: 'Track is already being processed',
       });
     }
 
@@ -1129,123 +1070,118 @@ router.post("/flows/:flowId/tracks/:jobId/research", async (req, res) => {
       queued: result?.queued === true,
     });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     res.status(500).json({
-      error: "Failed to re-search flow track",
-      message: error.message,
+      error: 'Failed to re-search flow track',
+      message: err.message,
     });
   }
 });
 
-router.post(
-  "/shared-playlists/:playlistId/tracks/:jobId/research",
-  async (req, res) => {
-    try {
-      const { playlistId, jobId } = req.params;
-      const playlist = getAccessibleSharedPlaylist(req.user, playlistId);
-      if (!playlist) {
-        return res.status(404).json({ error: "Shared playlist not found" });
-      }
+router.post('/shared-playlists/:playlistId/tracks/:jobId/research', async (req, res) => {
+  try {
+    const { playlistId, jobId } = req.params;
+    const playlist = getAccessibleSharedPlaylist(req.user, playlistId);
+    if (!playlist) {
+      return res.status(404).json({ error: 'Shared playlist not found' });
+    }
 
-      const job = downloadTracker.getJob(jobId);
-      if (!job || job.playlistType !== playlistId) {
-        return res.status(404).json({ error: "Track not found" });
-      }
+    const job = downloadTracker.getJob(jobId);
+    if (!job || job.playlistType !== playlistId) {
+      return res.status(404).json({ error: 'Track not found' });
+    }
 
-      if (job.status === "pending" || job.status === "downloading") {
-        return res.status(409).json({
-          error: "Track is already being processed",
-        });
-      }
-
-      const result = await weeklyFlowOperationQueue.enqueuePayload({
-        kind: "shared-playlist-research-track",
-        label: `shared-playlist:${playlistId}:track:${jobId}:research`,
-        playlistId,
-        jobId,
-      });
-      if (result?.missingPlaylist) {
-        return res.status(404).json({ error: "Shared playlist not found" });
-      }
-      if (result?.missingJob) {
-        return res.status(404).json({ error: "Track not found" });
-      }
-      if (result?.alreadyProcessing) {
-        return res.status(409).json({
-          error: "Track is already being processed",
-        });
-      }
-
-      res.json({
-        success: true,
-        jobId,
-        playlistId,
-        reused: result?.reused === true,
-        queued: result?.queued === true,
-      });
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to re-search shared playlist track",
-        message: error.message,
+    if (job.status === 'pending' || job.status === 'downloading') {
+      return res.status(409).json({
+        error: 'Track is already being processed',
       });
     }
-  },
-);
 
-router.delete("/shared-playlists/:playlistId", async (req, res) => {
+    const result = (await weeklyFlowOperationQueue.enqueuePayload({
+      kind: 'shared-playlist-research-track',
+      label: `shared-playlist:${playlistId}:track:${jobId}:research`,
+      playlistId,
+      jobId,
+    })) as Record<string, unknown>;
+    if (result?.missingPlaylist) {
+      return res.status(404).json({ error: 'Shared playlist not found' });
+    }
+    if (result?.missingJob) {
+      return res.status(404).json({ error: 'Track not found' });
+    }
+    if (result?.alreadyProcessing) {
+      return res.status(409).json({
+        error: 'Track is already being processed',
+      });
+    }
+
+    res.json({
+      success: true,
+      jobId,
+      playlistId,
+      reused: result?.reused === true,
+      queued: result?.queued === true,
+    });
+  } catch (error) {
+    const err = error as { message?: string; code?: string };
+    res.status(500).json({
+      error: 'Failed to re-search shared playlist track',
+      message: err.message,
+    });
+  }
+});
+
+router.delete('/shared-playlists/:playlistId', async (req, res) => {
   try {
     const { playlistId } = req.params;
     const exists = getAccessibleSharedPlaylist(req.user, playlistId);
     if (!exists) {
-      return res.status(404).json({ error: "Shared playlist not found" });
+      return res.status(404).json({ error: 'Shared playlist not found' });
     }
 
-    const deleted = await weeklyFlowOperationQueue.enqueuePayload({
-      kind: "shared-playlist-delete",
+    const deleted = (await weeklyFlowOperationQueue.enqueuePayload({
+      kind: 'shared-playlist-delete',
       label: `shared-playlist:${playlistId}:delete`,
       playlistId,
-    });
+    })) as Record<string, unknown>;
     if (deleted?.queued) {
       return res.json({ success: true, playlistId, queued: true });
     }
     if (!deleted) {
-      return res.status(404).json({ error: "Shared playlist not found" });
+      return res.status(404).json({ error: 'Shared playlist not found' });
     }
 
     res.json({ success: true, playlistId });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     res.status(500).json({
-      error: "Failed to delete shared playlist",
-      message: error.message,
+      error: 'Failed to delete shared playlist',
+      message: err.message,
     });
   }
 });
 
-router.get("/jobs/:flowId", async (req, res) => {
+router.get('/jobs/:flowId', async (req, res) => {
   const { flowId } = req.params;
   if (!canAccessPlaylistType(req.user, flowId)) {
-    return res.status(404).json({ error: "Playlist not found" });
+    return res.status(404).json({ error: 'Playlist not found' });
   }
   if (flowPlaylistConfig.getSharedPlaylist(flowId)) {
     try {
       await reconcileSharedPlaylistJobs(flowId);
     } catch {}
   }
-  const rawLimit =
-    req.query.limit == null ? "" : String(req.query.limit).trim();
+  const rawLimit = req.query.limit == null ? '' : String(req.query.limit).trim();
   const parsedLimit = Number(rawLimit);
   const limit =
-    rawLimit && Number.isFinite(parsedLimit) && parsedLimit > 0
-      ? Math.floor(parsedLimit)
-      : null;
-  const jobs = filterJobsForUser(
-    req.user,
-    downloadTracker.getByPlaylistType(flowId, limit),
-  );
+    rawLimit && Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.floor(parsedLimit) : null;
+  const jobs = filterJobsForUser(req.user, downloadTracker.getByPlaylistType(flowId, limit));
   res.json(jobs);
 });
 
-router.get("/jobs", (req, res) => {
-  const { status } = req.query;
+router.get('/jobs', (req, res) => {
+  const statusRaw = req.query.status;
+  const status = statusRaw ? String(statusRaw) : '';
   const jobs = filterJobsForUser(
     req.user,
     status ? downloadTracker.getByStatus(status) : downloadTracker.getAll(),
@@ -1253,19 +1189,19 @@ router.get("/jobs", (req, res) => {
   res.json(jobs);
 });
 
-router.put("/playlists/:playlistId/retry-cycle", async (req, res) => {
+router.put('/playlists/:playlistId/retry-cycle', async (req, res) => {
   try {
     const { playlistId } = req.params;
     const { paused } = req.body || {};
-    if (typeof paused !== "boolean") {
+    if (typeof paused !== 'boolean') {
       return res.status(400).json({
-        error: "paused must be a boolean",
+        error: 'paused must be a boolean',
       });
     }
     const shared = getAccessibleSharedPlaylist(req.user, playlistId);
     if (!shared) {
       return res.status(404).json({
-        error: "Static playlist not found",
+        error: 'Static playlist not found',
       });
     }
     if (paused) {
@@ -1280,32 +1216,35 @@ router.put("/playlists/:playlistId/retry-cycle", async (req, res) => {
       paused,
     });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     return res.status(500).json({
-      error: "Failed to update retry cycle",
-      message: error.message,
+      error: 'Failed to update retry cycle',
+      message: err.message,
     });
   }
 });
 
-router.get("/worker/settings", requireAdmin, (req, res) => {
+router.get('/worker/settings', requireAdmin, (req, res) => {
   res.json(weeklyFlowWorker.getWorkerSettings());
 });
 
-router.put("/worker/settings", requireAdmin, async (req, res) => {
+router.put('/worker/settings', requireAdmin, async (req, res) => {
   const { concurrency, existingFileMode } = req.body || {};
   if (concurrency !== undefined) {
     const parsed = Number(concurrency);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 3) {
       return res.status(400).json({
-        error: "concurrency must be an integer between 1 and 3",
+        error: 'concurrency must be an integer between 1 and 3',
       });
     }
   }
   if (existingFileMode !== undefined) {
-    const normalized = String(existingFileMode || "").trim().toLowerCase();
+    const normalized = String(existingFileMode || '')
+      .trim()
+      .toLowerCase();
     if (!EXISTING_FILE_MODE_OPTIONS.includes(normalized)) {
       return res.status(400).json({
-        error: "existingFileMode must be one of: download, reuse",
+        error: 'existingFileMode must be one of: download, reuse',
       });
     }
   }
@@ -1316,78 +1255,81 @@ router.put("/worker/settings", requireAdmin, async (req, res) => {
   return res.json({ success: true, settings });
 });
 
-router.post("/worker/start", requireAdmin, async (req, res) => {
+router.post('/worker/start', requireAdmin, async (req, res) => {
   try {
     startSlskdOrchestratorWorker();
     await weeklyFlowWorker.start();
-    res.json({ success: true, message: "Worker started" });
+    res.json({ success: true, message: 'Worker started' });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     res.status(500).json({
-      error: "Failed to start worker",
-      message: error.message,
+      error: 'Failed to start worker',
+      message: err.message,
     });
   }
 });
 
-router.post("/worker/stop", requireAdmin, async (req, res) => {
+router.post('/worker/stop', requireAdmin, async (req, res) => {
   try {
     await weeklyFlowWorker.stopAndDrain();
-    res.json({ success: true, message: "Worker stopped" });
+    res.json({ success: true, message: 'Worker stopped' });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     res.status(500).json({
-      error: "Failed to stop worker",
-      message: error.message,
+      error: 'Failed to stop worker',
+      message: err.message,
     });
   }
 });
 
-router.delete("/jobs/completed", requireAdmin, (req, res) => {
+router.delete('/jobs/completed', requireAdmin, (req, res) => {
   const count = downloadTracker.clearCompleted();
   res.json({ success: true, cleared: count });
 });
 
-router.delete("/jobs/all", requireAdmin, (req, res) => {
+router.delete('/jobs/all', requireAdmin, (req, res) => {
   const count = downloadTracker.clearAll();
   res.json({ success: true, cleared: count });
 });
 
-router.post("/reset", requireAdmin, async (req, res) => {
+router.post('/reset', requireAdmin, async (req, res) => {
   try {
     const { flowIds } = req.body;
-    const types =
-      flowIds || flowPlaylistConfig.getFlows().map((flow) => flow.id);
+    const types = flowIds || flowPlaylistConfig.getFlows().map((flow) => flow.id);
 
     await weeklyFlowOperationQueue.enqueuePayload({
-      kind: "reset-playlists",
-      label: "reset:manual",
+      kind: 'reset-playlists',
+      label: 'reset:manual',
       playlistTypes: types,
     });
 
     res.json({
       success: true,
-      message: `Weekly reset completed for: ${types.join(", ")}`,
+      message: `Weekly reset completed for: ${types.join(', ')}`,
     });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     res.status(500).json({
-      error: "Failed to perform weekly reset",
-      message: error.message,
+      error: 'Failed to perform weekly reset',
+      message: err.message,
     });
   }
 });
 
-router.post("/playlist/:playlistType/create", requireAdmin, async (req, res) => {
+router.post('/playlist/:playlistType/create', requireAdmin, async (req, res) => {
   try {
     playlistManager.updateConfig(false);
     await playlistManager.ensureSmartPlaylists();
     res.json({
       success: true,
       message:
-        "Playlists ensured. M3U files in the Aurral playlist library reference completed track paths and import after Navidrome scans that library.",
+        'Playlists ensured. M3U files in the Aurral playlist library reference completed track paths and import after Navidrome scans that library.',
     });
   } catch (error) {
+    const err = error as { message?: string; code?: string };
     res.status(500).json({
-      error: "Failed to ensure playlists or trigger scan",
-      message: error.message,
+      error: 'Failed to ensure playlists or trigger scan',
+      message: err.message,
     });
   }
 });

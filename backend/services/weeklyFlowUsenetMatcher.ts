@@ -1,49 +1,46 @@
-import path from "path";
+import path from 'path';
 
 const AUDIO_CATEGORY_MIN = 3000;
 const AUDIO_CATEGORY_MAX = 3999;
 const DEFAULT_MAX_RELEASE_SIZE_MB = 2500;
 const TITLE_STOP_WORDS = new Set([
-  "the",
-  "a",
-  "an",
-  "and",
-  "or",
-  "feat",
-  "featuring",
-  "ft",
-  "with",
+  'the',
+  'a',
+  'an',
+  'and',
+  'or',
+  'feat',
+  'featuring',
+  'ft',
+  'with',
 ]);
 
-function normalizeText(value) {
-  return String(value || "")
+function normalizeText(value: unknown) {
+  return String(value || '')
     .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/\(.*?\)|\[.*?\]/g, " ")
-    .replace(
-      /\b(deluxe|expanded|anniversary|remaster(?:ed)?|bonus|edition|explicit|clean)\b/g,
-      " ",
-    )
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
+    .replace(/&/g, ' and ')
+    .replace(/\(.*?\)|\[.*?\]/g, ' ')
+    .replace(/\b(deluxe|expanded|anniversary|remaster(?:ed)?|bonus|edition|explicit|clean)\b/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
-function normalizeTitle(value) {
+function normalizeTitle(value: unknown) {
   return normalizeText(value)
-    .split(" ")
+    .split(' ')
     .filter((word) => word && !TITLE_STOP_WORDS.has(word))
-    .join(" ");
+    .join(' ');
 }
 
-function splitWords(value) {
+function splitWords(value: unknown) {
   return normalizeText(value)
-    .split(" ")
+    .split(' ')
     .map((entry) => entry.trim())
     .filter(Boolean);
 }
 
-function scoreTextMatch(left, right) {
+function scoreTextMatch(left: unknown, right: unknown) {
   const a = normalizeText(left);
   const b = normalizeText(right);
   if (!a || !b) return 0;
@@ -56,39 +53,33 @@ function scoreTextMatch(left, right) {
   for (const word of leftWords) {
     if (rightWords.has(word)) overlap += 1;
   }
-  return Math.round(
-    ((2 * overlap) / Math.max(1, leftWords.size + rightWords.size)) * 100,
-  );
+  return Math.round(((2 * overlap) / Math.max(1, leftWords.size + rightWords.size)) * 100);
 }
 
-function getYear(value) {
-  const match = String(value || "").match(/\b(19\d{2}|20\d{2})\b/);
+function getYear(value: unknown) {
+  const match = String(value || '').match(/\b(19\d{2}|20\d{2})\b/);
   return match ? match[1] : null;
 }
 
-function hasAudioCategory(release) {
+function hasAudioCategory(release: Record<string, unknown>) {
   const categories = Array.isArray(release?.categories) ? release.categories : [];
   if (categories.length === 0) return true;
-  return categories.some((category) => {
+  return categories.some((category: unknown) => {
     const id = Number(category);
-    return (
-      Number.isFinite(id) &&
-      id >= AUDIO_CATEGORY_MIN &&
-      id <= AUDIO_CATEGORY_MAX
-    );
+    return Number.isFinite(id) && id >= AUDIO_CATEGORY_MIN && id <= AUDIO_CATEGORY_MAX;
   });
 }
 
-function hasConflictingYear(title, expectedYear) {
+function hasConflictingYear(title: unknown, expectedYear: unknown) {
   const expected = getYear(expectedYear);
   if (!expected) return false;
-  const years = [
-    ...String(title || "").matchAll(/\b(19\d{2}|20\d{2})\b/g),
-  ].map((match) => match[1]);
+  const years = [...String(title || '').matchAll(/\b(19\d{2}|20\d{2})\b/g)].map(
+    (match) => match[1],
+  );
   return years.length > 0 && !years.includes(expected);
 }
 
-function scoreFormat(title) {
+function scoreFormat(title: unknown) {
   const text = normalizeText(title);
   if (/\bflac\b|\blossless\b|\blossless\b|\b24bit\b|\b24 bit\b/.test(text)) {
     return 12;
@@ -97,7 +88,7 @@ function scoreFormat(title) {
   return 0;
 }
 
-function scoreNoise(title) {
+function scoreNoise(title: unknown) {
   const text = normalizeText(title);
   let penalty = 0;
   if (/\bdiscography\b|\bcomplete\b|\bcollection\b|\bbox set\b/.test(text)) {
@@ -112,7 +103,7 @@ function scoreNoise(title) {
   return penalty;
 }
 
-function scoreReleaseSize(release, context, options) {
+function scoreReleaseSize(release: Record<string, unknown>, context: Record<string, unknown>, options: Record<string, unknown>) {
   const size = Number(release?.size || 0);
   if (!size) return 0;
   const sizeMb = size / (1024 * 1024);
@@ -121,7 +112,7 @@ function scoreReleaseSize(release, context, options) {
     Number(options?.maxReleaseSizeMb || DEFAULT_MAX_RELEASE_SIZE_MB),
   );
   if (sizeMb > maxReleaseSizeMb) return -80;
-  if (context?.albumTrackCount && context.albumTrackCount > 1) {
+  if (context?.albumTrackCount && Number(context.albumTrackCount) > 1) {
     if (sizeMb >= 40 && sizeMb <= maxReleaseSizeMb) return 8;
     return -8;
   }
@@ -130,33 +121,32 @@ function scoreReleaseSize(release, context, options) {
   return -18;
 }
 
-function readComparableAlbumName(context) {
-  return String(context?.albumName || "")
-    .replace(/\s+(?:-|–|—)\s+(?:single|ep|album)\s*$/i, "")
-    .replace(/\s+[\[(](?:single|ep|album)[\])]\s*$/i, "")
-    .replace(/\s+/g, " ")
+function readComparableAlbumName(context: Record<string, unknown>) {
+  return String(context?.albumName || '')
+    .replace(/\s+(?:-|–|—)\s+(?:single|ep|album)\s*$/i, '')
+    .replace(/\s+[[(](?:single|ep|album)[\])]\s*$/i, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
-function releaseKey(release) {
-  return [
-    release?.guid,
-    release?.downloadUrl,
-    release?.indexerId,
-    normalizeTitle(release?.title),
-  ]
-    .map((entry) => String(entry || "").trim().toLowerCase())
-    .join("\0");
+function releaseKey(release: Record<string, unknown> | null) {
+  return [release?.guid, release?.downloadUrl, release?.indexerId, normalizeTitle(release?.title)]
+    .map((entry) =>
+      String(entry || '')
+        .trim()
+        .toLowerCase(),
+    )
+    .join('\0');
 }
 
-export function rankUsenetReleases(releases, context, options = {}) {
+export function rankUsenetReleases(releases: Record<string, unknown>[], context: Record<string, unknown>, options: Record<string, unknown> = {}) {
   const albumName = readComparableAlbumName(context);
   const expectedYear = getYear(context?.releaseYear);
   const seen = new Set();
   const ranked = [];
   for (const release of Array.isArray(releases) ? releases : []) {
     if (!release?.downloadUrl || !release?.title) continue;
-    if (String(release.protocol || "").toLowerCase() !== "usenet") continue;
+    if (String(release.protocol || '').toLowerCase() !== 'usenet') continue;
     const key = releaseKey(release);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -164,8 +154,7 @@ export function rankUsenetReleases(releases, context, options = {}) {
     const artistScore = scoreTextMatch(title, context?.artistName);
     const trackScore = scoreTextMatch(title, context?.trackName);
     const albumScore = albumName ? scoreTextMatch(title, albumName) : 0;
-    const yearScore =
-      expectedYear && normalizeText(title).includes(expectedYear) ? 10 : 0;
+    const yearScore = expectedYear && normalizeText(title).includes(expectedYear) ? 10 : 0;
     const audioCategoryScore = hasAudioCategory(release) ? 10 : -30;
     const formatScore = scoreFormat(title);
     const sizeScore = scoreReleaseSize(release, context, options);
@@ -218,7 +207,7 @@ export function rankUsenetReleases(releases, context, options = {}) {
   });
 }
 
-export function selectRankedUsenetCandidates(ranked, limit = 5) {
+export function selectRankedUsenetCandidates(ranked: Record<string, unknown>[], limit: number = 5) {
   const max = Math.max(1, Math.floor(Number(limit) || 5));
   const selected = [];
   const seenIndexers = new Set();
@@ -226,8 +215,9 @@ export function selectRankedUsenetCandidates(ranked, limit = 5) {
   for (const candidate of Array.isArray(ranked) ? ranked : []) {
     if (selected.length >= max) break;
     if (!candidate?.preDownloadValid) continue;
-    const key = releaseKey(candidate.raw?.release);
-    const indexerId = String(candidate.raw?.indexerId || "");
+    const raw = candidate.raw as Record<string, unknown>;
+    const key = releaseKey(raw?.release as Record<string, unknown>);
+    const indexerId = String(raw?.indexerId || '');
     if (seenKeys.has(key) || (indexerId && seenIndexers.has(indexerId))) continue;
     seenKeys.add(key);
     if (indexerId) seenIndexers.add(indexerId);
@@ -235,7 +225,8 @@ export function selectRankedUsenetCandidates(ranked, limit = 5) {
   }
   for (const candidate of Array.isArray(ranked) ? ranked : []) {
     if (selected.length >= max) break;
-    const key = releaseKey(candidate.raw?.release);
+    const raw2 = candidate.raw as Record<string, unknown>;
+    const key = releaseKey(raw2?.release as Record<string, unknown>);
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
     selected.push(candidate);
@@ -243,18 +234,18 @@ export function selectRankedUsenetCandidates(ranked, limit = 5) {
   return selected;
 }
 
-export function isAudioFile(filePath) {
-  const ext = path.extname(String(filePath || "")).toLowerCase();
+export function isAudioFile(filePath: string) {
+  const ext = path.extname(String(filePath || '')).toLowerCase();
   return [
-    ".flac",
-    ".mp3",
-    ".m4a",
-    ".ogg",
-    ".wav",
-    ".aac",
-    ".opus",
-    ".alac",
-    ".ape",
-    ".wma",
+    '.flac',
+    '.mp3',
+    '.m4a',
+    '.ogg',
+    '.wav',
+    '.aac',
+    '.opus',
+    '.alac',
+    '.ape',
+    '.wma',
   ].includes(ext);
 }

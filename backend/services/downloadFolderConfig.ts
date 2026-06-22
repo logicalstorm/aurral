@@ -1,11 +1,11 @@
-import fs from "fs";
-import path from "path";
-import { resolveAurralDataDir } from "../config/data-dir.js";
+import fs from 'fs';
+import path from 'path';
+import { resolveAurralDataDir } from '../config/data-dir.js';
 
-let storedDownloadFolderPath = null;
+let storedDownloadFolderPath: string | null = null;
 
-export function syncDownloadFolderPath(value) {
-  const normalized = String(value ?? "").trim();
+export function syncDownloadFolderPath(value: any) {
+  const normalized = String(value ?? '').trim();
   storedDownloadFolderPath = normalized || null;
 }
 
@@ -13,16 +13,14 @@ export function getStoredDownloadFolderPath() {
   return storedDownloadFolderPath;
 }
 
-function resolvePathValue(raw) {
-  const trimmed = String(raw || "").trim();
+function resolvePathValue(raw: any) {
+  const trimmed = String(raw || '').trim();
   if (!trimmed) return null;
-  return path.isAbsolute(trimmed)
-    ? path.resolve(trimmed)
-    : path.resolve(process.cwd(), trimmed);
+  return path.isAbsolute(trimmed) ? path.resolve(trimmed) : path.resolve(process.cwd(), trimmed);
 }
 
 export function resolveEnvDownloadFolder() {
-  for (const key of ["PLAYLIST_FOLDER", "WEEKLY_FLOW_FOLDER", "DOWNLOAD_FOLDER"]) {
+  for (const key of ['PLAYLIST_FOLDER', 'WEEKLY_FLOW_FOLDER', 'DOWNLOAD_FOLDER']) {
     const resolved = resolvePathValue(process.env[key]);
     if (resolved) return resolved;
   }
@@ -34,41 +32,38 @@ export function resolveDefaultPlaylistDownloadRoot() {
   if (envDownloadFolder) {
     return envDownloadFolder;
   }
-  if (fs.existsSync("/data")) {
-    return "/data/downloads/aurral";
+  if (fs.existsSync('/data')) {
+    return '/data/downloads/aurral';
   }
-  return path.join(
-    path.resolve(resolveAurralDataDir(), "..", "downloads"),
-    "aurral",
-  );
+  return path.join(path.resolve(resolveAurralDataDir(), '..', 'downloads'), 'aurral');
 }
 
 export function getSuggestedDownloadFolderPath() {
   return resolveDefaultPlaylistDownloadRoot();
 }
 
-function isExistingDirectory(targetPath) {
+function isExistingDirectory(targetPath: any) {
   try {
     return fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory();
-  } catch (e: unknown) {
+  } catch {
     return false;
   }
 }
 
 export function getFilesystemBrowseRoots() {
-  const configured = String(process.env.FILE_BROWSE_ROOTS || "")
-    .split(",")
+  const configured = String(process.env.FILE_BROWSE_ROOTS || '')
+    .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean)
     .map((entry) => resolvePathValue(entry))
-    .filter((entry) => isExistingDirectory(entry));
+    .filter((entry): entry is string => entry !== null && isExistingDirectory(entry));
   if (configured.length) {
     return [...new Set(configured.map((entry) => fs.realpathSync(entry)))];
   }
 
   const roots = [];
-  if (isExistingDirectory("/data")) {
-    roots.push(fs.realpathSync("/data"));
+  if (isExistingDirectory('/data')) {
+    roots.push(fs.realpathSync('/data'));
   }
   const envDownloadFolder = resolveEnvDownloadFolder();
   if (envDownloadFolder && isExistingDirectory(envDownloadFolder)) {
@@ -85,48 +80,48 @@ export function getFilesystemBrowseRoots() {
   if (uniqueRoots.length) {
     return uniqueRoots;
   }
-  if (isExistingDirectory("/")) {
-    return [path.resolve("/")];
+  if (isExistingDirectory('/')) {
+    return [path.resolve('/')];
   }
   return [];
 }
 
-export function formatBrowseDisplayPath(pathValue) {
-  if (!pathValue || pathValue === "/") {
-    return "";
+export function formatBrowseDisplayPath(pathValue: any) {
+  if (!pathValue || pathValue === '/') {
+    return '';
   }
   const normalized = path.resolve(pathValue);
   return normalized.endsWith(path.sep) ? normalized : `${normalized}${path.sep}`;
 }
 
-export function normalizeSelectedFolderPath(pathValue) {
+export function normalizeSelectedFolderPath(pathValue: any) {
   const resolved = resolvePathValue(pathValue);
   if (!resolved) {
     return null;
   }
-  if (resolved === path.sep || resolved === "/") {
-    return "/";
+  if (resolved === path.sep || resolved === '/') {
+    return '/';
   }
-  return resolved.replace(/[/\\]+$/, "");
+  return resolved.replace(/[/\\]+$/, '');
 }
 
-function isFilesystemRoot(resolvedRoot) {
-  return resolvedRoot === path.sep || resolvedRoot === "/";
+function isFilesystemRoot(resolvedRoot: any) {
+  return resolvedRoot === path.sep || resolvedRoot === '/';
 }
 
-function resolveRealPathIfExists(targetPath) {
+function resolveRealPathIfExists(targetPath: any) {
   const resolved = path.resolve(targetPath);
   if (!fs.existsSync(resolved)) {
     return null;
   }
   try {
     return fs.realpathSync(resolved);
-  } catch (e: unknown) {
+  } catch {
     return resolved;
   }
 }
 
-function isPathWithinRoot(candidate, root) {
+function isPathWithinRoot(candidate: any, root: any) {
   const resolvedRoot = path.resolve(root);
   const resolvedCandidate = path.resolve(candidate);
   if (isFilesystemRoot(resolvedRoot)) {
@@ -144,33 +139,26 @@ function isPathWithinRoot(candidate, root) {
   while (current && current !== path.dirname(current)) {
     const realCurrent = resolveRealPathIfExists(current);
     if (realCurrent) {
-      return (
-        realCurrent === realRoot ||
-        realCurrent.startsWith(`${realRoot}${path.sep}`)
-      );
+      return realCurrent === realRoot || realCurrent.startsWith(`${realRoot}${path.sep}`);
     }
     current = path.dirname(current);
   }
   return false;
 }
 
-function isRealPathWithinRoot(realTarget, realRoot) {
+function isRealPathWithinRoot(realTarget: any, realRoot: any) {
   if (isFilesystemRoot(realRoot)) {
     return (
-      realTarget === realRoot ||
-      (path.isAbsolute(realTarget) && realTarget.startsWith(path.sep))
+      realTarget === realRoot || (path.isAbsolute(realTarget) && realTarget.startsWith(path.sep))
     );
   }
-  return (
-    realTarget === realRoot ||
-    realTarget.startsWith(`${realRoot}${path.sep}`)
-  );
+  return realTarget === realRoot || realTarget.startsWith(`${realRoot}${path.sep}`);
 }
 
-export function resolveSafeBrowsePath(requestedPath, roots = getFilesystemBrowseRoots()) {
+export function resolveSafeBrowsePath(requestedPath: any, roots: any = getFilesystemBrowseRoots()) {
   const allowedRoots = (Array.isArray(roots) ? roots : [])
-    .map((entry) => resolvePathValue(entry))
-    .filter(Boolean);
+    .map((entry: any) => resolvePathValue(entry))
+    .filter((entry: any): entry is string => entry !== null);
   if (!allowedRoots.length) {
     return null;
   }
@@ -183,16 +171,16 @@ export function resolveSafeBrowsePath(requestedPath, roots = getFilesystemBrowse
       continue;
     }
     try {
-      if (fs.existsSync(target)) {
-        const realTarget = fs.realpathSync(target);
-        const realRoot = fs.realpathSync(root);
+      if (fs.existsSync(target as fs.PathLike)) {
+        const realTarget = fs.realpathSync(target as fs.PathLike);
+        const realRoot = fs.realpathSync(root as fs.PathLike);
         if (isRealPathWithinRoot(realTarget, realRoot)) {
           return realTarget;
         }
         continue;
       }
       return target;
-    } catch (e: unknown) {
+    } catch {
       return target;
     }
   }
@@ -200,22 +188,22 @@ export function resolveSafeBrowsePath(requestedPath, roots = getFilesystemBrowse
 }
 
 export function validateDownloadFolderPath(
-  requestedPath,
-  _roots = getFilesystemBrowseRoots(),
-  { create = false } = {},
+  requestedPath: any,
+  _roots: any = getFilesystemBrowseRoots(),
+  { create = false }: any = {},
 ) {
   const resolved = normalizeSelectedFolderPath(requestedPath);
   if (!resolved) {
     return {
       valid: false,
-      error: "Path must be an absolute path.",
+      error: 'Path must be an absolute path.',
     };
   }
   if (!fs.existsSync(resolved)) {
     if (!create) {
       return {
         valid: false,
-        error: "Path does not exist.",
+        error: 'Path does not exist.',
       };
     }
     fs.mkdirSync(resolved, { recursive: true });
@@ -223,24 +211,24 @@ export function validateDownloadFolderPath(
   if (!fs.statSync(resolved).isDirectory()) {
     return {
       valid: false,
-      error: "Path must be a directory.",
+      error: 'Path must be a directory.',
     };
   }
   return { valid: true, path: resolved };
 }
 
-export function ensureDownloadFolderPath(requestedPath) {
+export function ensureDownloadFolderPath(requestedPath: any) {
   const normalized = normalizeSelectedFolderPath(requestedPath);
   if (!normalized) {
     return {
       valid: false,
-      error: "Path must be an absolute path.",
+      error: 'Path must be an absolute path.',
     };
   }
   if (!resolveSafeBrowsePath(normalized)) {
     return {
       valid: false,
-      error: "Path is outside the allowed storage roots.",
+      error: 'Path is outside the allowed storage roots.',
     };
   }
   const existed = isExistingDirectory(normalized);
@@ -251,10 +239,7 @@ export function ensureDownloadFolderPath(requestedPath) {
   return { ...result, created: !existed };
 }
 
-export function resolveExistingBrowsePath(
-  requestedPath,
-  roots = getFilesystemBrowseRoots(),
-) {
+export function resolveExistingBrowsePath(requestedPath: any, _roots: any = getFilesystemBrowseRoots()) {
   const allowedRoots = getFilesystemBrowseRoots();
   if (!allowedRoots.length) {
     return null;
@@ -285,16 +270,16 @@ export function resolveExistingBrowsePath(
   return null;
 }
 
-export function listBrowseDirectory(requestedPath, roots = getFilesystemBrowseRoots()) {
+export function listBrowseDirectory(requestedPath: any, _roots: any = getFilesystemBrowseRoots()) {
   const allowedRoots = getFilesystemBrowseRoots();
   if (!allowedRoots.length) {
     throw new Error(
-      "No browsable storage path is available. Mount a shared folder such as /data into the container.",
+      'No browsable storage path is available. Mount a shared folder such as /data into the container.',
     );
   }
   const pathValue = resolveExistingBrowsePath(requestedPath, allowedRoots);
   if (!pathValue) {
-    throw new Error("No browsable storage path is available.");
+    throw new Error('No browsable storage path is available.');
   }
 
   const parent = allowedRoots.some((root) => pathValue === root)
@@ -303,7 +288,7 @@ export function listBrowseDirectory(requestedPath, roots = getFilesystemBrowseRo
 
   const entries = fs
     .readdirSync(pathValue, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
     .map((entry) => ({
       name: entry.name,
       path: path.resolve(pathValue, entry.name),

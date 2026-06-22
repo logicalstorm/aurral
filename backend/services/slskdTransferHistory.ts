@@ -1,16 +1,16 @@
-import { randomUUID } from "crypto";
-import { db } from "../config/db-sqlite.js";
+import { randomUUID } from 'crypto';
+import { db } from '../config/db-sqlite.js';
 
 const RECENT_HISTORY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const CLEANUP_HISTORY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 const FAILURE_STATUSES = new Set([
-  "batch_empty",
-  "enqueue_failed",
-  "missing_file",
-  "transfer_failed",
-  "transfer_timeout",
-  "validation_failed",
+  'batch_empty',
+  'enqueue_failed',
+  'missing_file',
+  'transfer_failed',
+  'transfer_timeout',
+  'validation_failed',
 ]);
 
 const insertOutcomeStmt = db.prepare(`
@@ -90,33 +90,31 @@ const markCleanedStmt = db.prepare(`
     AND created_at >= ?
 `);
 
-function normalizeText(value) {
-  return String(value || "").trim();
+function normalizeText(value: unknown) {
+  return String(value || '').trim();
 }
 
-function normalizeUsername(value) {
+function normalizeUsername(value: unknown) {
   return normalizeText(value).toLowerCase();
 }
 
-function normalizeSearchIds(value) {
+function normalizeSearchIds(value: unknown) {
   const values = Array.isArray(value) ? value : [value];
-  const ids = values
-    .map((entry) => normalizeText(entry))
-    .filter(Boolean);
+  const ids = values.map((entry) => normalizeText(entry)).filter(Boolean);
   return [...new Set(ids)];
 }
 
-function serializeSearchIds(value) {
+function serializeSearchIds(value: unknown) {
   const ids = normalizeSearchIds(value);
   if (ids.length === 0) return null;
   if (ids.length === 1) return ids[0];
   return JSON.stringify(ids);
 }
 
-function deserializeSearchIds(value) {
+function deserializeSearchIds(value: unknown) {
   const text = normalizeText(value);
   if (!text) return [];
-  if (text.startsWith("[")) {
+  if (text.startsWith('[')) {
     try {
       const parsed = JSON.parse(text);
       return normalizeSearchIds(parsed);
@@ -125,26 +123,34 @@ function deserializeSearchIds(value) {
   return [text];
 }
 
-function readCandidateRaw(candidate) {
-  return candidate?.raw && typeof candidate.raw === "object"
-    ? candidate.raw
-    : {};
+function readCandidateRaw(candidate: Record<string, unknown> | null): Record<string, unknown> {
+  return (candidate?.raw && typeof candidate.raw === 'object' ? candidate.raw : {}) as Record<string, unknown>;
 }
 
-function readTransferId(transfer) {
+function readTransferId(transfer: Record<string, unknown> | null) {
   return normalizeText(
-    transfer?.id ||
-      transfer?.Id ||
-      transfer?.transferId ||
-      transfer?.TransferId ||
-      "",
+    transfer?.id || transfer?.Id || transfer?.transferId || transfer?.TransferId || '',
   );
+}
+
+interface SlskdTransferOutcomeParams {
+  job?: Record<string, unknown> | null;
+  candidate?: Record<string, unknown> | null;
+  status?: string;
+  reason?: string | null;
+  transfer?: Record<string, unknown> | null;
+  transferId?: string | null;
+  searchIds?: string[];
+  batchId?: string | null;
+  sourcePath?: string | null;
+  finalPath?: string | null;
+  validation?: Record<string, unknown> | null;
 }
 
 export function recordSlskdTransferOutcome({
   job = null,
   candidate = null,
-  status,
+  status = '',
   reason = null,
   transfer = null,
   transferId = null,
@@ -153,11 +159,11 @@ export function recordSlskdTransferOutcome({
   sourcePath = null,
   finalPath = null,
   validation = null,
-} = {}) {
+}: SlskdTransferOutcomeParams = {}) {
   const raw = readCandidateRaw(candidate);
   const username = normalizeText(raw.user || candidate?.username || job?.remoteUsername);
   if (!username) return null;
-  const normalizedStatus = normalizeText(status) || "unknown";
+  const normalizedStatus = normalizeText(status) || 'unknown';
   const actualTransferId = normalizeText(transferId) || readTransferId(transfer);
   const rowId = randomUUID();
   insertOutcomeStmt.run(
@@ -170,14 +176,14 @@ export function recordSlskdTransferOutcome({
     normalizeText(batchId || job?.slskdBatchId) || null,
     normalizedStatus,
     normalizeText(reason) || null,
-    Number.isFinite(Number(candidate?.score)) ? Number(candidate.score) : null,
+    Number.isFinite(Number((candidate as Record<string, unknown>)?.score)) ? Number((candidate as Record<string, unknown>).score) : null,
     normalizeText(job?.artistName) || null,
     normalizeText(job?.trackName) || null,
     normalizeText(job?.albumName) || normalizeText(candidate?.resolvedAlbumName) || null,
     normalizeText(sourcePath) || null,
     normalizeText(finalPath) || null,
-    Number.isFinite(Number(validation?.actualDurationMs))
-      ? Math.round(Number(validation.actualDurationMs))
+    Number.isFinite(Number((validation as Record<string, unknown>)?.actualDurationMs))
+      ? Math.round(Number((validation as Record<string, unknown>).actualDurationMs))
       : null,
     Date.now(),
   );
@@ -187,7 +193,7 @@ export function recordSlskdTransferOutcome({
 function loadPeerStatsMap() {
   const cutoff = Date.now() - RECENT_HISTORY_WINDOW_MS;
   const peerStats = new Map();
-  for (const row of recentPeerRowsStmt.all(cutoff)) {
+  for (const row of recentPeerRowsStmt.all(cutoff) as Record<string, unknown>[]) {
     const key = normalizeUsername(row.user_key || row.username);
     if (!key) continue;
     peerStats.set(key, {
@@ -197,12 +203,15 @@ function loadPeerStatsMap() {
       active: 0,
     });
   }
-  for (const row of activePeerRowsStmt.all()) {
+  for (const row of activePeerRowsStmt.all() as Record<string, unknown>[]) {
     const key = normalizeUsername(row.user_key || row.username);
     if (!key) continue;
-    const stats =
-      peerStats.get(key) ||
-      { successes: 0, failures: 0, validationFailures: 0, active: 0 };
+    const stats = peerStats.get(key) || {
+      successes: 0,
+      failures: 0,
+      validationFailures: 0,
+      active: 0,
+    };
     stats.active = Number(row.active || 0);
     peerStats.set(key, stats);
   }
@@ -213,13 +222,13 @@ export function buildSlskdRankingHistoryOptions() {
   const peerStats = loadPeerStatsMap();
   return {
     peerStats: Object.fromEntries(peerStats.entries()),
-    isUserBlacklisted: (username) => {
+    isUserBlacklisted: (username: unknown) => {
       const stats = peerStats.get(normalizeUsername(username));
       if (!stats) return false;
       if (stats.successes > 0) return false;
       return stats.failures >= 5 || stats.validationFailures >= 3;
     },
-    getUserQueuePenalty: (username) => {
+    getUserQueuePenalty: (username: unknown) => {
       const stats = peerStats.get(normalizeUsername(username));
       if (!stats) return 0;
       const penalty =
@@ -243,7 +252,7 @@ export function getSlskdCleanupTargets() {
   const transfers = [];
   const seenTransfers = new Set();
 
-  for (const row of rows) {
+  for (const row of rows as Record<string, unknown>[]) {
     for (const searchId of deserializeSearchIds(row.search_id)) {
       searchIds.add(searchId);
     }
@@ -273,6 +282,6 @@ export function markSlskdCleanupTargetsCleaned() {
   markCleanedStmt.run(Date.now(), cutoff);
 }
 
-export function isSlskdFailureStatus(status) {
+export function isSlskdFailureStatus(status: unknown) {
   return FAILURE_STATUSES.has(normalizeText(status));
 }

@@ -1,15 +1,15 @@
-import Database from "better-sqlite3";
-import path from "path";
-import fs from "fs";
-import { initializeSchemaOnStartup } from "./schema-migration-v2.js";
-import { syncDownloadFolderPath } from "../services/downloadFolderConfig.js";
-import { ensureDataDir } from "./data-dir.js";
+import Database from 'better-sqlite3';
+import path from 'path';
+import fs from 'fs';
+import { initializeSchemaOnStartup } from './schema-migration-v2.js';
+import { syncDownloadFolderPath } from '../services/downloadFolderConfig.js';
+import { ensureDataDir } from './data-dir.js';
 
 const DATA_DIR = ensureDataDir();
 
 const DB_PATH = process.env.AURRAL_DB_PATH
   ? path.resolve(process.env.AURRAL_DB_PATH)
-  : path.join(DATA_DIR, "aurral.db");
+  : path.join(DATA_DIR, 'aurral.db');
 
 if (!fs.existsSync(path.dirname(DB_PATH))) {
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -17,7 +17,7 @@ if (!fs.existsSync(path.dirname(DB_PATH))) {
 
 const db = new Database(DB_PATH);
 
-db.pragma("journal_mode = WAL");
+db.pragma('journal_mode = WAL');
 
 function tryAddColumn(sql: string) {
   try {
@@ -25,9 +25,9 @@ function tryAddColumn(sql: string) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     if (
-      !String(message || "")
+      !String(message || '')
         .toLowerCase()
-        .includes("duplicate column name")
+        .includes('duplicate column name')
     ) {
       throw error;
     }
@@ -193,133 +193,112 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_honker_task_runs_started_at ON honker_task_runs(started_at DESC);
   CREATE INDEX IF NOT EXISTS idx_honker_task_runs_queue_started ON honker_task_runs(queue, started_at DESC);
   CREATE INDEX IF NOT EXISTS idx_honker_task_runs_job ON honker_task_runs(job_id, queue);
+
+  CREATE TABLE IF NOT EXISTS activity_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    level TEXT NOT NULL DEFAULT 'info',
+    category TEXT NOT NULL DEFAULT '',
+    message TEXT NOT NULL DEFAULT '',
+    data TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_activity_log_timestamp ON activity_log(timestamp DESC);
+  CREATE INDEX IF NOT EXISTS idx_activity_log_level ON activity_log(level, timestamp DESC);
+  CREATE INDEX IF NOT EXISTS idx_activity_log_category ON activity_log(category, timestamp DESC);
 `);
 
 const tableColumns = db
-  .prepare("PRAGMA table_info(playlist_download_jobs)")
+  .prepare('PRAGMA table_info(playlist_download_jobs)')
   .all()
-  .map((column: any) => column.name);
+  .map((column: unknown) => (column as { name: string }).name);
 
-if (!tableColumns.includes("album_name")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_name TEXT");
+if (!tableColumns.includes('album_name')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN album_name TEXT');
 }
-if (!tableColumns.includes("reason")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN reason TEXT");
+if (!tableColumns.includes('reason')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN reason TEXT');
 }
-if (!tableColumns.includes("artist_mbid")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN artist_mbid TEXT",
-  );
+if (!tableColumns.includes('artist_mbid')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN artist_mbid TEXT');
 }
-if (!tableColumns.includes("album_mbid")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_mbid TEXT");
+if (!tableColumns.includes('album_mbid')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN album_mbid TEXT');
 }
-if (!tableColumns.includes("track_mbid")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN track_mbid TEXT");
+if (!tableColumns.includes('track_mbid')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN track_mbid TEXT');
 }
-if (!tableColumns.includes("release_year")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN release_year TEXT",
-  );
+if (!tableColumns.includes('release_year')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN release_year TEXT');
 }
-if (!tableColumns.includes("duration_ms")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN duration_ms INTEGER",
-  );
+if (!tableColumns.includes('duration_ms')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN duration_ms INTEGER');
 }
-if (!tableColumns.includes("track_number")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN track_number INTEGER",
-  );
+if (!tableColumns.includes('track_number')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN track_number INTEGER');
 }
-if (!tableColumns.includes("album_track_count")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN album_track_count INTEGER",
-  );
+if (!tableColumns.includes('album_track_count')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN album_track_count INTEGER');
 }
-if (!tableColumns.includes("album_track_titles")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN album_track_titles TEXT",
-  );
+if (!tableColumns.includes('album_track_titles')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN album_track_titles TEXT');
 }
-if (!tableColumns.includes("artist_aliases")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN artist_aliases TEXT",
-  );
+if (!tableColumns.includes('artist_aliases')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN artist_aliases TEXT');
 }
-if (!tableColumns.includes("playlist_type")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN playlist_type TEXT",
-  );
+if (!tableColumns.includes('playlist_type')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN playlist_type TEXT');
 }
-if (!tableColumns.includes("external_path")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN external_path TEXT",
-  );
+if (!tableColumns.includes('external_path')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN external_path TEXT');
 }
-if (!tableColumns.includes("download_source")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN download_source TEXT",
-  );
+if (!tableColumns.includes('download_source')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN download_source TEXT');
 }
-if (!tableColumns.includes("download_client")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN download_client TEXT",
-  );
+if (!tableColumns.includes('download_client')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN download_client TEXT');
 }
-if (!tableColumns.includes("download_client_id")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN download_client_id TEXT",
-  );
+if (!tableColumns.includes('download_client_id')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN download_client_id TEXT');
 }
-if (!tableColumns.includes("release_guid")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN release_guid TEXT",
-  );
+if (!tableColumns.includes('release_guid')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN release_guid TEXT');
 }
-if (!tableColumns.includes("release_title")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN release_title TEXT",
-  );
+if (!tableColumns.includes('release_title')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN release_title TEXT');
 }
-if (!tableColumns.includes("indexer_id")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN indexer_id TEXT",
-  );
+if (!tableColumns.includes('indexer_id')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN indexer_id TEXT');
 }
-if (!tableColumns.includes("indexer_name")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN indexer_name TEXT",
-  );
+if (!tableColumns.includes('indexer_name')) {
+  tryAddColumn('ALTER TABLE playlist_download_jobs ADD COLUMN indexer_name TEXT');
 }
 
 const userColumns = db
-  .prepare("PRAGMA table_info(users)")
+  .prepare('PRAGMA table_info(users)')
   .all()
-  .map((column: any) => column.name);
+  .map((column: unknown) => (column as { name: string }).name);
 
-if (!userColumns.includes("lastfm_username")) {
-  tryAddColumn("ALTER TABLE users ADD COLUMN lastfm_username TEXT");
+if (!userColumns.includes('lastfm_username')) {
+  tryAddColumn('ALTER TABLE users ADD COLUMN lastfm_username TEXT');
 }
-if (!userColumns.includes("listen_history_provider")) {
-  tryAddColumn("ALTER TABLE users ADD COLUMN listen_history_provider TEXT");
+if (!userColumns.includes('listen_history_provider')) {
+  tryAddColumn('ALTER TABLE users ADD COLUMN listen_history_provider TEXT');
 }
-if (!userColumns.includes("listen_history_username")) {
-  tryAddColumn("ALTER TABLE users ADD COLUMN listen_history_username TEXT");
+if (!userColumns.includes('listen_history_username')) {
+  tryAddColumn('ALTER TABLE users ADD COLUMN listen_history_username TEXT');
 }
-if (!userColumns.includes("lidarr_root_folder_path")) {
-  tryAddColumn("ALTER TABLE users ADD COLUMN lidarr_root_folder_path TEXT");
+if (!userColumns.includes('lidarr_root_folder_path')) {
+  tryAddColumn('ALTER TABLE users ADD COLUMN lidarr_root_folder_path TEXT');
 }
-if (!userColumns.includes("lidarr_quality_profile_id")) {
-  tryAddColumn(
-    "ALTER TABLE users ADD COLUMN lidarr_quality_profile_id INTEGER",
-  );
+if (!userColumns.includes('lidarr_quality_profile_id')) {
+  tryAddColumn('ALTER TABLE users ADD COLUMN lidarr_quality_profile_id INTEGER');
 }
-if (!userColumns.includes("discover_layout")) {
-  tryAddColumn("ALTER TABLE users ADD COLUMN discover_layout TEXT");
+if (!userColumns.includes('discover_layout')) {
+  tryAddColumn('ALTER TABLE users ADD COLUMN discover_layout TEXT');
 }
-if (!userColumns.includes("listen_history_url")) {
-  tryAddColumn("ALTER TABLE users ADD COLUMN listen_history_url TEXT");
+if (!userColumns.includes('listen_history_url')) {
+  tryAddColumn('ALTER TABLE users ADD COLUMN listen_history_url TEXT');
 }
 
 db.exec(`
@@ -348,7 +327,7 @@ export const dbHelpers = {
     }
   },
 
-  stringifyJSON: (obj: any) => {
+  stringifyJSON: (obj: unknown) => {
     if (obj === undefined) return null;
     try {
       return JSON.stringify(obj);
@@ -361,8 +340,8 @@ export const dbHelpers = {
 initializeSchemaOnStartup(db, dbHelpers);
 
 const existingDownloadFolder = db
-  .prepare("SELECT value FROM settings WHERE key = ?")
-  .get("downloadFolderPath");
-syncDownloadFolderPath((existingDownloadFolder as any)?.value || null);
+  .prepare('SELECT value FROM settings WHERE key = ?')
+  .get('downloadFolderPath');
+syncDownloadFolderPath((existingDownloadFolder as { value?: string } | undefined)?.value || null);
 
 export { db };

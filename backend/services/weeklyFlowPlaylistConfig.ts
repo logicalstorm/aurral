@@ -1,33 +1,86 @@
-import { randomUUID } from "crypto";
-import { dbOps } from "../config/db-helpers.js";
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
+import { randomUUID } from 'crypto';
+import { dbOps } from '../config/db-helpers.js';
+import { downloadTracker } from './weeklyFlowDownloadTracker.js';
 
-const LEGACY_TYPES = ["discover", "mix", "trending"];
-const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33, focus: 0 };
+// --- Types ---
+
+interface NormalizedTrack {
+  artistName: string;
+  trackName: string;
+  albumName: string | null;
+  artistMbid: string | null;
+  albumMbid: string | null;
+  trackMbid: string | null;
+  releaseYear: string | null;
+  durationMs: number | null;
+  artistAliases: string[];
+  reason: string | null;
+}
+
+interface FlowConfig {
+  id: string;
+  name: string;
+  ownerUserId: number | null;
+  enabled: boolean;
+  scheduleDays: number[];
+  scheduleTime: string;
+  deepDive: boolean;
+  nextRunAt: number | null;
+  lastRunAt: number | null;
+  size: number;
+  mix: Record<string, number>;
+  recipe?: Record<string, unknown>;
+  tags: string[];
+  relatedArtists: string[];
+  discoverPresetId: string | null;
+  createdAt: number;
+}
+
+interface SharedPlaylist {
+  id: string;
+  name: string;
+  ownerUserId: number | null;
+  sourceName: string | null;
+  sourceFlowId: string | null;
+  discoverPresetId: string | null;
+  importedAt: number;
+  createdAt: number;
+  tracks: NormalizedTrack[];
+  trackCount: number;
+}
+
+class PlaylistConfigError extends Error {
+  code: string;
+  constructor(message: string, code: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+// --- Constants ---
+
+const LEGACY_TYPES = ['discover', 'mix', 'trending'];
+const DEFAULT_MIX: Record<string, number> = { discover: 34, mix: 33, trending: 33, focus: 0 };
 const DEFAULT_SIZE = 30;
-const DEFAULT_SCHEDULE_TIME = "00:00";
+const DEFAULT_SCHEDULE_TIME = '00:00';
 const DAY_MS = 24 * 60 * 60 * 1000;
-let cachedFlows = null;
-let cachedSharedPlaylists = null;
+let cachedFlows: FlowConfig[] | null = null;
+let cachedSharedPlaylists: SharedPlaylist[] | null = null;
 
-const titleCase = (value: unknown) =>
-  String(value || "")
-    .split(" ")
-    .filter(Boolean)
-    .map((w) => w[0]?.toUpperCase() + w.slice(1))
-    .join(" ");
+// --- Normalizers ---
 
-const clampSize = (value: unknown) => {
+const clampSize = (value: unknown): number => {
   const n = Number(value);
   if (!Number.isFinite(n)) return DEFAULT_SIZE;
   return Math.max(Math.round(n), 1);
 };
 
-const normalizeWeightMap = (value: unknown) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out = {};
-  for (const [key, rawValue] of Object.entries(value)) {
-    const name = String(key || "").trim();
+const normalizeWeightMap = (value: unknown): Record<string, number> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const record = value as Record<string, unknown>;
+  const out: Record<string, number> = {};
+  for (const [key, rawValue] of Object.entries(record)) {
+    const name = String(key || '').trim();
     if (!name) continue;
     const parsed = Number(rawValue);
     if (!Number.isFinite(parsed)) continue;
@@ -38,37 +91,34 @@ const normalizeWeightMap = (value: unknown) => {
   return out;
 };
 
-const getFlowEntryName = (value: unknown) => {
-  if (typeof value === "string" || typeof value === "number") {
+const getFlowEntryName = (value: unknown): string | null => {
+  if (typeof value === 'string' || typeof value === 'number') {
     const text = String(value).trim();
     return text || null;
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
+  const record = value as Record<string, unknown>;
   const candidates = [
-    value.name,
-    value.artistName,
-    value.artist,
-    value.tag,
-    value.label,
-    value.value,
+    record.name,
+    record.artistName,
+    record.artist,
+    record.tag,
+    record.label,
+    record.value,
   ];
   for (const candidate of candidates) {
-    const text = String(candidate || "").trim();
+    const text = String(candidate || '').trim();
     if (text) return text;
   }
   return null;
 };
 
-const normalizeStringArray = (value: unknown) => {
-  const raw = Array.isArray(value)
-    ? value
-    : value == null
-      ? []
-      : [value];
-  const seen = new Set();
-  const out = [];
+const normalizeStringArray = (value: unknown): string[] => {
+  const raw = Array.isArray(value) ? value : value == null ? [] : [value];
+  const seen = new Set<string>();
+  const out: string[] = [];
   for (const entry of raw) {
     const text = getFlowEntryName(entry);
     if (!text) continue;
@@ -80,49 +130,24 @@ const normalizeStringArray = (value: unknown) => {
   return out;
 };
 
-const sumWeightMap = (value: unknown) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
-  return Object.values(value).reduce((acc, entry) => {
-    const parsed = Number(entry);
-    return acc + (Number.isFinite(parsed) ? parsed : 0);
-  }, 0);
-};
-
-const normalizeRecipeCounts = (value: unknown, fallback) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return fallback ?? { discover: 0, mix: 0, trending: 0, focus: 0 };
-  }
-  const parseField = (entry: Record<string, unknown>) => {
-    const parsed = Number(entry);
-    if (!Number.isFinite(parsed)) return 0;
-    return Math.max(Math.round(parsed), 0);
-  };
-  return {
-    discover: parseField(value?.discover ?? 0),
-    mix: parseField(value?.mix ?? 0),
-    trending: parseField(value?.trending ?? 0),
-    focus: parseField(value?.focus ?? 0),
-  };
-};
-
-const clampCount = (value: unknown, min = 1, max = 100) => {
+const clampCount = (value: unknown, min = 1, max = 100): number => {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
   return Math.min(Math.max(Math.round(n), min), max);
 };
 
-const normalizeStringList = (value: unknown) => {
+const normalizeStringList = (value: unknown): string[] => {
   if (value == null) return [];
   if (Array.isArray(value)) {
-    return value.map((item) => getFlowEntryName(item)).filter(Boolean);
+    return value.map((item: unknown) => getFlowEntryName(item)).filter((s: string | null): s is string => s !== null);
   }
   const single = getFlowEntryName(value);
   return single ? [single] : [];
 };
 
-const normalizeScheduleDays = (value: unknown) => {
+const normalizeScheduleDays = (value: unknown): number[] => {
   if (!Array.isArray(value)) return [];
-  const out = new Set();
+  const out = new Set<number>();
   for (const entry of value) {
     const day = Number(entry);
     if (!Number.isFinite(day)) continue;
@@ -130,39 +155,34 @@ const normalizeScheduleDays = (value: unknown) => {
     if (rounded < 0 || rounded > 6) continue;
     out.add(rounded);
   }
-  return [...out].sort((a, b) => a - b);
+  return [...out].sort((a: number, b: number) => a - b);
 };
 
-const getDefaultScheduleDay = (timeMs = Date.now()) =>
-  new Date(timeMs).getDay();
+const getDefaultScheduleDay = (timeMs = Date.now()): number => new Date(timeMs).getDay();
 
-const normalizeScheduleTime = (value: unknown) => {
-  const text = String(value ?? "").trim();
+const normalizeScheduleTime = (value: unknown): string => {
+  const text = String(value ?? '').trim();
   const match = /^(\d{1,2}):(\d{2})$/.exec(text);
   if (!match) return DEFAULT_SCHEDULE_TIME;
   const hours = Number(match[1]);
-  if (
-    !Number.isInteger(hours) ||
-    hours < 0 ||
-    hours > 23
-  ) {
+  if (!Number.isInteger(hours) || hours < 0 || hours > 23) {
     return DEFAULT_SCHEDULE_TIME;
   }
-  return `${String(hours).padStart(2, "0")}:00`;
+  return `${String(hours).padStart(2, '0')}:00`;
 };
 
-const buildScheduledTime = (baseTimeMs: unknown, scheduleTime) => {
-  const [hoursText, minutesText] = normalizeScheduleTime(scheduleTime).split(":");
-  const candidate = new Date(baseTimeMs);
+const buildScheduledTime = (baseTimeMs: unknown, scheduleTime: unknown): number => {
+  const [hoursText, minutesText] = normalizeScheduleTime(scheduleTime).split(':');
+  const candidate = new Date(Number(baseTimeMs));
   candidate.setHours(Number(hoursText), Number(minutesText), 0, 0);
   return candidate.getTime();
 };
 
 const computeNextRunAt = (
-  scheduleDays,
-  scheduleTime = DEFAULT_SCHEDULE_TIME,
+  scheduleDays: unknown,
+  scheduleTime: unknown = DEFAULT_SCHEDULE_TIME,
   fromTimeMs = Date.now(),
-) => {
+): number => {
   const normalized = normalizeScheduleDays(scheduleDays);
   if (normalized.length === 0) {
     return buildScheduledTime(fromTimeMs + 7 * DAY_MS, scheduleTime);
@@ -178,12 +198,12 @@ const computeNextRunAt = (
   return buildScheduledTime(fromTimeMs + 7 * DAY_MS, scheduleTime);
 };
 
-const distributeCount = (total: number, values) => {
+const distributeCount = (total: number, values: string[]): Record<string, number> => {
   const items = values.filter(Boolean);
   if (!items.length || total <= 0) return {};
   const per = Math.floor(total / items.length);
   let remaining = total - per * items.length;
-  const result = {};
+  const result: Record<string, number> = {};
   for (const item of items) {
     const extra = remaining > 0 ? 1 : 0;
     if (remaining > 0) remaining -= 1;
@@ -192,24 +212,29 @@ const distributeCount = (total: number, values) => {
   return result;
 };
 
-const extractFromBlocks = (value: unknown) => {
+const extractFromBlocks = (value: unknown): {
+  recipe: Record<string, number>;
+  tags: Record<string, number>;
+  relatedArtists: Record<string, number>;
+  deepDive: boolean;
+  size: number;
+} | null => {
   if (!Array.isArray(value)) return null;
-  const recipe = { discover: 0, mix: 0, trending: 0, focus: 0 };
-  const tags = {};
-  const relatedArtists = {};
+  const recipe: Record<string, number> = { discover: 0, mix: 0, trending: 0, focus: 0 };
+  const tags: Record<string, number> = {};
+  const relatedArtists: Record<string, number> = {};
   let deepDive = false;
   let total = 0;
-  for (const block of value) {
-    if (!block || typeof block !== "object" || Array.isArray(block)) continue;
+  for (const rawBlock of value) {
+    const block = rawBlock as Record<string, unknown> | null | undefined;
+    if (!block || typeof block !== 'object' || Array.isArray(block)) continue;
     const count = clampCount(block.count);
     if (count <= 0) continue;
     total += count;
     if (block.deepDive === true) deepDive = true;
-    const include = block.include ?? {};
+    const include = (block.include ?? {}) as Record<string, unknown>;
     const includeTags = normalizeStringList(include.tags ?? include.tag);
-    const includeRelated = normalizeStringList(
-      include.relatedArtists ?? include.relatedArtist,
-    );
+    const includeRelated = normalizeStringList(include.relatedArtists ?? include.relatedArtist);
     if (includeTags.length > 0) {
       const distributed = distributeCount(count, includeTags);
       for (const [tag, qty] of Object.entries(distributed)) {
@@ -224,73 +249,33 @@ const extractFromBlocks = (value: unknown) => {
       }
       continue;
     }
-    const source = String(block.source || "")
+    const source = String(block.source || '')
       .trim()
       .toLowerCase();
-    const key =
-      source === "mix"
-        ? "mix"
-        : source === "trending"
-          ? "trending"
-          : "discover";
+    const key = source === 'mix' ? 'mix' : source === 'trending' ? 'trending' : 'discover';
     recipe[key] += count;
   }
   if (total <= 0) return null;
   return { recipe, tags, relatedArtists, deepDive, size: total };
 };
 
-const buildCountsFromMix = (size: number, mix) => {
-  const weights = [
-    { key: "discover", value: Number(mix?.discover ?? 0) },
-    { key: "mix", value: Number(mix?.mix ?? 0) },
-    { key: "trending", value: Number(mix?.trending ?? 0) },
-    { key: "focus", value: Number(mix?.focus ?? 0) },
-  ];
-  const sum = weights.reduce(
-    (acc, w) => acc + (Number.isFinite(w.value) ? w.value : 0),
-    0,
-  );
-  if (sum <= 0 || !Number.isFinite(sum) || size <= 0) {
-    return { discover: 0, mix: 0, trending: 0, focus: 0 };
-  }
-  const scaled = weights.map((w) => ({
-    ...w,
-    raw: (w.value / sum) * size,
-  }));
-  const floored = scaled.map((w) => ({
-    ...w,
-    count: Math.floor(w.raw),
-    remainder: w.raw - Math.floor(w.raw),
-  }));
-  let remaining = size - floored.reduce((acc, w) => acc + w.count, 0);
-  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
-  for (let i = 0; i < ordered.length && remaining > 0; i++) {
-    ordered[i].count += 1;
-    remaining -= 1;
-  }
-  const out = {};
-  for (const item of ordered) {
-    out[item.key] = item.count;
-  }
-  return out;
-};
-
-const normalizeMix = (mix: unknown) => {
+const normalizeMix = (mix: unknown): Record<string, number> => {
+  const record = (mix && typeof mix === 'object' ? mix : {}) as Record<string, unknown>;
   const raw = {
-    discover: Number(mix?.discover ?? 0),
-    mix: Number(mix?.mix ?? 0),
-    trending: Number(mix?.trending ?? 0),
-    focus: Number(mix?.focus ?? 0),
+    discover: Number(record.discover ?? 0),
+    mix: Number(record.mix ?? 0),
+    trending: Number(record.trending ?? 0),
+    focus: Number(record.focus ?? 0),
   };
   const sum = raw.discover + raw.mix + raw.trending + raw.focus;
   if (!Number.isFinite(sum) || sum <= 0) {
     return { ...DEFAULT_MIX };
   }
   const weights = [
-    { key: "discover", value: raw.discover },
-    { key: "mix", value: raw.mix },
-    { key: "trending", value: raw.trending },
-    { key: "focus", value: raw.focus },
+    { key: 'discover', value: raw.discover },
+    { key: 'mix', value: raw.mix },
+    { key: 'trending', value: raw.trending },
+    { key: 'focus', value: raw.focus },
   ];
   const scaled = weights.map((w) => ({
     ...w,
@@ -307,111 +292,98 @@ const normalizeMix = (mix: unknown) => {
     ordered[i].count += 1;
     remaining -= 1;
   }
-  const out = {};
+  const out: Record<string, number> = {};
   for (const item of ordered) {
     out[item.key] = item.count;
   }
   return out;
 };
 
-const normalizeFlow = (flow: unknown) => {
-  const name = String(flow?.name || "").trim();
-  const blocksData = extractFromBlocks(flow?.blocks);
-  const size = clampSize(flow?.size);
+const normalizeFlow = (flow: unknown): FlowConfig => {
+  const record = (flow && typeof flow === 'object' ? flow : {}) as Record<string, unknown>;
+  const name = String(record.name || '').trim();
+  const blocksData = extractFromBlocks(record.blocks);
+  const size = clampSize(record.size);
   const mixSource =
-    flow?.mix ??
-    (flow?.recipe && typeof flow.recipe === "object" ? flow.recipe : null) ??
+    record.mix ??
+    (record.recipe && typeof record.recipe === 'object' ? record.recipe : null) ??
     blocksData?.recipe;
   const mix = normalizeMix(mixSource);
-  const normalizedTagsArray = normalizeStringArray(flow?.tags);
-  const normalizedRelatedArray = normalizeStringArray(flow?.relatedArtists);
-  const legacyTags = normalizeWeightMap(flow?.tags);
-  const legacyRelatedArtists = normalizeWeightMap(flow?.relatedArtists);
-  const tags = normalizedTagsArray.length > 0
-    ? normalizedTagsArray
-    : Object.keys(legacyTags).length > 0
-      ? Object.keys(legacyTags)
-      : normalizeStringArray(Object.keys(normalizeWeightMap(blocksData?.tags)));
-  const relatedArtists = normalizedRelatedArray.length > 0
-    ? normalizedRelatedArray
-    : Object.keys(legacyRelatedArtists).length > 0
-      ? Object.keys(legacyRelatedArtists)
-      : normalizeStringArray(
-          Object.keys(normalizeWeightMap(blocksData?.relatedArtists)),
-        );
-  const baseSize = blocksData?.size > 0 ? blocksData.size : size;
+  const normalizedTagsArray = normalizeStringArray(record.tags);
+  const normalizedRelatedArray = normalizeStringArray(record.relatedArtists);
+  const legacyTags = normalizeWeightMap(record.tags);
+  const legacyRelatedArtists = normalizeWeightMap(record.relatedArtists);
+  const tags =
+    normalizedTagsArray.length > 0
+      ? normalizedTagsArray
+      : Object.keys(legacyTags).length > 0
+        ? Object.keys(legacyTags)
+        : normalizeStringArray(Object.keys(normalizeWeightMap(blocksData?.tags)));
+  const relatedArtists =
+    normalizedRelatedArray.length > 0
+      ? normalizedRelatedArray
+      : Object.keys(legacyRelatedArtists).length > 0
+        ? Object.keys(legacyRelatedArtists)
+        : normalizeStringArray(Object.keys(normalizeWeightMap(blocksData?.relatedArtists)));
+  const baseSize = blocksData?.size != null && blocksData.size > 0 ? blocksData.size : size;
   return {
-    id: flow?.id || randomUUID(),
-    name: name || "Flow",
+    id: (record.id as string) || randomUUID(),
+    name: name || 'Flow',
     ownerUserId:
-      flow?.ownerUserId != null && Number.isFinite(Number(flow.ownerUserId))
-        ? Math.trunc(Number(flow.ownerUserId))
+      record.ownerUserId != null && Number.isFinite(Number(record.ownerUserId))
+        ? Math.trunc(Number(record.ownerUserId))
         : null,
-    enabled: flow?.enabled === true,
-    scheduleDays: normalizeScheduleDays(flow?.scheduleDays),
-    scheduleTime: normalizeScheduleTime(flow?.scheduleTime),
-    deepDive: flow?.deepDive === true || blocksData?.deepDive === true,
+    enabled: record.enabled === true,
+    scheduleDays: normalizeScheduleDays(record.scheduleDays),
+    scheduleTime: normalizeScheduleTime(record.scheduleTime),
+    deepDive: record.deepDive === true || blocksData?.deepDive === true,
     nextRunAt:
-      flow?.nextRunAt != null && Number.isFinite(Number(flow.nextRunAt))
-        ? Number(flow.nextRunAt)
+      record.nextRunAt != null && Number.isFinite(Number(record.nextRunAt))
+        ? Number(record.nextRunAt)
         : null,
     lastRunAt:
-      flow?.lastRunAt != null && Number.isFinite(Number(flow.lastRunAt))
-        ? Number(flow.lastRunAt)
+      record.lastRunAt != null && Number.isFinite(Number(record.lastRunAt))
+        ? Number(record.lastRunAt)
         : null,
     size: baseSize > 0 ? baseSize : size,
     mix,
     tags,
     relatedArtists,
-    discoverPresetId: String(flow?.discoverPresetId || "").trim() || null,
+    discoverPresetId: String(record.discoverPresetId || '').trim() || null,
     createdAt:
-      flow?.createdAt != null && Number.isFinite(Number(flow.createdAt))
-        ? Number(flow.createdAt)
+      record.createdAt != null && Number.isFinite(Number(record.createdAt))
+        ? Number(record.createdAt)
         : Date.now(),
   };
 };
 
-export const normalizeSharedTrack = (track: string) => {
-  if (!track || typeof track !== "object" || Array.isArray(track)) return null;
+// --- Track helpers ---
+
+export const normalizeSharedTrack = (track: unknown): NormalizedTrack | null => {
+  if (!track || typeof track !== 'object' || Array.isArray(track)) return null;
+  const t = track as Record<string, unknown>;
   const artistName = String(
-    track.artistName ??
-      track.artist ??
-      track.artist_name ??
-      track["Artist Name(s)"] ??
-      "",
+    t.artistName ?? t.artist ?? t.artist_name ?? t['Artist Name(s)'] ?? '',
   ).trim();
   const trackName = String(
-    track.trackName ??
-      track.title ??
-      track.name ??
-      track.track ??
-      track["Track Name"] ??
-      "",
+    t.trackName ?? t.title ?? t.name ?? t.track ?? t['Track Name'] ?? '',
   ).trim();
   if (!artistName || !trackName) return null;
-  const albumName = String(
-    track.albumName ?? track.album ?? track["Album Name"] ?? "",
-  ).trim();
-  const artistMbid = String(
-    track.artistMbid ?? track.artistId ?? track.mbid ?? "",
-  ).trim();
-  const albumMbid = String(
-    track.albumMbid ?? track.releaseGroupMbid ?? track.albumId ?? "",
-  ).trim();
-  const trackMbid = String(
-    track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? "",
-  ).trim();
-  const releaseYear = String(track.releaseYear ?? track.year ?? "").trim();
+  const albumName = String(t.albumName ?? t.album ?? t['Album Name'] ?? '').trim();
+  const artistMbid = String(t.artistMbid ?? t.artistId ?? t.mbid ?? '').trim();
+  const albumMbid = String(t.albumMbid ?? t.releaseGroupMbid ?? t.albumId ?? '').trim();
+  const trackMbid = String(t.trackMbid ?? t.recordingMbid ?? t.recordingId ?? '').trim();
+  const releaseYear = String(t.releaseYear ?? t.year ?? '').trim();
   const durationMs =
-    track.durationMs != null && Number.isFinite(Number(track.durationMs))
-      ? Math.max(0, Math.round(Number(track.durationMs)))
+    t.durationMs != null && Number.isFinite(Number(t.durationMs))
+      ? Math.max(0, Math.round(Number(t.durationMs)))
       : null;
-  const artistAliases = Array.isArray(track.artistAliases)
-    ? track.artistAliases
-        .map((entry: Record<string, unknown>) => String(entry || "").trim())
+  const artistAliases = Array.isArray(t.artistAliases)
+    ? (t.artistAliases as unknown[])
+        .map((entry: unknown) => String(entry || '').trim())
         .filter(Boolean)
     : [];
-  const reason = String(track.reason ?? "").trim();
+  const reason = String(t.reason ?? '').trim();
   return {
     artistName,
     trackName,
@@ -426,25 +398,36 @@ export const normalizeSharedTrack = (track: string) => {
   };
 };
 
-export const buildSharedTrackIdentity = (track: string) =>
+export const buildSharedTrackIdentity = (track: unknown): string =>
   [
-    String(track?.artistName || "").trim().toLocaleLowerCase(),
-    String(track?.trackName || "").trim().toLocaleLowerCase(),
-    String(track?.albumName || "").trim().toLocaleLowerCase(),
-    String(track?.artistMbid || "").trim(),
-    String(track?.albumMbid || "").trim(),
-    String(track?.trackMbid || "").trim(),
-    String(track?.releaseYear || "").trim(),
-  ].join("\u0001");
+    String((track as Record<string, unknown>)?.artistName || '')
+      .trim()
+      .toLocaleLowerCase(),
+    String((track as Record<string, unknown>)?.trackName || '')
+      .trim()
+      .toLocaleLowerCase(),
+    String((track as Record<string, unknown>)?.albumName || '')
+      .trim()
+      .toLocaleLowerCase(),
+    String((track as Record<string, unknown>)?.artistMbid || '').trim(),
+    String((track as Record<string, unknown>)?.albumMbid || '').trim(),
+    String((track as Record<string, unknown>)?.trackMbid || '').trim(),
+    String((track as Record<string, unknown>)?.releaseYear || '').trim(),
+  ].join('\u0001');
 
-export const buildCoreTrackIdentity = (track: string) => {
-  const artistName = String(track?.artistName || "").trim().toLocaleLowerCase();
-  const trackName = String(track?.trackName || "").trim().toLocaleLowerCase();
-  if (!artistName || !trackName) return "";
+export const buildCoreTrackIdentity = (track: unknown): string => {
+  const rec = track as Record<string, unknown>;
+  const artistName = String(rec?.artistName || '')
+    .trim()
+    .toLocaleLowerCase();
+  const trackName = String(rec?.trackName || '')
+    .trim()
+    .toLocaleLowerCase();
+  if (!artistName || !trackName) return '';
   return `${artistName}\u0001${trackName}`;
 };
 
-export const tracksShareMembership = (left: unknown, right) => {
+export const tracksShareMembership = (left: unknown, right: unknown): boolean => {
   if (buildSharedTrackIdentity(left) === buildSharedTrackIdentity(right)) {
     return true;
   }
@@ -453,11 +436,11 @@ export const tracksShareMembership = (left: unknown, right) => {
   return Boolean(leftCore) && leftCore === rightCore;
 };
 
-export const dedupeSharedTracks = (tracks: unknown[]) => {
-  const seen = new Set();
-  const uniqueTracks = [];
-  for (const track of Array.isArray(tracks) ? tracks : []) {
-    const normalizedTrack = normalizeSharedTrack(track);
+export const dedupeSharedTracks = (tracks: unknown): NormalizedTrack[] => {
+  const seen = new Set<string>();
+  const uniqueTracks: NormalizedTrack[] = [];
+  for (const rawTrack of Array.isArray(tracks) ? tracks : []) {
+    const normalizedTrack = normalizeSharedTrack(rawTrack);
     if (!normalizedTrack) continue;
     const identity = buildSharedTrackIdentity(normalizedTrack);
     if (seen.has(identity)) continue;
@@ -467,15 +450,13 @@ export const dedupeSharedTracks = (tracks: unknown[]) => {
   return uniqueTracks;
 };
 
-export const filterMissingSharedTracks = (existingTracks: unknown, incomingTracks) => {
-  const seen = new Set(
-    dedupeSharedTracks(existingTracks).map((track) =>
-      buildSharedTrackIdentity(track),
-    ),
+export const filterMissingSharedTracks = (existingTracks: unknown, incomingTracks: unknown): NormalizedTrack[] => {
+  const seen = new Set<string>(
+    dedupeSharedTracks(existingTracks).map((track) => buildSharedTrackIdentity(track)),
   );
-  const missingTracks = [];
-  for (const track of Array.isArray(incomingTracks) ? incomingTracks : []) {
-    const normalizedTrack = normalizeSharedTrack(track);
+  const missingTracks: NormalizedTrack[] = [];
+  for (const rawTrack of Array.isArray(incomingTracks) ? incomingTracks : []) {
+    const normalizedTrack = normalizeSharedTrack(rawTrack);
     if (!normalizedTrack) continue;
     const identity = buildSharedTrackIdentity(normalizedTrack);
     if (seen.has(identity)) continue;
@@ -485,48 +466,52 @@ export const filterMissingSharedTracks = (existingTracks: unknown, incomingTrack
   return missingTracks;
 };
 
-const normalizeSharedPlaylist = (playlist: unknown) => {
-  const name = String(playlist?.name || "").trim();
-  const tracks = dedupeSharedTracks(playlist?.tracks);
+// --- Shared Playlist helpers ---
+
+const normalizeSharedPlaylist = (playlist: unknown): SharedPlaylist => {
+  const record = (playlist && typeof playlist === 'object' ? playlist : {}) as Record<string, unknown>;
+  const name = String(record.name || '').trim();
+  const tracks = dedupeSharedTracks(record.tracks);
   return {
-    id: playlist?.id || randomUUID(),
-    name: name || "Shared Playlist",
+    id: (record.id as string) || randomUUID(),
+    name: name || 'Shared Playlist',
     ownerUserId:
-      playlist?.ownerUserId != null &&
-      Number.isFinite(Number(playlist.ownerUserId))
-        ? Math.trunc(Number(playlist.ownerUserId))
+      record.ownerUserId != null && Number.isFinite(Number(record.ownerUserId))
+        ? Math.trunc(Number(record.ownerUserId))
         : null,
-    sourceName: String(playlist?.sourceName || "").trim() || null,
-    sourceFlowId: String(playlist?.sourceFlowId || "").trim() || null,
-    discoverPresetId: String(playlist?.discoverPresetId || "").trim() || null,
+    sourceName: String(record.sourceName || '').trim() || null,
+    sourceFlowId: String(record.sourceFlowId || '').trim() || null,
+    discoverPresetId: String(record.discoverPresetId || '').trim() || null,
     importedAt:
-      playlist?.importedAt != null &&
-      Number.isFinite(Number(playlist.importedAt))
-        ? Number(playlist.importedAt)
+      record.importedAt != null && Number.isFinite(Number(record.importedAt))
+        ? Number(record.importedAt)
         : Date.now(),
     createdAt:
-      playlist?.createdAt != null && Number.isFinite(Number(playlist.createdAt))
-        ? Number(playlist.createdAt)
+      record.createdAt != null && Number.isFinite(Number(record.createdAt))
+        ? Number(record.createdAt)
         : Date.now(),
     tracks,
     trackCount: tracks.length,
   };
 };
 
-const getStoredFlows = () => {
+// --- Persistence ---
+
+const getStoredFlows = (): FlowConfig[] => {
   if (cachedFlows) {
     return cachedFlows;
   }
   const settings = dbOps.getSettings();
-  const stored = settings.flows;
+  const stored: unknown = settings.flows;
   if (Array.isArray(stored) && stored.length > 0) {
-    const idMap = new Map();
+    const idMap = new Map<string, string>();
     let needsSave = false;
-    const nextFlows = stored.map((flow) => {
-      const currentId = flow?.id;
-      if (LEGACY_TYPES.includes(currentId)) {
-        const mapped = idMap.get(currentId) || randomUUID();
-        idMap.set(currentId, mapped);
+    const nextFlows: FlowConfig[] = stored.map((rawFlow: unknown) => {
+      const flow = rawFlow as Record<string, unknown>;
+      const currentId = flow?.id as string | undefined;
+      if (LEGACY_TYPES.includes(currentId as string)) {
+        const mapped = idMap.get(currentId as string) || randomUUID();
+        idMap.set(currentId as string, mapped);
         needsSave = true;
         return normalizeFlow({ ...flow, id: mapped });
       }
@@ -559,7 +544,7 @@ const getStoredFlows = () => {
   return cachedFlows;
 };
 
-const setFlows = (flows: unknown) => {
+const setFlows = (flows: FlowConfig[]): void => {
   cachedFlows = flows;
   const current = dbOps.getSettings();
   dbOps.updateSettings({
@@ -568,20 +553,17 @@ const setFlows = (flows: unknown) => {
   });
 };
 
-const getStoredSharedPlaylists = () => {
+const getStoredSharedPlaylists = (): SharedPlaylist[] => {
   if (cachedSharedPlaylists) {
     return cachedSharedPlaylists;
   }
   const settings = dbOps.getSettings();
-  const stored = settings.sharedPlaylists;
+  const stored: unknown = settings.sharedPlaylists;
   if (Array.isArray(stored)) {
-    const next = stored.map(normalizeSharedPlaylist);
+    const next: SharedPlaylist[] = (stored as unknown[]).map((s: unknown) => normalizeSharedPlaylist(s));
     const needsSave =
       next.length !== stored.length ||
-      next.some(
-        (playlist, index) =>
-          JSON.stringify(playlist) !== JSON.stringify(stored[index]),
-      );
+      next.some((playlist, index) => JSON.stringify(playlist) !== JSON.stringify(stored[index]));
     if (needsSave) {
       dbOps.updateSettings({
         ...settings,
@@ -599,7 +581,7 @@ const getStoredSharedPlaylists = () => {
   return cachedSharedPlaylists;
 };
 
-const setSharedPlaylists = (playlists: unknown[]) => {
+const setSharedPlaylists = (playlists: SharedPlaylist[]): void => {
   cachedSharedPlaylists = playlists;
   const current = dbOps.getSettings();
   dbOps.updateSettings({
@@ -608,86 +590,90 @@ const setSharedPlaylists = (playlists: unknown[]) => {
   });
 };
 
-const normalizeNameKey = (value: unknown) =>
-  String(value || "")
+// --- Validation ---
+
+const normalizeNameKey = (value: unknown): string =>
+  String(value || '')
     .trim()
     .toLowerCase();
 
-const createNameConflictError = (name: string) => {
-  const error = new Error(`Flow name "${name}" already exists`);
-  error.code = "FLOW_NAME_CONFLICT";
-  return error;
+const createNameConflictError = (name: string): PlaylistConfigError => {
+  return new PlaylistConfigError(`Flow name "${name}" already exists`, 'FLOW_NAME_CONFLICT');
 };
 
-const createSharedPlaylistNameConflictError = (name: string) => {
-  const error = new Error(`Shared playlist "${name}" already exists`);
-  error.code = "SHARED_PLAYLIST_NAME_CONFLICT";
-  return error;
+const createSharedPlaylistNameConflictError = (name: string): PlaylistConfigError => {
+  return new PlaylistConfigError(
+    `Shared playlist "${name}" already exists`,
+    'SHARED_PLAYLIST_NAME_CONFLICT',
+  );
 };
 
-const assertUniqueFlowName = (flows: unknown, nextName, exceptFlowId = null) => {
+const assertUniqueFlowName = (flows: FlowConfig[], nextName: unknown, exceptFlowId: string | null = null): void => {
   const key = normalizeNameKey(nextName);
   if (!key) return;
-  const hasConflict = flows.some((flow: unknown) => {
+  const hasConflict = flows.some((flow: FlowConfig) => {
     if (!flow) return false;
     if (exceptFlowId && flow.id === exceptFlowId) return false;
     return normalizeNameKey(flow.name) === key;
   });
   if (hasConflict) {
-    throw createNameConflictError(String(nextName || "").trim());
+    throw createNameConflictError(String(nextName || '').trim());
   }
 };
 
-const canUserAccessOwnerScopedEntity = (user: unknown, ownerUserId) => {
-  if (user?.role === "admin") return true;
-  if (!user || ownerUserId == null) return false;
-  return Number(user.id) === Number(ownerUserId);
+const canUserAccessOwnerScopedEntity = (user: unknown, ownerUserId: unknown): boolean => {
+  const record = (user && typeof user === 'object' ? user : null) as Record<string, unknown> | null;
+  if (record?.role === 'admin') return true;
+  if (!record || ownerUserId == null) return false;
+  return Number(record.id) === Number(ownerUserId);
 };
 
 const assertUniqueSharedPlaylistName = (
-  playlists,
-  nextName,
-  exceptPlaylistId = null,
-) => {
+  playlists: SharedPlaylist[],
+  nextName: unknown,
+  exceptPlaylistId: string | null = null,
+): void => {
   const key = normalizeNameKey(nextName);
   if (!key) return;
-  const hasConflict = playlists.some((playlist: unknown) => {
+  const hasConflict = playlists.some((playlist: SharedPlaylist) => {
     if (!playlist) return false;
     if (exceptPlaylistId && playlist.id === exceptPlaylistId) return false;
     return normalizeNameKey(playlist.name) === key;
   });
   if (hasConflict) {
-    throw createSharedPlaylistNameConflictError(String(nextName || "").trim());
+    throw createSharedPlaylistNameConflictError(String(nextName || '').trim());
   }
 };
 
+// --- Public API ---
+
 export const flowPlaylistConfig = {
-  canUserAccessFlow(user: unknown, flow) {
+  canUserAccessFlow(user: unknown, flow: FlowConfig): boolean {
     return canUserAccessOwnerScopedEntity(user, flow?.ownerUserId ?? null);
   },
 
-  canUserAccessSharedPlaylist(user: unknown, playlist) {
+  canUserAccessSharedPlaylist(user: unknown, playlist: SharedPlaylist): boolean {
     return canUserAccessOwnerScopedEntity(user, playlist?.ownerUserId ?? null);
   },
 
-  getFlows() {
+  getFlows(): FlowConfig[] {
     return getStoredFlows();
   },
 
-  getFlowsForUser(user: unknown) {
-    return getStoredFlows().filter((flow: unknown) => this.canUserAccessFlow(user, flow));
+  getFlowsForUser(user: unknown): FlowConfig[] {
+    return getStoredFlows().filter((flow: FlowConfig) => this.canUserAccessFlow(user, flow));
   },
 
-  getFlow(flowId: unknown) {
-    return getStoredFlows().find((flow: unknown) => flow.id === flowId) || null;
+  getFlow(flowId: unknown): FlowConfig | null {
+    return getStoredFlows().find((flow: FlowConfig) => flow.id === flowId) || null;
   },
 
-  getFlowForUser(user: unknown, flowId) {
+  getFlowForUser(user: unknown, flowId: unknown): FlowConfig | null {
     const flow = this.getFlow(flowId);
-    return this.canUserAccessFlow(user, flow) ? flow : null;
+    return this.canUserAccessFlow(user, flow as FlowConfig) ? (flow as FlowConfig) : null;
   },
 
-  isEnabled(flowId: unknown) {
+  isEnabled(flowId: unknown): boolean {
     const flow = this.getFlow(flowId);
     return flow?.enabled === true;
   },
@@ -704,7 +690,19 @@ export const flowPlaylistConfig = {
     scheduleTime,
     ownerUserId = null,
     discoverPresetId = null,
-  }) {
+  }: {
+    name: unknown;
+    mix?: unknown;
+    size?: unknown;
+    deepDive?: unknown;
+    recipe?: unknown;
+    tags?: unknown;
+    relatedArtists?: unknown;
+    scheduleDays?: unknown;
+    scheduleTime?: unknown;
+    ownerUserId?: unknown;
+    discoverPresetId?: unknown;
+  }): FlowConfig {
     const flows = getStoredFlows();
     assertUniqueFlowName(flows, name);
     const flow = normalizeFlow({
@@ -729,13 +727,13 @@ export const flowPlaylistConfig = {
     return flow;
   },
 
-  updateFlow(flowId: unknown, updates) {
+  updateFlow(flowId: unknown, updates: Record<string, unknown>): FlowConfig | null {
     const flows = getStoredFlows();
-    const index = flows.findIndex((flow: unknown) => flow.id === flowId);
+    const index = flows.findIndex((flow: FlowConfig) => flow.id === flowId);
     if (index === -1) return null;
     const current = flows[index];
     const nextName = updates?.name ?? current.name;
-    assertUniqueFlowName(flows, nextName, flowId);
+    assertUniqueFlowName(flows, nextName, flowId as string);
     const currentSchedule = normalizeScheduleDays(current.scheduleDays);
     const currentScheduleTime = normalizeScheduleTime(current.scheduleTime);
     const next = normalizeFlow({
@@ -748,10 +746,7 @@ export const flowPlaylistConfig = {
       relatedArtists: updates?.relatedArtists ?? current.relatedArtists,
       scheduleDays: updates?.scheduleDays ?? current.scheduleDays,
       scheduleTime: updates?.scheduleTime ?? current.scheduleTime,
-      deepDive:
-        typeof updates?.deepDive === "boolean"
-          ? updates.deepDive
-          : current.deepDive,
+      deepDive: typeof updates?.deepDive === 'boolean' ? updates.deepDive : current.deepDive,
       enabled: current.enabled,
       nextRunAt: current.nextRunAt,
       lastRunAt: current.lastRunAt,
@@ -768,28 +763,24 @@ export const flowPlaylistConfig = {
       const effectiveSchedule =
         nextSchedule.length > 0 ? nextSchedule : [getDefaultScheduleDay(now)];
       next.scheduleDays = effectiveSchedule;
-      next.nextRunAt = computeNextRunAt(
-        effectiveSchedule,
-        nextScheduleTime,
-        now,
-      );
+      next.nextRunAt = computeNextRunAt(effectiveSchedule, nextScheduleTime, now);
     }
     flows[index] = next;
     setFlows(flows);
     return next;
   },
 
-  deleteFlow(flowId: unknown) {
+  deleteFlow(flowId: unknown): boolean {
     const flows = getStoredFlows();
-    const next = flows.filter((flow: unknown) => flow.id !== flowId);
+    const next = flows.filter((flow: FlowConfig) => flow.id !== flowId);
     if (next.length === flows.length) return false;
     setFlows(next);
     return true;
   },
 
-  setEnabled(flowId: unknown, enabled) {
+  setEnabled(flowId: unknown, enabled: unknown): FlowConfig | null {
     const flows = getStoredFlows();
-    const index = flows.findIndex((flow: unknown) => flow.id === flowId);
+    const index = flows.findIndex((flow: FlowConfig) => flow.id === flowId);
     if (index === -1) return null;
     const flow = { ...flows[index], enabled: enabled === true };
     if (!flow.enabled) {
@@ -800,45 +791,39 @@ export const flowPlaylistConfig = {
     return flow;
   },
 
-  setNextRunAt(flowId: unknown, nextRunAt) {
+  setNextRunAt(flowId: unknown, nextRunAt: unknown): FlowConfig | null {
     const flows = getStoredFlows();
-    const index = flows.findIndex((flow: unknown) => flow.id === flowId);
+    const index = flows.findIndex((flow: FlowConfig) => flow.id === flowId);
     if (index === -1) return null;
     const flow = { ...flows[index] };
     flow.nextRunAt =
-      nextRunAt != null && Number.isFinite(Number(nextRunAt))
-        ? Number(nextRunAt)
-        : null;
+      nextRunAt != null && Number.isFinite(Number(nextRunAt)) ? Number(nextRunAt) : null;
     flows[index] = flow;
     setFlows(flows);
     return flow;
   },
 
-  markLastRunAt(flowId: unknown, lastRunAt = Date.now()) {
+  markLastRunAt(flowId: unknown, lastRunAt: unknown = Date.now()): FlowConfig | null {
     const flows = getStoredFlows();
-    const index = flows.findIndex((flow: unknown) => flow.id === flowId);
+    const index = flows.findIndex((flow: FlowConfig) => flow.id === flowId);
     if (index === -1) return null;
     const flow = { ...flows[index] };
     flow.lastRunAt =
-      lastRunAt != null && Number.isFinite(Number(lastRunAt))
-        ? Number(lastRunAt)
-        : Date.now();
+      lastRunAt != null && Number.isFinite(Number(lastRunAt)) ? Number(lastRunAt) : Date.now();
     flows[index] = flow;
     setFlows(flows);
     return flow;
   },
 
-  scheduleNextRun(flowId: unknown) {
+  scheduleNextRun(flowId: unknown): FlowConfig | null {
     const flows = getStoredFlows();
-    const index = flows.findIndex((flow: unknown) => flow.id === flowId);
+    const index = flows.findIndex((flow: FlowConfig) => flow.id === flowId);
     if (index === -1) return null;
     const now = Date.now();
     const flow = { ...flows[index] };
     const normalizedSchedule = normalizeScheduleDays(flow.scheduleDays);
     flow.scheduleDays =
-      normalizedSchedule.length > 0
-        ? normalizedSchedule
-        : [getDefaultScheduleDay(now)];
+      normalizedSchedule.length > 0 ? normalizedSchedule : [getDefaultScheduleDay(now)];
     flow.scheduleTime = normalizeScheduleTime(flow.scheduleTime);
     flow.nextRunAt = computeNextRunAt(flow.scheduleDays, flow.scheduleTime, now);
     flows[index] = flow;
@@ -846,28 +831,34 @@ export const flowPlaylistConfig = {
     return flow;
   },
 
-  getDueForRefresh() {
+  getDueForRefresh(): FlowConfig[] {
     const now = Date.now();
     return getStoredFlows().filter(
-      (flow: unknown) =>
-        flow.enabled === true &&
-        flow.nextRunAt != null &&
-        flow.nextRunAt <= now,
+      (flow: FlowConfig) => flow.enabled === true && flow.nextRunAt != null && flow.nextRunAt <= now,
     );
   },
 
-  getSharedPlaylists() {
+  getSharedPlaylists(): SharedPlaylist[] {
     return getStoredSharedPlaylists();
   },
 
-  getSharedPlaylistsForUser(user: unknown) {
-    return getStoredSharedPlaylists().filter((playlist: unknown) =>
+  getSharedPlaylistsForUser(user: unknown): SharedPlaylist[] {
+    return getStoredSharedPlaylists().filter((playlist: SharedPlaylist) =>
       this.canUserAccessSharedPlaylist(user, playlist),
     );
   },
 
-  getSharedPlaylistSummaries() {
-    return getStoredSharedPlaylists().map((playlist: unknown) => ({
+  getSharedPlaylistSummaries(): Array<{
+    id: string;
+    name: string;
+    ownerUserId: number | null;
+    sourceName: string | null;
+    sourceFlowId: string | null;
+    importedAt: number;
+    createdAt: number;
+    trackCount: number;
+  }> {
+    return getStoredSharedPlaylists().map((playlist: SharedPlaylist) => ({
       id: playlist.id,
       name: playlist.name,
       ownerUserId: playlist.ownerUserId,
@@ -879,17 +870,18 @@ export const flowPlaylistConfig = {
     }));
   },
 
-  getSharedPlaylist(playlistId: unknown) {
+  getSharedPlaylist(playlistId: unknown): SharedPlaylist | null {
     return (
-      getStoredSharedPlaylists().find(
-        (playlist: unknown) => playlist.id === playlistId,
-      ) || null
+      getStoredSharedPlaylists().find((playlist: SharedPlaylist) => playlist.id === playlistId) ||
+      null
     );
   },
 
-  getSharedPlaylistForUser(user: unknown, playlistId) {
+  getSharedPlaylistForUser(user: unknown, playlistId: unknown): SharedPlaylist | null {
     const playlist = this.getSharedPlaylist(playlistId);
-    return this.canUserAccessSharedPlaylist(user, playlist) ? playlist : null;
+    return this.canUserAccessSharedPlaylist(user, playlist as SharedPlaylist)
+      ? (playlist as SharedPlaylist)
+      : null;
   },
 
   createSharedPlaylist({
@@ -900,11 +892,19 @@ export const flowPlaylistConfig = {
     discoverPresetId = null,
     tracks = [],
     ownerUserId = null,
-  }) {
+  }: {
+    id?: unknown;
+    name: unknown;
+    sourceName?: unknown;
+    sourceFlowId?: unknown;
+    discoverPresetId?: unknown;
+    tracks?: unknown;
+    ownerUserId?: unknown;
+  }): SharedPlaylist {
     const playlists = getStoredSharedPlaylists();
     assertUniqueSharedPlaylistName(playlists, name);
     const playlist = normalizeSharedPlaylist({
-      id: String(id || "").trim() || randomUUID(),
+      id: String(id || '').trim() || randomUUID(),
       name,
       ownerUserId,
       sourceName,
@@ -919,9 +919,9 @@ export const flowPlaylistConfig = {
     return playlist;
   },
 
-  appendSharedPlaylistTracks(playlistId: unknown, tracks) {
+  appendSharedPlaylistTracks(playlistId: unknown, tracks: unknown): SharedPlaylist | null {
     const playlists = getStoredSharedPlaylists();
-    const index = playlists.findIndex((playlist: unknown) => playlist.id === playlistId);
+    const index = playlists.findIndex((playlist: SharedPlaylist) => playlist.id === playlistId);
     if (index === -1) return null;
     const current = playlists[index];
     const appendedTracks = filterMissingSharedTracks(current.tracks, tracks);
@@ -936,13 +936,13 @@ export const flowPlaylistConfig = {
     return next;
   },
 
-  updateSharedPlaylist(playlistId: unknown, updates) {
+  updateSharedPlaylist(playlistId: unknown, updates: Record<string, unknown>): SharedPlaylist | null {
     const playlists = getStoredSharedPlaylists();
-    const index = playlists.findIndex((playlist: unknown) => playlist.id === playlistId);
+    const index = playlists.findIndex((playlist: SharedPlaylist) => playlist.id === playlistId);
     if (index === -1) return null;
     const current = playlists[index];
     const nextName = updates?.name ?? current.name;
-    assertUniqueSharedPlaylistName(playlists, nextName, playlistId);
+    assertUniqueSharedPlaylistName(playlists, nextName, playlistId as string);
     const next = normalizeSharedPlaylist({
       ...current,
       name: nextName,
@@ -958,9 +958,9 @@ export const flowPlaylistConfig = {
     return next;
   },
 
-  deleteSharedPlaylist(playlistId: unknown) {
+  deleteSharedPlaylist(playlistId: unknown): boolean {
     const playlists = getStoredSharedPlaylists();
-    const next = playlists.filter((playlist: unknown) => playlist.id !== playlistId);
+    const next = playlists.filter((playlist: SharedPlaylist) => playlist.id !== playlistId);
     if (next.length === playlists.length) return false;
     setSharedPlaylists(next);
     return true;

@@ -1,16 +1,13 @@
-import {
-  enqueueWeeklyFlowOperationJob,
-  getHonkerQueueDepth,
-} from "./honkerDb.js";
+import { enqueueWeeklyFlowOperationJob, getHonkerQueueDepth } from './honkerDb.js';
 
 const DEFAULT_OPERATION_WAIT_MS = 10 * 60 * 1000;
 
 const pendingPayloadResults = new Map();
 const completedPayloadResults = new Map();
 let workerRunning = false;
-let workerCurrentLabel = null;
+let workerCurrentLabel: string | null = null;
 
-function rememberCompletedResult(jobId, entry) {
+function rememberCompletedResult(jobId: any, entry: any) {
   completedPayloadResults.set(jobId, entry);
   setTimeout(() => {
     completedPayloadResults.delete(jobId);
@@ -18,16 +15,13 @@ function rememberCompletedResult(jobId, entry) {
 }
 
 class WeeklyFlowOperationQueue {
-  constructor() {
-    this.pendingPayloadCount = 0;
-  }
+  pendingPayloadCount = 0;
 
-  async enqueuePayload(payload = {}, options = {}) {
+  async enqueuePayload(payload: any = {}, options: any = {}) {
     const waitForCompletion = options.waitForCompletion !== false;
     const waitTimeoutMs = Math.max(
       1000,
-      Number(options.waitTimeoutMs || DEFAULT_OPERATION_WAIT_MS) ||
-        DEFAULT_OPERATION_WAIT_MS,
+      Number(options.waitTimeoutMs || DEFAULT_OPERATION_WAIT_MS) || DEFAULT_OPERATION_WAIT_MS,
     );
     const jobId = enqueueWeeklyFlowOperationJob(payload, options);
     if (!waitForCompletion) {
@@ -48,12 +42,12 @@ class WeeklyFlowOperationQueue {
         });
       }, waitTimeoutMs);
       pendingPayloadResults.set(jobId, {
-        resolve: (value) => {
+        resolve: (value: any) => {
           clearTimeout(timeout);
           this.pendingPayloadCount = Math.max(0, this.pendingPayloadCount - 1);
           resolve(value);
         },
-        reject: (error) => {
+        reject: (error: any) => {
           clearTimeout(timeout);
           this.pendingPayloadCount = Math.max(0, this.pendingPayloadCount - 1);
           reject(error);
@@ -74,7 +68,7 @@ class WeeklyFlowOperationQueue {
   getStatus() {
     let pending = 0;
     try {
-      pending = getHonkerQueueDepth("weekly-flow-operation");
+      pending = getHonkerQueueDepth('weekly-flow-operation');
     } catch {}
     return {
       processing: workerRunning,
@@ -85,18 +79,14 @@ class WeeklyFlowOperationQueue {
   }
 }
 
-export function setWeeklyFlowOperationWorkerState({
-  running = false,
-  currentLabel = null,
-} = {}) {
+export function setWeeklyFlowOperationWorkerState({ running = false, currentLabel = null } = {}) {
   workerRunning = running === true;
-  workerCurrentLabel =
-    currentLabel == null ? null : String(currentLabel).trim() || null;
+  workerCurrentLabel = currentLabel == null ? null : String(currentLabel).trim() || null;
 }
 
 export const weeklyFlowOperationQueue = new WeeklyFlowOperationQueue();
 
-export function resolveWeeklyFlowOperationResult(jobId, result) {
+export function resolveWeeklyFlowOperationResult(jobId: any, result: any) {
   const waiter = pendingPayloadResults.get(jobId);
   if (!waiter) {
     rememberCompletedResult(jobId, { ok: true, result });
@@ -107,7 +97,7 @@ export function resolveWeeklyFlowOperationResult(jobId, result) {
   return true;
 }
 
-export function rejectWeeklyFlowOperationResult(jobId, error) {
+export function rejectWeeklyFlowOperationResult(jobId: any, error: any) {
   const waiter = pendingPayloadResults.get(jobId);
   if (!waiter) {
     rememberCompletedResult(jobId, { ok: false, error });

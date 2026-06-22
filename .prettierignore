@@ -1,0 +1,15 @@
+node_modules
+frontend/dist
+backend/data
+dist
+coverage
+.nyc_output
+*.log
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+desktop/node_modules
+desktop/src-tauri/target
+backend/native/aurral-worker/target
+docs/.astro
+docs/dist

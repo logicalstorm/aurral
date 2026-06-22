@@ -16,4 +16,4 @@ export {
   selectRankedMatchAttempts,
   stripReleaseTypeSuffix,
   validateDownloadedTrack,
-} from "./rustSlskdMatcherBridge.js";
+} from './rustSlskdMatcherBridge.js';

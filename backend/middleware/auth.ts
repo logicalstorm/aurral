@@ -1,13 +1,14 @@
-import basicAuth from "express-basic-auth";
-import bcrypt from "bcrypt";
-import crypto from "crypto";
-import os from "os";
-import type { Request, Response, NextFunction } from "express";
-import { dbOps, userOps } from "../config/db-helpers.js";
-import { getDefaultListenHistoryProfile } from "../services/listeningHistory.js";
-import { getSessionByToken } from "../config/session-helpers.js";
+import basicAuth from 'express-basic-auth';
+import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+import os from 'os';
+import type { Request, Response, NextFunction } from 'express';
+import { dbOps, userOps } from '../config/db-helpers.js';
+import { getDefaultListenHistoryProfile } from '../services/listeningHistory.js';
+import { getSessionByToken } from '../config/session-helpers.js';
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       user?: Record<string, unknown>;
@@ -15,50 +16,48 @@ declare global {
   }
 }
 
-const DEFAULT_PROXY_HEADER = "x-forwarded-user";
+const DEFAULT_PROXY_HEADER = 'x-forwarded-user';
 const STREAM_TOKEN_TTL_MS = 2 * 60 * 1000;
 const streamTokenStore = new Map();
-const LOOPBACK_IPS = new Set(["127.0.0.1", "::1"]);
+const LOOPBACK_IPS = new Set(['127.0.0.1', '::1']);
 
-const normalizeLocalNetworkBypassSettings = (settings: any = dbOps.getSettings()) => ({
-  enabled: settings?.security?.localNetworkBypass?.enabled === true,
+const normalizeLocalNetworkBypassSettings = (settings: Record<string, unknown> = dbOps.getSettings() as Record<string, unknown>) => ({
+  enabled: ((settings?.security as Record<string, unknown>)?.localNetworkBypass as Record<string, unknown>)?.enabled === true,
 });
 
-const withLocalNetworkBypassDefaults = (settings: any = dbOps.getSettings()) => ({
+const withLocalNetworkBypassDefaults = (settings: Record<string, unknown> = dbOps.getSettings() as Record<string, unknown>) => ({
   ...settings,
   security: {
-    ...(settings?.security || {}),
+    ...((settings?.security as Record<string, unknown>) || {}),
     localNetworkBypass: {
-      enabled: settings?.security?.localNetworkBypass?.enabled === true,
+      enabled: ((settings?.security as Record<string, unknown>)?.localNetworkBypass as Record<string, unknown>)?.enabled === true,
     },
   },
 });
 
 export const getAuthUser = () => {
   const settings = dbOps.getSettings();
-  return (
-    settings.integrations?.general?.authUser || process.env.AUTH_USER || "admin"
-  );
+  const general = (settings.integrations as Record<string, unknown>)?.general as Record<string, unknown> | undefined;
+  return (general?.authUser as string) || process.env.AUTH_USER || 'admin';
 };
 
 export const getAuthPassword = () => {
   const settings = dbOps.getSettings();
-  const dbPass = settings.integrations?.general?.authPassword;
+  const general = (settings.integrations as Record<string, unknown>)?.general as Record<string, unknown> | undefined;
+  const dbPass = general?.authPassword as string | undefined;
   if (dbPass) return [dbPass];
-  return process.env.AUTH_PASSWORD
-    ? process.env.AUTH_PASSWORD.split(",").map((p) => p.trim())
-    : [];
+  return process.env.AUTH_PASSWORD ? process.env.AUTH_PASSWORD.split(',').map((p) => p.trim()) : [];
 };
 
 export const isProxyAuthEnabled = () => {
-  if (process.env.AUTH_PROXY_ENABLED === "true") return true;
+  if (process.env.AUTH_PROXY_ENABLED === 'true') return true;
   return !!process.env.AUTH_PROXY_HEADER;
 };
 
 function parseCsv(value: unknown) {
   if (!value) return [];
   return String(value)
-    .split(",")
+    .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -75,15 +74,12 @@ function getHeaderValue(req: Request, headerName: string) {
 }
 
 function normalizeIp(value: unknown) {
-  const raw = String(value || "")
+  const raw = String(value || '')
     .trim()
     .toLowerCase();
-  if (!raw) return "";
-  const withoutBrackets =
-    raw.startsWith("[") && raw.endsWith("]") ? raw.slice(1, -1) : raw;
-  return withoutBrackets.startsWith("::ffff:")
-    ? withoutBrackets.slice(7)
-    : withoutBrackets;
+  if (!raw) return '';
+  const withoutBrackets = raw.startsWith('[') && raw.endsWith(']') ? raw.slice(1, -1) : raw;
+  return withoutBrackets.startsWith('::ffff:') ? withoutBrackets.slice(7) : withoutBrackets;
 }
 
 function isLoopbackIp(ip: string) {
@@ -91,9 +87,9 @@ function isLoopbackIp(ip: string) {
 }
 
 function isPrivateIpv4(ip: string) {
-  const parts = String(ip || "")
+  const parts = String(ip || '')
     .trim()
-    .split(".")
+    .split('.')
     .map((part) => Number(part));
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
     return false;
@@ -106,19 +102,20 @@ function isPrivateIpv4(ip: string) {
 }
 
 function ipv4ToInt(ip: string) {
-  const parts = String(ip || "")
+  const parts = String(ip || '')
     .trim()
-    .split(".")
+    .split('.')
     .map((part) => Number(part));
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
     return null;
   }
   return (
-    ((parts[0] << 24) >>> 0) +
-    ((parts[1] << 16) >>> 0) +
-    ((parts[2] << 8) >>> 0) +
-    (parts[3] >>> 0)
-  ) >>> 0;
+    (((parts[0] << 24) >>> 0) +
+      ((parts[1] << 16) >>> 0) +
+      ((parts[2] << 8) >>> 0) +
+      (parts[3] >>> 0)) >>>
+    0
+  );
 }
 
 function parseNetmaskPrefix(netmask: string) {
@@ -165,23 +162,17 @@ function getIpv4SubnetCandidates() {
   for (const [name, details] of Object.entries(interfaces)) {
     for (const detail of details || []) {
       if (!detail || detail.internal) continue;
-      if (detail.family !== "IPv4") continue;
+      if (detail.family !== 'IPv4') continue;
       const normalizedAddress = normalizeIp(detail.address);
       if (!isPrivateIpv4(normalizedAddress)) continue;
-      const subnet = buildIpv4Subnet(
-        normalizedAddress,
-        detail.netmask,
-        name,
-      );
+      const subnet = buildIpv4Subnet(normalizedAddress, detail.netmask, name);
       if (subnet) {
         candidates.push(subnet);
       }
     }
   }
   candidates.sort((a, b) =>
-    `${a.interfaceName}:${a.address}`.localeCompare(
-      `${b.interfaceName}:${b.address}`,
-    ),
+    `${a.interfaceName}:${a.address}`.localeCompare(`${b.interfaceName}:${b.address}`),
   );
   return candidates;
 }
@@ -207,16 +198,14 @@ function getRequestIps(req: Request) {
 }
 
 function isTrustedProxy(req: Request) {
-  const allowed = parseCsv(process.env.AUTH_PROXY_TRUSTED_IPS).map((ip) =>
-    normalizeIp(ip),
-  );
+  const allowed = parseCsv(process.env.AUTH_PROXY_TRUSTED_IPS).map((ip) => normalizeIp(ip));
   if (allowed.length === 0) return true;
   const requestIps = getRequestIps(req);
   return requestIps.some((ip) => allowed.includes(ip));
 }
 
 function buildPermissions(role: string, permissions: Record<string, unknown>) {
-  if (role === "admin") {
+  if (role === 'admin') {
     return {
       accessSettings: true,
       accessFlow: true,
@@ -240,7 +229,10 @@ function toResolvedUser(user: Record<string, unknown>) {
     id: user.id,
     username: user.username,
     role: user.role as string,
-    permissions: buildPermissions(user.role as string, (user.permissions as Record<string, unknown>) || {}),
+    permissions: buildPermissions(
+      user.role as string,
+      (user.permissions as Record<string, unknown>) || {},
+    ),
   };
 }
 
@@ -251,13 +243,16 @@ const toSessionUser = (session: Record<string, unknown>) => {
     id: baseUser.id,
     username: baseUser.username,
     role: baseUser.role as string,
-    permissions: buildPermissions(baseUser.role as string, (baseUser.permissions as Record<string, unknown>) || {}),
+    permissions: buildPermissions(
+      baseUser.role as string,
+      (baseUser.permissions as Record<string, unknown>) || {},
+    ),
   };
 };
 
 const getBearerToken = (req: Request) => {
-  const authHeader = String(req.headers.authorization || "");
-  if (!authHeader.startsWith("Bearer ")) return null;
+  const authHeader = String(req.headers.authorization || '');
+  if (!authHeader.startsWith('Bearer ')) return null;
   const token = authHeader.slice(7).trim();
   return token || null;
 };
@@ -265,13 +260,13 @@ const getBearerToken = (req: Request) => {
 export function getUnauthorizedDetails(req: Request) {
   if (getBearerToken(req)) {
     return {
-      code: "SESSION_INVALID",
-      message: "Session expired or invalid",
+      code: 'SESSION_INVALID',
+      message: 'Session expired or invalid',
     };
   }
   return {
-    code: "AUTH_REQUIRED",
-    message: "Authentication required",
+    code: 'AUTH_REQUIRED',
+    message: 'Authentication required',
   };
 }
 
@@ -281,10 +276,10 @@ export function sendUnauthorizedResponse(
   { challenge = false, ...overrides }: Record<string, unknown> = {},
 ) {
   if (challenge) {
-    res.setHeader("WWW-Authenticate", 'Basic realm="Aurral"');
+    res.setHeader('WWW-Authenticate', 'Basic realm="Aurral"');
   }
   return res.status(401).json({
-    error: "Unauthorized",
+    error: 'Unauthorized',
     ...getUnauthorizedDetails(req),
     ...overrides,
   });
@@ -304,18 +299,18 @@ export const isAuthRequiredByConfig = () => {
   return isProxyAuthEnabled() || users.length > 0 || legacyPasswords.length > 0;
 };
 
-export const getLocalNetworkBypassConfig = (settings: any = dbOps.getSettings()) =>
+export const getLocalNetworkBypassConfig = (settings: Record<string, unknown> = dbOps.getSettings() as Record<string, unknown>) =>
   normalizeLocalNetworkBypassSettings(settings);
 
 export function getSoleAdminUser() {
   const users = userOps.getAllUsers();
   if (users.length !== 1) return null;
   const [user] = users;
-  if (user?.role !== "admin") return null;
+  if (user?.role !== 'admin') return null;
   return user;
 }
 
-export function isRequestFromTrustedLocalSubnet(req: any) {
+export function isRequestFromTrustedLocalSubnet(req: Request) {
   const requestIps = getRequestIps(req);
   if (requestIps.some((ip) => isLoopbackIp(ip))) {
     return true;
@@ -331,7 +326,7 @@ export function isRequestFromTrustedLocalSubnet(req: any) {
   });
 }
 
-export function getLocalNetworkBypassStatus(req: any) {
+export function getLocalNetworkBypassStatus(req: Request) {
   const settings = dbOps.getSettings();
   const config = getLocalNetworkBypassConfig(settings);
   const onboardingDone = settings?.onboardingComplete === true;
@@ -345,29 +340,26 @@ export function getLocalNetworkBypassStatus(req: any) {
 
   if (!onboardingDone) {
     eligible = false;
-    reason = "not_onboarded";
+    reason = 'not_onboarded';
   } else if (users.length !== 1) {
     eligible = false;
-    reason = "not_single_user";
-  } else if (!soleUser || soleUser.role !== "admin") {
+    reason = 'not_single_user';
+  } else if (!soleUser || soleUser.role !== 'admin') {
     eligible = false;
-    reason = "sole_user_not_admin";
+    reason = 'sole_user_not_admin';
   } else if (!subnet) {
     eligible = false;
-    reason = "not_trusted_network";
+    reason = 'not_trusted_network';
   }
 
   const active =
-    config.enabled &&
-    eligible &&
-    isRequestFromTrustedLocalSubnet(req) &&
-    !!soleAdminUser;
+    config.enabled && eligible && isRequestFromTrustedLocalSubnet(req) && !!soleAdminUser;
 
   return {
     enabled: config.enabled,
     eligible,
     active,
-    reason: reason || (config.enabled ? null : "disabled"),
+    reason: reason || (config.enabled ? null : 'disabled'),
   };
 }
 
@@ -384,9 +376,9 @@ export function reconcileLocalNetworkBypassSetting() {
     headers: {},
     socket: {},
     connection: {},
-    ip: "",
+    ip: '',
     ips: [],
-  });
+  } as unknown as Request);
   if (status.eligible) {
     return {
       changed: false,
@@ -403,13 +395,15 @@ export function reconcileLocalNetworkBypassSetting() {
 }
 
 function createProxyUser(username: string, role: string) {
-  const passwordHash = bcrypt.hashSync(
-    crypto.randomBytes(32).toString("hex"),
-    10,
-  );
+  const passwordHash = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 10);
   const created = userOps.createUser(username, passwordHash, role, null);
   return created
-    ? toResolvedUser((userOps.getUserByUsername(created.username) || created) as unknown as Record<string, unknown>)
+    ? toResolvedUser(
+        (userOps.getUserByUsername(created.username) || created) as unknown as Record<
+          string,
+          unknown
+        >,
+      )
     : toResolvedUser(userOps.getUserByUsername(username) as unknown as Record<string, unknown>);
 }
 
@@ -418,32 +412,27 @@ export function resolveProxyUser(req: Request) {
   if (!isTrustedProxy(req)) return null;
   const headerName = getProxyHeaderName();
   const rawUsername = getHeaderValue(req, headerName);
-  const username = String(rawUsername || "").trim();
+  const username = String(rawUsername || '').trim();
   if (!username) return null;
   const existing = userOps.getUserByUsername(username);
   if (existing) {
     return toResolvedUser(existing);
   }
-  const adminUsers = parseCsv(process.env.AUTH_PROXY_ADMIN_USERS).map((u) =>
-    u.toLowerCase(),
-  );
+  const adminUsers = parseCsv(process.env.AUTH_PROXY_ADMIN_USERS).map((u) => u.toLowerCase());
   const headerRoleName = process.env.AUTH_PROXY_ROLE_HEADER
     ? String(process.env.AUTH_PROXY_ROLE_HEADER).trim().toLowerCase()
-    : "";
+    : '';
   const headerRole = headerRoleName
-    ? String(getHeaderValue(req, headerRoleName) || "")
+    ? String(getHeaderValue(req, headerRoleName) || '')
         .trim()
         .toLowerCase()
-    : "";
+    : '';
   const defaultRole =
-    (process.env.AUTH_PROXY_DEFAULT_ROLE || "user").trim().toLowerCase() ===
-    "admin"
-      ? "admin"
-      : "user";
+    (process.env.AUTH_PROXY_DEFAULT_ROLE || 'user').trim().toLowerCase() === 'admin'
+      ? 'admin'
+      : 'user';
   const role =
-    headerRole === "admin" || adminUsers.includes(username.toLowerCase())
-      ? "admin"
-      : defaultRole;
+    headerRole === 'admin' || adminUsers.includes(username.toLowerCase()) ? 'admin' : defaultRole;
   return createProxyUser(username, role);
 }
 
@@ -452,11 +441,12 @@ function migrateLegacyAdmin() {
   if (users.length > 0) return;
   const settings = dbOps.getSettings();
   const onboardingComplete = settings.onboardingComplete;
-  const authUser = settings.integrations?.general?.authUser || "admin";
-  const authPassword = settings.integrations?.general?.authPassword;
+  const general = (settings.integrations as Record<string, unknown>)?.general as Record<string, unknown> | undefined;
+  const authUser = (general?.authUser as string) || 'admin';
+  const authPassword = general?.authPassword as string | undefined;
   if (!onboardingComplete || !authPassword) return;
   const hash = bcrypt.hashSync(authPassword, 10);
-  const created = userOps.createUser(authUser, hash, "admin", null);
+  const created = userOps.createUser(authUser, hash, 'admin', null);
   const initialListenHistory = getDefaultListenHistoryProfile(settings);
   if (created && initialListenHistory) {
     userOps.updateUser(Number(created.id), initialListenHistory);
@@ -470,7 +460,7 @@ function resolveUser(username: string, password: string) {
   }
   const all = userOps.getAllUsers();
   if (all.length === 0) return null;
-  const un = String(username || "")
+  const un = String(username || '')
     .trim()
     .toLowerCase();
   const u = userOps.getUserByUsername(un);
@@ -491,14 +481,12 @@ function legacyAuth(username: string, password: string) {
   const passwords = getAuthPassword();
   if (passwords.length === 0) return null;
   const userMatches = basicAuth.safeCompare(username, authUser);
-  const passwordMatches = passwords.some((p) =>
-    basicAuth.safeCompare(password, p),
-  );
+  const passwordMatches = passwords.some((p) => basicAuth.safeCompare(password, p));
   if (!userMatches || !passwordMatches) return null;
   return {
     id: 0,
     username: authUser,
-    role: "admin",
+    role: 'admin',
     permissions: {
       accessSettings: true,
       accessFlow: true,
@@ -523,17 +511,17 @@ export function resolveRequestUser(req: Request) {
   const proxyUser = resolveProxyUser(req);
   if (proxyUser) return proxyUser;
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Basic ")) {
+  if (authHeader && authHeader.startsWith('Basic ')) {
     try {
       const token = authHeader.substring(6);
-      const decoded = Buffer.from(token, "base64").toString("utf8");
-      const colon = decoded.indexOf(":");
+      const decoded = Buffer.from(token, 'base64').toString('utf8');
+      const colon = decoded.indexOf(':');
       const username = colon >= 0 ? decoded.slice(0, colon) : decoded;
-      const password = colon >= 0 ? decoded.slice(colon + 1) : "";
+      const password = colon >= 0 ? decoded.slice(colon + 1) : '';
       let user = resolveUser(username, password);
       if (!user) user = legacyAuth(username, password);
       if (user) return user;
-    } catch (e) {
+    } catch {
       return null;
     }
   }
@@ -549,10 +537,13 @@ function pruneExpiredStreamTokens() {
   }
 }
 
-export function issueStreamToken(user: Record<string, unknown>, ttlMs: number = STREAM_TOKEN_TTL_MS) {
+export function issueStreamToken(
+  user: Record<string, unknown>,
+  ttlMs: number = STREAM_TOKEN_TTL_MS,
+) {
   if (!user) return null;
   pruneExpiredStreamTokens();
-  const token = crypto.randomBytes(24).toString("base64url");
+  const token = crypto.randomBytes(24).toString('base64url');
   streamTokenStore.set(token, {
     user: {
       id: user.id,
@@ -560,8 +551,7 @@ export function issueStreamToken(user: Record<string, unknown>, ttlMs: number = 
       role: user.role,
       permissions: user.permissions || {},
     },
-    expiresAt:
-      Date.now() + Math.max(1000, Number(ttlMs) || STREAM_TOKEN_TTL_MS),
+    expiresAt: Date.now() + Math.max(1000, Number(ttlMs) || STREAM_TOKEN_TTL_MS),
   });
   return token;
 }
@@ -581,15 +571,15 @@ function consumeStreamToken(rawToken: string) {
 
 export const createAuthMiddleware = () => {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.path.startsWith("/api")) return next();
+    if (!req.path.startsWith('/api')) return next();
     if (
-      req.path === "/api/health" ||
-      req.path === "/api/health/live" ||
-      req.path === "/api/health/bootstrap" ||
-      req.path === "/api/filesystem/browse" ||
-      req.path === "/api/filesystem/ensure" ||
-      req.path === "/api/image-proxy" ||
-      req.path.startsWith("/api/image-proxy/")
+      req.path === '/api/health' ||
+      req.path === '/api/health/live' ||
+      req.path === '/api/health/bootstrap' ||
+      req.path === '/api/filesystem/browse' ||
+      req.path === '/api/filesystem/ensure' ||
+      req.path === '/api/image-proxy' ||
+      req.path.startsWith('/api/image-proxy/')
     ) {
       return next();
     }
@@ -599,22 +589,18 @@ export const createAuthMiddleware = () => {
       /^\/api\/artists\/[a-f0-9-]{36}\/stream$/i.test(req.path) ||
       /^\/api\/weekly-flow\/stream\/[^/]+$/i.test(req.path) ||
       /^\/api\/playlists\/stream\/[^/]+$/i.test(req.path) ||
-      (req.method === "GET" &&
-        /^\/api\/weekly-flow\/artwork\/[^/]+$/i.test(req.path)) ||
-      (req.method === "GET" &&
-        /^\/api\/playlists\/artwork\/[^/]+$/i.test(req.path)) ||
-      (req.method === "GET" &&
-        /^\/api\/discover\/artwork\/[^/]+$/i.test(req.path))
+      (req.method === 'GET' && /^\/api\/weekly-flow\/artwork\/[^/]+$/i.test(req.path)) ||
+      (req.method === 'GET' && /^\/api\/playlists\/artwork\/[^/]+$/i.test(req.path)) ||
+      (req.method === 'GET' && /^\/api\/discover\/artwork\/[^/]+$/i.test(req.path))
     ) {
       return next();
     }
-    if (req.path === "/api/auth/login") return next();
+    if (req.path === '/api/auth/login') return next();
 
     const settings = dbOps.getSettings();
     const onboardingDone = settings.onboardingComplete;
 
-    if (req.path.startsWith("/api/onboarding") && !onboardingDone)
-      return next();
+    if (req.path.startsWith('/api/onboarding') && !onboardingDone) return next();
 
     const authRequired = isAuthRequiredByConfig();
 
@@ -633,18 +619,18 @@ export const createAuthMiddleware = () => {
 function getCredentialsFromRequest(req: Request) {
   const sessionUser = resolveSessionUserFromToken(req.query.token as string);
   if (sessionUser) {
-    return { type: "session", user: sessionUser };
+    return { type: 'session', user: sessionUser };
   }
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Basic ")) {
+  if (authHeader && authHeader.startsWith('Basic ')) {
     try {
       const token = authHeader.substring(6);
-      const decoded = Buffer.from(token, "base64").toString("utf8");
-      const colon = decoded.indexOf(":");
+      const decoded = Buffer.from(token, 'base64').toString('utf8');
+      const colon = decoded.indexOf(':');
       const username = colon >= 0 ? decoded.slice(0, colon) : decoded;
-      const password = colon >= 0 ? decoded.slice(colon + 1) : "";
-      return { type: "basic", username, password };
-    } catch (e) {
+      const password = colon >= 0 ? decoded.slice(colon + 1) : '';
+      return { type: 'basic', username, password };
+    } catch {
       return null;
     }
   }
@@ -659,11 +645,11 @@ export const verifyTokenAuth = (req: Request) => {
   }
   const creds = getCredentialsFromRequest(req);
   if (creds) {
-    if (creds.type === "session" && creds.user) {
+    if (creds.type === 'session' && creds.user) {
       req.user = creds.user;
       return true;
     }
-    if (creds.type === "basic") {
+    if (creds.type === 'basic') {
       let u = resolveUser(creds.username!, creds.password!);
       if (!u) u = legacyAuth(creds.username!, creds.password!);
       if (u) {
@@ -672,7 +658,7 @@ export const verifyTokenAuth = (req: Request) => {
       }
     }
   }
-  const streamTokenUser = consumeStreamToken(String(req.query.st ?? ""));
+  const streamTokenUser = consumeStreamToken(String(req.query.st ?? ''));
   if (streamTokenUser) {
     req.user = streamTokenUser;
     return true;
@@ -685,6 +671,6 @@ export const verifyTokenAuth = (req: Request) => {
 
 export function hasPermission(user: Record<string, unknown>, permission: string) {
   if (!user) return false;
-  if (user.role === "admin") return true;
+  if (user.role === 'admin') return true;
   return !!(user.permissions as Record<string, unknown>)?.[permission];
 }

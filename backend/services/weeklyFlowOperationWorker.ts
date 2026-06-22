@@ -1,12 +1,10 @@
-import { getWeeklyFlowOperationQueue, getWorkerId } from "./honkerDb.js";
-import {
-  processWeeklyFlowOperation,
-} from "./weeklyFlowOperations.js";
+import { getWeeklyFlowOperationQueue, getWorkerId } from './honkerDb.js';
+import { processWeeklyFlowOperation } from './weeklyFlowOperations.js';
 import {
   rejectWeeklyFlowOperationResult,
   resolveWeeklyFlowOperationResult,
   setWeeklyFlowOperationWorkerState,
-} from "./weeklyFlowOperationQueue.js";
+} from './weeklyFlowOperationQueue.js';
 import {
   createIdleAbortController,
   getWorkerIdleStopMs,
@@ -14,31 +12,23 @@ import {
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
   withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
-import {
-  HEAVY_WORK_TYPES,
-  isFlowHarvestOperation,
-  withHeavyWorkBudget,
-} from "./resourceBudget.js";
-import { withWorkerPerfSpan } from "./workerPerfMetrics.js";
+} from './honkerWorkerRuntime.js';
+import { HEAVY_WORK_TYPES, isFlowHarvestOperation, withHeavyWorkBudget } from './resourceBudget.js';
+import { withWorkerPerfSpan } from './workerPerfMetrics.js';
 
-const WORKER_NAME = "weekly-flow-operation";
+const WORKER_NAME = 'weekly-flow-operation';
 
-const PERMANENT_ERROR_CODES = new Set([
-  "SHARED_PLAYLIST_NAME_CONFLICT",
-  "FLOW_NAME_CONFLICT",
-]);
+const PERMANENT_ERROR_CODES = new Set(['SHARED_PLAYLIST_NAME_CONFLICT', 'FLOW_NAME_CONFLICT']);
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
-let currentLabel = null;
-let idleController = null;
+let currentLabel: string | null = null;
+let idleController: ReturnType<typeof createIdleAbortController> | null = null;
 
 function syncWorkerState() {
   setWeeklyFlowOperationWorkerState({
     running,
-    currentLabel,
+    currentLabel: (currentLabel as unknown as undefined | null),
   });
 }
 
@@ -56,29 +46,25 @@ async function runLoop() {
     })) {
       idleController.disarm();
       if (!running || stopRequested) break;
-      currentLabel = job.payload?.label || job.payload?.kind || null;
+      currentLabel = String((job.payload as Record<string, unknown>)?.label || (job.payload as Record<string, unknown>)?.kind || '') || null;
       syncWorkerState();
       try {
         const runOperation = () =>
           withWorkerPerfSpan(
-            "weekly-flow-operation",
-            () => processWeeklyFlowOperation(job.payload),
-            currentLabel,
+            'weekly-flow-operation',
+            () => processWeeklyFlowOperation(job.payload as Record<string, unknown>),
+            currentLabel as string | undefined,
           );
         const result = await withJobHeartbeat(job, queue, () =>
-          isFlowHarvestOperation(job.payload)
-            ? withHeavyWorkBudget(
-                HEAVY_WORK_TYPES.FLOW_HARVEST,
-                runOperation,
-                currentLabel,
-              )
+          isFlowHarvestOperation(job.payload as Record<string, unknown>)
+            ? withHeavyWorkBudget(HEAVY_WORK_TYPES.FLOW_HARVEST, runOperation, currentLabel as string)
             : runOperation(),
         );
         job.ack();
         resolveWeeklyFlowOperationResult(job.id, result);
-      } catch (error) {
-        const message = error?.message || String(error);
-        const permanent = PERMANENT_ERROR_CODES.has(String(error?.code || ""));
+      } catch (error: unknown) {
+        const message = (error as Error)?.message || String(error);
+        const permanent = PERMANENT_ERROR_CODES.has(String((error as Record<string, unknown>)?.code || ''));
         if (permanent || job.attempts >= 3) {
           job.fail(message);
           rejectWeeklyFlowOperationResult(job.id, error);
@@ -93,14 +79,13 @@ async function runLoop() {
     }
   } catch (error) {
     if (!idleController?.idleStopped && !stopRequested) {
-      console.error("[weeklyFlowOperationWorker] loop error:", error);
+      console.error('[weeklyFlowOperationWorker] loop error:', error);
     }
   } finally {
     const idleStopped = idleController?.idleStopped === true;
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
     currentLabel = null;
     syncWorkerState();
     const intentional = stopRequested || idleStopped;
@@ -116,7 +101,7 @@ export function startWeeklyFlowOperationWorker() {
   running = true;
   stopRequested = false;
   syncWorkerState();
-  loopPromise = runLoop();
+  runLoop();
 }
 
 export function stopWeeklyFlowOperationWorker() {

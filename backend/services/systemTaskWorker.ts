@@ -1,5 +1,5 @@
-import { getSystemTaskQueue, getWorkerId } from "./honkerDb.js";
-import { cleanExpiredSessions } from "../config/session-helpers.js";
+import { getSystemTaskQueue, getWorkerId } from './honkerDb.js';
+import { cleanExpiredSessions } from '../config/session-helpers.js';
 import {
   createIdleAbortController,
   getWorkerIdleStopMs,
@@ -7,68 +7,63 @@ import {
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
   withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
+} from './honkerWorkerRuntime.js';
 
-const WORKER_NAME = "system-task";
+const WORKER_NAME = 'system-task';
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
-let idleController = null;
+let idleController: ReturnType<typeof createIdleAbortController> | null = null;
 
-async function processSystemTask(payload = {}) {
-  const kind = String(payload?.kind || "").trim();
+async function processSystemTask(payload: Record<string, unknown> = {}) {
+  const kind = String(payload?.kind || '').trim();
   switch (kind) {
-    case "weekly-flow-refresh": {
-      const { runScheduledRefresh } = await import("./weeklyFlowScheduler.js");
+    case 'weekly-flow-refresh': {
+      const { runScheduledRefresh } = await import('./weeklyFlowScheduler.js');
       await runScheduledRefresh();
       return;
     }
-    case "session-cleanup":
+    case 'session-cleanup':
       cleanExpiredSessions();
       return;
-    case "weekly-flow-reuse-repair": {
-      const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
+    case 'weekly-flow-reuse-repair': {
+      const { weeklyFlowWorker } = await import('./weeklyFlowWorker.js');
       weeklyFlowWorker.scheduleReuseLinkRepair(false);
       return;
     }
-    case "weekly-flow-startup-reuse-repair": {
-      const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
+    case 'weekly-flow-startup-reuse-repair': {
+      const { weeklyFlowWorker } = await import('./weeklyFlowWorker.js');
       weeklyFlowWorker.scheduleReuseLinkRepair(true);
       return;
     }
-    case "discovery-refresh-check": {
-      const { enqueueDiscoveryRefreshIfNeeded } = await import(
-        "./discoveryRefreshScheduler.js"
-      );
-      await enqueueDiscoveryRefreshIfNeeded({ reason: "interval" });
+    case 'discovery-refresh-check': {
+      const { enqueueDiscoveryRefreshIfNeeded } = await import('./discoveryRefreshScheduler.js');
+      await enqueueDiscoveryRefreshIfNeeded({ reason: 'interval' });
       return;
     }
-    case "weekly-flow-startup-check": {
-      const { startWorkerIfPending } = await import("./weeklyFlowScheduler.js");
+    case 'weekly-flow-startup-check': {
+      const { startWorkerIfPending } = await import('./weeklyFlowScheduler.js');
       await startWorkerIfPending();
       return;
     }
-    case "discovery-bootstrap": {
-      const { bootstrapDiscoveryRefresh } = await import(
-        "./discoveryRefreshScheduler.js"
-      );
+    case 'discovery-bootstrap': {
+      const { bootstrapDiscoveryRefresh } = await import('./discoveryRefreshScheduler.js');
       await bootstrapDiscoveryRefresh();
       return;
     }
-    case "playlist-startup-migration": {
+    case 'playlist-startup-migration': {
       const [
         { migrateLegacyWeeklyFlowPaths, resolveWeeklyFlowRoot },
         trackerModule,
         { playlistManager },
       ] = await Promise.all([
-        import("./weeklyFlowPaths.js"),
-        import("./weeklyFlowDownloadTracker.js"),
-        import("./weeklyFlowPlaylistManager.js"),
+        import('./weeklyFlowPaths.js'),
+        import('./weeklyFlowDownloadTracker.js'),
+        import('./weeklyFlowPlaylistManager.js'),
       ]);
       const result = await migrateLegacyWeeklyFlowPaths(
         resolveWeeklyFlowRoot(),
-        trackerModule.downloadTracker,
+        trackerModule.downloadTracker as any,
       );
       if (result.migrated > 0) {
         console.log(
@@ -80,30 +75,24 @@ async function processSystemTask(payload = {}) {
       await playlistManager.scheduleScanLibrary(true);
       return;
     }
-    case "lidarr-retry": {
-      const { libraryManager } = await import("./libraryManager.js");
+    case 'lidarr-retry': {
+      const { libraryManager } = await import('./libraryManager.js');
       await libraryManager.getAllArtists();
       return;
     }
-    case "stale-pipeline-sweep": {
-      const { downloadTracker } = await import(
-        "./weeklyFlowDownloadTracker.js"
-      );
-      const { startSlskdOrchestratorWorker } = await import(
-        "./slskdOrchestratorWorker.js"
-      );
+    case 'stale-pipeline-sweep': {
+      const { downloadTracker } = await import('./weeklyFlowDownloadTracker.js');
+      const { startSlskdOrchestratorWorker } = await import('./slskdOrchestratorWorker.js');
       const STALE_DISPATCHED_MS = 30 * 60 * 1000;
       const STALE_UNDISPATCHED_MS = 10 * 60 * 1000;
       const now = Date.now();
       let swept = 0;
-      let requeued = 0;
-      for (const job of downloadTracker.getByStatus("pending")) {
-        const age = now - (Number(job?.createdAt || 0));
+      for (const job of downloadTracker.getByStatus('pending')) {
+        const age = now - Number(job?.createdAt || 0);
         const dispatched = downloadTracker.isSlskdDispatched(job.id);
         if (dispatched && age > STALE_DISPATCHED_MS) {
           downloadTracker.clearSlskdPipelineState(job.id);
           downloadTracker.enqueueDownloadPipeline(job.id);
-          requeued += 1;
           swept += 1;
         } else if (!dispatched && age > STALE_UNDISPATCHED_MS) {
           downloadTracker.setFailed(
@@ -119,7 +108,7 @@ async function processSystemTask(payload = {}) {
       return;
     }
     default:
-      throw new Error(`Unknown system task: ${kind || "unknown"}`);
+      throw new Error(`Unknown system task: ${kind || 'unknown'}`);
   }
 }
 
@@ -138,10 +127,10 @@ async function runLoop() {
       idleController.disarm();
       if (!running || stopRequested) break;
       try {
-        await withJobHeartbeat(job, queue, () => processSystemTask(job.payload));
+        await withJobHeartbeat(job, queue, () => processSystemTask(job.payload as Record<string, unknown>));
         job.ack();
       } catch (error) {
-        const message = error?.message || String(error);
+        const message = (error as { message?: string })?.message || String(error);
         if (job.attempts >= 3) {
           job.fail(message);
         } else {
@@ -152,14 +141,13 @@ async function runLoop() {
     }
   } catch (error) {
     if (!idleController?.idleStopped && !stopRequested) {
-      console.error("[systemTaskWorker] loop error:", error);
+      console.error('[systemTaskWorker] loop error:', error);
     }
   } finally {
     const idleStopped = idleController?.idleStopped === true;
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
     const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startSystemTaskWorker, {
@@ -172,7 +160,7 @@ export function startSystemTaskWorker() {
   if (running || isHonkerShuttingDown()) return;
   running = true;
   stopRequested = false;
-  loopPromise = runLoop();
+  runLoop();
 }
 
 export function stopSystemTaskWorker() {

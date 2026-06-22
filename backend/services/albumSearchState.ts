@@ -3,16 +3,15 @@ const STALE_SEARCH_MS = 5 * 60 * 1000;
 const RECENT_COMMAND_MS = 2 * 60 * 60 * 1000;
 const RECENT_HISTORY_MS = 60 * 60 * 1000;
 
-const normalizeItems = (value) =>
-  Array.isArray(value) ? value : value?.records || [];
+const normalizeItems = (value: unknown): unknown[] => (Array.isArray(value) ? value : ((value as Record<string, unknown>)?.records as unknown[]) || []);
 
-const getCommandAlbumIds = (command) => {
-  if (Array.isArray(command?.body?.albumIds)) return command.body.albumIds;
-  if (Array.isArray(command?.albumIds)) return command.albumIds;
+const getCommandAlbumIds = (command: Record<string, unknown>): unknown[] => {
+  if (Array.isArray((command?.body as Record<string, unknown>)?.albumIds)) return (command.body as Record<string, unknown>).albumIds as unknown[];
+  if (Array.isArray(command?.albumIds)) return command.albumIds as unknown[];
   return [];
 };
 
-export const parseLidarrSearchContext = ({ queue, history, commands } = {}) => {
+export const parseLidarrSearchContext = ({ queue, history, commands }: { queue?: unknown; history?: unknown; commands?: unknown } = {}) => {
   const queueItems = normalizeItems(queue);
   const historyItems = normalizeItems(history);
   const commandItems = normalizeItems(commands);
@@ -23,23 +22,24 @@ export const parseLidarrSearchContext = ({ queue, history, commands } = {}) => {
   const activeHistoryAlbumIds = new Set();
 
   for (const command of commandItems) {
-    const name = String(command?.name || command?.commandName || "")
+    const cmd = command as Record<string, unknown>;
+    const name = String(cmd?.name || cmd?.commandName || '')
       .toLowerCase()
       .trim();
-    if (!name.includes("albumsearch")) continue;
-    const albumIds = getCommandAlbumIds(command);
-    const status = String(command?.status || "")
+    if (!name.includes('albumsearch')) continue;
+    const albumIds = getCommandAlbumIds(cmd);
+    const status = String(cmd?.status || '')
       .toLowerCase()
       .trim();
     if (
-      status === "completed" ||
-      status === "failed" ||
-      status === "aborted" ||
-      status === "canceled" ||
-      status === "cancelled"
+      status === 'completed' ||
+      status === 'failed' ||
+      status === 'aborted' ||
+      status === 'canceled' ||
+      status === 'cancelled'
     ) {
       const endedAt = new Date(
-        command?.ended || command?.completedAt || command?.endTime || 0,
+        String(cmd?.ended || cmd?.completedAt || cmd?.endTime || 0),
       ).getTime();
       if (endedAt > 0 && now - endedAt <= RECENT_COMMAND_MS) {
         for (const id of albumIds) {
@@ -54,25 +54,27 @@ export const parseLidarrSearchContext = ({ queue, history, commands } = {}) => {
   }
 
   for (const item of queueItems) {
-    const albumId = item?.albumId ?? item?.album?.id;
+    const qItem = item as Record<string, unknown>;
+    const albumId = qItem?.albumId ?? (qItem?.album as Record<string, unknown>)?.id;
     if (albumId != null) queueAlbumIds.add(albumId);
   }
 
   for (const record of historyItems) {
-    const albumId = record?.albumId;
+    const rec = record as Record<string, unknown>;
+    const albumId = rec?.albumId;
     if (albumId == null) continue;
-    const recordTime = new Date(record?.date || record?.eventDate || 0).getTime();
+    const recordTime = new Date(String(rec?.date || rec?.eventDate || 0)).getTime();
     if (!Number.isFinite(recordTime) || now - recordTime > RECENT_HISTORY_MS) {
       continue;
     }
-    const eventType = String(record?.eventType || "").toLowerCase();
-    const sourceTitle = String(record?.sourceTitle || "").toLowerCase();
-    const dataString = JSON.stringify(record?.data || {}).toLowerCase();
+    const eventType = String(rec?.eventType || '').toLowerCase();
+    const sourceTitle = String(rec?.sourceTitle || '').toLowerCase();
+    const dataString = JSON.stringify(rec?.data || {}).toLowerCase();
     const isGrabbed =
-      eventType.includes("grabbed") ||
-      sourceTitle.includes("grabbed") ||
-      dataString.includes("grabbed");
-    const isImport = eventType.includes("import");
+      eventType.includes('grabbed') ||
+      sourceTitle.includes('grabbed') ||
+      dataString.includes('grabbed');
+    const isImport = eventType.includes('import');
     if (isGrabbed || isImport) {
       activeHistoryAlbumIds.add(albumId);
     }
@@ -86,46 +88,40 @@ export const parseLidarrSearchContext = ({ queue, history, commands } = {}) => {
   };
 };
 
-export const resolveAlbumSearchOutcome = (
-  albumId,
-  context,
-  { searchStartedAt = 0 } = {},
-) => {
-  const lidarrAlbumId = parseInt(albumId, 10);
+export const resolveAlbumSearchOutcome = (albumId: string | number, context: Record<string, unknown> | null, { searchStartedAt = 0 }: { searchStartedAt?: number } = {}) => {
+  const lidarrAlbumId = parseInt(String(albumId), 10);
   if (isNaN(lidarrAlbumId) || !context) return null;
 
-  const {
-    searchingAlbumIds,
-    recentlyCompletedSearchAlbumIds,
-    queueAlbumIds,
-    activeHistoryAlbumIds,
-  } = context;
+  const searchingAlbumIds = context['searchingAlbumIds'] as Set<unknown> | undefined;
+  const recentlyCompletedSearchAlbumIds = context['recentlyCompletedSearchAlbumIds'] as Set<unknown> | undefined;
+  const queueAlbumIds = context['queueAlbumIds'] as Set<unknown> | undefined;
+  const activeHistoryAlbumIds = context['activeHistoryAlbumIds'] as Set<unknown> | undefined;
 
-  if (searchingAlbumIds.has(lidarrAlbumId)) {
-    return { status: "searching" };
+  if (searchingAlbumIds?.has(lidarrAlbumId)) {
+    return { status: 'searching' };
   }
-  if (queueAlbumIds.has(lidarrAlbumId)) {
-    return { status: "downloading" };
+  if (queueAlbumIds?.has(lidarrAlbumId)) {
+    return { status: 'downloading' };
   }
-  if (activeHistoryAlbumIds.has(lidarrAlbumId)) {
-    return { status: "processing" };
+  if (activeHistoryAlbumIds?.has(lidarrAlbumId)) {
+    return { status: 'processing' };
   }
 
   const age = searchStartedAt > 0 ? Date.now() - searchStartedAt : 0;
   if (age > 0 && age < MIN_SEARCH_MS) {
-    return { status: "searching" };
+    return { status: 'searching' };
   }
 
-  if (recentlyCompletedSearchAlbumIds.has(lidarrAlbumId)) {
-    return { status: "failed", statusLabel: "Not found" };
+  if (recentlyCompletedSearchAlbumIds?.has(lidarrAlbumId)) {
+    return { status: 'failed', statusLabel: 'Not found' };
   }
 
   if (age >= STALE_SEARCH_MS) {
-    return { status: "failed", statusLabel: "Not found" };
+    return { status: 'failed', statusLabel: 'Not found' };
   }
 
   if (searchStartedAt > 0) {
-    return { status: "searching" };
+    return { status: 'searching' };
   }
 
   return null;

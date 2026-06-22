@@ -1,21 +1,19 @@
-import { UUID_REGEX } from "../../../config/constants.js";
-import { dbOps } from "../../../config/db-helpers.js";
-import { pendingCoverRequests, fetchCoverInBackground } from "../utils.js";
-import { getArtistImage } from "../../../services/imageService.js";
-import { warmImageProxy } from "../../../services/imageProxyService.js";
+import { UUID_REGEX } from '../../../config/constants.js';
+import { dbOps } from '../../../config/db-helpers.js';
+import { pendingCoverRequests, fetchCoverInBackground } from '../utils.js';
+import { getArtistImage } from '../../../services/imageService.js';
+import { warmImageProxy } from '../../../services/imageProxyService.js';
 
-export default function registerCover(router) {
-  router.get("/:mbid/cover", async (req, res) => {
+export default function registerCover(router: Record<string, (...args: unknown[]) => unknown>) {
+  router.get('/:mbid/cover', async (req: Record<string, any>, res: Record<string, any>) => {
     const { mbid } = req.params;
     const { refresh = false, artistName: queryArtistName } = req.query;
     const artistNameFromQuery =
-      typeof queryArtistName === "string" && queryArtistName.trim()
-        ? queryArtistName.trim()
-        : null;
+      typeof queryArtistName === 'string' && queryArtistName.trim() ? queryArtistName.trim() : null;
 
     try {
       if (!UUID_REGEX.test(mbid)) {
-        return res.status(400).json({ error: "Invalid MBID format", images: [] });
+        return res.status(400).json({ error: 'Invalid MBID format', images: [] });
       }
 
       if (pendingCoverRequests.has(mbid)) {
@@ -24,29 +22,20 @@ export default function registerCover(router) {
         return res.json({ images: result.images || [] });
       }
 
-      const override = dbOps.getArtistOverride(mbid);
-      const resolvedMbid = override?.musicbrainzId || mbid;
-
       const cachedImage = dbOps.getImage(mbid);
-      if (
-        !refresh &&
-        cachedImage &&
-        cachedImage.imageUrl &&
-        cachedImage.imageUrl !== "NOT_FOUND"
-      ) {
+      if (!refresh && cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== 'NOT_FOUND') {
         console.log(`[Cover Route] Cache hit for ${mbid}`);
-        res.set("Cache-Control", "public, max-age=31536000, immutable");
+        res.set('Cache-Control', 'public, max-age=31536000, immutable');
 
         const cacheAge = cachedImage.cacheAge;
-        const shouldRefresh =
-          !cacheAge || Date.now() - cacheAge > 7 * 24 * 60 * 60 * 1000;
+        const shouldRefresh = !cacheAge || Date.now() - cacheAge > 7 * 24 * 60 * 60 * 1000;
 
         if (shouldRefresh) {
-          fetchCoverInBackground(mbid, artistNameFromQuery).catch(() => {});
+          fetchCoverInBackground(mbid, artistNameFromQuery as string | null).catch(() => {});
         }
         warmImageProxy(cachedImage.imageUrl).catch(() => {
           dbOps.deleteImage(mbid);
-          fetchCoverInBackground(mbid, artistNameFromQuery).catch(() => {});
+          fetchCoverInBackground(mbid, artistNameFromQuery as string | null).catch(() => {});
         });
 
         const cachedResult = await getArtistImage(mbid, {
@@ -54,29 +43,24 @@ export default function registerCover(router) {
         }).catch(() => null);
 
         return res.json({
-          images: cachedResult?.images?.length
-            ? cachedResult.images
+          images: (cachedResult as Record<string, any>)?.images?.length
+            ? (cachedResult as Record<string, any>).images
             : [
                 {
                   image: cachedImage.imageUrl,
                   front: true,
-                  types: ["Front"],
+                  types: ['Front'],
                 },
               ],
         });
       }
 
-      if (
-        !refresh &&
-        cachedImage &&
-        cachedImage.imageUrl === "NOT_FOUND" &&
-        !artistNameFromQuery
-      ) {
+      if (!refresh && cachedImage && cachedImage.imageUrl === 'NOT_FOUND' && !artistNameFromQuery) {
         console.log(`[Cover Route] NOT_FOUND cache for ${mbid}`);
-        res.set("Cache-Control", "public, max-age=3600");
+        res.set('Cache-Control', 'public, max-age=3600');
 
         setTimeout(() => {
-          fetchCoverInBackground(mbid, artistNameFromQuery).catch(() => {});
+          fetchCoverInBackground(mbid, artistNameFromQuery as string | null).catch(() => {});
         }, 60000);
 
         return res.json({ images: [] });
@@ -85,8 +69,7 @@ export default function registerCover(router) {
       console.log(`[Cover Route] Fetching cover for ${mbid}`);
 
       const shouldForceRefresh =
-        !!refresh ||
-        (cachedImage?.imageUrl === "NOT_FOUND" && !!artistNameFromQuery);
+        !!refresh || (cachedImage?.imageUrl === 'NOT_FOUND' && !!artistNameFromQuery);
 
       const fetchPromise = (async () => {
         try {
@@ -99,37 +82,35 @@ export default function registerCover(router) {
             notFound: !!result.notFound,
             transientError: !!result.transientError,
           };
-        } catch (error) {
-          console.error(`Error fetching cover for ${mbid}:`, error.message);
+        } catch (error: unknown) {
+          console.error(`Error fetching cover for ${mbid}:`, (error as Error).message);
           return { images: [] };
         }
       })();
 
       pendingCoverRequests.set(mbid, fetchPromise);
-      const result = await fetchPromise;
+      const result = await fetchPromise as Record<string, any>;
 
       if (result.images && result.images.length > 0) {
         console.log(`[Cover Route] Successfully returning cover for ${mbid}`);
-        res.set("Cache-Control", "public, max-age=31536000, immutable");
+        res.set('Cache-Control', 'public, max-age=31536000, immutable');
       } else {
         if (result.notFound) {
-          console.log(
-            `[Cover Route] No cover found for ${mbid}, caching NOT_FOUND`
-          );
-          dbOps.setImage(mbid, "NOT_FOUND");
-          res.set("Cache-Control", "public, max-age=3600");
+          console.log(`[Cover Route] No cover found for ${mbid}, caching NOT_FOUND`);
+          dbOps.setImage(mbid, 'NOT_FOUND');
+          res.set('Cache-Control', 'public, max-age=3600');
         } else {
           console.log(
             `[Cover Route] Cover lookup for ${mbid} failed transiently; skipping NOT_FOUND cache`,
           );
-          res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+          res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
         }
       }
 
-      res.json({ images: result.images || [] });
-    } catch (error) {
-      console.error(`Error in cover route for ${mbid}:`, error.message);
-      res.set("Cache-Control", "public, max-age=60");
+      res.json({ images: (result as Record<string, any>).images || [] });
+    } catch (error: unknown) {
+      console.error(`Error in cover route for ${mbid}:`, (error as Error).message);
+      res.set('Cache-Control', 'public, max-age=60');
       res.json({ images: [] });
     } finally {
       if (mbid) {

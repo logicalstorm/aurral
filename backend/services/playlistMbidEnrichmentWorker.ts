@@ -1,11 +1,8 @@
-import {
-  getPlaylistMbidEnrichmentQueue,
-  getWorkerId,
-} from "./honkerDb.js";
+import { getPlaylistMbidEnrichmentQueue, getWorkerId } from './honkerDb.js';
 import {
   enrichSharedPlaylistMbids,
   schedulePlaylistMbidEnrichmentForMissingPlaylists,
-} from "./playlistMbidEnrichmentService.js";
+} from './playlistMbidEnrichmentService.js';
 import {
   createIdleAbortController,
   getWorkerIdleStopMs,
@@ -13,24 +10,23 @@ import {
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
   withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
+} from './honkerWorkerRuntime.js';
 
-const WORKER_NAME = "playlist-mbid-enrichment";
+const WORKER_NAME = 'playlist-mbid-enrichment';
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
-let idleController = null;
+let idleController: ReturnType<typeof createIdleAbortController> | null = null;
 
-async function processPlaylistMbidEnrichment(payload = {}) {
-  const kind = String(payload?.kind || payload?.type || "").trim();
+async function processPlaylistMbidEnrichment(payload: Record<string, unknown> = {}) {
+  const kind = String(payload?.['kind'] || payload?.['type'] || '').trim();
   switch (kind) {
-    case "playlist-mbid-enrichment": {
-      return enrichSharedPlaylistMbids(payload.playlistId);
+    case 'playlist-mbid-enrichment': {
+      return enrichSharedPlaylistMbids(payload['playlistId'] as string);
     }
-    case "playlist-mbid-enrichment-sweep": {
+    case 'playlist-mbid-enrichment-sweep': {
       const jobIds = schedulePlaylistMbidEnrichmentForMissingPlaylists({
-        reason: payload?.reason || "sweep",
+        reason: (payload?.['reason'] as string) || 'sweep',
       });
       return {
         success: true,
@@ -39,9 +35,7 @@ async function processPlaylistMbidEnrichment(payload = {}) {
       };
     }
     default:
-      throw new Error(
-        `Unknown playlist MBID enrichment task: ${kind || "unknown"}`,
-      );
+      throw new Error(`Unknown playlist MBID enrichment task: ${kind || 'unknown'}`);
   }
 }
 
@@ -60,12 +54,10 @@ async function runLoop() {
       idleController.disarm();
       if (!running || stopRequested) break;
       try {
-        await withJobHeartbeat(job, queue, () =>
-          processPlaylistMbidEnrichment(job.payload),
-        );
+        await withJobHeartbeat(job, queue, () => processPlaylistMbidEnrichment(job.payload as Record<string, unknown>));
         job.ack();
-      } catch (error) {
-        const message = error?.message || String(error);
+      } catch (error: unknown) {
+        const message = (error as { message?: string })?.message || String(error);
         if (job.attempts >= 4) {
           job.fail(message);
         } else {
@@ -76,14 +68,13 @@ async function runLoop() {
     }
   } catch (error) {
     if (!idleController?.idleStopped && !stopRequested) {
-      console.error("[playlistMbidEnrichmentWorker] loop error:", error);
+      console.error('[playlistMbidEnrichmentWorker] loop error:', error);
     }
   } finally {
     const idleStopped = idleController?.idleStopped === true;
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
     const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startPlaylistMbidEnrichmentWorker, {
@@ -96,7 +87,7 @@ export function startPlaylistMbidEnrichmentWorker() {
   if (running || isHonkerShuttingDown()) return;
   running = true;
   stopRequested = false;
-  loopPromise = runLoop();
+  runLoop();
 }
 
 export function stopPlaylistMbidEnrichmentWorker() {

@@ -1,5 +1,6 @@
-import { db } from "../config/db-sqlite.js";
-import { SCHEDULED_SYSTEM_TASKS } from "./honkerDb.js";
+import { db } from '../config/db-sqlite.js';
+import type BetterSqlite3 from 'better-sqlite3';
+import { SCHEDULED_SYSTEM_TASKS } from './honkerDb.js';
 
 const RUN_LEDGER_MAX_AGE_MS = 60 * 60 * 1000;
 const STALE_RUNNING_MS = 60 * 60 * 1000;
@@ -8,121 +9,121 @@ const DEAD_JOB_LIMIT = 50;
 
 const QUEUE_DEFINITIONS = [
   {
-    queue: "system-task",
-    label: "System Maintenance",
-    workerLabel: "System Maintenance Worker",
-    description: "Runs housekeeping, startup checks, and scheduled playlist maintenance.",
-    worker: "system-task",
+    queue: 'system-task',
+    label: 'System Maintenance',
+    workerLabel: 'System Maintenance Worker',
+    description: 'Runs housekeeping, startup checks, and scheduled playlist maintenance.',
+    worker: 'system-task',
   },
   {
-    queue: "weekly-flow-operation",
-    label: "Playlist Operations",
-    workerLabel: "Playlist Operation Worker",
-    description: "Applies playlist edits, manual runs, flow changes, and track actions.",
-    worker: "weekly-flow-operation",
+    queue: 'weekly-flow-operation',
+    label: 'Playlist Operations',
+    workerLabel: 'Playlist Operation Worker',
+    description: 'Applies playlist edits, manual runs, flow changes, and track actions.',
+    worker: 'weekly-flow-operation',
   },
   {
-    queue: "slskd-pipeline",
-    label: "Download Pipeline",
-    workerLabel: "Download Pipeline Worker",
-    description: "Searches, downloads, validates, and finalizes playlist tracks.",
-    worker: "slskd-pipeline",
+    queue: 'slskd-pipeline',
+    label: 'Download Pipeline',
+    workerLabel: 'Download Pipeline Worker',
+    description: 'Searches, downloads, validates, and finalizes playlist tracks.',
+    worker: 'slskd-pipeline',
   },
   {
-    queue: "playlist-retry",
-    label: "Playlist Retry",
-    workerLabel: "Playlist Retry Worker",
-    description: "Retries incomplete playlist tracks after temporary download failures.",
-    worker: "playlist-retry",
+    queue: 'playlist-retry',
+    label: 'Playlist Retry',
+    workerLabel: 'Playlist Retry Worker',
+    description: 'Retries incomplete playlist tracks after temporary download failures.',
+    worker: 'playlist-retry',
   },
   {
-    queue: "playlist-mbid-enrichment",
-    label: "Playlist MBID Enrichment",
-    workerLabel: "Playlist MBID Worker",
-    description: "Finds and fills missing MusicBrainz IDs on imported playlist tracks.",
-    worker: "playlist-mbid-enrichment",
+    queue: 'playlist-mbid-enrichment',
+    label: 'Playlist MBID Enrichment',
+    workerLabel: 'Playlist MBID Worker',
+    description: 'Finds and fills missing MusicBrainz IDs on imported playlist tracks.',
+    worker: 'playlist-mbid-enrichment',
   },
   {
-    queue: "library-scan",
-    label: "Library Scans",
-    workerLabel: "Library Scan Worker",
+    queue: 'library-scan',
+    label: 'Library Scans',
+    workerLabel: 'Library Scan Worker',
     description: "Refreshes Aurral's view of files after playlist or library changes.",
-    worker: "library-scan",
+    worker: 'library-scan',
   },
   {
-    queue: "discovery-refresh",
-    label: "Discovery Refreshes",
-    workerLabel: "Discovery Refresh Worker",
-    description: "Refreshes discovery recommendations from library and listening data.",
-    worker: "discovery-refresh",
+    queue: 'discovery-refresh',
+    label: 'Discovery Refreshes',
+    workerLabel: 'Discovery Refresh Worker',
+    description: 'Refreshes discovery recommendations from library and listening data.',
+    worker: 'discovery-refresh',
   },
   {
-    queue: "discovery-recommendation-enrichment",
-    label: "Discovery Recommendation Enrichment",
-    workerLabel: "Discovery Enrichment Worker",
+    queue: 'discovery-recommendation-enrichment',
+    label: 'Discovery Recommendation Enrichment',
+    workerLabel: 'Discovery Enrichment Worker',
     description:
-      "Hydrates, expands, and reranks discovery recommendations after the initial pool is available.",
-    worker: "discovery-recommendation-enrichment",
+      'Hydrates, expands, and reranks discovery recommendations after the initial pool is available.',
+    worker: 'discovery-recommendation-enrichment',
   },
   {
-    queue: "discovery-user-refresh",
-    label: "Listening History Refreshes",
-    workerLabel: "Listening History Worker",
-    description: "Refreshes user listening profiles used by discovery.",
-    worker: "discovery-user-refresh",
+    queue: 'discovery-user-refresh',
+    label: 'Listening History Refreshes',
+    workerLabel: 'Listening History Worker',
+    description: 'Refreshes user listening profiles used by discovery.',
+    worker: 'discovery-user-refresh',
   },
   {
-    queue: "image-prefetch",
-    label: "Image Prefetch",
-    workerLabel: "Image Prefetch Worker",
-    description: "Warms artist and playlist artwork so pages load faster.",
-    worker: "image-prefetch",
+    queue: 'image-prefetch',
+    label: 'Image Prefetch',
+    workerLabel: 'Image Prefetch Worker',
+    description: 'Warms artist and playlist artwork so pages load faster.',
+    worker: 'image-prefetch',
   },
   {
-    queue: "_outbox:notifications",
-    label: "Notifications",
-    workerLabel: "Notification Worker",
-    description: "Delivers queued Gotify and webhook notifications.",
-    worker: "notification-outbox",
+    queue: '_outbox:notifications',
+    label: 'Notifications',
+    workerLabel: 'Notification Worker',
+    description: 'Delivers queued Gotify and webhook notifications.',
+    worker: 'notification-outbox',
   },
 ];
 
 const SYSTEM_TASK_LABELS = {
-  "weekly-flow-refresh": {
-    label: "Playlist Schedule Check",
-    description: "Queues enabled playlist flows that are due to run.",
+  'weekly-flow-refresh': {
+    label: 'Playlist Schedule Check',
+    description: 'Queues enabled playlist flows that are due to run.',
   },
-  "session-cleanup": {
-    label: "Session Cleanup",
-    description: "Removes expired login sessions from the app database.",
+  'session-cleanup': {
+    label: 'Session Cleanup',
+    description: 'Removes expired login sessions from the app database.',
   },
-  "weekly-flow-reuse-repair": {
-    label: "Playlist File Reuse Repair",
-    description: "Repairs reusable playlist file links when source files move.",
+  'weekly-flow-reuse-repair': {
+    label: 'Playlist File Reuse Repair',
+    description: 'Repairs reusable playlist file links when source files move.',
   },
-  "weekly-flow-startup-reuse-repair": {
-    label: "Startup Playlist Reuse Repair",
-    description: "Checks reusable playlist links after Aurral starts.",
+  'weekly-flow-startup-reuse-repair': {
+    label: 'Startup Playlist Reuse Repair',
+    description: 'Checks reusable playlist links after Aurral starts.',
   },
-  "weekly-flow-startup-check": {
-    label: "Startup Playlist Schedule Check",
-    description: "Resumes pending playlist work after Aurral starts.",
+  'weekly-flow-startup-check': {
+    label: 'Startup Playlist Schedule Check',
+    description: 'Resumes pending playlist work after Aurral starts.',
   },
-  "discovery-refresh-check": {
-    label: "Discovery Auto Refresh Check",
-    description: "Checks whether discovery recommendations need a scheduled refresh.",
+  'discovery-refresh-check': {
+    label: 'Discovery Auto Refresh Check',
+    description: 'Checks whether discovery recommendations need a scheduled refresh.',
   },
-  "discovery-bootstrap": {
-    label: "Discovery Startup Check",
-    description: "Initializes discovery data and schedules the next refresh.",
+  'discovery-bootstrap': {
+    label: 'Discovery Startup Check',
+    description: 'Initializes discovery data and schedules the next refresh.',
   },
-  "playlist-startup-migration": {
-    label: "Playlist Startup Migration",
-    description: "Migrates legacy playlist files and reconciles playlist folders.",
+  'playlist-startup-migration': {
+    label: 'Playlist Startup Migration',
+    description: 'Migrates legacy playlist files and reconciles playlist folders.',
   },
-  "lidarr-retry": {
-    label: "Lidarr Retry",
-    description: "Retries Lidarr library access after a temporary connection problem.",
+  'lidarr-retry': {
+    label: 'Lidarr Retry',
+    description: 'Retries Lidarr library access after a temporary connection problem.',
   },
 };
 
@@ -131,10 +132,10 @@ const queueDefinitionByName = new Map(
 );
 
 let schemaEnsured = false;
-let insertRunStatement = null;
-let updateRunStatement = null;
-let pruneRunsStatement = null;
-let pruneDeadJobsStatement = null;
+let insertRunStatement: BetterSqlite3.Statement | null = null;
+let updateRunStatement: BetterSqlite3.Statement | null = null;
+let pruneRunsStatement: BetterSqlite3.Statement | null = null;
+let pruneDeadJobsStatement: BetterSqlite3.Statement | null = null;
 
 function ensureRunSchema() {
   if (schemaEnsured) return;
@@ -202,52 +203,47 @@ function getRunLedgerCutoffUnix() {
 async function pruneExpiredRuns() {
   ensureRunSchema();
   const cutoff = getRunLedgerCutoffUnix();
-  pruneRunsStatement.run(cutoff);
+  pruneRunsStatement!.run(cutoff);
   try {
-    pruneDeadJobsStatement.run(cutoff);
+    pruneDeadJobsStatement!.run(cutoff);
   } catch {}
   try {
-    const { pruneDuplicateScheduledDiscoveryRefreshes } = await import(
-      "./discoveryRefreshScheduler.js"
-    );
+    const { pruneDuplicateScheduledDiscoveryRefreshes } =
+      await import('./discoveryRefreshScheduler.js');
     pruneDuplicateScheduledDiscoveryRefreshes();
   } catch {}
 }
 
-function isActiveQueueRow(row) {
-  return (
-    row.status === "running" ||
-    row.status === "queued" ||
-    row.status === "scheduled"
-  );
+function isActiveQueueRow(row: Record<string, unknown>): boolean {
+  return row.status === 'running' || row.status === 'queued' || row.status === 'scheduled';
 }
 
-function isWithinTaskHistoryWindow(row) {
+function isWithinTaskHistoryWindow(row: Record<string, unknown>): boolean {
   if (isActiveQueueRow(row)) return true;
   const sortAt = Number(row.sortAt || 0);
   if (!Number.isFinite(sortAt) || sortAt <= 0) return true;
   return sortAt >= getRunLedgerCutoffUnix();
 }
 
-function safeQuery(sql, params = []) {
+function safeQuery(sql: string, params: unknown[] = []): Array<Record<string, unknown>> {
   try {
-    return db.prepare(sql).all(...params);
+    return db.prepare(sql).all(...params) as Array<Record<string, unknown>>;
   } catch {
     return [];
   }
 }
 
-function safeGet(sql, params = []) {
+function safeGet(sql: string, params: unknown[] = []): Record<string, unknown> | null {
   try {
-    return db.prepare(sql).get(...params) || null;
+    return (db.prepare(sql).get(...params) as Record<string, unknown>) || null;
   } catch {
     return null;
   }
 }
 
-function parsePayload(value) {
+function parsePayload(value: unknown): unknown {
   if (value == null) return null;
-  if (typeof value === "object") return value;
+  if (typeof value === 'object') return value;
   try {
     return JSON.parse(String(value));
   } catch {
@@ -255,313 +251,317 @@ function parsePayload(value) {
   }
 }
 
-function stableValue(value) {
-  if (!value || typeof value !== "object") return value;
+function stableValue(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(stableValue);
-  return Object.keys(value)
+  return Object.keys(value as Record<string, unknown>)
     .sort()
-    .reduce((acc, key) => {
-      if (key === "requestedAt") return acc;
-      acc[key] = stableValue(value[key]);
+    .reduce<Record<string, unknown>>((acc, key) => {
+      if (key === 'requestedAt') return acc;
+      acc[key] = stableValue((value as Record<string, unknown>)[key]);
       return acc;
     }, {});
 }
 
-function payloadKey(payload) {
+function payloadKey(payload: unknown): string {
   try {
     return JSON.stringify(stableValue(payload ?? null));
   } catch {
-    return String(payload ?? "");
+    return String(payload ?? '');
   }
 }
 
-function taskMatchKey(queue, payload) {
-  return `${queue || ""}:${payloadKey(payload)}`;
+function taskMatchKey(queue: unknown, payload: unknown): string {
+  return `${queue || ''}:${payloadKey(payload)}`;
 }
 
-function titleize(value) {
-  return String(value || "")
-    .replace(/^_outbox:/, "")
-    .replace(/[-_:]+/g, " ")
+function titleize(value: unknown): string {
+  return String(value || '')
+    .replace(/^_outbox:/, '')
+    .replace(/[-_:]+/g, ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
     .trim();
 }
 
-function queueLabel(queue) {
-  return queueDefinitionByName.get(queue)?.label || titleize(queue) || "Task";
+function queueLabel(queue: unknown): string {
+  const name = String(queue || '');
+  return queueDefinitionByName.get(name)?.label || titleize(name) || 'Task';
 }
 
-function queueDescription(queue) {
-  return queueDefinitionByName.get(queue)?.description || "";
+function queueDescription(queue: unknown): string {
+  const name = String(queue || '');
+  return queueDefinitionByName.get(name)?.description || '';
 }
 
-function workerLabel(queue, worker) {
-  const definition = queueDefinitionByName.get(queue);
-  return definition?.workerLabel || definition?.label || titleize(worker || queue);
+function workerLabel(queue: unknown, worker: unknown): string {
+  const name = String(queue || '');
+  const definition = queueDefinitionByName.get(name);
+  return definition?.workerLabel || definition?.label || titleize(worker || name);
 }
 
-function formatPayloadLabel(value) {
-  const trimmed = String(value || "").trim();
-  return trimmed ? titleize(trimmed) : "";
+function formatPayloadLabel(value: unknown): string {
+  const trimmed = String(value || '').trim();
+  return trimmed ? titleize(trimmed) : '';
 }
 
-function systemTaskInfo(kind) {
-  return SYSTEM_TASK_LABELS[kind] || {
-    label: formatPayloadLabel(kind) || "System Task",
-    description: queueDescription("system-task"),
-  };
+function systemTaskInfo(kind: unknown): { label: string; description: string } {
+  const key = String(kind || '');
+  return (
+    (SYSTEM_TASK_LABELS as Record<string, { label: string; description: string }>)[key] || {
+      label: formatPayloadLabel(key) || 'System Task',
+      description: queueDescription('system-task'),
+    }
+  );
 }
 
-function discoveryRefreshInfo(payload = {}) {
-  const reason = String(payload?.reason || "").trim();
-  if (reason === "scheduled") {
+function discoveryRefreshInfo(payload: Record<string, unknown> = {}): { label: string; description: string } {
+  const reason = String(payload.reason || '').trim();
+  if (reason === 'scheduled') {
     return {
-      label: "Discovery Auto Refresh",
-      description: "Refreshes discovery recommendations on the configured schedule.",
+      label: 'Discovery Auto Refresh',
+      description: 'Refreshes discovery recommendations on the configured schedule.',
     };
   }
-  if (reason === "startup" || reason === "startup_incomplete") {
+  if (reason === 'startup' || reason === 'startup_incomplete') {
     return {
-      label: "Discovery Startup Refresh",
-      description: "Refreshes discovery data after startup when the cache is missing or stale.",
+      label: 'Discovery Startup Refresh',
+      description: 'Refreshes discovery data after startup when the cache is missing or stale.',
     };
   }
-  if (reason === "interval") {
+  if (reason === 'interval') {
     return {
-      label: "Discovery Refresh Check",
-      description: "Checks whether discovery data is stale enough to refresh.",
+      label: 'Discovery Refresh Check',
+      description: 'Checks whether discovery data is stale enough to refresh.',
     };
   }
-  if (reason === "manual") {
+  if (reason === 'manual') {
     return {
-      label: "Manual Discovery Refresh",
-      description: "Refreshes discovery recommendations after a manual request.",
+      label: 'Manual Discovery Refresh',
+      description: 'Refreshes discovery recommendations after a manual request.',
     };
   }
   return {
-    label: "Discovery Refresh",
-    description: queueDescription("discovery-refresh"),
+    label: 'Discovery Refresh',
+    description: queueDescription('discovery-refresh'),
   };
 }
 
-export function describeHonkerTask(queue, payloadValue) {
-  const payload = parsePayload(payloadValue) || {};
-  const safeQueue = String(queue || "").trim();
-  const kind = String(payload?.kind || "").trim();
-  const phase = String(payload?.phase || "").trim();
-  const label = String(payload?.label || "").trim();
+export function describeHonkerTask(queue: unknown, payloadValue: unknown): string {
+  const payload = (parsePayload(payloadValue) || {}) as Record<string, unknown>;
+  const safeQueue = String(queue || '').trim();
+  const kind = String(payload.kind || '').trim();
+  const phase = String(payload.phase || '').trim();
+  const label = String(payload.label || '').trim();
 
-  if (safeQueue === "system-task") {
+  if (safeQueue === 'system-task') {
     return systemTaskInfo(kind).label;
   }
 
-  if (safeQueue === "slskd-pipeline") {
-    return phase
-      ? `Download Pipeline: ${formatPayloadLabel(phase)}`
-      : "Download Pipeline";
+  if (safeQueue === 'slskd-pipeline') {
+    return phase ? `Download Pipeline: ${formatPayloadLabel(phase)}` : 'Download Pipeline';
   }
 
-  if (safeQueue === "weekly-flow-operation") {
-    return label || formatPayloadLabel(kind) || "Playlist Operation";
+  if (safeQueue === 'weekly-flow-operation') {
+    return label || formatPayloadLabel(kind) || 'Playlist Operation';
   }
 
-  if (safeQueue === "playlist-retry") {
+  if (safeQueue === 'playlist-retry') {
     return payload?.playlistType
       ? `Playlist Retry: ${formatPayloadLabel(payload.playlistType)}`
-      : "Playlist Retry";
+      : 'Playlist Retry';
   }
 
-  if (safeQueue === "playlist-mbid-enrichment") {
+  if (safeQueue === 'playlist-mbid-enrichment') {
     return payload?.playlistId
       ? `Playlist MBID Enrichment: ${formatPayloadLabel(payload.playlistId)}`
-      : "Playlist MBID Enrichment";
+      : 'Playlist MBID Enrichment';
   }
 
-  if (safeQueue === "library-scan") {
-    return payload?.force ? "Manual Library Scan" : "Library Scan";
+  if (safeQueue === 'library-scan') {
+    return payload?.force ? 'Manual Library Scan' : 'Library Scan';
   }
 
-  if (safeQueue === "discovery-refresh") {
+  if (safeQueue === 'discovery-refresh') {
     return discoveryRefreshInfo(payload).label;
   }
 
-  if (safeQueue === "discovery-recommendation-enrichment") {
+  if (safeQueue === 'discovery-recommendation-enrichment') {
     return payload?.cacheNamespace
       ? `Discovery Enrichment: ${formatPayloadLabel(payload.cacheNamespace)}`
-      : "Discovery Enrichment";
+      : 'Discovery Enrichment';
   }
 
-  if (safeQueue === "discovery-user-refresh") {
-    const profile = payload?.listenHistoryProfile || {};
-    return profile?.listenHistoryUsername
+  if (safeQueue === 'discovery-user-refresh') {
+    const profile = (payload.listenHistoryProfile as Record<string, unknown>) || {};
+    return profile.listenHistoryUsername
       ? `Discovery User Refresh: ${profile.listenHistoryUsername}`
-      : "Discovery User Refresh";
+      : 'Discovery User Refresh';
   }
 
-  if (safeQueue === "image-prefetch") {
+  if (safeQueue === 'image-prefetch') {
     const mbids = Array.isArray(payload?.mbids) ? payload.mbids : [];
     return mbids.length > 0
-      ? `Image Prefetch: ${mbids.length} artist${mbids.length === 1 ? "" : "s"}`
-      : "Image Prefetch";
+      ? `Image Prefetch: ${mbids.length} artist${mbids.length === 1 ? '' : 's'}`
+      : 'Image Prefetch';
   }
 
-  if (safeQueue === "_outbox:notifications") {
-    return payload?.event
-      ? `Notification: ${formatPayloadLabel(payload.event)}`
-      : "Notification";
+  if (safeQueue === '_outbox:notifications') {
+    return payload?.event ? `Notification: ${formatPayloadLabel(payload.event)}` : 'Notification';
   }
 
   return queueLabel(safeQueue);
 }
 
-function describeHonkerTaskDetail(queue, payloadValue) {
-  const payload = parsePayload(payloadValue) || {};
-  const safeQueue = String(queue || "").trim();
-  const kind = String(payload?.kind || "").trim();
+function describeHonkerTaskDetail(queue: unknown, payloadValue: unknown): string {
+  const payload = (parsePayload(payloadValue) || {}) as Record<string, unknown>;
+  const safeQueue = String(queue || '').trim();
+  const kind = String(payload.kind || '').trim();
 
-  if (safeQueue === "system-task") {
+  if (safeQueue === 'system-task') {
     return systemTaskInfo(kind).description;
   }
-  if (safeQueue === "discovery-refresh") {
+  if (safeQueue === 'discovery-refresh') {
     return discoveryRefreshInfo(payload).description;
   }
-  if (safeQueue === "slskd-pipeline") {
-    const phase = String(payload?.phase || "").trim();
+  if (safeQueue === 'slskd-pipeline') {
+    const phase = String(payload?.phase || '').trim();
     return phase
       ? `${queueDescription(safeQueue)} Current phase: ${formatPayloadLabel(phase)}.`
       : queueDescription(safeQueue);
   }
-  if (safeQueue === "weekly-flow-operation") {
+  if (safeQueue === 'weekly-flow-operation') {
     return queueDescription(safeQueue);
   }
-  if (safeQueue === "playlist-retry") {
+  if (safeQueue === 'playlist-retry') {
     return payload?.playlistType
       ? `Retries incomplete tracks for ${formatPayloadLabel(payload.playlistType)}.`
       : queueDescription(safeQueue);
   }
-  if (safeQueue === "playlist-mbid-enrichment") {
+  if (safeQueue === 'playlist-mbid-enrichment') {
     return payload?.playlistId
       ? `Finds missing MusicBrainz IDs for ${formatPayloadLabel(payload.playlistId)}.`
-      : "Scans playlists for tracks missing MusicBrainz IDs and queues enrichment jobs.";
+      : 'Scans playlists for tracks missing MusicBrainz IDs and queues enrichment jobs.';
   }
-  if (safeQueue === "library-scan") {
+  if (safeQueue === 'library-scan') {
     return payload?.force
       ? "Refreshes Aurral's library view after startup or a forced scan."
       : queueDescription(safeQueue);
   }
-  if (safeQueue === "discovery-recommendation-enrichment") {
+  if (safeQueue === 'discovery-recommendation-enrichment') {
     return payload?.discoveryRunId
-      ? "Finishes scoring and ranking for the current discovery refresh."
+      ? 'Finishes scoring and ranking for the current discovery refresh.'
       : queueDescription(safeQueue);
   }
-  if (safeQueue === "discovery-user-refresh") {
-    const profile = payload?.listenHistoryProfile || {};
-    return profile?.listenHistoryUsername
+  if (safeQueue === 'discovery-user-refresh') {
+    const profile = (payload.listenHistoryProfile as Record<string, unknown>) || {};
+    return profile.listenHistoryUsername
       ? `Refreshes listening history for ${profile.listenHistoryUsername}.`
       : queueDescription(safeQueue);
   }
-  if (safeQueue === "image-prefetch") {
+  if (safeQueue === 'image-prefetch') {
     const mbids = Array.isArray(payload?.mbids) ? payload.mbids : [];
     return mbids.length > 0
-      ? `Fetches artwork for ${mbids.length} artist${mbids.length === 1 ? "" : "s"}.`
+      ? `Fetches artwork for ${mbids.length} artist${mbids.length === 1 ? '' : 's'}.`
       : queueDescription(safeQueue);
   }
-  if (safeQueue === "_outbox:notifications") {
+  if (safeQueue === '_outbox:notifications') {
     return queueDescription(safeQueue);
   }
   return queueDescription(safeQueue);
 }
 
-function summarizePayload(queue, payloadValue) {
+function summarizePayload(queue: unknown, payloadValue: unknown): string {
   const payload = parsePayload(payloadValue);
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return "";
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return '';
   }
 
-  if (queue === "system-task") {
-    return "";
+  const queueStr = String(queue || '');
+  const p = payload as Record<string, unknown>;
+
+  if (queueStr === 'system-task') {
+    return '';
   }
 
-  if (queue === "discovery-refresh" && payload.reason) {
-    return "";
+  if (queueStr === 'discovery-refresh' && p.reason) {
+    return '';
   }
 
-  if (queue === "discovery-recommendation-enrichment" && payload.discoveryRunId) {
-    return `Run: ${String(payload.discoveryRunId)}`;
+  if (queueStr === 'discovery-recommendation-enrichment' && p.discoveryRunId) {
+    return `Run: ${String(p.discoveryRunId)}`;
   }
 
-  const parts = [];
+  const parts: string[] = [];
   const keys = [
-    "kind",
-    "reason",
-    "phase",
-    "playlistType",
-    "playlistId",
-    "flowId",
-    "jobId",
-    "source",
-    "event",
+    'kind',
+    'reason',
+    'phase',
+    'playlistType',
+    'playlistId',
+    'flowId',
+    'jobId',
+    'source',
+    'event',
   ];
   for (const key of keys) {
-    const value = payload[key];
-    if (value == null || value === "") continue;
+    const value = p[key];
+    if (value == null || value === '') continue;
     parts.push(`${titleize(key)}: ${String(value)}`);
   }
 
-  if (Array.isArray(payload.mbids)) {
-    parts.push(`MBIDs: ${payload.mbids.length}`);
+  if (Array.isArray(p.mbids)) {
+    parts.push(`MBIDs: ${(p.mbids as unknown[]).length}`);
   }
 
-  const profile = payload.listenHistoryProfile;
-  if (profile && typeof profile === "object") {
-    const username = profile.listenHistoryUsername || profile.username;
-    const provider = profile.listenHistoryProvider || profile.provider;
+  const profile = p.listenHistoryProfile;
+  if (profile && typeof profile === 'object') {
+    const prof = profile as Record<string, unknown>;
+    const username = prof.listenHistoryUsername || prof.username;
+    const provider = prof.listenHistoryProvider || prof.provider;
     if (provider || username) {
-      parts.push(
-        `Profile: ${[provider, username].filter(Boolean).join(" / ")}`,
-      );
+      parts.push(`Profile: ${[provider, username].filter(Boolean).join(' / ')}`);
     }
   }
 
-  if (!parts.length && queue && !queueDefinitionByName.has(queue)) {
-    return queueLabel(queue);
+  if (!parts.length && queueStr && !queueDefinitionByName.has(queueStr)) {
+    return queueLabel(queueStr);
   }
-  return parts.slice(0, 4).join(" · ");
+  return parts.slice(0, 4).join(' · ');
 }
 
-function unixToIso(value) {
+function unixToIso(value: unknown): string | null {
   const seconds = Number(value);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
   return new Date(seconds * 1000).toISOString();
 }
 
-function nowUnix() {
+function nowUnix(): number {
   return Math.floor(Date.now() / 1000);
 }
 
-function normalizeIntervalUnit(unit, value) {
-  const units = {
-    ms: "millisecond",
-    s: "second",
-    m: "minute",
-    h: "hour",
-    d: "day",
-    w: "week",
+function normalizeIntervalUnit(unit: unknown, value: unknown): string {
+  const units: Record<string, string> = {
+    ms: 'millisecond',
+    s: 'second',
+    m: 'minute',
+    h: 'hour',
+    d: 'day',
+    w: 'week',
   };
-  const label = units[String(unit || "").toLowerCase()] || unit;
-  return `${value} ${label}${Number(value) === 1 ? "" : "s"}`;
+  const label = units[String(unit || '').toLowerCase()] || String(unit);
+  return `${value} ${label}${Number(value) === 1 ? '' : 's'}`;
 }
 
-function formatSchedule(expr) {
-  const value = String(expr || "").trim();
+function formatSchedule(expr: unknown): string {
+  const value = String(expr || '').trim();
   const every = value.match(/^@every\s+(\d+)\s*(ms|s|m|h|d|w)$/i);
   if (every) {
     return normalizeIntervalUnit(every[2], Number(every[1]));
   }
-  return value || "Manual";
+  return value || 'Manual';
 }
 
-function normalizeRunRow(row) {
+function normalizeRunRow(row: Record<string, unknown>): Record<string, unknown> {
   const payload = parsePayload(row.payload);
   return {
     id: row.id,
@@ -573,7 +573,7 @@ function normalizeRunRow(row) {
     payloadSummary: summarizePayload(row.queue, payload),
     workerId: row.worker_id || null,
     attempt: row.attempt,
-    status: row.status || "completed",
+    status: row.status || 'completed',
     error: row.error || null,
     queuedAt: unixToIso(row.queued_at),
     runAt: unixToIso(row.run_at),
@@ -583,26 +583,25 @@ function normalizeRunRow(row) {
   };
 }
 
-function readRunningStartsByJobId() {
+function readRunningStartsByJobId(): Map<string, number> {
   ensureRunSchema();
   const rows = safeQuery(`
     SELECT job_id, queue, started_at
     FROM honker_task_runs
     WHERE status = 'running'
   `);
-  const map = new Map();
+  const map = new Map<string, number>();
   for (const row of rows) {
     map.set(`${row.queue}:${row.job_id}`, Number(row.started_at));
   }
   return map;
 }
 
-function enrichQueueRow(row) {
-  let runningForMs = null;
+function enrichQueueRow(row: Record<string, unknown>): Record<string, unknown> {
+  let runningForMs: number | null = null;
   let isStale = false;
-  if (row.status === "running") {
-    const startedMs =
-      Date.parse(row.startedAt || "") || Date.parse(row.queuedAt || "");
+  if (row.status === 'running') {
+    const startedMs = Date.parse(String(row.startedAt || '')) || Date.parse(String(row.queuedAt || ''));
     if (Number.isFinite(startedMs) && startedMs > 0) {
       runningForMs = Math.max(0, Date.now() - startedMs);
       isStale = runningForMs > STALE_RUNNING_MS;
@@ -615,7 +614,7 @@ function enrichQueueRow(row) {
   };
 }
 
-function buildTaskSummary(queueRows, workerRows) {
+function buildTaskSummary(queueRows: Record<string, unknown>[], workerRows: Record<string, unknown>[]): Record<string, unknown> {
   let activeCount = 0;
   let staleCount = 0;
   let failedCount = 0;
@@ -628,10 +627,10 @@ function buildTaskSummary(queueRows, workerRows) {
     if (row.isStale) {
       staleCount += 1;
     }
-    if (row.status === "failed") {
+    if (row.status === 'failed') {
       failedCount += 1;
     }
-    if (row.status === "completed") {
+    if (row.status === 'completed') {
       completedCount += Number(row.duplicateCount || 1);
     }
   }
@@ -653,23 +652,17 @@ function buildTaskSummary(queueRows, workerRows) {
   };
 }
 
-function normalizeLiveJobRow(row, runningStartsByJobId = new Map()) {
+function normalizeLiveJobRow(row: Record<string, unknown>, runningStartsByJobId: Map<string, number> = new Map()): Record<string, unknown> {
   const payload = parsePayload(row.payload);
   const currentTime = nowUnix();
-  const state = String(row.state || "pending");
+  const state = String(row.state || 'pending');
   const status =
-    state === "processing"
-      ? "running"
-      : Number(row.run_at) > currentTime
-        ? "scheduled"
-        : "queued";
+    state === 'processing' ? 'running' : Number(row.run_at) > currentTime ? 'scheduled' : 'queued';
   const startedUnix =
-    state === "processing"
-      ? runningStartsByJobId.get(`${row.queue}:${row.id}`)
-      : null;
+    state === 'processing' ? runningStartsByJobId.get(`${row.queue}:${row.id}`) : null;
 
   return {
-    source: "live",
+    source: 'live',
     id: `live-${row.queue}-${row.id}`,
     jobId: row.id,
     queue: row.queue,
@@ -694,10 +687,10 @@ function normalizeLiveJobRow(row, runningStartsByJobId = new Map()) {
   };
 }
 
-function normalizeDeadJobRow(row) {
+function normalizeDeadJobRow(row: Record<string, unknown>): Record<string, unknown> {
   const payload = parsePayload(row.payload);
   return {
-    source: "dead",
+    source: 'dead',
     id: `dead-${row.queue}-${row.id}`,
     jobId: row.id,
     queue: row.queue,
@@ -708,8 +701,8 @@ function normalizeDeadJobRow(row) {
     workerId: null,
     attempt: row.attempts,
     maxAttempts: row.max_attempts,
-    status: "failed",
-    state: "failed",
+    status: 'failed',
+    state: 'failed',
     priority: row.priority,
     queuedAt: unixToIso(row.created_at),
     runAt: unixToIso(row.run_at),
@@ -730,7 +723,9 @@ function readScheduledRows() {
   `);
   if (rows.length > 0) return rows;
 
-  return SCHEDULED_SYSTEM_TASKS.map((task) => ({
+  return SCHEDULED_SYSTEM_TASKS.map((item) => {
+    const task = item as Record<string, unknown>;
+    return ({
     name: task.name,
     queue: task.queue,
     cron_expr: task.schedule,
@@ -738,10 +733,10 @@ function readScheduledRows() {
     priority: Number(task.priority || 0),
     expires_s: task.expiresS ?? null,
     next_fire_at: null,
-  }));
+  })}) as Array<Record<string, unknown>>;
 }
 
-function readRecentRuns() {
+function readRecentRuns(): Array<Record<string, unknown>> {
   ensureRunSchema();
   const cutoff = getRunLedgerCutoffUnix();
   return safeQuery(
@@ -756,7 +751,7 @@ function readRecentRuns() {
   );
 }
 
-function readLatestRunsByTask() {
+function readLatestRunsByTask(): Map<string, Record<string, unknown>> {
   const cutoff = getRunLedgerCutoffUnix();
   const rows = safeQuery(
     `
@@ -768,7 +763,7 @@ function readLatestRunsByTask() {
     `,
     [cutoff],
   );
-  const latest = new Map();
+  const latest = new Map<string, Record<string, unknown>>();
   for (const row of rows) {
     const payload = parsePayload(row.payload);
     const key = taskMatchKey(row.queue, payload);
@@ -777,7 +772,7 @@ function readLatestRunsByTask() {
   return latest;
 }
 
-function readLiveJobs() {
+function readLiveJobs(): Array<Record<string, unknown>> {
   return safeQuery(
     `
       SELECT id, queue, payload, state, priority, run_at, worker_id,
@@ -793,7 +788,7 @@ function readLiveJobs() {
   );
 }
 
-function readDeadJobs() {
+function readDeadJobs(): Array<Record<string, unknown>> {
   const cutoff = getRunLedgerCutoffUnix();
   return safeQuery(
     `
@@ -808,7 +803,19 @@ function readDeadJobs() {
   );
 }
 
-function readQueueStats(liveRows = []) {
+type QueueStatEntry = {
+  queue: string;
+  liveCount: number;
+  runningCount: number;
+  queuedCount: number;
+  scheduledCount: number;
+  scheduledKeys?: Set<unknown>;
+  failedCount: number;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+};
+
+function readQueueStats(liveRows: Array<Record<string, unknown>> = []): Map<string, QueueStatEntry> {
   const currentTime = nowUnix();
   const deadStats = safeQuery(
     `
@@ -829,7 +836,7 @@ function readQueueStats(liveRows = []) {
     [getRunLedgerCutoffUnix()],
   );
 
-  const stats = new Map();
+  const stats = new Map<string, QueueStatEntry>();
   for (const definition of QUEUE_DEFINITIONS) {
     stats.set(definition.queue, {
       queue: definition.queue,
@@ -837,40 +844,41 @@ function readQueueStats(liveRows = []) {
       runningCount: 0,
       queuedCount: 0,
       scheduledCount: 0,
-      scheduledKeys: new Set(),
+      scheduledKeys: new Set<unknown>(),
       failedCount: 0,
       nextRunAt: null,
       lastRunAt: null,
     });
   }
 
-  const ensure = (queue) => {
-    if (!stats.has(queue)) {
-      stats.set(queue, {
-        queue,
+  const ensure = (queue: unknown): QueueStatEntry => {
+    const q = String(queue || '');
+    if (!stats.has(q)) {
+      stats.set(q, {
+        queue: q,
         liveCount: 0,
         runningCount: 0,
         queuedCount: 0,
         scheduledCount: 0,
-        scheduledKeys: new Set(),
+        scheduledKeys: new Set<unknown>(),
         failedCount: 0,
         nextRunAt: null,
         lastRunAt: null,
       });
     }
-    return stats.get(queue);
+    return stats.get(q)!;
   };
 
   for (const row of liveRows) {
     const entry = ensure(row.queue);
-    const state = String(row.state || "pending");
+    const state = String(row.state || 'pending');
     const runAt = Number(row.run_at || 0);
     entry.liveCount += 1;
-    if (state === "processing") {
+    if (state === 'processing') {
       entry.runningCount += 1;
     } else if (runAt > currentTime) {
       const payload = parsePayload(row.payload);
-      entry.scheduledKeys.add(taskMatchKey(row.queue, payload));
+      entry.scheduledKeys!.add(taskMatchKey(row.queue, payload));
       if (!entry.nextRunAt || runAt < Number(Date.parse(entry.nextRunAt) / 1000)) {
         entry.nextRunAt = unixToIso(runAt);
       }
@@ -886,7 +894,7 @@ function readQueueStats(liveRows = []) {
   }
 
   for (const entry of stats.values()) {
-    entry.scheduledCount = entry.scheduledKeys.size;
+    entry.scheduledCount = entry.scheduledKeys?.size ?? 0;
     delete entry.scheduledKeys;
   }
 
@@ -895,26 +903,31 @@ function readQueueStats(liveRows = []) {
 
 async function readWorkerStatuses() {
   try {
-    const { getHonkerWorkerStatuses } = await import("./honkerWorkerRuntime.js");
+    const { getHonkerWorkerStatuses } = await import('./honkerWorkerRuntime.js');
     return getHonkerWorkerStatuses();
   } catch {
     return [];
   }
 }
 
-function normalizeWorkerRows(workerStatuses, queueStats) {
-  const workerByName = new Map(
-    workerStatuses.map((worker) => [worker.name, worker]),
-  );
+function normalizeWorkerRows(workerStatuses: Record<string, unknown>[], queueStats: Map<string, QueueStatEntry>): Record<string, unknown>[] {
+  const workerByName = new Map(workerStatuses.map((worker: Record<string, unknown>) => [worker.name, worker]));
   const rows = [];
   const seenQueues = new Set();
 
   for (const definition of QUEUE_DEFINITIONS) {
     seenQueues.add(definition.queue);
-    const stats = queueStats.get(definition.queue) || {};
-    const worker = definition.worker
-      ? workerByName.get(definition.worker)
-      : null;
+    const stats: QueueStatEntry = queueStats.get(definition.queue) || {
+      queue: definition.queue,
+      liveCount: 0,
+      runningCount: 0,
+      queuedCount: 0,
+      scheduledCount: 0,
+      failedCount: 0,
+      nextRunAt: null,
+      lastRunAt: null,
+    };
+    const worker: Record<string, unknown> | undefined = definition.worker ? workerByName.get(definition.worker) : undefined;
     const processing = Number(stats.runningCount || 0);
     const loopRunning = worker?.running === true;
     rows.push({
@@ -922,8 +935,8 @@ function normalizeWorkerRows(workerStatuses, queueStats) {
       queueLabel: definition.label,
       worker: definition.worker || null,
       name: workerLabel(definition.queue, definition.worker),
-      description: definition.description || "",
-      status: processing > 0 ? "running" : loopRunning ? "idle" : "not_loaded",
+      description: definition.description || '',
+      status: processing > 0 ? 'running' : loopRunning ? 'idle' : 'not_loaded',
       running: loopRunning,
       queued: Number(stats.queuedCount || 0),
       scheduled: Number(stats.scheduledCount || 0),
@@ -942,7 +955,7 @@ function normalizeWorkerRows(workerStatuses, queueStats) {
       worker: null,
       name: workerLabel(queue, null),
       description: queueDescription(queue),
-      status: "not_loaded",
+      status: 'not_loaded',
       running: false,
       queued: Number(stats.queuedCount || 0),
       scheduled: Number(stats.scheduledCount || 0),
@@ -956,8 +969,8 @@ function normalizeWorkerRows(workerStatuses, queueStats) {
   return rows;
 }
 
-function normalizeScheduledRows(rows, latestRunsByTask) {
-  return rows.map((row) => {
+function normalizeScheduledRows(rows: Record<string, unknown>[], latestRunsByTask: Map<string, Record<string, unknown>>): Record<string, unknown>[] {
+  return rows.map((row: Record<string, unknown>) => {
     const payload = parsePayload(row.payload);
     const latestRun = latestRunsByTask.get(taskMatchKey(row.queue, payload));
     return {
@@ -979,40 +992,42 @@ function normalizeScheduledRows(rows, latestRunsByTask) {
   });
 }
 
-function normalizeQueueRows(liveRows, deadRows, runRows, runningStartsByJobId) {
+function normalizeQueueRows(
+  liveRows: Record<string, unknown>[],
+  deadRows: Record<string, unknown>[],
+  runRows: Record<string, unknown>[],
+  runningStartsByJobId: Map<string, number>,
+): Record<string, unknown>[] {
   const normalizedLive = groupQueueRows(
-    liveRows.map((row) => normalizeLiveJobRow(row, runningStartsByJobId)),
+    liveRows.map((row: Record<string, unknown>) => normalizeLiveJobRow(row, runningStartsByJobId)),
   );
-  const liveJobKeys = new Set(
-    liveRows.map((row) => `${row.queue}:${row.id}`),
-  );
+  const liveJobKeys = new Set(liveRows.map((row: Record<string, unknown>) => `${row.queue}:${row.id}`));
   const runJobKeys = new Set();
   const normalizedRuns = runRows
-    .filter((row) => !liveJobKeys.has(`${row.queue}:${row.job_id}`))
-    .map((row) => {
+    .filter((row: Record<string, unknown>) => !liveJobKeys.has(`${row.queue}:${row.job_id}`))
+    .map((row: Record<string, unknown>) => {
       runJobKeys.add(`${row.queue}:${row.job_id}`);
       const run = normalizeRunRow(row);
       return {
         ...run,
-        source: "run",
+        source: 'run',
         id: `run-${run.id}`,
         maxAttempts: null,
         priority: null,
         state: run.status,
-        sortAt:
-          Date.parse(run.endedAt || run.startedAt || run.queuedAt || 0) / 1000,
+        sortAt: Date.parse(String(run.endedAt || run.startedAt || run.queuedAt || 0)) / 1000,
         duplicateCount: 1,
       };
     });
   const normalizedDead = deadRows
-    .filter((row) => !runJobKeys.has(`${row.queue}:${row.id}`))
+    .filter((row: Record<string, unknown>) => !runJobKeys.has(`${row.queue}:${row.id}`))
     .map(normalizeDeadJobRow);
 
   return [...normalizedLive, ...groupQueueRows(normalizedRuns), ...normalizedDead]
     .sort((a, b) => {
-      const activeOrder = { running: 0, queued: 1, scheduled: 2 };
-      const aActive = activeOrder[a.status];
-      const bActive = activeOrder[b.status];
+      const activeOrder: Record<string, number> = { running: 0, queued: 1, scheduled: 2 };
+      const aActive = activeOrder[String(a.status)];
+      const bActive = activeOrder[String(b.status)];
       if (aActive != null || bActive != null) {
         return (aActive ?? 10) - (bActive ?? 10);
       }
@@ -1022,11 +1037,11 @@ function normalizeQueueRows(liveRows, deadRows, runRows, runningStartsByJobId) {
     .map(enrichQueueRow);
 }
 
-function shouldGroupQueueRow(row) {
-  return row.status === "scheduled" || row.status === "completed";
+function shouldGroupQueueRow(row: Record<string, unknown>): boolean {
+  return row.status === 'scheduled' || row.status === 'completed';
 }
 
-function groupQueueRows(rows) {
+function groupQueueRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
   const grouped = [];
   const groupedByTask = new Map();
 
@@ -1036,12 +1051,7 @@ function groupQueueRows(rows) {
       continue;
     }
 
-    const key = [
-      row.queue,
-      row.status,
-      row.name,
-      row.payloadSummary,
-    ].join("|");
+    const key = [String(row.queue), String(row.status), String(row.name), String(row.payloadSummary)].join('|');
     const existing = groupedByTask.get(key);
     if (!existing) {
       groupedByTask.set(key, row);
@@ -1050,23 +1060,23 @@ function groupQueueRows(rows) {
     }
 
     existing.duplicateCount = Number(existing.duplicateCount || 1) + 1;
-    if (row.status === "scheduled") {
-      const existingRunAt = Date.parse(existing.runAt || "") || Infinity;
-      const rowRunAt = Date.parse(row.runAt || "") || Infinity;
+    if (row.status === 'scheduled') {
+      const existingRunAt = Date.parse(String(existing.runAt || '')) || Infinity;
+      const rowRunAt = Date.parse(String(row.runAt || '')) || Infinity;
       if (rowRunAt < existingRunAt) {
         existing.runAt = row.runAt;
         existing.sortAt = row.sortAt;
       }
     }
-    const existingQueuedAt = Date.parse(existing.queuedAt || "") || 0;
-    const rowQueuedAt = Date.parse(row.queuedAt || "") || 0;
+    const existingQueuedAt = Date.parse(String(existing.queuedAt || '')) || 0;
+    const rowQueuedAt = Date.parse(String(row.queuedAt || '')) || 0;
     if (rowQueuedAt > existingQueuedAt) {
       existing.queuedAt = row.queuedAt;
       existing.jobId = row.jobId;
       existing.id = row.id;
     }
-    const existingEndedAt = Date.parse(existing.endedAt || "") || 0;
-    const rowEndedAt = Date.parse(row.endedAt || "") || 0;
+    const existingEndedAt = Date.parse(String(existing.endedAt || '')) || 0;
+    const rowEndedAt = Date.parse(String(row.endedAt || '')) || 0;
     if (rowEndedAt > existingEndedAt) {
       existing.startedAt = row.startedAt;
       existing.endedAt = row.endedAt;
@@ -1078,10 +1088,10 @@ function groupQueueRows(rows) {
   return grouped;
 }
 
-export function recordHonkerTaskRunStarted(job, queue) {
+export function recordHonkerTaskRunStarted(job: Record<string, unknown>, queue: Record<string, unknown>): number | null {
   try {
     ensureRunSchema();
-    const queueName = String(job?.queue || queue?.name || "").trim();
+    const queueName = String(job?.queue || queue?.name || '').trim();
     if (!job?.id || !queueName) return null;
     const liveRow = safeGet(
       `
@@ -1093,7 +1103,7 @@ export function recordHonkerTaskRunStarted(job, queue) {
     );
     const startedAt = nowUnix();
     const payloadText = JSON.stringify(job.payload ?? null);
-    const info = insertRunStatement.run(
+    const info = insertRunStatement!.run(
       job.id,
       queueName,
       describeHonkerTask(queueName, job.payload),
@@ -1110,21 +1120,18 @@ export function recordHonkerTaskRunStarted(job, queue) {
   }
 }
 
-export function recordHonkerTaskRunFinished(runId, status, error = null) {
+export function recordHonkerTaskRunFinished(runId: unknown, status: unknown, error: unknown = null): void {
   try {
     ensureRunSchema();
     const id = Number(runId);
     if (!Number.isFinite(id) || id <= 0) return;
-    const row = safeGet(
-      "SELECT started_at FROM honker_task_runs WHERE id = ?",
-      [id],
-    );
+    const row = safeGet('SELECT started_at FROM honker_task_runs WHERE id = ?', [id]);
     const endedAt = nowUnix();
     const durationMs = row?.started_at
       ? Math.max(0, (endedAt - Number(row.started_at)) * 1000)
       : null;
-    updateRunStatement.run(
-      status || "completed",
+    updateRunStatement!.run(
+      status || 'completed',
       error ? String(error).slice(0, 2000) : null,
       endedAt,
       durationMs,
@@ -1136,12 +1143,11 @@ export function recordHonkerTaskRunFinished(runId, status, error = null) {
 
 export async function clearStaleHonkerJobs() {
   ensureRunSchema();
-  const { sweepAllHonkerQueues, getHonkerDb, getHonkerQueueByName } =
-    await import("./honkerDb.js");
+  const { sweepAllHonkerQueues, getHonkerDb, getHonkerQueueByName } = await import('./honkerDb.js');
   const honkerDb = getHonkerDb();
   const now = nowUnix();
   const staleCutoff = now - Math.floor(STALE_RUNNING_MS / 1000);
-  const clearedReason = "Cleared stuck background job";
+  const clearedReason = 'Cleared stuck background job';
 
   let swept = sweepAllHonkerQueues();
   let cleared = 0;
@@ -1173,14 +1179,13 @@ export async function clearStaleHonkerJobs() {
         swept += Number(queue.sweepExpired()) || 0;
       }
 
-      const stillLive = honkerDb.query(
-        `SELECT id FROM _honker_live WHERE id = ? LIMIT 1`,
-        [row.id],
-      );
+      const stillLive = honkerDb.query(`SELECT id FROM _honker_live WHERE id = ? LIMIT 1`, [
+        row.id,
+      ]);
       if (stillLive.length > 0) {
         const tx = honkerDb.transaction();
         try {
-          tx.execute("DELETE FROM _honker_live WHERE id = ?", [row.id]);
+          tx.execute('DELETE FROM _honker_live WHERE id = ?', [row.id]);
           tx.commit();
         } catch (error) {
           try {
@@ -1191,18 +1196,14 @@ export async function clearStaleHonkerJobs() {
       }
 
       if (row.run_id) {
-        recordHonkerTaskRunFinished(
-          Number(row.run_id),
-          "failed",
-          clearedReason,
-        );
+        recordHonkerTaskRunFinished(Number(row.run_id), 'failed', clearedReason);
       }
       cleared += 1;
     } catch (error) {
       errors.push({
         jobId: row.id,
         queue: row.queue,
-        message: error?.message || String(error),
+        message: (error as Record<string, unknown>)?.message || String(error),
       });
     }
   }
@@ -1223,13 +1224,13 @@ export async function clearStaleHonkerJobs() {
 
   for (const run of orphanRuns) {
     try {
-      recordHonkerTaskRunFinished(Number(run.id), "failed", clearedReason);
+      recordHonkerTaskRunFinished(Number(run.id), 'failed', clearedReason);
       cleared += 1;
     } catch (error) {
       errors.push({
         jobId: null,
         queue: null,
-        message: error?.message || String(error),
+        message: (error as Record<string, unknown>)?.message || String(error),
       });
     }
   }
@@ -1249,12 +1250,7 @@ export async function getHonkerTaskStatus() {
   const queueStats = readQueueStats(liveRows);
   const workerStatuses = await readWorkerStatuses();
   const workers = normalizeWorkerRows(workerStatuses, queueStats);
-  const queue = normalizeQueueRows(
-    liveRows,
-    deadRows,
-    runRows,
-    runningStartsByJobId,
-  );
+  const queue = normalizeQueueRows(liveRows, deadRows, runRows, runningStartsByJobId);
 
   return {
     timestamp: new Date().toISOString(),
@@ -1262,10 +1258,10 @@ export async function getHonkerTaskStatus() {
     scheduled: normalizeScheduledRows(scheduledRows, latestRunsByTask),
     workers,
     queue,
-    workerPerf: (await import("./workerPerfMetrics.js")).summarizeWorkerPerfHistory(),
-    resourceBudget: (await import("./resourceBudget.js")).getResourceBudgetStatus(),
+    workerPerf: (await import('./workerPerfMetrics.js')).summarizeWorkerPerfHistory(),
+    resourceBudget: (await import('./resourceBudget.js')).getResourceBudgetStatus(),
     rustWorker: await (async () => {
-      const { getRustWorkerStatus } = await import("./rustWorkerRunner.js");
+      const { getRustWorkerStatus } = await import('./rustWorkerRunner.js');
       return getRustWorkerStatus();
     })(),
   };

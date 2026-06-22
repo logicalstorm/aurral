@@ -1,15 +1,15 @@
-import { getDiscoveryRefreshQueue, getWorkerId } from "./honkerDb.js";
+import { getDiscoveryRefreshQueue, getWorkerId } from './honkerDb.js';
 import {
   clearDiscoveryUpdateProgress,
   getDiscoveryCache,
   updateDiscoveryCache,
-} from "./discoveryService.js";
+} from './discoveryService.js';
 import {
   discoveryNeedsRefresh,
   isDiscoveryRefreshConfigured,
   markDiscoveryRefreshDequeued,
   scheduleNextDiscoveryRefresh,
-} from "./discoveryRefreshScheduler.js";
+} from './discoveryRefreshScheduler.js';
 import {
   createIdleAbortController,
   getWorkerIdleStopMs,
@@ -17,21 +17,17 @@ import {
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
   withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
-import {
-  HEAVY_WORK_TYPES,
-  withHeavyWorkBudget,
-} from "./resourceBudget.js";
-import { withWorkerPerfSpan } from "./workerPerfMetrics.js";
+} from './honkerWorkerRuntime.js';
+import { HEAVY_WORK_TYPES, withHeavyWorkBudget } from './resourceBudget.js';
+import { withWorkerPerfSpan } from './workerPerfMetrics.js';
 
-const WORKER_NAME = "discovery-refresh";
+const WORKER_NAME = 'discovery-refresh';
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
-let idleController = null;
+let idleController: ReturnType<typeof createIdleAbortController> | null = null;
 
-async function runDiscoveryRefresh(payload) {
+async function runDiscoveryRefresh(payload: Record<string, unknown>) {
   if (!(await isDiscoveryRefreshConfigured())) {
     getDiscoveryCache().isUpdating = false;
     clearDiscoveryUpdateProgress();
@@ -64,22 +60,23 @@ async function runLoop() {
       if (!running || stopRequested) break;
       markDiscoveryRefreshDequeued();
       try {
+        const payload = job.payload as Record<string, unknown>;
         await withJobHeartbeat(job, queue, () =>
           withHeavyWorkBudget(
             HEAVY_WORK_TYPES.DISCOVERY_REFRESH,
             () =>
               withWorkerPerfSpan(
-                "discovery-refresh",
-                () => runDiscoveryRefresh(job.payload),
-                job.payload?.reason || "scheduled",
+                'discovery-refresh',
+                () => runDiscoveryRefresh(payload),
+                (payload?.['reason'] as string) || 'scheduled',
               ),
-            job.payload?.reason || "discovery-refresh",
+            (payload?.['reason'] as string) || 'discovery-refresh',
           ),
         );
         job.ack();
         scheduleNextDiscoveryRefresh();
-      } catch (error) {
-        const message = error?.message || String(error);
+      } catch (error: unknown) {
+        const message = (error as { message?: string })?.message || String(error);
         getDiscoveryCache().isUpdating = false;
         clearDiscoveryUpdateProgress();
         if (job.attempts >= 3) {
@@ -92,14 +89,13 @@ async function runLoop() {
     }
   } catch (error) {
     if (!idleController?.idleStopped && !stopRequested) {
-      console.error("[discoveryRefreshWorker] loop error:", error);
+      console.error('[discoveryRefreshWorker] loop error:', error);
     }
   } finally {
     const idleStopped = idleController?.idleStopped === true;
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
     const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startDiscoveryRefreshWorker, {
@@ -112,7 +108,7 @@ export function startDiscoveryRefreshWorker() {
   if (running || isHonkerShuttingDown()) return;
   running = true;
   stopRequested = false;
-  loopPromise = runLoop();
+  runLoop();
 }
 
 export function stopDiscoveryRefreshWorker() {

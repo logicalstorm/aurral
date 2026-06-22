@@ -1,43 +1,51 @@
-import path from "path";
-import fs from "fs/promises";
-import crypto from "crypto";
-import { dbOps } from "../config/db-helpers.js";
-import { NavidromeClient } from "./navidrome.js";
-import { PlexClient } from "./plex.js";
-import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
-import { writePlaylistArtworkWebpFromBuffer } from "./playlistArtwork.js";
+import path from 'path';
+import fs from 'fs/promises';
+import crypto from 'crypto';
+import { dbOps } from '../config/db-helpers.js';
+import { NavidromeClient } from './navidrome.js';
+import { PlexClient } from './plex.js';
+import { flowPlaylistConfig } from './weeklyFlowPlaylistConfig.js';
+import { downloadTracker } from './weeklyFlowDownloadTracker.js';
+import { writePlaylistArtworkWebpFromBuffer } from './playlistArtwork.js';
 import {
   getArtworkExtensionForStyle,
   getPlaylistArtworkStyle,
   writeGeneratedPlaylistArtwork,
-} from "./playlistArtworkGenerator.js";
-import {
-  PLAYLIST_LIBRARY_DIR,
-  resolvePlaylistRoot,
-} from "./playlistPaths.js";
-import { buildM3uContent, collectPlaylistM3uEntries } from "./playlistM3u.js";
-import { scheduleLibraryScan } from "./libraryScanWorker.js";
+} from './playlistArtworkGenerator.js';
+import { PLAYLIST_LIBRARY_DIR, resolvePlaylistRoot } from './playlistPaths.js';
+import { buildM3uContent, collectPlaylistM3uEntries } from './playlistM3u.js';
+import { scheduleLibraryScan } from './libraryScanWorker.js';
 
-const ARTWORK_FILE_EXTENSIONS = [".webp", ".jpg", ".png"];
-const ARTWORK_SUPPRESS_SUFFIX = ".no-artwork";
-const PLAYLIST_FILE_EXTENSIONS = [".m3u", ".nsp"];
+const ARTWORK_FILE_EXTENSIONS = ['.webp', '.jpg', '.png'];
+const ARTWORK_SUPPRESS_SUFFIX = '.no-artwork';
+const PLAYLIST_FILE_EXTENSIONS = ['.m3u', '.nsp'];
 
 export class WeeklyFlowPlaylistManager {
+  weeklyFlowRoot: string;
+  playlistLibraryRoot: string;
+  libraryRoot: string;
+  navidromeClient: NavidromeClient | null;
+  _navidromeConfigKey: string;
+  plexClient: PlexClient | null;
+  _plexConfigKey: string;
+  _plexSectionId: string | null;
+  _plexSyncHashes: Map<string, string>;
+  _plexCatchupRunning: boolean;
+  _ensureInFlight: Promise<unknown> | null;
+  _refreshInFlight: Map<string, Promise<unknown>>;
+  _plexDownloadsPath: string = '';
+
   constructor(
-    weeklyFlowRoot = resolvePlaylistRoot(),
-    { triggerEnsureOnInit = process.env.NODE_ENV !== "test" } = {},
+    weeklyFlowRoot: string = resolvePlaylistRoot(),
+    { triggerEnsureOnInit = process.env.NODE_ENV !== 'test' } = {},
   ) {
     this.weeklyFlowRoot = resolvePlaylistRoot(weeklyFlowRoot);
-    this.playlistLibraryRoot = path.join(
-      this.weeklyFlowRoot,
-      PLAYLIST_LIBRARY_DIR,
-    );
-    this.libraryRoot = path.join(this.playlistLibraryRoot, "_playlists");
+    this.playlistLibraryRoot = path.join(this.weeklyFlowRoot, PLAYLIST_LIBRARY_DIR);
+    this.libraryRoot = path.join(this.playlistLibraryRoot, '_playlists');
     this.navidromeClient = null;
-    this._navidromeConfigKey = "";
+    this._navidromeConfigKey = '';
     this.plexClient = null;
-    this._plexConfigKey = "";
+    this._plexConfigKey = '';
     this._plexSectionId = null;
     this._plexSyncHashes = new Map();
     this._plexCatchupRunning = false;
@@ -48,20 +56,18 @@ export class WeeklyFlowPlaylistManager {
 
   updateConfig(triggerEnsurePlaylists = true) {
     const settings = dbOps.getSettings();
-    const navidromeConfig = settings.integrations?.navidrome || {};
+    const navidromeConfig =
+      (((settings as Record<string, unknown>).integrations as Record<string, unknown> | undefined)
+        ?.navidrome ?? {}) as Record<string, string>;
     const nextConfigKey = JSON.stringify({
-      url: navidromeConfig.url || "",
-      username: navidromeConfig.username || "",
-      password: navidromeConfig.password || "",
+      url: navidromeConfig.url || '',
+      username: navidromeConfig.username || '',
+      password: navidromeConfig.password || '',
     });
     const configChanged = this._navidromeConfigKey !== nextConfigKey;
     this._navidromeConfigKey = nextConfigKey;
 
-    if (
-      navidromeConfig.url &&
-      navidromeConfig.username &&
-      navidromeConfig.password
-    ) {
+    if (navidromeConfig.url && navidromeConfig.username && navidromeConfig.password) {
       if (!this.navidromeClient || configChanged) {
         this.navidromeClient = new NavidromeClient(
           navidromeConfig.url,
@@ -73,23 +79,21 @@ export class WeeklyFlowPlaylistManager {
       this.navidromeClient = null;
     }
 
-    const plexConfig = settings.integrations?.plex || {};
+    const plexConfig =
+      (((settings as Record<string, unknown>).integrations as Record<string, unknown> | undefined)
+        ?.plex ?? {}) as Record<string, string>;
     const nextPlexKey = JSON.stringify({
-      url: plexConfig.url || "",
-      token: plexConfig.token || "",
-      clientId: plexConfig.clientId || "",
-      downloadsPath: plexConfig.downloadsPath || "",
+      url: plexConfig.url || '',
+      token: plexConfig.token || '',
+      clientId: plexConfig.clientId || '',
+      downloadsPath: plexConfig.downloadsPath || '',
     });
     const plexChanged = this._plexConfigKey !== nextPlexKey;
     this._plexConfigKey = nextPlexKey;
-    this._plexDownloadsPath = plexConfig.downloadsPath || "";
+    this._plexDownloadsPath = plexConfig.downloadsPath || '';
     if (plexConfig.url && plexConfig.token) {
       if (!this.plexClient || plexChanged) {
-        this.plexClient = new PlexClient(
-          plexConfig.url,
-          plexConfig.token,
-          plexConfig.clientId,
-        );
+        this.plexClient = new PlexClient(plexConfig.url, plexConfig.token, plexConfig.clientId);
         this._plexSectionId = null;
         this._plexSyncHashes.clear();
       }
@@ -101,45 +105,42 @@ export class WeeklyFlowPlaylistManager {
 
     if (triggerEnsurePlaylists) {
       this.ensurePlaylists().catch((err) =>
-        console.warn(
-          "[WeeklyFlowPlaylistManager] ensurePlaylists on config:",
-          err?.message,
-        ),
+        console.warn('[WeeklyFlowPlaylistManager] ensurePlaylists on config:', err?.message),
       );
     }
   }
 
-  _sanitize(str) {
-    return String(str || "")
-      .replace(/[<>:"/\\|?*]/g, "_")
+  _sanitize(str: string) {
+    return String(str || '')
+      .replace(/[<>:"/\\|?*]/g, '_')
       .trim();
   }
 
   _getPlaylistLibraryHostPath() {
-    return this.playlistLibraryRoot.replace(/\\/g, "/").replace(/\/+$/, "");
+    return this.playlistLibraryRoot.replace(/\\/g, '/').replace(/\/+$/, '');
   }
 
-  _getPlaylistBaseName(playlistName) {
+  _getPlaylistBaseName(playlistName: string) {
     return this._sanitize(playlistName);
   }
 
-  _getFlowPlaylistNames(flowName) {
-    const name = String(flowName || "").trim();
+  _getFlowPlaylistNames(flowName: string) {
+    const name = String(flowName || '').trim();
     return {
       current: `[A] ${name}`,
       legacy: [`Aurral ${name}`],
     };
   }
 
-  _getSharedPlaylistNames(playlistName) {
-    const name = String(playlistName || "").trim();
+  _getSharedPlaylistNames(playlistName: string) {
+    const name = String(playlistName || '').trim();
     return {
       current: `[AS] ${name}`,
       legacy: [`Aurral Shared ${name}`],
     };
   }
 
-  _getPlaylistNameSet(playlistType) {
+  _getPlaylistNameSet(playlistType: string) {
     const flow = flowPlaylistConfig.getFlow(playlistType);
     if (flow) {
       const names = this._getFlowPlaylistNames(flow.name);
@@ -169,8 +170,8 @@ export class WeeklyFlowPlaylistManager {
     return this.ensurePlaylists();
   }
 
-  async refreshPlaylist(playlistType) {
-    const key = String(playlistType || "");
+  async refreshPlaylist(playlistType: string) {
+    const key = String(playlistType || '');
     if (this._refreshInFlight.has(key)) {
       return this._refreshInFlight.get(key);
     }
@@ -181,36 +182,30 @@ export class WeeklyFlowPlaylistManager {
     return task;
   }
 
-  async _refreshPlaylistInternal(playlistType) {
+  async _refreshPlaylistInternal(playlistType: string) {
     const flow = flowPlaylistConfig.getFlow(playlistType);
     if (flow) {
       if (!flow.enabled) return null;
       const { current } = this._getFlowPlaylistNames(flow.name);
-      return this._writePlaylistFile(current, playlistType, "Flow");
+      return this._writePlaylistFile(current, playlistType, 'Flow');
     }
     const sharedPlaylist = flowPlaylistConfig.getSharedPlaylist(playlistType);
     if (!sharedPlaylist) return null;
     const { current } = this._getSharedPlaylistNames(sharedPlaylist.name);
-    return this._writePlaylistFile(current, playlistType, "Playlist");
+    return this._writePlaylistFile(current, playlistType, 'Playlist');
   }
 
   scheduleScanLibrary(force = false) {
     return scheduleLibraryScan(force);
   }
 
-  async _ensureFlowArtwork(playlistType, playlistName, artworkKind) {
+  async _ensureFlowArtwork(playlistType: string, playlistName: string, artworkKind: string) {
     await fs.mkdir(this.libraryRoot, { recursive: true });
     const baseName = this._getPlaylistBaseName(playlistName);
     const artworkExtension = getArtworkExtensionForStyle(getPlaylistArtworkStyle());
-    const artworkPath = path.join(
-      this.libraryRoot,
-      `${baseName}${artworkExtension}`,
-    );
+    const artworkPath = path.join(this.libraryRoot, `${baseName}${artworkExtension}`);
     const safeRoot = path.resolve(this.libraryRoot);
-    const suppressed = await this._isArtworkGenerationSuppressed(
-      safeRoot,
-      baseName,
-    );
+    const suppressed = await this._isArtworkGenerationSuppressed(safeRoot, baseName);
     if (!(await this._playlistArtworkExists(baseName)) && !suppressed) {
       const artworkContext = this.getArtworkContextForPlaylistId(playlistType);
       await writeGeneratedPlaylistArtwork({
@@ -218,19 +213,19 @@ export class WeeklyFlowPlaylistManager {
         title: artworkContext?.title || playlistName,
         kind: artworkContext?.kind || artworkKind,
         signature: artworkContext?.signature || playlistType,
-        relatedArtists: artworkContext?.relatedArtists || [],
+        relatedArtists: (artworkContext?.relatedArtists as string[]) || [],
       });
     }
   }
 
-  async _writePlaylistFile(playlistName, playlistType, artworkKind) {
+  async _writePlaylistFile(playlistName: string, playlistType: string, artworkKind: string) {
     await fs.mkdir(this.libraryRoot, { recursive: true });
     const baseName = this._getPlaylistBaseName(playlistName);
     const m3uPath = path.join(this.libraryRoot, `${baseName}.m3u`);
     const entries = await collectPlaylistM3uEntries(playlistType, {
       weeklyFlowRoot: this.weeklyFlowRoot,
     });
-    await fs.writeFile(m3uPath, buildM3uContent(entries), "utf8");
+    await fs.writeFile(m3uPath, buildM3uContent(entries), 'utf8');
     await this._ensureFlowArtwork(playlistType, playlistName, artworkKind);
     return m3uPath;
   }
@@ -242,21 +237,16 @@ export class WeeklyFlowPlaylistManager {
     if (this.navidromeClient?.isConfigured()) {
       try {
         const hostPath = this._getPlaylistLibraryHostPath();
-        await this.navidromeClient.ensureWeeklyFlowLibrary(hostPath);
+        await this.navidromeClient!.ensureWeeklyFlowLibrary(hostPath);
       } catch (err) {
-        console.warn(
-          "[WeeklyFlowPlaylistManager] ensureWeeklyFlowLibrary failed:",
-          err?.message,
-        );
+        console.warn('[WeeklyFlowPlaylistManager] ensureWeeklyFlowLibrary failed:', (err as Error)?.message || String(err));
       }
       try {
-        const raw = await this.navidromeClient.getPlaylists();
+        const raw = await this.navidromeClient!.getPlaylists();
         playlists = Array.isArray(raw) ? raw : raw ? [raw] : [];
-      } catch (err) {
-        console.warn(
-          "[WeeklyFlowPlaylistManager] getPlaylists failed:",
-          err?.message,
-        );
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('[WeeklyFlowPlaylistManager] ensurePlaylists on config:', msg);
       }
     }
 
@@ -264,50 +254,46 @@ export class WeeklyFlowPlaylistManager {
       await fs.mkdir(this.libraryRoot, { recursive: true });
       const existingFiles = await fs.readdir(this.libraryRoot).catch(() => []);
       const expectedFiles = new Set();
-      const trackExpectedArtworkFiles = (baseName) => {
+      const trackExpectedArtworkFiles = (baseName: string) => {
         for (const extension of ARTWORK_FILE_EXTENSIONS) {
           expectedFiles.add(`${baseName}${extension}`);
         }
       };
-      const trackExpectedPlaylistFiles = (baseName) => {
+      const trackExpectedPlaylistFiles = (baseName: string) => {
         expectedFiles.add(`${baseName}.m3u`);
         trackExpectedArtworkFiles(baseName);
       };
-      const deleteNavidromePlaylistByName = async (playlistName) => {
+      const deleteNavidromePlaylistByName = async (playlistName: string) => {
         if (!playlists?.length) return;
-        const existing = playlists.find(
-          (playlist) => playlist.name === playlistName,
-        );
+        const existing = (playlists as Record<string, unknown>[]).find((playlist: Record<string, unknown>) => playlist.name === playlistName);
         if (!existing) return;
         try {
-          await this.navidromeClient.deletePlaylist(existing.id);
+          await this.navidromeClient!.deletePlaylist(existing.id as string);
         } catch (err) {
           console.warn(
             `[WeeklyFlowPlaylistManager] Failed to delete playlist "${playlistName}" from Navidrome:`,
-            err?.message,
+            (err as Error)?.message || String(err),
           );
         }
       };
-      const deleteNavidromePlaylistsByNames = async (playlistNames) => {
+      const deleteNavidromePlaylistsByNames = async (playlistNames: string[]) => {
         const uniqueNames = [...new Set((playlistNames || []).filter(Boolean))];
         for (const playlistName of uniqueNames) {
           await deleteNavidromePlaylistByName(playlistName);
         }
       };
-      const deletePlaylistM3uByNames = async (playlistNames) => {
+      const deletePlaylistM3uByNames = async (playlistNames: string[]) => {
         const uniqueNames = [...new Set((playlistNames || []).filter(Boolean))];
         for (const playlistName of uniqueNames) {
           const baseName = this._getPlaylistBaseName(playlistName);
           for (const extension of PLAYLIST_FILE_EXTENSIONS) {
             try {
-              await fs.unlink(
-                path.join(this.libraryRoot, `${baseName}${extension}`),
-              );
+              await fs.unlink(path.join(this.libraryRoot, `${baseName}${extension}`));
             } catch {}
           }
         }
       };
-      const deletePlaylistAssetsByNames = async (playlistNames) => {
+      const deletePlaylistAssetsByNames = async (playlistNames: string[]) => {
         const uniqueNames = [...new Set((playlistNames || []).filter(Boolean))];
         for (const playlistName of uniqueNames) {
           const baseName = this._getPlaylistBaseName(playlistName);
@@ -317,18 +303,12 @@ export class WeeklyFlowPlaylistManager {
             ARTWORK_SUPPRESS_SUFFIX,
           ]) {
             try {
-              await fs.unlink(
-                path.join(this.libraryRoot, `${baseName}${extension}`),
-              );
+              await fs.unlink(path.join(this.libraryRoot, `${baseName}${extension}`));
             } catch {}
           }
         }
       };
-      const writePlaylistFile = async (
-        playlistName,
-        playlistType,
-        artworkKind,
-      ) => {
+      const writePlaylistFile = async (playlistName: string, playlistType: string, artworkKind: string) => {
         trackExpectedPlaylistFiles(this._getPlaylistBaseName(playlistName));
         await this._writePlaylistFile(playlistName, playlistType, artworkKind);
       };
@@ -336,7 +316,7 @@ export class WeeklyFlowPlaylistManager {
         const { current, legacy } = this._getFlowPlaylistNames(flow.name);
         const playlistName = current;
         if (flow.enabled) {
-          await writePlaylistFile(playlistName, flow.id, "Flow");
+          await writePlaylistFile(playlistName, flow.id, 'Flow');
           await deleteNavidromePlaylistsByNames(legacy);
           await deletePlaylistAssetsByNames(legacy);
         } else {
@@ -344,12 +324,12 @@ export class WeeklyFlowPlaylistManager {
           await deletePlaylistM3uByNames([playlistName]);
           await deletePlaylistAssetsByNames(legacy);
           trackExpectedArtworkFiles(this._getPlaylistBaseName(playlistName));
-          await this._ensureFlowArtwork(flow.id, playlistName, "Flow");
+          await this._ensureFlowArtwork(flow.id, playlistName, 'Flow');
         }
       }
       for (const playlist of sharedPlaylists) {
         const { current, legacy } = this._getSharedPlaylistNames(playlist.name);
-        await writePlaylistFile(current, playlist.id, "Playlist");
+        await writePlaylistFile(current, playlist.id, 'Playlist');
         await deleteNavidromePlaylistsByNames(legacy);
         await deletePlaylistAssetsByNames(legacy);
       }
@@ -373,20 +353,14 @@ export class WeeklyFlowPlaylistManager {
         } catch {}
       }
     } catch (err) {
-      console.warn(
-        "[WeeklyFlowPlaylistManager] Failed to write playlists:",
-        err?.message,
-      );
+      console.warn('[WeeklyFlowPlaylistManager] Failed to write playlists:', (err as Error)?.message || String(err));
     }
 
     if (this.plexClient?.isConfigured()) {
       try {
         await this._syncPlexPlaylists(flows, sharedPlaylists);
       } catch (err) {
-        console.warn(
-          "[WeeklyFlowPlaylistManager] Plex playlist sync failed:",
-          err?.message,
-        );
+        console.warn('[WeeklyFlowPlaylistManager] Plex playlist sync failed:', (err as Error)?.message || String(err));
       }
     }
   }
@@ -394,67 +368,65 @@ export class WeeklyFlowPlaylistManager {
   // The location must be the path the Plex server uses, which differs from
   // Aurral's host path when Plex runs in its own container.
   _getPlexLibraryPath() {
-    const override = String(this._plexDownloadsPath || "").trim();
+    const override = String(this._plexDownloadsPath || '').trim();
     if (override) {
-      const base = override.replace(/\\/g, "/").replace(/\/+$/, "");
+      const base = override.replace(/\\/g, '/').replace(/\/+$/, '');
       return `${base}/${PLAYLIST_LIBRARY_DIR}`;
     }
     return this._getPlaylistLibraryHostPath();
   }
 
-  _hashKeys(ratingKeys) {
+  _hashKeys(ratingKeys: string[]) {
     const sorted = (ratingKeys || []).map(String).sort();
-    return crypto.createHash("sha1").update(sorted.join(",")).digest("hex");
+    return crypto.createHash('sha1').update(sorted.join(',')).digest('hex');
   }
 
-  async _ensurePlexSectionId() {
+  async _ensurePlexSectionId(): Promise<string | null> {
     if (this._plexSectionId != null) return this._plexSectionId;
     const libraryPath = this._getPlexLibraryPath();
-    const library = await this.plexClient.ensureWeeklyFlowLibrary(libraryPath);
+    const library = await this.plexClient!.ensureWeeklyFlowLibrary(libraryPath);
     // Plex section objects expose the section id as `key`.
-    const id = library?.key ?? null;
+    const id = ((library as Record<string, unknown>)?.key as string) ?? null;
     this._plexSectionId = id;
     return id;
   }
 
   // Plex has no equivalent of Navidrome's .nsp smart playlists, so we build
   // regular playlists from indexed tracks, grouped by their weekly-flow subfolder.
-  async _syncPlexPlaylists(flows, sharedPlaylists) {
+  async _syncPlexPlaylists(flows: { id: string; name: string; enabled?: boolean }[], sharedPlaylists: { id: string; name: string }[]) {
     const sectionId = await this._ensurePlexSectionId();
     if (sectionId == null) return;
 
-    const tracks = await this.plexClient.getTracks(sectionId);
+    const tracks = await this.plexClient!.getTracks(sectionId);
     // Plex de-duplicates the same song across flow folders inconsistently:
     // sometimes one track with one path, sometimes two separate tracks sharing
     // a relative path. So resolve membership per relative file (Artist/Album/
     // Title.ext) from disk, picking ONE representative track per file — the
     // copy whose own path is in this flow when available. This puts shared
     // songs in every flow that holds the file without duplicating a track.
-    const relativeOf = (file) => {
-      const parts = (file || "").replace(/\\/g, "/").split("/aurral-weekly-flow/");
+     
+    const relativeOf = (file: string): string | null => {
+      const parts = (file || '').replace(/\\/g, '/').split('/aurral-weekly-flow/');
       if (parts.length < 2) return null;
-      const segs = parts[1].split("/");
+      const segs = parts[1].split('/');
       segs.shift(); // drop the flow-id segment
-      return segs.join("/") || null;
+      return segs.join('/') || null;
     };
     const byRelative = new Map();
-    for (const t of tracks) {
-      const rel = relativeOf(t.files[0]);
+    for (const t of tracks as Record<string, unknown>[]) {
+      const rel = relativeOf((t.files as string[])[0]);
       if (!rel) continue;
       if (!byRelative.has(rel)) byRelative.set(rel, []);
       byRelative.get(rel).push(t);
     }
-    const playlistIds = [
-      ...new Set([
-        ...flows.map((f) => f.id),
-        ...sharedPlaylists.map((p) => p.id),
-      ]),
+      const playlistIds = [
+      ...new Set([...flows.map((f: { id: string }) => f.id), ...sharedPlaylists.map((p: { id: string }) => p.id)]),
     ];
-    const membership = new Map(playlistIds.map((id) => [id, []]));
+    const membership = new Map<string, unknown[]>(playlistIds.map((id) => [id, []]));
     for (const id of playlistIds) {
       for (const [rel, group] of byRelative) {
-        const ownsPath = (t) =>
-          t.files.some((f) => f.replace(/\\/g, "/").includes(`/${id}/`));
+        const ownsPath = (t: Record<string, unknown>) =>
+          (t.files as string[]).some((f: string) => f.replace(/\\/g, '/').includes(`/${id}/`));
         let present = group.some(ownsPath);
         if (!present) {
           try {
@@ -464,38 +436,41 @@ export class WeeklyFlowPlaylistManager {
         }
         if (!present) continue;
         const best = group.find(ownsPath) || group[0];
-        if (best?.ratingKey) membership.get(id).push(best.ratingKey);
+        if (best?.ratingKey) membership.get(id)!.push(best.ratingKey);
       }
     }
-    const ratingKeysFor = (playlistType) => membership.get(playlistType) || [];
+     
+    const ratingKeysFor = (playlistType: string): string[] => (membership.get(playlistType) || []) as string[];
 
-    const deletePlexPlaylistsByNames = async (names) => {
-      const playlists = await this.plexClient.getPlaylists();
+    const deletePlexPlaylistsByNames = async (names: string[]) => {
+    const playlists = await this.plexClient!.getPlaylists() as Record<string, unknown>[];
       for (const name of [...new Set((names || []).filter(Boolean))]) {
-        const existing = playlists.find((p) => p.title === name);
+        const existing = playlists.find(
+          (p: Record<string, unknown>) => (p.title as string) === name,
+        );
         if (existing) {
           try {
-            await this.plexClient.deletePlaylist(existing.ratingKey);
+            await this.plexClient!.deletePlaylist(existing.ratingKey as string);
           } catch (err) {
             console.warn(
               `[WeeklyFlowPlaylistManager] Failed to delete Plex playlist "${name}":`,
-              err?.message,
+              (err as Error)?.message || String(err),
             );
           }
         }
       }
     };
 
-    const buildIfChanged = async (desired, ratingKeys) => {
+    const buildIfChanged = async (desired: string, ratingKeys: string[]) => {
       const hash = this._hashKeys(ratingKeys);
       if (this._plexSyncHashes.get(desired) === hash) return;
-      await this.plexClient.createPlaylist(desired, ratingKeys, true);
+      await this.plexClient!.createPlaylist(desired, ratingKeys as string[], true);
       this._plexSyncHashes.set(desired, hash);
     };
 
     // Plex uses the bare flow name; remove any old "[A]"/"[AS]" prefixed names.
     for (const flow of flows) {
-      const desired = String(flow.name || "").trim();
+      const desired = String(flow.name || '').trim();
       const { current, legacy } = this._getFlowPlaylistNames(flow.name);
       const stale = [current, ...legacy].filter((name) => name !== desired);
       if (flow.enabled) {
@@ -514,7 +489,7 @@ export class WeeklyFlowPlaylistManager {
     }
 
     for (const playlist of sharedPlaylists) {
-      const desired = String(playlist.name || "").trim();
+      const desired = String(playlist.name || '').trim();
       const { current, legacy } = this._getSharedPlaylistNames(playlist.name);
       const stale = [current, ...legacy].filter((name) => name !== desired);
       const ratingKeys = ratingKeysFor(playlist.id);
@@ -537,9 +512,9 @@ export class WeeklyFlowPlaylistManager {
     }
     const sectionId = await this._ensurePlexSectionId();
     if (sectionId == null) {
-      throw new Error("Could not create or find the Aurral Plex library");
+      throw new Error('Could not create or find the Aurral Plex library');
     }
-    await this.plexClient.scanLibrary(sectionId);
+    await this.plexClient!.scanLibrary(sectionId);
 
     // Manual sync is authoritative: drop cached fingerprints so we reconcile
     // against Plex's real state (catches manual edits made in Plex).
@@ -549,15 +524,15 @@ export class WeeklyFlowPlaylistManager {
     const sharedPlaylists = flowPlaylistConfig.getSharedPlaylists();
     await this._syncPlexPlaylists(flows, sharedPlaylists);
 
-    const tracks = await this.plexClient.getTracks(sectionId);
-    const playlists = await this.plexClient.getPlaylists();
+    const tracks = await this.plexClient!.getTracks(sectionId);
+    const playlists = await this.plexClient!.getPlaylists();
 
     this._schedulePlexCatchup(sectionId);
 
-    const managedNames = new Set(
+    const managedNames = new Set<string>(
       [
-        ...flows.map((f) => String(f.name || "").trim()),
-        ...sharedPlaylists.map((p) => String(p.name || "").trim()),
+        ...flows.map((f: { name: string }) => String(f.name || '').trim()),
+        ...sharedPlaylists.map((p: { name: string }) => String(p.name || '').trim()),
       ].filter(Boolean),
     );
 
@@ -566,13 +541,13 @@ export class WeeklyFlowPlaylistManager {
       sectionId,
       indexedTracks: tracks.length,
       scanInProgress: tracks.length === 0,
-      playlists: playlists
-        .filter((p) => managedNames.has(p.title))
-        .map((p) => ({ title: p.title, count: p.leafCount ?? null })),
+      playlists: (playlists as Record<string, unknown>[])
+        .filter((p) => managedNames.has(p.title as string))
+        .map((p) => ({ title: p.title as string, count: (p.leafCount as number) ?? null })),
     };
   }
 
-  _schedulePlexCatchup(sectionId, delaysMs = [30000, 90000, 180000]) {
+  _schedulePlexCatchup(sectionId: string | null, delaysMs: number[] = [30000, 90000, 180000]) {
     if (this._plexCatchupRunning) return;
     this._plexCatchupRunning = true;
     const run = async () => {
@@ -585,10 +560,7 @@ export class WeeklyFlowPlaylistManager {
           await this._syncPlexPlaylists(flows, sharedPlaylists);
         }
       } catch (err) {
-        console.warn(
-          "[WeeklyFlowPlaylistManager] Plex catch-up failed:",
-          err?.message,
-        );
+        console.warn('[WeeklyFlowPlaylistManager] Plex catch-up failed:', (err as Error)?.message || String(err));
       } finally {
         this._plexCatchupRunning = false;
       }
@@ -596,12 +568,10 @@ export class WeeklyFlowPlaylistManager {
     run();
   }
 
-  async _playlistArtworkExists(baseName) {
+  async _playlistArtworkExists(baseName: string) {
     for (const extension of ARTWORK_FILE_EXTENSIONS) {
       try {
-        await fs.access(
-          path.join(this.libraryRoot, `${baseName}${extension}`),
-        );
+        await fs.access(path.join(this.libraryRoot, `${baseName}${extension}`));
         return true;
       } catch {}
     }
@@ -617,21 +587,21 @@ export class WeeklyFlowPlaylistManager {
       try {
         const sectionId = await this._ensurePlexSectionId();
         if (sectionId != null) {
-          results.push(await this.plexClient.scanLibrary(sectionId));
+          results.push(await this.plexClient!.scanLibrary(sectionId));
         }
       } catch (err) {
-        console.warn("[WeeklyFlowPlaylistManager] Plex scan failed:", err?.message);
+        console.warn('[WeeklyFlowPlaylistManager] Plex scan failed:', (err as Error)?.message || String(err));
       }
     }
     return results.length ? results : null;
   }
 
-  async weeklyReset(playlistTypes = null) {
+  async weeklyReset(playlistTypes: string[] | null = null) {
     const targets =
       playlistTypes && playlistTypes.length
         ? playlistTypes
-        : flowPlaylistConfig.getFlows().map((flow) => flow.id);
-    const fallbackDir = path.join(this.weeklyFlowRoot, "_fallback");
+        : flowPlaylistConfig.getFlows().map((flow: { id: string }) => flow.id);
+    const fallbackDir = path.join(this.weeklyFlowRoot, '_fallback');
     try {
       await fs.rm(fallbackDir, { recursive: true, force: true });
     } catch {}
@@ -639,7 +609,7 @@ export class WeeklyFlowPlaylistManager {
     for (const playlistType of targets) {
       const jobs = downloadTracker.getByPlaylistType(playlistType);
       for (const job of jobs) {
-        const stagingDir = path.join(this.weeklyFlowRoot, "_staging", job.id);
+        const stagingDir = path.join(this.weeklyFlowRoot, '_staging', job.id);
         try {
           await fs.rm(stagingDir, { recursive: true, force: true });
         } catch {}
@@ -647,44 +617,41 @@ export class WeeklyFlowPlaylistManager {
       const playlistDir = path.join(this.playlistLibraryRoot, playlistType);
       try {
         await fs.rm(playlistDir, { recursive: true, force: true });
-        console.log(
-          `[WeeklyFlowPlaylistManager] Deleted files for ${playlistType}`,
-        );
+        console.log(`[WeeklyFlowPlaylistManager] Deleted files for ${playlistType}`);
       } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
         console.warn(
           `[WeeklyFlowPlaylistManager] Failed to delete files for ${playlistType}:`,
-          error.message,
+          msg,
         );
       }
       downloadTracker.clearByPlaylistType(playlistType);
     }
   }
 
-  getPlaylistName(playlistType) {
+  getPlaylistName(playlistType: string) {
     return this._getPlaylistNameSet(playlistType)[0];
   }
 
-  getArtworkKindForPlaylistId(playlistId) {
-    if (flowPlaylistConfig.getFlow(playlistId)) return "Flow";
-    return "Playlist";
+  getArtworkKindForPlaylistId(playlistId: string) {
+    if (flowPlaylistConfig.getFlow(playlistId)) return 'Flow';
+    return 'Playlist';
   }
 
-  getArtworkContextForPlaylistId(playlistId) {
+  getArtworkContextForPlaylistId(playlistId: string) {
     const flow = flowPlaylistConfig.getFlow(playlistId);
     if (flow) {
       return {
-        kind: "Flow",
+        kind: 'Flow',
         title: flow.name,
         signature: flow.discoverPresetId || flow.id || flow.name,
-        relatedArtists: Array.isArray(flow.relatedArtists)
-          ? flow.relatedArtists
-          : [],
+        relatedArtists: Array.isArray(flow.relatedArtists) ? flow.relatedArtists : [],
       };
     }
     const playlist = flowPlaylistConfig.getSharedPlaylist(playlistId);
     if (playlist) {
       return {
-        kind: "Playlist",
+        kind: 'Playlist',
         title: playlist.name,
         signature: playlist.id || playlist.name,
         relatedArtists: [],
@@ -693,7 +660,7 @@ export class WeeklyFlowPlaylistManager {
     return null;
   }
 
-  _resolveArtworkBase(playlistId) {
+  _resolveArtworkBase(playlistId: string) {
     const playlistName = this.getPlaylistName(playlistId);
     if (!playlistName) return null;
     const baseName = this._getPlaylistBaseName(playlistName);
@@ -701,13 +668,13 @@ export class WeeklyFlowPlaylistManager {
     return { safeRoot, baseName, playlistName };
   }
 
-  _artworkSuppressPath(safeRoot, baseName) {
+  _artworkSuppressPath(safeRoot: string, baseName: string) {
     const safePath = path.resolve(safeRoot, `${baseName}${ARTWORK_SUPPRESS_SUFFIX}`);
     if (path.dirname(safePath) !== safeRoot) return null;
     return safePath;
   }
 
-  async _isArtworkGenerationSuppressed(safeRoot, baseName) {
+  async _isArtworkGenerationSuppressed(safeRoot: string, baseName: string) {
     const suppressPath = this._artworkSuppressPath(safeRoot, baseName);
     if (!suppressPath) return false;
     try {
@@ -718,11 +685,11 @@ export class WeeklyFlowPlaylistManager {
     }
   }
 
-  async _setArtworkGenerationSuppressed(safeRoot, baseName, suppressed) {
+  async _setArtworkGenerationSuppressed(safeRoot: string, baseName: string, suppressed: boolean) {
     const suppressPath = this._artworkSuppressPath(safeRoot, baseName);
     if (!suppressPath) return;
     if (suppressed) {
-      await fs.writeFile(suppressPath, "", "utf8");
+      await fs.writeFile(suppressPath, '', 'utf8');
       return;
     }
     try {
@@ -730,14 +697,11 @@ export class WeeklyFlowPlaylistManager {
     } catch {}
   }
 
-  async resolveArtworkFile(playlistId) {
+  async resolveArtworkFile(playlistId: string) {
     const resolved = this._resolveArtworkBase(playlistId);
     if (!resolved) return null;
     for (const extension of ARTWORK_FILE_EXTENSIONS) {
-      const safePath = path.resolve(
-        resolved.safeRoot,
-        `${resolved.baseName}${extension}`,
-      );
+      const safePath = path.resolve(resolved.safeRoot, `${resolved.baseName}${extension}`);
       if (path.dirname(safePath) !== resolved.safeRoot) continue;
       try {
         const stat = await fs.stat(safePath);
@@ -749,67 +713,53 @@ export class WeeklyFlowPlaylistManager {
     return null;
   }
 
-  async saveArtworkUpload(playlistId, buffer) {
+  async saveArtworkUpload(playlistId: string, buffer: Buffer) {
     const resolved = this._resolveArtworkBase(playlistId);
     if (!resolved) {
-      throw new Error("Playlist not found");
+      throw new Error('Playlist not found');
     }
     await fs.mkdir(resolved.safeRoot, { recursive: true });
     const webpPath = path.join(resolved.safeRoot, `${resolved.baseName}.webp`);
     if (path.dirname(webpPath) !== resolved.safeRoot) {
-      throw new Error("Invalid artwork path");
+      throw new Error('Invalid artwork path');
     }
     await writePlaylistArtworkWebpFromBuffer(buffer, webpPath);
     const legacyPng = path.join(resolved.safeRoot, `${resolved.baseName}.png`);
     try {
       await fs.unlink(legacyPng);
     } catch {}
-    await this._setArtworkGenerationSuppressed(
-      resolved.safeRoot,
-      resolved.baseName,
-      false,
-    );
+    await this._setArtworkGenerationSuppressed(resolved.safeRoot, resolved.baseName, false);
     return webpPath;
   }
 
-  async removeArtwork(playlistId) {
+  async removeArtwork(playlistId: string) {
     const resolved = this._resolveArtworkBase(playlistId);
     if (!resolved) {
-      throw new Error("Playlist not found");
+      throw new Error('Playlist not found');
     }
     let removed = false;
     for (const extension of ARTWORK_FILE_EXTENSIONS) {
-      const safePath = path.join(
-        resolved.safeRoot,
-        `${resolved.baseName}${extension}`,
-      );
+      const safePath = path.join(resolved.safeRoot, `${resolved.baseName}${extension}`);
       if (path.dirname(safePath) !== resolved.safeRoot) continue;
       try {
         await fs.unlink(safePath);
         removed = true;
       } catch {}
     }
-    await this._setArtworkGenerationSuppressed(
-      resolved.safeRoot,
-      resolved.baseName,
-      true,
-    );
+    await this._setArtworkGenerationSuppressed(resolved.safeRoot, resolved.baseName, true);
     return removed;
   }
 
-  async generateArtwork(playlistId) {
+  async generateArtwork(playlistId: string) {
     const resolved = this._resolveArtworkBase(playlistId);
     if (!resolved) {
-      throw new Error("Playlist not found");
+      throw new Error('Playlist not found');
     }
     await fs.mkdir(resolved.safeRoot, { recursive: true });
     const artworkExtension = getArtworkExtensionForStyle(getPlaylistArtworkStyle());
-    const artworkPath = path.join(
-      resolved.safeRoot,
-      `${resolved.baseName}${artworkExtension}`,
-    );
+    const artworkPath = path.join(resolved.safeRoot, `${resolved.baseName}${artworkExtension}`);
     if (path.dirname(artworkPath) !== resolved.safeRoot) {
-      throw new Error("Invalid artwork path");
+      throw new Error('Invalid artwork path');
     }
     const artworkContext = this.getArtworkContextForPlaylistId(playlistId);
     const outputPath = await writeGeneratedPlaylistArtwork({
@@ -820,11 +770,7 @@ export class WeeklyFlowPlaylistManager {
       relatedArtists: artworkContext?.relatedArtists || [],
       rotateSourceImage: true,
     });
-    await this._setArtworkGenerationSuppressed(
-      resolved.safeRoot,
-      resolved.baseName,
-      false,
-    );
+    await this._setArtworkGenerationSuppressed(resolved.safeRoot, resolved.baseName, false);
     return outputPath;
   }
 }

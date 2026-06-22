@@ -1,80 +1,82 @@
-import fs from "fs";
-import path from "path";
-import honker from "@russellthehippo/honker-node";
-import { resolveAurralDataDir } from "../config/data-dir.js";
-import { scheduleHonkerComponentRestart } from "./honkerWorkerRuntime.js";
+import fs from 'fs';
+import path from 'path';
+import honker from '@russellthehippo/honker-node';
+import type { JsonValue } from '@russellthehippo/honker-node';
+import type { SchedulerAddOptions } from '@russellthehippo/honker-node';
+import { resolveAurralDataDir } from '../config/data-dir.js';
+import { scheduleHonkerComponentRestart } from './honkerWorkerRuntime.js';
 
 function resolveHonkerDbPath() {
   return process.env.AURRAL_DB_PATH
     ? path.resolve(process.env.AURRAL_DB_PATH)
-    : path.join(resolveAurralDataDir(), "aurral.db");
+    : path.join(resolveAurralDataDir(), 'aurral.db');
 }
 
-let honkerDb = null;
-let openedHonkerDbPath = null;
-let pipelineQueue = null;
-let discoveryRefreshQueue = null;
-let discoveryRecommendationEnrichmentQueue = null;
-let discoveryUserRefreshQueue = null;
-let weeklyFlowOperationQueue = null;
-let playlistRetryQueue = null;
-let playlistMbidEnrichmentQueue = null;
-let systemTaskQueue = null;
-let libraryScanQueue = null;
-let imagePrefetchQueue = null;
-let notificationOutbox = null;
+let honkerDb: ReturnType<typeof honker.open> | null = null;
+let openedHonkerDbPath: string | null = null;
+let pipelineQueue: ReturnType<ReturnType<typeof honker.open>['queue']> | null = null;
+let discoveryRefreshQueue: ReturnType<ReturnType<typeof honker.open>['queue']> | null = null;
+let discoveryRecommendationEnrichmentQueue: ReturnType<ReturnType<typeof honker.open>['queue']> | null = null;
+let discoveryUserRefreshQueue: ReturnType<ReturnType<typeof honker.open>['queue']> | null = null;
+let weeklyFlowOperationQueue: ReturnType<ReturnType<typeof honker.open>['queue']> | null = null;
+let playlistRetryQueue: ReturnType<ReturnType<typeof honker.open>['queue']> | null = null;
+let playlistMbidEnrichmentQueue: ReturnType<ReturnType<typeof honker.open>['queue']> | null = null;
+let systemTaskQueue: ReturnType<ReturnType<typeof honker.open>['queue']> | null = null;
+let libraryScanQueue: ReturnType<ReturnType<typeof honker.open>['queue']> | null = null;
+let imagePrefetchQueue: ReturnType<ReturnType<typeof honker.open>['queue']> | null = null;
+let notificationOutbox: ReturnType<ReturnType<typeof honker.open>['outbox']> | null = null;
 let honkerSchedulerStarted = false;
-let honkerSchedulerAbort = null;
+let honkerSchedulerAbort: AbortController | null = null;
 const WORKER_ID = `aurral-${process.pid}`;
 
 export const SCHEDULED_SYSTEM_TASKS = [
   {
-    name: "weekly-flow-refresh",
-    queue: "system-task",
-    schedule: "@every 1h",
-    payload: { kind: "weekly-flow-refresh" },
+    name: 'weekly-flow-refresh',
+    queue: 'system-task',
+    schedule: '@every 1h',
+    payload: { kind: 'weekly-flow-refresh' },
   },
   {
-    name: "session-cleanup",
-    queue: "system-task",
-    schedule: "@every 1h",
-    payload: { kind: "session-cleanup" },
+    name: 'session-cleanup',
+    queue: 'system-task',
+    schedule: '@every 1h',
+    payload: { kind: 'session-cleanup' },
   },
   {
-    name: "weekly-flow-reuse-repair",
-    queue: "system-task",
-    schedule: "@every 30m",
-    payload: { kind: "weekly-flow-reuse-repair" },
+    name: 'weekly-flow-reuse-repair',
+    queue: 'system-task',
+    schedule: '@every 30m',
+    payload: { kind: 'weekly-flow-reuse-repair' },
   },
   {
-    name: "discovery-refresh-check",
-    queue: "system-task",
-    schedule: "@every 15m",
-    payload: { kind: "discovery-refresh-check" },
+    name: 'discovery-refresh-check',
+    queue: 'system-task',
+    schedule: '@every 15m',
+    payload: { kind: 'discovery-refresh-check' },
   },
   {
-    name: "stale-pipeline-sweep",
-    queue: "system-task",
-    schedule: "@every 10m",
-    payload: { kind: "stale-pipeline-sweep" },
+    name: 'stale-pipeline-sweep',
+    queue: 'system-task',
+    schedule: '@every 10m',
+    payload: { kind: 'stale-pipeline-sweep' },
   },
   {
-    name: "playlist-mbid-enrichment-sweep",
-    queue: "playlist-mbid-enrichment",
-    schedule: "@every 6h",
-    payload: { kind: "playlist-mbid-enrichment-sweep", reason: "schedule" },
+    name: 'playlist-mbid-enrichment-sweep',
+    queue: 'playlist-mbid-enrichment',
+    schedule: '@every 6h',
+    payload: { kind: 'playlist-mbid-enrichment-sweep', reason: 'schedule' },
   },
 ];
 
-const PIPELINE_PHASE_PRIORITY = {
+const PIPELINE_PHASE_PRIORITY: Record<string, number> = {
   search: 0,
   poll: 10,
   download: 20,
   finalize: 30,
 };
 
-export function getPipelinePriorityForPhase(phase) {
-  return PIPELINE_PHASE_PRIORITY[String(phase || "").toLowerCase()] ?? 0;
+export function getPipelinePriorityForPhase(phase: unknown): number {
+  return PIPELINE_PHASE_PRIORITY[String(phase || '').toLowerCase()] ?? 0;
 }
 
 export function getHonkerDb() {
@@ -95,7 +97,7 @@ export function getHonkerDb() {
 
 export function getPipelineQueue() {
   if (!pipelineQueue) {
-    pipelineQueue = getHonkerDb().queue("slskd-pipeline", {
+    pipelineQueue = getHonkerDb().queue('slskd-pipeline', {
       visibilityTimeoutS: 1200,
       maxAttempts: 5,
     });
@@ -103,7 +105,13 @@ export function getPipelineQueue() {
   return pipelineQueue;
 }
 
-export function enqueuePipelineJob(payload, options = {}) {
+type EnqueueOptions = {
+  runAt?: number;
+  delaySeconds?: number;
+  priority?: number;
+};
+
+export function enqueuePipelineJob(payload: Record<string, unknown>, options: EnqueueOptions = {}): number {
   const queue = getPipelineQueue();
   const runAt =
     options.runAt != null
@@ -115,11 +123,11 @@ export function enqueuePipelineJob(payload, options = {}) {
     options.priority != null
       ? Number(options.priority)
       : getPipelinePriorityForPhase(payload?.phase);
-  const jobId = queue.enqueue(payload, {
+  const jobId = queue.enqueue(payload as JsonValue, {
     priority,
     runAt,
   });
-  import("./slskdOrchestratorWorker.js")
+  import('./slskdOrchestratorWorker.js')
     .then(({ startSlskdOrchestratorWorker }) => startSlskdOrchestratorWorker())
     .catch(() => {});
   return jobId;
@@ -127,7 +135,7 @@ export function enqueuePipelineJob(payload, options = {}) {
 
 export function getDiscoveryRefreshQueue() {
   if (!discoveryRefreshQueue) {
-    discoveryRefreshQueue = getHonkerDb().queue("discovery-refresh", {
+    discoveryRefreshQueue = getHonkerDb().queue('discovery-refresh', {
       visibilityTimeoutS: 3600,
       maxAttempts: 4,
     });
@@ -135,7 +143,7 @@ export function getDiscoveryRefreshQueue() {
   return discoveryRefreshQueue;
 }
 
-export function enqueueDiscoveryRefreshJob(payload, options = {}) {
+export function enqueueDiscoveryRefreshJob(payload: unknown, options: EnqueueOptions = {}): number {
   const queue = getDiscoveryRefreshQueue();
   const runAt =
     options.runAt != null
@@ -143,12 +151,12 @@ export function enqueueDiscoveryRefreshJob(payload, options = {}) {
       : options.delaySeconds != null
         ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
         : null;
-  const jobId = queue.enqueue(payload, {
+  const jobId = queue.enqueue(payload as JsonValue, {
     priority: Number(options.priority || 0),
     runAt,
   });
-  if (process.env.NODE_ENV !== "test") {
-    import("./discoveryRefreshWorker.js")
+  if (process.env.NODE_ENV !== 'test') {
+    import('./discoveryRefreshWorker.js')
       .then(({ startDiscoveryRefreshWorker }) => startDiscoveryRefreshWorker())
       .catch(() => {});
   }
@@ -158,7 +166,7 @@ export function enqueueDiscoveryRefreshJob(payload, options = {}) {
 export function getDiscoveryRecommendationEnrichmentQueue() {
   if (!discoveryRecommendationEnrichmentQueue) {
     discoveryRecommendationEnrichmentQueue = getHonkerDb().queue(
-      "discovery-recommendation-enrichment",
+      'discovery-recommendation-enrichment',
       {
         visibilityTimeoutS: 3600,
         maxAttempts: 4,
@@ -168,10 +176,7 @@ export function getDiscoveryRecommendationEnrichmentQueue() {
   return discoveryRecommendationEnrichmentQueue;
 }
 
-export function enqueueDiscoveryRecommendationEnrichmentJob(
-  payload,
-  options = {},
-) {
+export function enqueueDiscoveryRecommendationEnrichmentJob(payload: unknown, options: EnqueueOptions = {}): number {
   const queue = getDiscoveryRecommendationEnrichmentQueue();
   const runAt =
     options.runAt != null
@@ -179,11 +184,11 @@ export function enqueueDiscoveryRecommendationEnrichmentJob(
       : options.delaySeconds != null
         ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
         : null;
-  const jobId = queue.enqueue(payload, {
+  const jobId = queue.enqueue(payload as JsonValue, {
     priority: Number(options.priority || 0),
     runAt,
   });
-  import("./discoveryRecommendationEnrichmentWorker.js")
+  import('./discoveryRecommendationEnrichmentWorker.js')
     .then(({ startDiscoveryRecommendationEnrichmentWorker }) =>
       startDiscoveryRecommendationEnrichmentWorker(),
     )
@@ -193,7 +198,7 @@ export function enqueueDiscoveryRecommendationEnrichmentJob(
 
 export function getDiscoveryUserRefreshQueue() {
   if (!discoveryUserRefreshQueue) {
-    discoveryUserRefreshQueue = getHonkerDb().queue("discovery-user-refresh", {
+    discoveryUserRefreshQueue = getHonkerDb().queue('discovery-user-refresh', {
       visibilityTimeoutS: 3600,
       maxAttempts: 4,
     });
@@ -201,7 +206,7 @@ export function getDiscoveryUserRefreshQueue() {
   return discoveryUserRefreshQueue;
 }
 
-export function enqueueDiscoveryUserRefreshJob(payload, options = {}) {
+export function enqueueDiscoveryUserRefreshJob(payload: unknown, options: EnqueueOptions = {}): number {
   const queue = getDiscoveryUserRefreshQueue();
   const runAt =
     options.runAt != null
@@ -209,21 +214,19 @@ export function enqueueDiscoveryUserRefreshJob(payload, options = {}) {
       : options.delaySeconds != null
         ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
         : null;
-  const jobId = queue.enqueue(payload, {
+  const jobId = queue.enqueue(payload as JsonValue, {
     priority: Number(options.priority || 0),
     runAt,
   });
-  import("./discoveryUserRefreshWorker.js")
-    .then(({ startDiscoveryUserRefreshWorker }) =>
-      startDiscoveryUserRefreshWorker(),
-    )
+  import('./discoveryUserRefreshWorker.js')
+    .then(({ startDiscoveryUserRefreshWorker }) => startDiscoveryUserRefreshWorker())
     .catch(() => {});
   return jobId;
 }
 
 export function getWeeklyFlowOperationQueue() {
   if (!weeklyFlowOperationQueue) {
-    weeklyFlowOperationQueue = getHonkerDb().queue("weekly-flow-operation", {
+    weeklyFlowOperationQueue = getHonkerDb().queue('weekly-flow-operation', {
       visibilityTimeoutS: 3600,
       maxAttempts: 3,
     });
@@ -231,7 +234,7 @@ export function getWeeklyFlowOperationQueue() {
   return weeklyFlowOperationQueue;
 }
 
-export function enqueueWeeklyFlowOperationJob(payload, options = {}) {
+export function enqueueWeeklyFlowOperationJob(payload: unknown, options: EnqueueOptions = {}): number {
   const queue = getWeeklyFlowOperationQueue();
   const runAt =
     options.runAt != null
@@ -239,21 +242,19 @@ export function enqueueWeeklyFlowOperationJob(payload, options = {}) {
       : options.delaySeconds != null
         ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
         : null;
-  const jobId = queue.enqueue(payload, {
+  const jobId = queue.enqueue(payload as JsonValue, {
     priority: Number(options.priority || 0),
     runAt,
   });
-  import("./weeklyFlowOperationWorker.js")
-    .then(({ startWeeklyFlowOperationWorker }) =>
-      startWeeklyFlowOperationWorker(),
-    )
+  import('./weeklyFlowOperationWorker.js')
+    .then(({ startWeeklyFlowOperationWorker }) => startWeeklyFlowOperationWorker())
     .catch(() => {});
   return jobId;
 }
 
 export function getPlaylistRetryQueue() {
   if (!playlistRetryQueue) {
-    playlistRetryQueue = getHonkerDb().queue("playlist-retry", {
+    playlistRetryQueue = getHonkerDb().queue('playlist-retry', {
       visibilityTimeoutS: 1800,
       maxAttempts: 5,
     });
@@ -261,7 +262,7 @@ export function getPlaylistRetryQueue() {
   return playlistRetryQueue;
 }
 
-export function enqueuePlaylistRetryJob(payload, options = {}) {
+export function enqueuePlaylistRetryJob(payload: unknown, options: EnqueueOptions = {}): number {
   const queue = getPlaylistRetryQueue();
   const runAt =
     options.runAt != null
@@ -269,32 +270,27 @@ export function enqueuePlaylistRetryJob(payload, options = {}) {
       : options.delaySeconds != null
         ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
         : null;
-  const jobId = queue.enqueue(payload, {
+  const jobId = queue.enqueue(payload as JsonValue, {
     priority: Number(options.priority || 0),
     runAt,
   });
-  import("./weeklyFlowPlaylistRetryWorker.js")
-    .then(({ startWeeklyFlowPlaylistRetryWorker }) =>
-      startWeeklyFlowPlaylistRetryWorker(),
-    )
+  import('./weeklyFlowPlaylistRetryWorker.js')
+    .then(({ startWeeklyFlowPlaylistRetryWorker }) => startWeeklyFlowPlaylistRetryWorker())
     .catch(() => {});
   return jobId;
 }
 
 export function getPlaylistMbidEnrichmentQueue() {
   if (!playlistMbidEnrichmentQueue) {
-    playlistMbidEnrichmentQueue = getHonkerDb().queue(
-      "playlist-mbid-enrichment",
-      {
-        visibilityTimeoutS: 3600,
-        maxAttempts: 4,
-      },
-    );
+    playlistMbidEnrichmentQueue = getHonkerDb().queue('playlist-mbid-enrichment', {
+      visibilityTimeoutS: 3600,
+      maxAttempts: 4,
+    });
   }
   return playlistMbidEnrichmentQueue;
 }
 
-export function enqueuePlaylistMbidEnrichmentJob(payload = {}, options = {}) {
+export function enqueuePlaylistMbidEnrichmentJob(payload: unknown = {}, options: EnqueueOptions = {}): number {
   const queue = getPlaylistMbidEnrichmentQueue();
   const runAt =
     options.runAt != null
@@ -302,21 +298,19 @@ export function enqueuePlaylistMbidEnrichmentJob(payload = {}, options = {}) {
       : options.delaySeconds != null
         ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
         : null;
-  const jobId = queue.enqueue(payload, {
+  const jobId = queue.enqueue(payload as JsonValue, {
     priority: Number(options.priority || 0),
     runAt,
   });
-  import("./playlistMbidEnrichmentWorker.js")
-    .then(({ startPlaylistMbidEnrichmentWorker }) =>
-      startPlaylistMbidEnrichmentWorker(),
-    )
+  import('./playlistMbidEnrichmentWorker.js')
+    .then(({ startPlaylistMbidEnrichmentWorker }) => startPlaylistMbidEnrichmentWorker())
     .catch(() => {});
   return jobId;
 }
 
 export function getSystemTaskQueue() {
   if (!systemTaskQueue) {
-    systemTaskQueue = getHonkerDb().queue("system-task", {
+    systemTaskQueue = getHonkerDb().queue('system-task', {
       visibilityTimeoutS: 3600,
       maxAttempts: 3,
     });
@@ -324,7 +318,7 @@ export function getSystemTaskQueue() {
   return systemTaskQueue;
 }
 
-export function enqueueSystemTaskJob(payload, options = {}) {
+export function enqueueSystemTaskJob(payload: unknown, options: EnqueueOptions = {}): number {
   const queue = getSystemTaskQueue();
   const runAt =
     options.runAt != null
@@ -332,11 +326,11 @@ export function enqueueSystemTaskJob(payload, options = {}) {
       : options.delaySeconds != null
         ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
         : null;
-  const jobId = queue.enqueue(payload, {
+  const jobId = queue.enqueue(payload as JsonValue, {
     priority: Number(options.priority || 0),
     runAt,
   });
-  import("./systemTaskWorker.js")
+  import('./systemTaskWorker.js')
     .then(({ startSystemTaskWorker }) => startSystemTaskWorker())
     .catch(() => {});
   return jobId;
@@ -344,7 +338,7 @@ export function enqueueSystemTaskJob(payload, options = {}) {
 
 export function getLibraryScanQueue() {
   if (!libraryScanQueue) {
-    libraryScanQueue = getHonkerDb().queue("library-scan", {
+    libraryScanQueue = getHonkerDb().queue('library-scan', {
       visibilityTimeoutS: 600,
       maxAttempts: 3,
     });
@@ -352,7 +346,7 @@ export function getLibraryScanQueue() {
   return libraryScanQueue;
 }
 
-export function enqueueLibraryScanJob(payload = {}, options = {}) {
+export function enqueueLibraryScanJob(payload: unknown = {}, options: EnqueueOptions = {}): number {
   const queue = getLibraryScanQueue();
   const runAt =
     options.runAt != null
@@ -360,11 +354,11 @@ export function enqueueLibraryScanJob(payload = {}, options = {}) {
       : options.delaySeconds != null
         ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
         : null;
-  const jobId = queue.enqueue(payload, {
+  const jobId = queue.enqueue(payload as JsonValue, {
     priority: Number(options.priority || 0),
     runAt,
   });
-  import("./libraryScanWorker.js")
+  import('./libraryScanWorker.js')
     .then(({ startLibraryScanWorker }) => startLibraryScanWorker())
     .catch(() => {});
   return jobId;
@@ -372,7 +366,7 @@ export function enqueueLibraryScanJob(payload = {}, options = {}) {
 
 export function getImagePrefetchQueue() {
   if (!imagePrefetchQueue) {
-    imagePrefetchQueue = getHonkerDb().queue("image-prefetch", {
+    imagePrefetchQueue = getHonkerDb().queue('image-prefetch', {
       visibilityTimeoutS: 600,
       maxAttempts: 4,
     });
@@ -380,7 +374,7 @@ export function getImagePrefetchQueue() {
   return imagePrefetchQueue;
 }
 
-export function enqueueImagePrefetchJob(payload, options = {}) {
+export function enqueueImagePrefetchJob(payload: unknown, options: EnqueueOptions = {}): number {
   const queue = getImagePrefetchQueue();
   const runAt =
     options.runAt != null
@@ -388,11 +382,11 @@ export function enqueueImagePrefetchJob(payload, options = {}) {
       : options.delaySeconds != null
         ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
         : null;
-  const jobId = queue.enqueue(payload, {
+  const jobId = queue.enqueue(payload as JsonValue, {
     priority: Number(options.priority || 0),
     runAt,
   });
-  import("./imagePrefetchWorker.js")
+  import('./imagePrefetchWorker.js')
     .then(({ startImagePrefetchWorker }) => startImagePrefetchWorker())
     .catch(() => {});
   return jobId;
@@ -401,15 +395,12 @@ export function enqueueImagePrefetchJob(payload, options = {}) {
 export function getNotificationOutbox() {
   if (!notificationOutbox) {
     notificationOutbox = getHonkerDb().outbox(
-      "notifications",
-      async (payload, job) => {
-        const { deliverQueuedNotification } =
-          await import("./notificationService.js");
-        const { withJobHeartbeat } = await import("./honkerWorkerRuntime.js");
+      'notifications',
+      async (payload: unknown, job: unknown) => {
+        const { deliverQueuedNotification } = await import('./notificationService.js');
+        const { withJobHeartbeat } = await import('./honkerWorkerRuntime.js');
         const outbox = getNotificationOutbox();
-        await withJobHeartbeat(job, outbox.queue, () =>
-          deliverQueuedNotification(payload),
-        );
+        await withJobHeartbeat(job, outbox.queue, () => deliverQueuedNotification(payload as Record<string, unknown>));
       },
       {
         visibilityTimeoutS: 120,
@@ -421,12 +412,10 @@ export function getNotificationOutbox() {
   return notificationOutbox;
 }
 
-export function enqueueNotification(payload) {
-  const jobId = getNotificationOutbox().enqueue(payload);
-  import("./notificationOutboxWorker.js")
-    .then(({ startNotificationOutboxWorker }) =>
-      startNotificationOutboxWorker(),
-    )
+export function enqueueNotification(payload: unknown): number {
+  const jobId = getNotificationOutbox().enqueue(payload as JsonValue);
+  import('./notificationOutboxWorker.js')
+    .then(({ startNotificationOutboxWorker }) => startNotificationOutboxWorker())
     .catch(() => {});
   return jobId;
 }
@@ -437,46 +426,37 @@ export function bootstrapHonkerSchedules() {
     try {
       scheduler.remove(task.name);
     } catch {}
-    scheduler.add(task);
+    scheduler.add(task as SchedulerAddOptions);
   }
 }
 
 export function enqueueHonkerStartupTasks() {
+  enqueueSystemTaskJob({ kind: 'playlist-startup-migration' }, { delaySeconds: 3, priority: 10 });
+  enqueueSystemTaskJob({ kind: 'weekly-flow-startup-check' }, { delaySeconds: 5, priority: 5 });
   enqueueSystemTaskJob(
-    { kind: "playlist-startup-migration" },
-    { delaySeconds: 3, priority: 10 },
-  );
-  enqueueSystemTaskJob(
-    { kind: "weekly-flow-startup-check" },
-    { delaySeconds: 5, priority: 5 },
-  );
-  enqueueSystemTaskJob(
-    { kind: "weekly-flow-startup-reuse-repair" },
+    { kind: 'weekly-flow-startup-reuse-repair' },
     { delaySeconds: 15, priority: 5 },
   );
-  enqueueSystemTaskJob(
-    { kind: "discovery-bootstrap" },
-    { delaySeconds: 15, priority: 5 },
-  );
+  enqueueSystemTaskJob({ kind: 'discovery-bootstrap' }, { delaySeconds: 15, priority: 5 });
   enqueuePlaylistMbidEnrichmentJob(
-    { kind: "playlist-mbid-enrichment-sweep", reason: "startup" },
+    { kind: 'playlist-mbid-enrichment-sweep', reason: 'startup' },
     { delaySeconds: 30, priority: -5 },
   );
 }
 
 export function startHonkerScheduler() {
-  if (honkerSchedulerStarted || process.env.NODE_ENV === "test") return;
+  if (honkerSchedulerStarted || process.env.NODE_ENV === 'test') return;
   honkerSchedulerStarted = true;
   const abort = new AbortController();
   honkerSchedulerAbort = abort;
   getHonkerDb()
     .scheduler()
     .run(WORKER_ID, abort.signal)
-    .catch((error) => {
-      console.error("[honkerScheduler] loop error:", error);
+    .catch((error: unknown) => {
+      console.error('[honkerScheduler] loop error:', error);
       honkerSchedulerStarted = false;
       honkerSchedulerAbort = null;
-      scheduleHonkerComponentRestart("scheduler", startHonkerScheduler);
+      scheduleHonkerComponentRestart('scheduler', startHonkerScheduler);
     });
 }
 
@@ -515,13 +495,13 @@ export function closeHonkerDb() {
   notificationOutbox = null;
 }
 
-const DISCOVERY_REFRESH_QUEUE_LOCK = "discovery-refresh-queue";
+const DISCOVERY_REFRESH_QUEUE_LOCK = 'discovery-refresh-queue';
 
-let discoveryRefreshQueueLock = null;
+let discoveryRefreshQueueLock: { release: () => void } | null = null;
 
-export function isHonkerLockHeld(name) {
+export function isHonkerLockHeld(name: unknown): boolean {
   const probeOwner = `probe-${WORKER_ID}-${Date.now()}`;
-  const lock = getHonkerDb().tryLock(String(name || "").trim(), probeOwner, 1);
+  const lock = getHonkerDb().tryLock(String(name || '').trim(), probeOwner, 1);
   if (lock) {
     try {
       lock.release();
@@ -533,11 +513,7 @@ export function isHonkerLockHeld(name) {
 
 export function tryAcquireDiscoveryRefreshQueueLock() {
   if (discoveryRefreshQueueLock) return true;
-  const lock = getHonkerDb().tryLock(
-    DISCOVERY_REFRESH_QUEUE_LOCK,
-    WORKER_ID,
-    3600,
-  );
+  const lock = getHonkerDb().tryLock(DISCOVERY_REFRESH_QUEUE_LOCK, WORKER_ID, 3600);
   if (!lock) return false;
   discoveryRefreshQueueLock = lock;
   return true;
@@ -552,27 +528,28 @@ export function releaseDiscoveryRefreshQueueLock() {
 }
 
 export function isDiscoveryRefreshQueueLocked() {
-  return (
-    discoveryRefreshQueueLock != null ||
-    isHonkerLockHeld(DISCOVERY_REFRESH_QUEUE_LOCK)
-  );
+  return discoveryRefreshQueueLock != null || isHonkerLockHeld(DISCOVERY_REFRESH_QUEUE_LOCK);
 }
 
 const inProcessLockTails = new Map();
 
 export async function withHonkerLock(
-  name,
-  fn,
-  { ttlSeconds = 120, waitTimeoutMs = 300000, retryDelayMs = 250 } = {},
-) {
-  const safeName = String(name || "").trim();
+  name: unknown,
+  fn: () => unknown,
+  { ttlSeconds = 120, waitTimeoutMs = 300000, retryDelayMs = 250 }: {
+    ttlSeconds?: number;
+    waitTimeoutMs?: number;
+    retryDelayMs?: number;
+  } = {},
+): Promise<unknown> {
+  const safeName = String(name || '').trim();
   if (!safeName) {
-    throw new Error("Honker lock name is required");
+    throw new Error('Honker lock name is required');
   }
   const deadline = Date.now() + Math.max(0, Number(waitTimeoutMs) || 0);
 
   const previousTail = inProcessLockTails.get(safeName) || Promise.resolve();
-  let releaseGate;
+  let releaseGate: ((value?: unknown) => void) | undefined;
   const gate = new Promise((resolve) => {
     releaseGate = resolve;
   });
@@ -585,7 +562,7 @@ export async function withHonkerLock(
       new Promise((resolve) => {
         const waitMs = Math.max(0, deadline - Date.now());
         const timer = setTimeout(() => resolve(false), waitMs);
-        if (typeof timer.unref === "function") timer.unref();
+        if (typeof timer.unref === 'function') timer.unref();
       }),
     ]);
     if (!gateAcquired) {
@@ -604,10 +581,7 @@ export async function withHonkerLock(
       );
     }
 
-    const heartbeatMs = Math.max(
-      1000,
-      Math.floor((Number(ttlSeconds) || 120) * 1000 * 0.33),
-    );
+    const heartbeatMs = Math.max(1000, Math.floor((Number(ttlSeconds) || 120) * 1000 * 0.33));
     const heartbeat = setInterval(() => {
       try {
         lock.heartbeat(ttlSeconds);
@@ -623,7 +597,7 @@ export async function withHonkerLock(
       } catch {}
     }
   } finally {
-    releaseGate();
+    releaseGate?.();
     if (inProcessLockTails.get(safeName) === tail) {
       inProcessLockTails.delete(safeName);
     }
@@ -634,8 +608,8 @@ export function getWorkerId() {
   return WORKER_ID;
 }
 
-export function getHonkerQueueDepth(queueName) {
-  const safeQueue = String(queueName || "").trim();
+export function getHonkerQueueDepth(queueName: unknown): number {
+  const safeQueue = String(queueName || '').trim();
   if (!safeQueue) return 0;
   const now = Math.floor(Date.now() / 1000);
   const row = getHonkerDb().query(
@@ -650,17 +624,17 @@ export function getHonkerQueueDepth(queueName) {
 }
 
 export const HONKER_QUEUE_NAMES = [
-  "system-task",
-  "weekly-flow-operation",
-  "slskd-pipeline",
-  "playlist-retry",
-  "playlist-mbid-enrichment",
-  "library-scan",
-  "discovery-refresh",
-  "discovery-recommendation-enrichment",
-  "discovery-user-refresh",
-  "image-prefetch",
-  "_outbox:notifications",
+  'system-task',
+  'weekly-flow-operation',
+  'slskd-pipeline',
+  'playlist-retry',
+  'playlist-mbid-enrichment',
+  'library-scan',
+  'discovery-refresh',
+  'discovery-recommendation-enrichment',
+  'discovery-user-refresh',
+  'image-prefetch',
+  '_outbox:notifications',
 ];
 
 export function sweepAllHonkerQueues() {
@@ -675,43 +649,41 @@ export function sweepAllHonkerQueues() {
   return swept;
 }
 
-export function getHonkerQueueByName(queueName) {
+export function getHonkerQueueByName(queueName: unknown) {
   switch (queueName) {
-    case "slskd-pipeline":
+    case 'slskd-pipeline':
       return getPipelineQueue();
-    case "discovery-refresh":
+    case 'discovery-refresh':
       return getDiscoveryRefreshQueue();
-    case "discovery-recommendation-enrichment":
+    case 'discovery-recommendation-enrichment':
       return getDiscoveryRecommendationEnrichmentQueue();
-    case "discovery-user-refresh":
+    case 'discovery-user-refresh':
       return getDiscoveryUserRefreshQueue();
-    case "weekly-flow-operation":
+    case 'weekly-flow-operation':
       return getWeeklyFlowOperationQueue();
-    case "playlist-retry":
+    case 'playlist-retry':
       return getPlaylistRetryQueue();
-    case "playlist-mbid-enrichment":
+    case 'playlist-mbid-enrichment':
       return getPlaylistMbidEnrichmentQueue();
-    case "system-task":
+    case 'system-task':
       return getSystemTaskQueue();
-    case "library-scan":
+    case 'library-scan':
       return getLibraryScanQueue();
-    case "image-prefetch":
+    case 'image-prefetch':
       return getImagePrefetchQueue();
-    case "_outbox:notifications":
+    case '_outbox:notifications':
       return getNotificationOutbox().queue;
     default:
       return null;
   }
 }
 
-export function getHonkerQueueNextClaimAt(queueName) {
-  const safeQueue = String(queueName || "").trim();
+export function getHonkerQueueNextClaimAt(queueName: unknown) {
+  const safeQueue = String(queueName || '').trim();
   if (!safeQueue) return null;
   const queue = getHonkerQueueByName(safeQueue);
-  const value =
-    queue && typeof queue._nextClaimAt === "function"
-      ? queue._nextClaimAt()
-      : null;
+  const q = queue as Record<string, unknown> | null;
+  const value = q && typeof q._nextClaimAt === 'function' ? (q._nextClaimAt as () => unknown)() : null;
   const timestamp = Number(value);
   return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
 }

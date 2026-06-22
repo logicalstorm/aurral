@@ -1,5 +1,5 @@
-import { getPlaylistRetryQueue, getWorkerId, withHonkerLock } from "./honkerDb.js";
-import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
+import { getPlaylistRetryQueue, getWorkerId, withHonkerLock } from './honkerDb.js';
+import { weeklyFlowWorker } from './weeklyFlowWorker.js';
 import {
   createIdleAbortController,
   getWorkerIdleStopMs,
@@ -7,14 +7,13 @@ import {
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
   withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
+} from './honkerWorkerRuntime.js';
 
-const WORKER_NAME = "playlist-retry";
+const WORKER_NAME = 'playlist-retry';
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
-let idleController = null;
+let idleController: ReturnType<typeof createIdleAbortController> | null = null;
 
 async function runLoop() {
   const queue = getPlaylistRetryQueue();
@@ -30,7 +29,7 @@ async function runLoop() {
     })) {
       idleController.disarm();
       if (!running || stopRequested) break;
-      const playlistType = String(job.payload?.playlistType || "").trim();
+      const playlistType = String((job.payload as Record<string, unknown>)?.playlistType || '').trim();
       const scheduledJobId = playlistType
         ? weeklyFlowWorker.getScheduledRetryJobId(playlistType)
         : null;
@@ -53,7 +52,7 @@ async function runLoop() {
         );
         job.ack();
       } catch (error) {
-        const message = error?.message || String(error);
+        const message = error instanceof Error ? error.message : String(error);
         if (job.attempts >= 4) {
           job.fail(message);
         } else {
@@ -65,14 +64,13 @@ async function runLoop() {
     }
   } catch (error) {
     if (!idleController?.idleStopped && !stopRequested) {
-      console.error("[weeklyFlowPlaylistRetryWorker] loop error:", error);
+      console.error('[weeklyFlowPlaylistRetryWorker] loop error:', error);
     }
   } finally {
     const idleStopped = idleController?.idleStopped === true;
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
     const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startWeeklyFlowPlaylistRetryWorker, {
@@ -85,7 +83,7 @@ export function startWeeklyFlowPlaylistRetryWorker() {
   if (running || isHonkerShuttingDown()) return;
   running = true;
   stopRequested = false;
-  loopPromise = runLoop();
+  runLoop();
 }
 
 export function stopWeeklyFlowPlaylistRetryWorker() {

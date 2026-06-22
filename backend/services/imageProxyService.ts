@@ -1,13 +1,13 @@
-import crypto from "crypto";
-import fs from "fs";
-import path from "path";
-import axios from "axios";
-import sharp from "sharp";
-import { resolveAurralDataDir } from "../config/data-dir.js";
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import axios from 'axios';
+import sharp from 'sharp';
+import { resolveAurralDataDir } from '../config/data-dir.js';
 
-const IMAGE_PROXY_ROUTE = "/api/image-proxy";
+const IMAGE_PROXY_ROUTE = '/api/image-proxy';
 const DATA_DIR = resolveAurralDataDir();
-const IMAGE_PROXY_DIR = path.join(DATA_DIR, "image-proxy");
+const IMAGE_PROXY_DIR = path.join(DATA_DIR, 'image-proxy');
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 25000;
 const OPTIMIZED_IMAGE_MAX_BYTES = 1024 * 1024;
@@ -31,19 +31,14 @@ const PRIVATE_HOST_PATTERNS = [
 
 const PRIVATE_172_RANGE = /^172\.(1[6-9]|2\d|3[0-1])\./;
 const MIME_EXTENSION_MAP = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/gif": "gif",
-  "image/avif": "avif",
-  "image/svg+xml": "svg",
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/avif': 'avif',
+  'image/svg+xml': 'svg',
 };
-const OPTIMIZABLE_CONTENT_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/avif",
-]);
+const OPTIMIZABLE_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
 
 const ensureCacheDir = () => {
   fs.mkdirSync(IMAGE_PROXY_DIR, { recursive: true });
@@ -62,15 +57,12 @@ const initializeCacheIndex = () => {
     const metaPath = path.join(IMAGE_PROXY_DIR, file);
     let meta = null;
     try {
-      meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+      meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
     } catch {
       continue;
     }
     if (!meta?.extension) continue;
-    const imagePath = path.join(
-      IMAGE_PROXY_DIR,
-      `${cacheKey}.${meta.extension}`,
-    );
+    const imagePath = path.join(IMAGE_PROXY_DIR, `${cacheKey}.${meta.extension}`);
     if (!fs.existsSync(imagePath)) continue;
     const sourceUrl = normalizeKnownImageUrl(meta.sourceUrl);
     const entry = {
@@ -79,8 +71,7 @@ const initializeCacheIndex = () => {
       imagePath,
       localUrl: buildLocalImageUrl(cacheKey, meta.extension),
       isFresh:
-        Number(meta.fetchedAt || 0) > 0 &&
-        Date.now() - Number(meta.fetchedAt || 0) < CACHE_TTL_MS,
+        Number(meta.fetchedAt || 0) > 0 && Date.now() - Number(meta.fetchedAt || 0) < CACHE_TTL_MS,
     };
     cacheEntriesByKey.set(cacheKey, entry);
     if (sourceUrl) {
@@ -119,45 +110,44 @@ export const getImageProxyCacheSizeBytes = () => {
   return total;
 };
 
-const isPrivateHostname = (hostname) => {
-  const normalized = String(hostname || "")
+const isPrivateHostname = (hostname: string) => {
+  const normalized = String(hostname || '')
     .trim()
     .toLowerCase();
   if (!normalized) return true;
-  if (normalized.endsWith(".local")) return true;
+  if (normalized.endsWith('.local')) return true;
   if (PRIVATE_172_RANGE.test(normalized)) return true;
   return PRIVATE_HOST_PATTERNS.some((pattern) => pattern.test(normalized));
 };
 
-const hashValue = (value) =>
-  crypto.createHash("sha256").update(String(value)).digest("hex");
+const hashValue = (value: string) => crypto.createHash('sha256').update(String(value)).digest('hex');
 
-const normalizeKnownImageUrl = (value) =>
-  String(value || "")
+const normalizeKnownImageUrl = (value: string) =>
+  String(value || '')
     .trim()
     .replace(
       /^(https?:\/\/(?:caa\.lkly\.net|coverartarchive\.org)\/release-group\/[0-9a-f-]+)\/front-250(?=[/?#]|$)/i,
-      "$1/front",
+      '$1/front',
     )
     .replace(
       /^(https?:\/\/(?:[\w-]+\.)?ca\.archive\.org\/.*?)-thumb250(\.[a-z0-9]+)(?=[?#]|$)/i,
-      "$1$2",
+      '$1$2',
     )
     .replace(
       /^(https?:\/\/archive\.org\/download\/[^?#]+?)_thumb250(\.[a-z0-9]+)(?=[?#]|$)/i,
-      "$1$2",
+      '$1$2',
     );
 
-const getCachePaths = (cacheKey) => ({
+const getCachePaths = (cacheKey: string) => ({
   metaPath: path.join(IMAGE_PROXY_DIR, `${cacheKey}.json`),
   baseImagePath: path.join(IMAGE_PROXY_DIR, `${cacheKey}`),
 });
 
-const removeStaleCachedFiles = (cacheKey, keepExtension) => {
+const removeStaleCachedFiles = (cacheKey: string, keepExtension?: string) => {
   ensureCacheDir();
   const prefix = `${cacheKey}.`;
   for (const file of fs.readdirSync(IMAGE_PROXY_DIR)) {
-    if (!file.startsWith(prefix) || file.endsWith(".json")) continue;
+    if (!file.startsWith(prefix) || file.endsWith('.json')) continue;
     if (keepExtension && file === `${cacheKey}.${keepExtension}`) continue;
     try {
       fs.unlinkSync(path.join(IMAGE_PROXY_DIR, file));
@@ -165,26 +155,15 @@ const removeStaleCachedFiles = (cacheKey, keepExtension) => {
   }
 };
 
-const buildLocalImageUrl = (cacheKey, extension) =>
-  `${IMAGE_PROXY_ROUTE}/${cacheKey}.${extension}`;
+const buildLocalImageUrl = (cacheKey: string, extension: string) => `${IMAGE_PROXY_ROUTE}/${cacheKey}.${extension}`;
 
-const getCacheKeyFromLocalUrl = (value) => {
-  const normalized = String(value || "").trim();
-  const match = normalized.match(
-    /\/api\/image-proxy\/([a-f0-9]{64})(?:\.[a-z0-9]+)?$/i,
-  );
+const getCacheKeyFromLocalUrl = (value: string) => {
+  const normalized = String(value || '').trim();
+  const match = normalized.match(/\/api\/image-proxy\/([a-f0-9]{64})(?:\.[a-z0-9]+)?$/i);
   return match?.[1]?.toLowerCase() || null;
 };
 
-const readCacheMetadata = (metaPath) => {
-  try {
-    return JSON.parse(fs.readFileSync(metaPath, "utf8"));
-  } catch {
-    return null;
-  }
-};
-
-const getCachedEntryFromKey = (cacheKey) => {
+const getCachedEntryFromKey = (cacheKey: string) => {
   if (!cacheKey) return null;
   initializeCacheIndex();
   const entry = cacheEntriesByKey.get(cacheKey);
@@ -197,7 +176,7 @@ const getCachedEntryFromKey = (cacheKey) => {
   };
 };
 
-export const isImageProxyLocalUrlReady = (value) => {
+export const isImageProxyLocalUrlReady = (value: string) => {
   const cacheKey = getCacheKeyFromLocalUrl(value);
   if (!cacheKey) return true;
   const cached = getCachedEntryFromKey(cacheKey);
@@ -209,19 +188,17 @@ export const isImageProxyLocalUrlReady = (value) => {
   }
 };
 
-const getCachedEntry = (sourceUrl) => {
+const getCachedEntry = (sourceUrl: string) => {
   const normalizedSourceUrl = normalizeKnownImageUrl(sourceUrl);
   if (!normalizedSourceUrl) return null;
   initializeCacheIndex();
-  const cacheKey =
-    cacheKeysBySourceUrl.get(normalizedSourceUrl) ||
-    hashValue(normalizedSourceUrl);
+  const cacheKey = cacheKeysBySourceUrl.get(normalizedSourceUrl) || hashValue(normalizedSourceUrl);
   return getCachedEntryFromKey(cacheKey);
 };
 
-const writeCacheEntry = (cacheKey, buffer, contentType, sourceUrl) => {
+const writeCacheEntry = (cacheKey: string, buffer: Buffer, contentType: string, sourceUrl: string) => {
   ensureCacheDir();
-  const extension = MIME_EXTENSION_MAP[contentType] || "img";
+  const extension = (MIME_EXTENSION_MAP as Record<string, string>)[contentType] || 'img';
   const { metaPath, baseImagePath } = getCachePaths(cacheKey);
   const imagePath = `${baseImagePath}.${extension}`;
   const fetchedAt = Date.now();
@@ -250,16 +227,16 @@ const writeCacheEntry = (cacheKey, buffer, contentType, sourceUrl) => {
   return entry;
 };
 
-const shouldNormalizeCachedEntry = (entry) => {
+const shouldNormalizeCachedEntry = (entry: any) => {
   if (!entry?.imagePath || !entry?.meta?.contentType) return false;
   if (!OPTIMIZABLE_CONTENT_TYPES.has(entry.meta.contentType)) return false;
   return (
-    entry.meta.contentType !== "image/webp" ||
+    entry.meta.contentType !== 'image/webp' ||
     Number(entry.meta.size || 0) > OPTIMIZED_IMAGE_MAX_BYTES
   );
 };
 
-const optimizeImageBuffer = async (buffer, contentType) => {
+const optimizeImageBuffer = async (buffer: Buffer, contentType: string) => {
   if (!OPTIMIZABLE_CONTENT_TYPES.has(contentType)) {
     return {
       buffer,
@@ -277,10 +254,7 @@ const optimizeImageBuffer = async (buffer, contentType) => {
     };
   }
 
-  const largestDimension = Math.max(
-    metadata?.width || 0,
-    metadata?.height || 0,
-  );
+  const largestDimension = Math.max(metadata?.width || 0, metadata?.height || 0);
   const dimensionSteps = FALLBACK_MAX_DIMENSIONS.filter(
     (dimension) => dimension === null || largestDimension > dimension,
   );
@@ -297,7 +271,7 @@ const optimizeImageBuffer = async (buffer, contentType) => {
         candidate = candidate.resize({
           width: maxDimension,
           height: maxDimension,
-          fit: "inside",
+          fit: 'inside',
           withoutEnlargement: true,
         });
       }
@@ -309,30 +283,24 @@ const optimizeImageBuffer = async (buffer, contentType) => {
         })
         .toBuffer();
 
-      if (
-        !bestCandidate ||
-        optimizedBuffer.length < bestCandidate.buffer.length
-      ) {
+      if (!bestCandidate || optimizedBuffer.length < bestCandidate.buffer.length) {
         bestCandidate = {
           buffer: optimizedBuffer,
-          contentType: "image/webp",
+          contentType: 'image/webp',
         };
       }
 
-      if (
-        quality === DEFAULT_WEBP_QUALITY &&
-        optimizedBuffer.length <= OPTIMIZED_IMAGE_MAX_BYTES
-      ) {
+      if (quality === DEFAULT_WEBP_QUALITY && optimizedBuffer.length <= OPTIMIZED_IMAGE_MAX_BYTES) {
         return {
           buffer: optimizedBuffer,
-          contentType: "image/webp",
+          contentType: 'image/webp',
         };
       }
 
       if (optimizedBuffer.length <= OPTIMIZED_IMAGE_MAX_BYTES) {
         return {
           buffer: optimizedBuffer,
-          contentType: "image/webp",
+          contentType: 'image/webp',
         };
       }
     }
@@ -341,7 +309,7 @@ const optimizeImageBuffer = async (buffer, contentType) => {
   return bestCandidate || { buffer, contentType };
 };
 
-const normalizeCachedEntryIfNeeded = async (entry) => {
+const normalizeCachedEntryIfNeeded = async (entry: any) => {
   if (!shouldNormalizeCachedEntry(entry)) {
     return entry;
   }
@@ -365,49 +333,43 @@ const normalizeCachedEntryIfNeeded = async (entry) => {
     entry.cacheKey,
     optimized.buffer,
     optimized.contentType,
-    normalizeKnownImageUrl(entry.meta.sourceUrl) ||
-      entry.meta.sourceUrl ||
-      null,
+    normalizeKnownImageUrl(entry.meta.sourceUrl) || entry.meta.sourceUrl || null,
   );
 };
 
-const fetchAndCacheImage = async (sourceUrl) => {
+const fetchAndCacheImage = async (sourceUrl: string) => {
   const normalizedSourceUrl = normalizeKnownImageUrl(sourceUrl);
   if (!normalizedSourceUrl) {
-    throw new Error("Missing source image URL");
+    throw new Error('Missing source image URL');
   }
 
   const parsed = new URL(normalizedSourceUrl);
-  if (!["http:", "https:"].includes(parsed.protocol)) {
-    throw new Error("Unsupported image protocol");
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Unsupported image protocol');
   }
   if (isPrivateHostname(parsed.hostname)) {
-    throw new Error("Refusing to cache private host");
+    throw new Error('Refusing to cache private host');
   }
 
   const response = await axios.get(normalizedSourceUrl, {
-    responseType: "arraybuffer",
+    responseType: 'arraybuffer',
     timeout: FETCH_TIMEOUT_MS,
     maxRedirects: 10,
     headers: {
-      Accept:
-        "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-      "User-Agent": "Aurral Local Image Cache",
+      Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      'User-Agent': 'Aurral Local Image Cache',
     },
   });
 
-  const contentType = String(response.headers["content-type"] || "")
-    .split(";")[0]
+  const contentType = String(response.headers['content-type'] || '')
+    .split(';')[0]
     .trim()
     .toLowerCase();
-  if (!contentType.startsWith("image/")) {
-    throw new Error("Upstream response is not an image");
+  if (!contentType.startsWith('image/')) {
+    throw new Error('Upstream response is not an image');
   }
 
-  const optimized = await optimizeImageBuffer(
-    Buffer.from(response.data),
-    contentType,
-  );
+  const optimized = await optimizeImageBuffer(Buffer.from(response.data), contentType);
 
   return writeCacheEntry(
     hashValue(normalizedSourceUrl),
@@ -417,19 +379,19 @@ const fetchAndCacheImage = async (sourceUrl) => {
   );
 };
 
-export const warmImageProxy = async (sourceUrl) => {
+export const warmImageProxy = async (sourceUrl: string) => {
   const cacheKeyFromLocalUrl = getCacheKeyFromLocalUrl(sourceUrl);
   if (cacheKeyFromLocalUrl) {
     const cachedLocal = getCachedEntryFromKey(cacheKeyFromLocalUrl);
     if (cachedLocal?.imagePath) {
       return normalizeCachedEntryIfNeeded(cachedLocal);
     }
-    throw new Error("Missing local cached image");
+    throw new Error('Missing local cached image');
   }
 
   const normalizedSourceUrl = normalizeKnownImageUrl(sourceUrl);
   if (!normalizedSourceUrl) {
-    throw new Error("Missing source image URL");
+    throw new Error('Missing source image URL');
   }
 
   const cached = getCachedEntry(normalizedSourceUrl);
@@ -448,20 +410,20 @@ export const warmImageProxy = async (sourceUrl) => {
   return request;
 };
 
-export const buildImageProxyUrl = (sourceUrl) => {
+export const buildImageProxyUrl = (sourceUrl: string) => {
   const normalized = normalizeKnownImageUrl(sourceUrl);
   if (!normalized) return null;
   if (
-    normalized.startsWith("/") ||
-    normalized.startsWith("data:") ||
-    normalized.startsWith("blob:")
+    normalized.startsWith('/') ||
+    normalized.startsWith('data:') ||
+    normalized.startsWith('blob:')
   ) {
     return normalized;
   }
 
   try {
     const parsed = new URL(normalized);
-    if (!["http:", "https:"].includes(parsed.protocol)) {
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
       return normalized;
     }
   } catch {
@@ -473,41 +435,37 @@ export const buildImageProxyUrl = (sourceUrl) => {
   return `${IMAGE_PROXY_ROUTE}?src=${encodeURIComponent(normalized)}`;
 };
 
-export const handleImageProxyRequest = async (req, res) => {
-  const rawKey = String(req.params.cacheKey || "").trim();
+export const handleImageProxyRequest = async (req: any, res: any) => {
+  const rawKey = String(req.params.cacheKey || '').trim();
   const match = rawKey.match(/^([a-f0-9]{64})(?:\.([a-z0-9]+))?$/i);
   if (!match) {
-    return res.status(404).json({ error: "Image not found" });
+    return res.status(404).json({ error: 'Image not found' });
   }
 
   const cacheKey = match[1].toLowerCase();
   const cached = getCachedEntryFromKey(cacheKey);
   if (!cached?.imagePath) {
-    return res.status(404).json({ error: "Image not found" });
+    return res.status(404).json({ error: 'Image not found' });
   }
 
-  res.set("Content-Type", cached.meta.contentType || "image/jpeg");
-  res.set(
-    "Cache-Control",
-    "public, max-age=86400, stale-while-revalidate=604800",
-  );
+  res.set('Content-Type', cached.meta.contentType || 'image/jpeg');
+  res.set('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
   return res.sendFile(cached.imagePath);
 };
 
-export const handleLegacyImageProxyRequest = async (req, res) => {
-  const rawSourceUrl =
-    typeof req.query.src === "string" ? req.query.src.trim() : "";
+export const handleLegacyImageProxyRequest = async (req: any, res: any) => {
+  const rawSourceUrl = typeof req.query.src === 'string' ? req.query.src.trim() : '';
   if (!rawSourceUrl) {
-    return res.status(404).json({ error: "Image not found" });
+    return res.status(404).json({ error: 'Image not found' });
   }
 
   try {
     const cached = await warmImageProxy(rawSourceUrl);
     if (!cached?.localUrl) {
-      return res.status(404).json({ error: "Image not found" });
+      return res.status(404).json({ error: 'Image not found' });
     }
     return res.redirect(302, cached.localUrl);
   } catch {
-    return res.status(404).json({ error: "Image not found" });
+    return res.status(404).json({ error: 'Image not found' });
   }
 };

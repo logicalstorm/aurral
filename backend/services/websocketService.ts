@@ -1,12 +1,13 @@
-import { WebSocketServer } from 'ws';
-import { dbOps, userOps } from "../config/db-helpers.js";
+import { WebSocketServer, WebSocket } from 'ws';
+import type { IncomingMessage } from 'http';
+import { dbOps, userOps } from '../config/db-helpers.js';
 import {
   getAuthPassword,
   isProxyAuthEnabled,
   resolveLocalNetworkBypassUser,
   resolveSessionUserFromToken,
   resolveProxyUser,
-} from "../middleware/auth.js";
+} from '../middleware/auth.js';
 
 const isAuthRequired = () => {
   const settings = dbOps.getSettings();
@@ -16,22 +17,31 @@ const isAuthRequired = () => {
   return isProxyAuthEnabled() || users.length > 0 || legacyPasswords.length > 0;
 };
 
-class WebSocketService {
-  constructor() {
-    this.wss = null;
-    this.clients = new Set();
-    this.subscriptions = new Map();
-    this.startTime = Date.now();
-  }
+interface WebSocketClient {
+  id: string;
+  ws: WebSocket;
+  user: unknown;
+  authSource: string | null;
+  subscriptions: Set<string>;
+  connectedAt: number;
+}
 
-  initialize(server) {
+class WebSocketService {
+  private wss: WebSocketServer | null = null;
+  private clients = new Set<WebSocketClient>();
+  private subscriptions = new Map();
+  private startTime = Date.now();
+
+  constructor() {}
+
+  initialize(server: unknown) {
     this.startTime = Date.now();
-    this.wss = new WebSocketServer({ 
-      server,
+    this.wss = new WebSocketServer({
+      server: server as any,
       path: '/ws',
     });
 
-    this.wss.on('connection', (ws, req) => {
+    this.wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
       this.handleConnection(ws, req);
     });
 
@@ -39,38 +49,38 @@ class WebSocketService {
     return this;
   }
 
-  handleConnection(ws, req) {
+  handleConnection(ws: WebSocket, req: IncomingMessage) {
     let sessionUser = null;
     let authSource = null;
     if (isAuthRequired()) {
-      const requestUrl = new URL(req.url || "", "http://localhost");
-      const token = requestUrl.searchParams.get("token");
+      const requestUrl = new URL(req.url || '', 'http://localhost');
+      const token = requestUrl.searchParams.get('token');
       sessionUser = resolveSessionUserFromToken(token);
       if (!sessionUser) {
-        sessionUser = resolveProxyUser(req);
+        sessionUser = resolveProxyUser(req as any);
       }
       if (sessionUser) {
-        authSource = "session";
+        authSource = 'session';
       } else {
         sessionUser = resolveLocalNetworkBypassUser({
           headers: req.headers || {},
           socket: req.socket || {},
           connection: req.connection || {},
-          ip: req.socket?.remoteAddress || "",
+          ip: req.socket?.remoteAddress || '',
           ips: [],
-        });
+        } as any);
         if (sessionUser) {
-          authSource = "local-network-bypass";
+          authSource = 'local-network-bypass';
         }
       }
       if (!sessionUser) {
-        ws.close(4401, "Unauthorized");
+        ws.close(4401, 'Unauthorized');
         return;
       }
     }
 
     const clientId = this.generateClientId();
-    
+
     const client = {
       id: clientId,
       ws,
@@ -83,7 +93,7 @@ class WebSocketService {
     this.clients.add(client);
     console.log(`[WebSocket] Client connected: ${clientId} (total: ${this.clients.size})`);
 
-    ws.on('message', (message) => {
+    ws.on('message', (message: unknown) => {
       this.handleMessage(client, message);
     });
 
@@ -92,7 +102,7 @@ class WebSocketService {
       console.log(`[WebSocket] Client disconnected: ${clientId} (total: ${this.clients.size})`);
     });
 
-    ws.on('error', (error) => {
+    ws.on('error', (error: Error) => {
       console.error(`[WebSocket] Client error ${clientId}:`, error.message);
       this.clients.delete(client);
     });
@@ -104,9 +114,9 @@ class WebSocketService {
     });
   }
 
-  handleMessage(client, rawMessage) {
+  handleMessage(client: WebSocketClient, rawMessage: unknown) {
     try {
-      const message = JSON.parse(rawMessage.toString());
+      const message = JSON.parse((rawMessage as { toString(): string }).toString());
 
       switch (message.type) {
         case 'subscribe':
@@ -122,15 +132,15 @@ class WebSocketService {
           console.log(`[WebSocket] Unknown message type: ${message.type}`);
       }
     } catch (error) {
-      console.error('[WebSocket] Failed to parse message:', error.message);
+      console.error('[WebSocket] Failed to parse message:', (error as Error).message);
     }
   }
 
-  handleSubscribe(client, channels) {
+  handleSubscribe(client: WebSocketClient, channels: string[]) {
     for (const channel of channels) {
       client.subscriptions.add(channel);
     }
-    
+
     this.send(client, {
       type: 'subscribed',
       channels,
@@ -138,11 +148,11 @@ class WebSocketService {
     });
   }
 
-  handleUnsubscribe(client, channels) {
+  handleUnsubscribe(client: WebSocketClient, channels: string[]) {
     for (const channel of channels) {
       client.subscriptions.delete(channel);
     }
-    
+
     this.send(client, {
       type: 'unsubscribed',
       channels,
@@ -150,13 +160,13 @@ class WebSocketService {
     });
   }
 
-  send(client, data) {
+  send(client: WebSocketClient, data: Record<string, unknown>) {
     if (client.ws.readyState === 1) {
       client.ws.send(JSON.stringify(data));
     }
   }
 
-  broadcast(channel, data) {
+  broadcast(channel: string, data: Record<string, unknown>) {
     const message = JSON.stringify({
       channel,
       timestamp: Date.now(),
@@ -176,7 +186,7 @@ class WebSocketService {
     return sent;
   }
 
-  broadcastPerClient(channel, buildData) {
+  broadcastPerClient(channel: string, buildData: (client: WebSocketClient) => Record<string, unknown> | null | undefined) {
     let sent = 0;
     for (const client of this.clients) {
       if (!(client.subscriptions.has(channel) || client.subscriptions.has('*'))) {
@@ -201,7 +211,7 @@ class WebSocketService {
     return sent;
   }
 
-  broadcastToAll(data) {
+  broadcastToAll(data: Record<string, unknown>) {
     const message = JSON.stringify({
       timestamp: Date.now(),
       ...data,
@@ -218,7 +228,7 @@ class WebSocketService {
     return sent;
   }
 
-  emitDownloadProgress(downloadId, progress) {
+  emitDownloadProgress(downloadId: string, progress: Record<string, unknown>) {
     this.broadcast('downloads', {
       type: 'download_progress',
       downloadId,
@@ -226,7 +236,7 @@ class WebSocketService {
     });
   }
 
-  emitDownloadStateChange(downloadId, fromState, toState, metadata = {}) {
+  emitDownloadStateChange(downloadId: string, fromState: string, toState: string, metadata: Record<string, unknown> = {}) {
     this.broadcast('downloads', {
       type: 'download_state_change',
       downloadId,
@@ -236,7 +246,7 @@ class WebSocketService {
     });
   }
 
-  emitDownloadComplete(downloadId, result) {
+  emitDownloadComplete(downloadId: string, result: Record<string, unknown>) {
     this.broadcast('downloads', {
       type: 'download_complete',
       downloadId,
@@ -246,34 +256,34 @@ class WebSocketService {
 
   reconcileAuthState() {
     for (const client of this.clients) {
-      if (client.authSource !== "local-network-bypass") {
+      if (client.authSource !== 'local-network-bypass') {
         continue;
       }
       if (client.ws.readyState !== 1) {
         continue;
       }
       try {
-        client.ws.close(4401, "Unauthorized");
+        client.ws.close(4401, 'Unauthorized');
       } catch {}
     }
   }
 
-  emitDownloadFailed(downloadId, error) {
+  emitDownloadFailed(downloadId: string, error: unknown) {
     this.broadcast('downloads', {
       type: 'download_failed',
       downloadId,
-      error: error?.message || String(error),
+      error: (error as Error)?.message || String(error),
     });
   }
 
-  emitQueueUpdate(queueStatus) {
+  emitQueueUpdate(queueStatus: Record<string, unknown>) {
     this.broadcast('queue', {
       type: 'queue_update',
       ...queueStatus,
     });
   }
 
-  emitLibraryUpdate(event, data) {
+  emitLibraryUpdate(event: string, data: Record<string, unknown>) {
     this.broadcast('library', {
       type: 'library_update',
       event,
@@ -281,14 +291,14 @@ class WebSocketService {
     });
   }
 
-  emitDiscoveryUpdate(data) {
+  emitDiscoveryUpdate(data: Record<string, unknown>) {
     this.broadcast('discovery', {
       type: 'discovery_update',
       ...data,
     });
   }
 
-  emitNotification(level, message, data = {}) {
+  emitNotification(level: string, message: string, data: Record<string, unknown> = {}) {
     this.broadcast('notifications', {
       type: 'notification',
       level,
@@ -298,7 +308,7 @@ class WebSocketService {
   }
 
   getStats() {
-    const channelStats = {};
+    const channelStats: Record<string, number> = {};
     for (const client of this.clients) {
       for (const channel of client.subscriptions) {
         channelStats[channel] = (channelStats[channel] || 0) + 1;

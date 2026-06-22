@@ -1,16 +1,15 @@
-import { getNotificationOutbox, getWorkerId } from "./honkerDb.js";
+import { getNotificationOutbox, getWorkerId } from './honkerDb.js';
 import {
   isHonkerShuttingDown,
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
-} from "./honkerWorkerRuntime.js";
+} from './honkerWorkerRuntime.js';
 
-const WORKER_NAME = "notification-outbox";
+const WORKER_NAME = 'notification-outbox';
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
-let abortController = null;
+let abortController: AbortController | null = null;
 
 async function runLoop() {
   abortController = new AbortController();
@@ -21,12 +20,11 @@ async function runLoop() {
     });
   } catch (error) {
     if (!stopRequested && !isHonkerShuttingDown()) {
-      console.error("[notificationOutboxWorker] loop error:", error);
+      console.error('[notificationOutboxWorker] loop error:', error);
     }
   } finally {
     abortController = null;
     running = false;
-    loopPromise = null;
     const intentional = stopRequested;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startNotificationOutboxWorker, {
@@ -39,7 +37,7 @@ export function startNotificationOutboxWorker() {
   if (running || isHonkerShuttingDown()) return;
   running = true;
   stopRequested = false;
-  loopPromise = runLoop();
+  runLoop();
 }
 
 export function stopNotificationOutboxWorker() {

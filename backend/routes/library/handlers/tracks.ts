@@ -1,23 +1,23 @@
-import { libraryManager } from "../../../services/libraryManager.js";
-import { cacheMiddleware } from "../../../middleware/cache.js";
-import { noCache } from "../../../middleware/cache.js";
-import { verifyTokenAuth } from "../../../middleware/auth.js";
-import { getAlbumTracksByAlbumMbid } from "../../../services/providers/brainzmashProvider.js";
-import { enrichTracksWithDeezerPreviews } from "../../../services/apiClients.js";
-import fs from "fs";
-import fsp from "fs/promises";
-import path from "path";
+import { libraryManager } from '../../../services/libraryManager.js';
+import { cacheMiddleware } from '../../../middleware/cache.js';
+import { noCache } from '../../../middleware/cache.js';
+import { verifyTokenAuth } from '../../../middleware/auth.js';
+import { getAlbumTracksByAlbumMbid } from '../../../services/providers/brainzmashProvider.js';
+import { enrichTracksWithDeezerPreviews } from '../../../services/apiClients.js';
+import fs from 'fs';
+import fsp from 'fs/promises';
+import path from 'path';
 
-const AUDIO_CONTENT_TYPES = {
-  ".mp3": "audio/mpeg",
-  ".m4a": "audio/mp4",
-  ".aac": "audio/aac",
-  ".flac": "audio/flac",
-  ".ogg": "audio/ogg",
-  ".wav": "audio/wav",
+const AUDIO_CONTENT_TYPES: Record<string, string> = {
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.flac': 'audio/flac',
+  '.ogg': 'audio/ogg',
+  '.wav': 'audio/wav',
 };
 
-const canReadAudioFile = async (filePath) => {
+const canReadAudioFile = async (filePath: string) => {
   if (!filePath) return false;
   try {
     const stat = await fsp.stat(filePath);
@@ -27,27 +27,24 @@ const canReadAudioFile = async (filePath) => {
   }
 };
 
-const streamAudioFile = async (req, res, filePath) => {
+const streamAudioFile = async (req: any, res: any, filePath: string) => {
   let stat;
   try {
     stat = await fsp.stat(filePath);
     if (!stat.isFile()) {
-      return res.status(404).json({ error: "Track file missing" });
+      return res.status(404).json({ error: 'Track file missing' });
     }
   } catch {
-    return res.status(404).json({ error: "Track file missing" });
+    return res.status(404).json({ error: 'Track file missing' });
   }
 
   const ext = path.extname(filePath).toLowerCase();
-  res.setHeader(
-    "Content-Type",
-    AUDIO_CONTENT_TYPES[ext] || "application/octet-stream",
-  );
-  res.setHeader("Accept-Ranges", "bytes");
+  res.setHeader('Content-Type', AUDIO_CONTENT_TYPES[ext] || 'application/octet-stream');
+  res.setHeader('Accept-Ranges', 'bytes');
 
   const range = req.headers.range;
   if (!range) {
-    res.setHeader("Content-Length", stat.size);
+    res.setHeader('Content-Length', stat.size);
     fs.createReadStream(filePath).pipe(res);
     return;
   }
@@ -66,25 +63,25 @@ const streamAudioFile = async (req, res, filePath) => {
     return;
   }
   res.status(206);
-  res.setHeader("Content-Range", `bytes ${start}-${end}/${stat.size}`);
-  res.setHeader("Content-Length", end - start + 1);
+  res.setHeader('Content-Range', `bytes ${start}-${end}/${stat.size}`);
+  res.setHeader('Content-Length', end - start + 1);
   fs.createReadStream(filePath, { start, end }).pipe(res);
 };
 
-export default function registerTracks(router) {
-  router.get("/playback-queue", cacheMiddleware(120), async (req, res) => {
+export default function registerTracks(router: any) {
+  router.get('/playback-queue', cacheMiddleware(120), async (req: any, res: any) => {
     try {
       const tracks = await libraryManager.getPlaybackQueue();
       res.json(tracks);
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({
-        error: "Failed to build playback queue",
+        error: 'Failed to build playback queue',
         message: error.message,
       });
     }
   });
 
-  router.get("/tracks", cacheMiddleware(120), async (req, res) => {
+  router.get('/tracks', cacheMiddleware(120), async (req: any, res: any) => {
     try {
       const { albumId, releaseGroupMbid } = req.query;
 
@@ -95,12 +92,10 @@ export default function registerTracks(router) {
       }
 
       if (tracks.length === 0 && releaseGroupMbid) {
-        if (String(releaseGroupMbid).startsWith("dz-")) {
-          const { deezerGetAlbumTracks } = await import(
-            "../../../services/apiClients.js"
-          );
+        if (String(releaseGroupMbid).startsWith('dz-')) {
+          const { deezerGetAlbumTracks } = await import('../../../services/apiClients.js');
           const dzTracks = await deezerGetAlbumTracks(releaseGroupMbid);
-          tracks = dzTracks.map((t) => ({
+          tracks = (dzTracks as any[]).map((t: any) => ({
             ...t,
             path: null,
             hasFile: false,
@@ -112,7 +107,7 @@ export default function registerTracks(router) {
           try {
             const metadataTracks = await getAlbumTracksByAlbumMbid(releaseGroupMbid);
             if (metadataTracks.length > 0) {
-              tracks = metadataTracks.map((track) => ({
+              tracks = (metadataTracks as any[]).map((track: any) => ({
                 id: track.recordingId || track.id,
                 mbid: track.recordingId || track.id,
                 trackName: track.title,
@@ -125,27 +120,27 @@ export default function registerTracks(router) {
                 addedAt: new Date().toISOString(),
               }));
             }
-          } catch (mbError) {
+          } catch (mbError: any) {
             console.warn(
-              `[Library] Failed to fetch tracks from metadata provider: ${mbError.message}`
+              `[Library] Failed to fetch tracks from metadata provider: ${mbError.message}`,
             );
           }
         }
       }
 
-      const formatted = tracks.map((track) => ({
+      const formatted = tracks.map((track: any) => ({
         ...track,
         title: track.trackName || track.title,
         trackNumber: track.trackNumber || 0,
       }));
 
       const tracksWithStreamState = await Promise.all(
-        formatted.map(async (track) => {
+        formatted.map(async (track: any) => {
           const readable = track.hasFile && (await canReadAudioFile(track.path));
           const canStream = readable && track.id != null;
           const streamFormat =
             canStream && track.path
-              ? path.extname(track.path).replace(/^\./, "").toLowerCase()
+              ? path.extname(track.path).replace(/^\./, '').toLowerCase()
               : null;
           return {
             ...track,
@@ -160,23 +155,21 @@ export default function registerTracks(router) {
         }),
       );
 
-      const needsPreview = tracksWithStreamState.some((track) => !track.streamPath);
+      const needsPreview = tracksWithStreamState.some((track: any) => !track.streamPath);
       if (!needsPreview) {
         return res.json(tracksWithStreamState);
       }
 
       const artistName =
-        typeof req.query.artistName === "string" ? req.query.artistName.trim() : "";
+        typeof req.query.artistName === 'string' ? req.query.artistName.trim() : '';
       const albumTitle =
-        typeof req.query.albumTitle === "string" ? req.query.albumTitle.trim() : "";
+        typeof req.query.albumTitle === 'string' ? req.query.albumTitle.trim() : '';
       const releaseType =
-        typeof req.query.releaseType === "string" ? req.query.releaseType.trim() : "";
+        typeof req.query.releaseType === 'string' ? req.query.releaseType.trim() : '';
       const releaseDate =
-        typeof req.query.releaseDate === "string" ? req.query.releaseDate.trim() : "";
+        typeof req.query.releaseDate === 'string' ? req.query.releaseDate.trim() : '';
       const deezerAlbumId =
-        typeof req.query.deezerAlbumId === "string"
-          ? req.query.deezerAlbumId.trim()
-          : "";
+        typeof req.query.deezerAlbumId === 'string' ? req.query.deezerAlbumId.trim() : '';
 
       const enriched = await enrichTracksWithDeezerPreviews(tracksWithStreamState, {
         artistName,
@@ -184,43 +177,39 @@ export default function registerTracks(router) {
         releaseType,
         releaseDate,
         deezerAlbumId,
-        cacheKey: `library:${albumId || releaseGroupMbid}:${
-          deezerAlbumId || artistName
-        }`,
-      }).catch(() => tracksWithStreamState);
+        cacheKey: `library:${albumId || releaseGroupMbid}:${deezerAlbumId || artistName}`,
+      }).catch(() => tracksWithStreamState) as any[];
 
       res.json(
-        enriched.map((track) => ({
+        (enriched as any[]).map((track: any) => ({
           ...track,
           preview_url: track.streamPath ? null : track.preview_url || null,
         })),
       );
-    } catch (error) {
+    } catch (error: any) {
       res.status(500).json({
-        error: "Failed to fetch tracks",
+        error: 'Failed to fetch tracks',
         message: error.message,
       });
     }
   });
 
-  router.get("/file-stream/:albumId/:trackId", noCache, async (req, res) => {
+  router.get('/file-stream/:albumId/:trackId', noCache, async (req: any, res: any) => {
     if (!verifyTokenAuth(req)) {
-      return res.status(401).json({ error: "Unauthorized" });
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
     try {
       const tracks = await libraryManager.getTracks(req.params.albumId);
-      const track = tracks.find(
-        (item) => String(item.id) === String(req.params.trackId),
-      );
+      const track = tracks.find((item: any) => String(item.id) === String(req.params.trackId));
       if (!track?.hasFile || !track.path) {
-        return res.status(404).json({ error: "Track file missing" });
+        return res.status(404).json({ error: 'Track file missing' });
       }
       return streamAudioFile(req, res, track.path);
-    } catch (error) {
+    } catch (error: any) {
       if (!res.headersSent) {
         res.status(500).json({
-          error: "Stream failed",
+          error: 'Stream failed',
           message: error.message,
         });
       }

@@ -1,56 +1,56 @@
-import "./loadEnv.js";
+import './loadEnv.js';
 
-import express, { Request, Response, NextFunction } from "express";
-import cors from "cors";
-import rateLimit from "express-rate-limit";
-import helmet from "helmet";
-import path from "path";
-import fs from "fs";
-import { createServer } from "http";
-import { fileURLToPath } from "url";
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import path from 'path';
+import fs from 'fs';
+import { createServer } from 'http';
+import { fileURLToPath } from 'url';
 
-import { createAuthMiddleware } from "./middleware/auth.js";
-import { websocketService } from "./services/websocketService.js";
-import { getAllDownloadStatuses } from "./routes/library/handlers/downloads.js";
-import { getWeeklyFlowStatusSnapshot } from "./services/weeklyFlowStatusSnapshot.js";
+import { createAuthMiddleware } from './middleware/auth.js';
+import { websocketService } from './services/websocketService.js';
+import { getAllDownloadStatuses } from './routes/library/handlers/downloads.js';
+import { getWeeklyFlowStatusSnapshot } from './services/weeklyFlowStatusSnapshot.js';
 
-import settingsRouter from "./routes/settings.js";
-import onboardingRouter from "./routes/onboarding.js";
-import usersRouter from "./routes/users.js";
-import artistsRouter from "./routes/artists/index.js";
-import searchRouter from "./routes/search.js";
-import libraryRouter from "./routes/library/index.js";
-import discoveryRouter from "./routes/discovery.js";
-import requestsRouter from "./routes/requests.js";
-import healthRouter from "./routes/health.js";
-import filesystemRouter from "./routes/filesystem.js";
-import weeklyFlowRouter from "./routes/weeklyFlow.js";
-import { bootstrapHonkerSchedules } from "./services/honkerDb.js";
-import { initializeAppRuntime } from "./services/appRuntime.js";
+import settingsRouter from './routes/settings.js';
+import onboardingRouter from './routes/onboarding.js';
+import usersRouter from './routes/users.js';
+import artistsRouter from './routes/artists/index.js';
+import searchRouter from './routes/search.js';
+import libraryRouter from './routes/library/index.js';
+import discoveryRouter from './routes/discovery.js';
+import requestsRouter from './routes/requests.js';
+import healthRouter from './routes/health.js';
+import filesystemRouter from './routes/filesystem.js';
+import weeklyFlowRouter from './routes/weeklyFlow.js';
+import { bootstrapHonkerSchedules } from './services/honkerDb.js';
+import { initializeAppRuntime } from './services/appRuntime.js';
 import {
   registerHonkerShutdownHandler,
   shutdownHonkerInfrastructure,
-} from "./services/honkerWorkerRuntime.js";
-import authRouter from "./routes/auth.js";
-import imageProxyRouter from "./routes/imageProxy.js";
+} from './services/honkerWorkerRuntime.js';
+import authRouter from './routes/auth.js';
+import imageProxyRouter from './routes/imageProxy.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-process.on("uncaughtException", (error) => {
-  console.error("Uncaught Exception:", error);
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
 });
 
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled Rejection:", reason);
+process.on('unhandledRejection', (reason, _promise) => {
+  console.error('Unhandled Rejection:', reason);
 });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
-const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || "5mb";
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '5mb';
 
-const allowedCorsOrigins = String(process.env.CORS_ORIGIN || "")
-  .split(",")
+const allowedCorsOrigins = String(process.env.CORS_ORIGIN || '')
+  .split(',')
   .map((v) => v.trim())
   .filter(Boolean);
 
@@ -69,14 +69,14 @@ const corsOptions =
 const trustProxyValue =
   process.env.TRUST_PROXY === undefined
     ? 1
-    : process.env.TRUST_PROXY === "true"
+    : process.env.TRUST_PROXY === 'true'
       ? true
-      : process.env.TRUST_PROXY === "false"
+      : process.env.TRUST_PROXY === 'false'
         ? false
         : Number.isNaN(Number(process.env.TRUST_PROXY))
           ? process.env.TRUST_PROXY
           : Number(process.env.TRUST_PROXY);
-app.set("trust proxy", trustProxyValue);
+app.set('trust proxy', trustProxyValue);
 
 app.use(cors(corsOptions));
 app.use(
@@ -85,33 +85,29 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-        fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
         imgSrc: [
           "'self'",
-          "data:",
-          "https://*.deezer.com",
-          "https://*.dzcdn.net",
-          "https://ticketm.net",
-          "https://*.ticketm.net",
-          "https://ticketmaster.com",
-          "https://*.ticketmaster.com",
-          "https://caa.lkly.net",
-          "https://imagecache.lidarr.audio",
-          "https://*.lidarr.audio",
-          "https://archive.org",
-          "https://*.archive.org",
-          "https://*.last.fm",
-          "https://lastfm.freetls.fastly.net",
-          "https://*.fanart.tv",
+          'data:',
+          'https://*.deezer.com',
+          'https://*.dzcdn.net',
+          'https://ticketm.net',
+          'https://*.ticketm.net',
+          'https://ticketmaster.com',
+          'https://*.ticketmaster.com',
+          'https://caa.lkly.net',
+          'https://imagecache.lidarr.audio',
+          'https://*.lidarr.audio',
+          'https://archive.org',
+          'https://*.archive.org',
+          'https://*.last.fm',
+          'https://lastfm.freetls.fastly.net',
+          'https://*.fanart.tv',
         ],
-        connectSrc: ["'self'", "ws:", "wss:", "https://api.github.com"],
-        mediaSrc: ["'self'", "https://*.dzcdn.net", "https://*.deezer.com"],
-        frameSrc: [
-          "'self'",
-          "https://www.youtube-nocookie.com",
-          "https://www.youtube.com",
-        ],
+        connectSrc: ["'self'", 'ws:', 'wss:', 'https://api.github.com'],
+        mediaSrc: ["'self'", 'https://*.dzcdn.net', 'https://*.deezer.com'],
+        frameSrc: ["'self'", 'https://www.youtube-nocookie.com', 'https://www.youtube.com'],
         frameAncestors: null,
         upgradeInsecureRequests: null,
       },
@@ -127,61 +123,62 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
 });
-app.use("/api/auth/login", authLimiter);
-app.use("/api/users/me/password", authLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/users/me/password', authLimiter);
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5000,
 });
-app.use("/api/", limiter);
+app.use('/api/', limiter);
 
-app.use("/api/settings", settingsRouter);
-app.use("/api/onboarding", onboardingRouter);
-app.use("/api/users", usersRouter);
-app.use("/api/search", searchRouter);
-app.use("/api/artists", artistsRouter);
-app.use("/api/library", libraryRouter);
-app.use("/api/discover", discoveryRouter);
-app.use("/api/requests", requestsRouter);
-app.use("/api/health", healthRouter);
-app.use("/api/filesystem", filesystemRouter);
-app.use("/api/playlists", weeklyFlowRouter);
-app.use("/api/weekly-flow", weeklyFlowRouter);
-app.use("/api/auth", authRouter);
-app.use("/api/image-proxy", imageProxyRouter);
+app.use('/api/settings', settingsRouter);
+app.use('/api/onboarding', onboardingRouter);
+app.use('/api/users', usersRouter);
+app.use('/api/search', searchRouter);
+app.use('/api/artists', artistsRouter);
+app.use('/api/library', libraryRouter);
+app.use('/api/discover', discoveryRouter);
+app.use('/api/requests', requestsRouter);
+app.use('/api/health', healthRouter);
+app.use('/api/filesystem', filesystemRouter);
+app.use('/api/playlists', weeklyFlowRouter);
+app.use('/api/weekly-flow', weeklyFlowRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/image-proxy', imageProxyRouter);
 
-const frontendDist = path.join(__dirname, "..", "frontend", "dist");
+const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
 const frontendFallbackRoute = /.*/;
 
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
 
   app.get(frontendFallbackRoute, (req, res) => {
-    if (req.path.startsWith("/api")) {
-      return res.status(404).json({ error: "Not found" });
+    if (req.path.startsWith('/api')) {
+      return res.status(404).json({ error: 'Not found' });
     }
-    res.sendFile(path.join(frontendDist, "index.html"));
+    res.sendFile(path.join(frontendDist, 'index.html'));
   });
 } else {
   app.get(frontendFallbackRoute, (req, res) => {
-    if (req.path.startsWith("/api")) {
-      return res.status(404).json({ error: "Not found" });
+    if (req.path.startsWith('/api')) {
+      return res.status(404).json({ error: 'Not found' });
     }
     res.status(503).send("Frontend not built. Run 'npm run build' first.");
   });
 }
 
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
   console.error(err);
   if (res.headersSent) return next(err);
-  if (err?.type === "entity.too.large" || err?.status === 413) {
+  const error = err as Record<string, unknown> | undefined;
+  if (error?.type === 'entity.too.large' || error?.status === 413) {
     return res.status(413).json({
-      error: "Payload too large",
+      error: 'Payload too large',
       message: `Request body exceeds limit (${JSON_BODY_LIMIT})`,
     });
   }
-  return res.status(500).json({ error: "Internal server error" });
+  return res.status(500).json({ error: 'Internal server error' });
 });
 
 const httpServer = createServer(app);
@@ -199,18 +196,18 @@ const broadcastDownloadStatuses = async () => {
   if (downloadStatusBroadcastInFlight) return;
   downloadStatusBroadcastInFlight = true;
   try {
-    if (!hasWsSubscribers("downloads")) return;
+    if (!hasWsSubscribers('downloads')) return;
     const statuses = await getAllDownloadStatuses();
     const payload = JSON.stringify(statuses);
     if (payload !== lastDownloadStatusesPayload) {
       lastDownloadStatusesPayload = payload;
-      websocketService.broadcast("downloads", {
-        type: "download_statuses",
+      websocketService.broadcast('downloads', {
+        type: 'download_statuses',
         statuses,
       });
     }
   } catch (error) {
-    console.warn("Failed to broadcast download statuses:", (error as Error).message);
+    console.warn('Failed to broadcast download statuses:', (error as Error).message);
   } finally {
     downloadStatusBroadcastInFlight = false;
   }
@@ -222,53 +219,46 @@ const broadcastWeeklyFlowStatus = async () => {
   if (weeklyFlowStatusBroadcastInFlight) return;
   weeklyFlowStatusBroadcastInFlight = true;
   try {
-    if (!hasWsSubscribers("weekly-flow") && !hasWsSubscribers("playlists")) {
+    if (!hasWsSubscribers('weekly-flow') && !hasWsSubscribers('playlists')) {
       return;
     }
     const payloadByAudience = new Map();
-    const buildPayload = (channel: string) => (client: any) => {
+    const buildPayload = (channel: string) => (client: unknown) => {
+       
+      const c = client as any;
       const cacheKey =
-        client?.user?.role === "admin"
-          ? "admin"
-          : client?.user?.id != null
-            ? `user:${client.user.id}`
-            : `anon:${client?.id || "unknown"}`;
+        c?.user?.role === 'admin'
+          ? 'admin'
+          : c?.user?.id != null
+            ? `user:${c.user.id}`
+            : `anon:${c?.id || 'unknown'}`;
       let cached = payloadByAudience.get(cacheKey);
       if (!cached) {
         const status = getWeeklyFlowStatusSnapshot({
-          user: client?.user || null,
+          user: c?.user || null,
         });
         cached = {
           payload: JSON.stringify(status),
           message: {
-            type: "playlist_status",
+            type: 'playlist_status',
             status,
           },
         };
         payloadByAudience.set(cacheKey, cached);
       }
-      if (!client._lastWeeklyFlowStatusPayloadByChannel) {
-        client._lastWeeklyFlowStatusPayloadByChannel = new Map();
+      if (!c._lastWeeklyFlowStatusPayloadByChannel) {
+        c._lastWeeklyFlowStatusPayloadByChannel = new Map();
       }
-      if (
-        client._lastWeeklyFlowStatusPayloadByChannel.get(channel) ===
-        cached.payload
-      ) {
+      if (c._lastWeeklyFlowStatusPayloadByChannel.get(channel) === cached.payload) {
         return null;
       }
-      client._lastWeeklyFlowStatusPayloadByChannel.set(
-        channel,
-        cached.payload,
-      );
+      c._lastWeeklyFlowStatusPayloadByChannel.set(channel, cached.payload);
       return cached.message;
     };
-    websocketService.broadcastPerClient(
-      "weekly-flow",
-      buildPayload("weekly-flow"),
-    );
-    websocketService.broadcastPerClient("playlists", buildPayload("playlists"));
+    websocketService.broadcastPerClient('weekly-flow', buildPayload('weekly-flow'));
+    websocketService.broadcastPerClient('playlists', buildPayload('playlists'));
   } catch (error) {
-    console.warn("Failed to broadcast weekly flow status:", (error as Error).message);
+    console.warn('Failed to broadcast weekly flow status:', (error as Error).message);
   } finally {
     weeklyFlowStatusBroadcastInFlight = false;
   }
@@ -277,13 +267,9 @@ const broadcastWeeklyFlowStatus = async () => {
 const broadcastIntervals: NodeJS.Timeout[] = [];
 
 broadcastDownloadStatuses();
-broadcastIntervals.push(
-  setInterval(broadcastDownloadStatuses, DOWNLOAD_STATUS_INTERVAL_MS),
-);
+broadcastIntervals.push(setInterval(broadcastDownloadStatuses, DOWNLOAD_STATUS_INTERVAL_MS));
 broadcastWeeklyFlowStatus();
-broadcastIntervals.push(
-  setInterval(broadcastWeeklyFlowStatus, WEEKLY_FLOW_STATUS_INTERVAL_MS),
-);
+broadcastIntervals.push(setInterval(broadcastWeeklyFlowStatus, WEEKLY_FLOW_STATUS_INTERVAL_MS));
 
 let shuttingDown = false;
 
@@ -305,26 +291,26 @@ registerHonkerShutdownHandler(async () => {
   websocketService.close?.();
 });
 
-process.once("SIGTERM", () => {
-  void gracefulShutdown("SIGTERM");
+process.once('SIGTERM', () => {
+  void gracefulShutdown('SIGTERM');
 });
-process.once("SIGINT", () => {
-  void gracefulShutdown("SIGINT");
+process.once('SIGINT', () => {
+  void gracefulShutdown('SIGINT');
 });
 
-httpServer.listen(PORT, "0.0.0.0", async () => {
+httpServer.listen(PORT, '0.0.0.0', async () => {
   console.log(`Server running on port ${PORT}`);
   bootstrapHonkerSchedules();
   initializeAppRuntime({ logger: console });
 });
 
-httpServer.on("error", (error: any) => {
-  if (error.code === "EADDRINUSE") {
+httpServer.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
     console.error(
       `Port ${PORT} is already in use. Please stop the other process or use a different port.`,
     );
     process.exit(1);
   } else {
-    console.error("Server error:", error);
+    console.error('Server error:', error);
   }
 });

@@ -1,27 +1,27 @@
-import { getNormalizedText } from "./brainzmashRanking.js";
+import { getNormalizedText } from './brainzmashRanking.js';
 
-function normalizeArray(value) {
+function normalizeArray(value: any) {
   return Array.isArray(value) ? value : [];
 }
 
-function normalizeString(value) {
-  return String(value || "").trim();
+function normalizeString(value: any) {
+  return String(value || '').trim();
 }
 
-function normalizeType(value) {
+function normalizeType(value: any) {
   const normalized = normalizeString(value);
-  if (normalized === "Album" || normalized === "EP" || normalized === "Single") {
+  if (normalized === 'Album' || normalized === 'EP' || normalized === 'Single') {
     return normalized;
   }
-  return normalized || "Album";
+  return normalized || 'Album';
 }
 
-function normalizeImageKind(value) {
+function normalizeImageKind(value: any) {
   const normalized = normalizeString(value);
-  return normalized || "Cover";
+  return normalized || 'Cover';
 }
 
-export function toNormalizedArtistImage(image) {
+export function toNormalizedArtistImage(image: any) {
   const url = normalizeString(image?.Url || image?.url);
   if (!url) return null;
   return {
@@ -30,31 +30,26 @@ export function toNormalizedArtistImage(image) {
   };
 }
 
-export function toNormalizedArtistLink(link) {
+export function toNormalizedArtistLink(link: any) {
   const target = normalizeString(link?.target || link?.url);
   if (!target) return null;
   return {
-    type: normalizeString(link?.type) || "external",
+    type: normalizeString(link?.type) || 'external',
     target,
   };
 }
 
-export function toNormalizedArtist(raw) {
-  const images = normalizeArray(raw?.images)
-    .map(toNormalizedArtistImage)
-    .filter(Boolean);
-  const links = normalizeArray(raw?.links)
-    .map(toNormalizedArtistLink)
-    .filter(Boolean);
+export function toNormalizedArtist(raw: any) {
+  const images = normalizeArray(raw?.images).map(toNormalizedArtistImage).filter(Boolean);
+  const links = normalizeArray(raw?.links).map(toNormalizedArtistLink).filter(Boolean);
   return {
     id: normalizeString(raw?.id),
     name: normalizeString(raw?.artistname || raw?.name),
-    sortName:
-      normalizeString(raw?.sortname || raw?.sortName || raw?.artistname || raw?.name),
+    sortName: normalizeString(raw?.sortname || raw?.sortName || raw?.artistname || raw?.name),
     type: normalizeString(raw?.type) || null,
     status: normalizeString(raw?.status) || null,
-    disambiguation: normalizeString(raw?.disambiguation) || "",
-    overview: normalizeString(raw?.overview) || "",
+    disambiguation: normalizeString(raw?.disambiguation) || '',
+    overview: normalizeString(raw?.overview) || '',
     genres: normalizeArray(raw?.genres)
       .map((genre) => normalizeString(genre))
       .filter(Boolean),
@@ -76,7 +71,7 @@ export function toNormalizedArtist(raw) {
   };
 }
 
-export function toNormalizedTrack(raw) {
+export function toNormalizedTrack(raw: any) {
   return {
     id: normalizeString(raw?.id),
     recordingId: normalizeString(raw?.recordingid || raw?.recordingId || raw?.id),
@@ -103,7 +98,7 @@ export function toNormalizedTrack(raw) {
   };
 }
 
-export function toNormalizedRelease(raw) {
+export function toNormalizedRelease(raw: any) {
   const tracks = normalizeArray(raw?.tracks).map(toNormalizedTrack).filter(Boolean);
   return {
     id: normalizeString(raw?.id),
@@ -129,20 +124,16 @@ export function toNormalizedRelease(raw) {
         : tracks.length,
     tracks,
     releaseDate: normalizeString(raw?.releasedate || raw?.releaseDate) || null,
-    disambiguation: normalizeString(raw?.disambiguation) || "",
+    disambiguation: normalizeString(raw?.disambiguation) || '',
   };
 }
 
-export function toNormalizedAlbum(raw) {
+export function toNormalizedAlbum(raw: any) {
   const artists = normalizeArray(raw?.artists)
     .map(toNormalizedArtist)
     .filter((artist) => artist?.id);
-  const images = normalizeArray(raw?.images)
-    .map(toNormalizedArtistImage)
-    .filter(Boolean);
-  const links = normalizeArray(raw?.links)
-    .map(toNormalizedArtistLink)
-    .filter(Boolean);
+  const images = normalizeArray(raw?.images).map(toNormalizedArtistImage).filter(Boolean);
+  const links = normalizeArray(raw?.links).map(toNormalizedArtistLink).filter(Boolean);
   const releases = normalizeArray(raw?.releases)
     .map(toNormalizedRelease)
     .filter((release) => release?.id);
@@ -162,7 +153,7 @@ export function toNormalizedAlbum(raw) {
     aliases: normalizeArray(raw?.aliases)
       .map((value) => normalizeString(value))
       .filter(Boolean),
-    overview: normalizeString(raw?.overview) || "",
+    overview: normalizeString(raw?.overview) || '',
     images,
     links,
     releases,
@@ -179,7 +170,7 @@ export function toNormalizedAlbum(raw) {
   };
 }
 
-export function toNormalizedArtistAlbum(raw) {
+export function toNormalizedArtistAlbum(raw: any) {
   return {
     id: normalizeString(raw?.Id || raw?.id),
     title: normalizeString(raw?.Title || raw?.title),
@@ -203,17 +194,17 @@ export function toNormalizedArtistAlbum(raw) {
   };
 }
 
-export function toLegacyArtist(normalizedArtist) {
+export function toLegacyArtist(normalizedArtist: any) {
   return {
     id: normalizedArtist.id,
     name: normalizedArtist.name,
-    "sort-name": normalizedArtist.sortName,
+    'sort-name': normalizedArtist.sortName,
     type: normalizedArtist.type,
     status: normalizedArtist.status,
-    disambiguation: normalizedArtist.disambiguation || "",
+    disambiguation: normalizedArtist.disambiguation || '',
     genres: normalizedArtist.genres,
-    aliases: normalizedArtist.aliases.map((name) => ({ name })),
-    relations: normalizedArtist.links.map((link) => ({
+    aliases: normalizedArtist.aliases.map((name: any) => ({ name })),
+    relations: normalizedArtist.links.map((link: any) => ({
       type: link.type,
       url: { resource: link.target },
     })),
@@ -221,22 +212,18 @@ export function toLegacyArtist(normalizedArtist) {
   };
 }
 
-export function toLegacyReleaseGroupSummary(
-  album,
-  artist = null,
-  { score = 0 } = {},
-) {
-  const artistName = artist?.name || album?.artistName || "";
+export function toLegacyReleaseGroupSummary(album: any, artist: any = null, { score = 0 }: any = {}) {
+  const artistName = artist?.name || album?.artistName || '';
   const artistId = artist?.id || album?.artistId || null;
   return {
     id: album.id,
     title: album.title,
-    "primary-type": album.type || "Album",
-    "secondary-types": album.secondaryTypes || [],
-    "first-release-date": album.releaseDate || album.firstReleaseDate || null,
+    'primary-type': album.type || 'Album',
+    'secondary-types': album.secondaryTypes || [],
+    'first-release-date': album.releaseDate || album.firstReleaseDate || null,
     rating: album.rating || null,
     score,
-    "artist-credit": artistName
+    'artist-credit': artistName
       ? [
           {
             name: artistName,
@@ -253,7 +240,7 @@ export function toLegacyReleaseGroupSummary(
   };
 }
 
-export function toLegacyRelease(release) {
+export function toLegacyRelease(release: any) {
   return {
     id: release.id,
     title: release.title,
@@ -275,8 +262,7 @@ export function toLegacyRelease(release) {
           title: track.title,
           length: track.durationMs,
           position: track.trackPosition || track.trackNumber || 0,
-          number:
-            track.trackNumber != null ? String(track.trackNumber) : null,
+          number: track.trackNumber != null ? String(track.trackNumber) : null,
           recording: {
             id: track.recordingId || track.id,
             title: track.title,
@@ -287,28 +273,28 @@ export function toLegacyRelease(release) {
   };
 }
 
-export function toLegacySearchArtistResult(normalizedArtist, score = 0) {
+export function toLegacySearchArtistResult(normalizedArtist: any, score = 0) {
   return {
     id: normalizedArtist.id,
     name: normalizedArtist.name,
-    "sort-name": normalizedArtist.sortName,
+    'sort-name': normalizedArtist.sortName,
     type: normalizedArtist.type,
-    disambiguation: normalizedArtist.disambiguation || "",
+    disambiguation: normalizedArtist.disambiguation || '',
     genres: normalizedArtist.genres,
     score,
   };
 }
 
-export function toLegacySearchAlbumResult(item) {
-  const normalizedArtistName = normalizeString(item?.artistName) || "Unknown Artist";
+export function toLegacySearchAlbumResult(item: any) {
+  const normalizedArtistName = normalizeString(item?.artistName) || 'Unknown Artist';
   return {
     id: item.id,
     title: item.title,
-    "primary-type": item.type || "Album",
-    "secondary-types": item.secondaryTypes || [],
-    "first-release-date": item.releaseDate || null,
+    'primary-type': item.type || 'Album',
+    'secondary-types': item.secondaryTypes || [],
+    'first-release-date': item.releaseDate || null,
     score: Number(item?.score || 0),
-    "artist-credit": normalizedArtistName
+    'artist-credit': normalizedArtistName
       ? [
           {
             name: normalizedArtistName,
@@ -321,7 +307,7 @@ export function toLegacySearchAlbumResult(item) {
   };
 }
 
-export function matchesGenreQuery(artist, query) {
+export function matchesGenreQuery(artist: any, query: any) {
   const normalizedQuery = getNormalizedText(query);
   if (!normalizedQuery) return false;
   return normalizeArray(artist?.genres).some((genre) =>

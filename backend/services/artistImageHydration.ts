@@ -1,30 +1,30 @@
-import { dbOps } from "../config/db-helpers.js";
-import { enqueueImagePrefetchJob } from "./honkerDb.js";
-import { getArtistImage } from "./imageService.js";
-import { buildImageProxyUrl, isImageProxyLocalUrlReady } from "./imageProxyService.js";
+import { dbOps } from '../config/db-helpers.js';
+import { enqueueImagePrefetchJob } from './honkerDb.js';
+import { getArtistImage } from './imageService.js';
+import { buildImageProxyUrl, isImageProxyLocalUrlReady } from './imageProxyService.js';
 
 const DEFAULT_BATCH_SIZE = 12;
 const DEFAULT_DELAY_MS = 15;
 
 const LASTFM_IMAGE_PATTERN = /lastfm|audioscrobbler/i;
 
-export const shouldReplaceExistingImage = (imageUrl) => {
-  const image = String(imageUrl || "").trim();
+export const shouldReplaceExistingImage = (imageUrl: string | null | undefined) => {
+  const image = String(imageUrl || '').trim();
   if (!image) return false;
   if (LASTFM_IMAGE_PATTERN.test(image)) return true;
-  if (image.includes("/api/image-proxy/") && image.includes("?src=")) {
+  if (image.includes('/api/image-proxy/') && image.includes('?src=')) {
     return true;
   }
-  if (image.includes("/api/image-proxy/") && !isImageProxyLocalUrlReady(image)) {
+  if (image.includes('/api/image-proxy/') && !isImageProxyLocalUrlReady(image)) {
     return true;
   }
   return false;
 };
 
-const clearReplaceableImages = (artist) => {
-  if (!artist || typeof artist !== "object") return artist;
+const clearReplaceableImages = (artist: Record<string, unknown> | null) => {
+  if (!artist || typeof artist !== 'object') return artist;
   const existing = artist.imageUrl || artist.image;
-  if (!shouldReplaceExistingImage(existing)) return artist;
+  if (!shouldReplaceExistingImage(String(existing || ''))) return artist;
   return {
     ...artist,
     image: null,
@@ -32,15 +32,14 @@ const clearReplaceableImages = (artist) => {
   };
 };
 
-const getArtistId = (artist) =>
-  artist?.id || artist?.mbid || artist?.foreignArtistId || null;
+const getArtistId = (artist: Record<string, unknown> | null) => artist?.id || artist?.mbid || artist?.foreignArtistId || null;
 
-const withProxiedImageFields = (artist) => {
-  if (!artist || typeof artist !== "object") return artist;
+const withProxiedImageFields = (artist: Record<string, unknown> | null) => {
+  if (!artist || typeof artist !== 'object') return artist;
   const rawImage = artist.imageUrl || artist.image || null;
   if (!rawImage) return artist;
 
-  const proxiedImage = buildImageProxyUrl(rawImage) || rawImage;
+  const proxiedImage = buildImageProxyUrl(String(rawImage)) || rawImage;
   if (artist.image === proxiedImage && artist.imageUrl === proxiedImage) {
     return artist;
   }
@@ -52,25 +51,21 @@ const withProxiedImageFields = (artist) => {
   };
 };
 
-const applyCachedImages = (artists = []) => {
+const applyCachedImages = (artists: unknown[] = []) => {
   const list = Array.isArray(artists) ? artists : [];
-  const ids = [...new Set(list.map((artist) => getArtistId(artist)).filter(Boolean))];
+  const ids = [...new Set(list.map((artist) => getArtistId(artist as Record<string, unknown>)).filter(Boolean))] as string[];
   if (!ids.length) return list;
 
   const cachedImages = dbOps.getImages(ids);
   return list.map((artist) => {
-    if (!artist || typeof artist !== "object") return artist;
-    const cleared = clearReplaceableImages(artist);
-    if (cleared.image || cleared.imageUrl) {
+    if (!artist || typeof artist !== 'object') return artist;
+    const cleared = clearReplaceableImages(artist as Record<string, unknown>);
+    if (cleared && (cleared.image || cleared.imageUrl)) {
       return withProxiedImageFields(cleared);
     }
 
-    const cachedImage = cachedImages[getArtistId(cleared)]?.imageUrl;
-    if (
-      !cachedImage ||
-      cachedImage === "NOT_FOUND" ||
-      shouldReplaceExistingImage(cachedImage)
-    ) {
+    const cachedImage = (cachedImages[getArtistId(cleared) as string] as Record<string, unknown>)?.imageUrl;
+    if (!cachedImage || cachedImage === 'NOT_FOUND' || shouldReplaceExistingImage(String(cachedImage || ''))) {
       return cleared;
     }
     return withProxiedImageFields({
@@ -89,13 +84,13 @@ export const hydrateArtistImages = async (
   const pending = [];
 
   for (const artist of withCached) {
-    if (!artist || typeof artist !== "object") continue;
-    const cleared = clearReplaceableImages(artist);
+    if (!artist || typeof artist !== 'object') continue;
+    const cleared = clearReplaceableImages(artist as Record<string, unknown>);
     Object.assign(artist, cleared);
-    if (artist.image || artist.imageUrl) continue;
-    const id = getArtistId(artist);
+    if ((artist as Record<string, unknown>).image || (artist as Record<string, unknown>).imageUrl) continue;
+    const id = getArtistId(artist as Record<string, unknown>);
     if (!id) continue;
-    pending.push({ artist, id });
+    pending.push({ artist, id: id as string });
     if (pending.length >= limit) break;
   }
 
@@ -105,16 +100,16 @@ export const hydrateArtistImages = async (
       batch.map(async ({ artist, id }) => {
         try {
           const cached = dbOps.getImage(id);
+          const artistName = (artist as Record<string, unknown>).name || (artist as Record<string, unknown>).sortName || null;
           const cover = await getArtistImage(id, {
-            artistName: artist.name || artist.sortName || null,
+            artistName: String(artistName || '') || null,
             forceRefresh:
-              cached?.imageUrl === "NOT_FOUND" ||
-              shouldReplaceExistingImage(cached?.imageUrl),
+              cached?.imageUrl === 'NOT_FOUND' || shouldReplaceExistingImage(cached?.imageUrl as string),
           });
           if (!cover?.url) return;
-          const proxiedImage = buildImageProxyUrl(cover.url) || cover.url;
-          artist.image = proxiedImage;
-          artist.imageUrl = proxiedImage;
+          const proxiedImage = buildImageProxyUrl(cover.url as string) || cover.url;
+          (artist as Record<string, unknown>).image = proxiedImage;
+          (artist as Record<string, unknown>).imageUrl = proxiedImage;
         } catch {}
       }),
     );
@@ -128,33 +123,28 @@ export const hydrateArtistImages = async (
 };
 
 export const primeArtistImageCache = (artists = []) => {
-  const entries = (Array.isArray(artists) ? artists : [])
+  const entries = (Array.isArray(artists) ? (artists as Record<string, unknown>[]) : [])
     .map((artist) => ({
       id: getArtistId(artist),
       artistName:
-        typeof artist?.name === "string" && artist.name.trim()
-          ? artist.name.trim()
-          : typeof artist?.sortName === "string" && artist.sortName.trim()
-            ? artist.sortName.trim()
+        typeof artist?.name === 'string' && (artist.name as string).trim()
+          ? (artist.name as string).trim()
+          : typeof artist?.sortName === 'string' && (artist.sortName as string).trim()
+            ? (artist.sortName as string).trim()
             : null,
     }))
     .filter((artist) => artist.id)
-    .filter(
-      (artist, index, list) =>
-        list.findIndex((entry) => entry.id === artist.id) === index,
-    );
+    .filter((artist, index, list) => list.findIndex((entry) => entry.id === artist.id) === index);
   if (entries.length === 0) return Promise.resolve();
 
-  const ids = entries.map((entry) => entry.id);
+  const ids = entries.map((entry) => entry.id as string);
   const cachedImages = dbOps.getImages(ids);
   const uncached = entries.filter((entry) => {
-    const cached = cachedImages[entry.id];
-    return !cached || cached.imageUrl === "NOT_FOUND";
+    const cached = cachedImages[entry.id as string] as Record<string, unknown> | undefined;
+    return !cached || cached.imageUrl === 'NOT_FOUND';
   });
   const artistNames = Object.fromEntries(
-    uncached
-      .filter((entry) => entry.artistName)
-      .map((entry) => [entry.id, entry.artistName]),
+    uncached.filter((entry) => entry.artistName).map((entry) => [entry.id, entry.artistName]),
   );
   for (let index = 0; index < uncached.length; index += DEFAULT_BATCH_SIZE) {
     const batch = uncached.slice(index, index + DEFAULT_BATCH_SIZE);

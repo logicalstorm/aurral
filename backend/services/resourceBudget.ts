@@ -1,21 +1,21 @@
 const HEAVY_WORK_TYPES = {
-  DISCOVERY_REFRESH: "discovery-refresh",
-  DISCOVERY_ENRICHMENT: "discovery-enrichment",
-  FLOW_HARVEST: "flow-harvest",
+  DISCOVERY_REFRESH: 'discovery-refresh',
+  DISCOVERY_ENRICHMENT: 'discovery-enrichment',
+  FLOW_HARVEST: 'flow-harvest',
 };
 
 let activeType: string | null = null;
 let activeLabel: string | null = null;
 let activeSince: number | null = null;
-const waiters: Array<() => void> = [];
+const waiters: Array<(value?: unknown) => void> = [];
 
-const isEnabled = () => process.env.AURRAL_RESOURCE_BUDGET_ENABLED === "1";
+const isEnabled = () => process.env.AURRAL_RESOURCE_BUDGET_ENABLED === '1';
 
 const notifyWaiters = () => {
   while (waiters.length > 0 && !activeType) {
     const resolve = waiters.shift();
     try {
-      resolve();
+      resolve?.();
     } catch {}
   }
 };
@@ -29,7 +29,7 @@ const releaseHeavyWork = () => {
 
 const acquireHeavyWork = async (type: string, label: string | null = null) => {
   if (!isEnabled()) return;
-  const safeType = String(type || "").trim();
+  const safeType = String(type || '').trim();
   if (!safeType) return;
   while (activeType && activeType !== safeType) {
     await new Promise((resolve) => {
@@ -53,19 +53,25 @@ export function getResourceBudgetStatus() {
   };
 }
 
-export function isFlowHarvestOperation(payload: any = {}) {
-  const kind = String(payload?.kind || payload?.label || "").trim().toLowerCase();
+export function isFlowHarvestOperation(payload: Record<string, unknown> = {}) {
+  const kind = String(payload?.kind || payload?.label || '')
+    .trim()
+    .toLowerCase();
   if (!kind) return false;
   return [
-    "manual-start-flow",
-    "scheduled-flow-refresh",
-    "enable-flow-refresh",
-    "shared-playlist-create",
-    "shared-playlist-append-tracks",
+    'manual-start-flow',
+    'scheduled-flow-refresh',
+    'enable-flow-refresh',
+    'shared-playlist-create',
+    'shared-playlist-append-tracks',
   ].includes(kind);
 }
 
-export async function withHeavyWorkBudget<T>(type: string, fn: () => Promise<T>, label: string | null = null) {
+export async function withHeavyWorkBudget<T>(
+  type: string,
+  fn: () => Promise<T>,
+  label: string | null = null,
+) {
   await acquireHeavyWork(type, label);
   try {
     return await fn();

@@ -1,73 +1,68 @@
-import {
-  enqueuePlaylistMbidEnrichmentJob,
-  withHonkerLock,
-} from "./honkerDb.js";
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
-import { playlistManager } from "./weeklyFlowPlaylistManager.js";
-import { resolveWeeklyFlowTrackContext } from "./weeklyFlowTrackResolver.js";
+import { enqueuePlaylistMbidEnrichmentJob, withHonkerLock } from './honkerDb.js';
+import { downloadTracker } from './weeklyFlowDownloadTracker.js';
+import { playlistManager } from './weeklyFlowPlaylistManager.js';
+import { resolveWeeklyFlowTrackContext } from './weeklyFlowTrackResolver.js';
 import {
   flowPlaylistConfig,
   normalizeSharedTrack,
   tracksShareMembership,
-} from "./weeklyFlowPlaylistConfig.js";
+} from './weeklyFlowPlaylistConfig.js';
 
 const PLAYLIST_MBID_ENRICHMENT_DELAY_SECONDS = 20;
 
-function hasValue(value) {
-  return String(value || "").trim() !== "";
+type AnyRecord = Record<string, unknown>;
+
+function hasValue(value: unknown) {
+  return String(value || '').trim() !== '';
 }
 
-function isMissingMbid(track) {
-  return (
-    !hasValue(track?.artistMbid) ||
-    !hasValue(track?.albumMbid) ||
-    !hasValue(track?.trackMbid)
-  );
+function isMissingMbid(track: unknown) {
+  const t = track as AnyRecord;
+  return !hasValue(t?.artistMbid) || !hasValue(t?.albumMbid) || !hasValue(t?.trackMbid);
 }
 
-function hasMissingJobMbid(track, jobs) {
+function hasMissingJobMbid(track: unknown, jobs: unknown) {
   return (Array.isArray(jobs) ? jobs : [])
     .filter((job) => tracksShareMembership(job, track))
     .some((job) => isMissingMbid(job));
 }
 
-function hasMissingPlaylistMbids(playlist) {
-  return (Array.isArray(playlist?.tracks) ? playlist.tracks : []).some(
-    (track) => isMissingMbid(track),
+function hasMissingPlaylistMbids(playlist: unknown) {
+  const p = playlist as AnyRecord;
+  return (Array.isArray(p?.tracks) ? p.tracks : []).some((track: unknown) =>
+    isMissingMbid(track),
   );
 }
 
-function mergeMissingString(target, source, key) {
-  if (hasValue(target?.[key]) || !hasValue(source?.[key])) return undefined;
-  return String(source[key]).trim();
+function mergeMissingString(target: unknown, source: unknown, key: string) {
+  const t = target as AnyRecord;
+  const s = source as AnyRecord;
+  if (hasValue(t?.[key]) || !hasValue(s?.[key])) return undefined;
+  return String(s[key]).trim();
 }
 
-function mergeMissingMetadata(target, source, { includeJobFields = false } = {}) {
-  const patch = {};
-  for (const key of [
-    "artistMbid",
-    "albumMbid",
-    "trackMbid",
-    "albumName",
-    "releaseYear",
-  ]) {
-    const value = mergeMissingString(target, source, key);
+function mergeMissingMetadata(target: unknown, source: unknown, { includeJobFields = false }: { includeJobFields?: boolean } = {}) {
+  const t = target as AnyRecord;
+  const s = source as AnyRecord;
+  const patch: AnyRecord = {};
+  for (const key of ['artistMbid', 'albumMbid', 'trackMbid', 'albumName', 'releaseYear']) {
+    const value = mergeMissingString(t, s, key);
     if (value !== undefined) patch[key] = value;
   }
 
   if (
-    target?.durationMs == null &&
-    source?.durationMs != null &&
-    Number.isFinite(Number(source.durationMs))
+    t?.durationMs == null &&
+    s?.durationMs != null &&
+    Number.isFinite(Number(s.durationMs))
   ) {
-    patch.durationMs = Math.max(0, Math.round(Number(source.durationMs)));
+    patch.durationMs = Math.max(0, Math.round(Number(s.durationMs)));
   }
 
-  const targetAliases = Array.isArray(target?.artistAliases)
-    ? target.artistAliases.filter(Boolean)
+  const targetAliases = Array.isArray(t?.artistAliases)
+    ? (t.artistAliases as unknown[]).filter(Boolean)
     : [];
-  const sourceAliases = Array.isArray(source?.artistAliases)
-    ? source.artistAliases.map((entry) => String(entry || "").trim()).filter(Boolean)
+  const sourceAliases = Array.isArray(s?.artistAliases)
+    ? (s.artistAliases as unknown[]).map((entry: unknown) => String(entry || '').trim()).filter(Boolean)
     : [];
   if (targetAliases.length === 0 && sourceAliases.length > 0) {
     patch.artistAliases = [...new Set(sourceAliases)];
@@ -75,23 +70,17 @@ function mergeMissingMetadata(target, source, { includeJobFields = false } = {})
 
   if (!includeJobFields) return patch;
 
-  for (const key of ["trackNumber", "albumTrackCount"]) {
-    if (
-      target?.[key] == null &&
-      source?.[key] != null &&
-      Number.isFinite(Number(source[key]))
-    ) {
-      patch[key] = Math.max(1, Math.round(Number(source[key])));
+  for (const key of ['trackNumber', 'albumTrackCount']) {
+    if (t?.[key] == null && s?.[key] != null && Number.isFinite(Number(s[key]))) {
+      patch[key] = Math.max(1, Math.round(Number(s[key])));
     }
   }
 
-  const targetTitles = Array.isArray(target?.albumTrackTitles)
-    ? target.albumTrackTitles.filter(Boolean)
+  const targetTitles = Array.isArray(t?.albumTrackTitles)
+    ? (t.albumTrackTitles as unknown[]).filter(Boolean)
     : [];
-  const sourceTitles = Array.isArray(source?.albumTrackTitles)
-    ? source.albumTrackTitles
-        .map((entry) => String(entry || "").trim())
-        .filter(Boolean)
+  const sourceTitles = Array.isArray(s?.albumTrackTitles)
+    ? (s.albumTrackTitles as unknown[]).map((entry: unknown) => String(entry || '').trim()).filter(Boolean)
     : [];
   if (targetTitles.length === 0 && sourceTitles.length > 0) {
     patch.albumTrackTitles = [...new Set(sourceTitles)];
@@ -100,23 +89,25 @@ function mergeMissingMetadata(target, source, { includeJobFields = false } = {})
   return patch;
 }
 
-function hasPatch(patch) {
-  return patch && typeof patch === "object" && Object.keys(patch).length > 0;
+function hasPatch(patch: unknown): patch is AnyRecord {
+  return patch != null && typeof patch === 'object' && Object.keys(patch as object).length > 0;
 }
 
-function applyPlaylistTrackPatch(track, source) {
+function applyPlaylistTrackPatch(track: unknown, source: unknown) {
   const patch = mergeMissingMetadata(track, source);
   if (!hasPatch(patch)) return track;
-  return normalizeSharedTrack({
-    ...track,
-    ...patch,
-  }) || track;
+  return (
+    normalizeSharedTrack({
+      ...(track as AnyRecord),
+      ...patch,
+    }) || track
+  );
 }
 
-function findResolutionForTrack(track, resolutions, usedResolutionIndexes) {
+function findResolutionForTrack(track: unknown, resolutions: unknown[], usedResolutionIndexes: Set<number>) {
   for (let index = 0; index < resolutions.length; index += 1) {
     if (usedResolutionIndexes.has(index)) continue;
-    const resolution = resolutions[index];
+    const resolution = resolutions[index] as AnyRecord;
     if (
       tracksShareMembership(track, resolution.originalTrack) ||
       tracksShareMembership(track, resolution.resolvedTrack)
@@ -128,13 +119,11 @@ function findResolutionForTrack(track, resolutions, usedResolutionIndexes) {
   return null;
 }
 
-function matchingJobsForTrack(track, jobs) {
-  return (Array.isArray(jobs) ? jobs : []).filter((job) =>
-    tracksShareMembership(job, track),
-  );
+function matchingJobsForTrack(track: unknown, jobs: unknown[]) {
+  return (Array.isArray(jobs) ? jobs : []).filter((job) => tracksShareMembership(job, track));
 }
 
-async function buildResolution(track, jobs, resolveTrackContext) {
+async function buildResolution(track: unknown, jobs: unknown[], resolveTrackContext: (track: Record<string, unknown>) => Promise<unknown>) {
   if (!isMissingMbid(track) && !hasMissingJobMbid(track, jobs)) {
     return null;
   }
@@ -142,17 +131,17 @@ async function buildResolution(track, jobs, resolveTrackContext) {
   const originalTrack = normalizeSharedTrack(track);
   if (!originalTrack) return null;
 
-  let resolvedTrack = originalTrack;
+  let resolvedTrack: unknown = originalTrack;
   if (isMissingMbid(originalTrack)) {
     resolvedTrack = await Promise.resolve()
-      .then(() => resolveTrackContext(originalTrack))
+      .then(() => resolveTrackContext(originalTrack as unknown as Record<string, unknown>))
       .catch(() => originalTrack);
   }
 
   const enrichedTrack = applyPlaylistTrackPatch(originalTrack, resolvedTrack);
   const jobMetadata = {
-    ...resolvedTrack,
-    ...enrichedTrack,
+    ...(resolvedTrack as AnyRecord),
+    ...(enrichedTrack as AnyRecord),
   };
   const trackPatch = mergeMissingMetadata(originalTrack, enrichedTrack);
   const jobNeedsPatch = matchingJobsForTrack(originalTrack, jobs).some((job) =>
@@ -171,14 +160,18 @@ async function buildResolution(track, jobs, resolveTrackContext) {
 }
 
 export function schedulePlaylistMbidEnrichment(
-  playlistId,
-  { reason = "playlist-update", delaySeconds = PLAYLIST_MBID_ENRICHMENT_DELAY_SECONDS, priority = 0 } = {},
+  playlistId: unknown,
+  {
+    reason = 'playlist-update',
+    delaySeconds = PLAYLIST_MBID_ENRICHMENT_DELAY_SECONDS,
+    priority = 0,
+  }: { reason?: string; delaySeconds?: number; priority?: number } = {},
 ) {
-  const safePlaylistId = String(playlistId || "").trim();
+  const safePlaylistId = String(playlistId || '').trim();
   if (!safePlaylistId) return null;
   return enqueuePlaylistMbidEnrichmentJob(
     {
-      kind: "playlist-mbid-enrichment",
+      kind: 'playlist-mbid-enrichment',
       playlistId: safePlaylistId,
       reason,
       requestedAt: Date.now(),
@@ -190,17 +183,14 @@ export function schedulePlaylistMbidEnrichment(
   );
 }
 
-export function schedulePlaylistMbidEnrichmentForMissingPlaylists(
-  { reason = "sweep" } = {},
-) {
+export function schedulePlaylistMbidEnrichmentForMissingPlaylists({ reason = 'sweep' }: { reason?: string } = {}) {
   const jobIds = [];
   for (const playlist of flowPlaylistConfig.getSharedPlaylists()) {
     const jobs = downloadTracker.getByPlaylistType(playlist.id);
     const hasMissingConfig = hasMissingPlaylistMbids(playlist);
-    const hasMissingJobs = (Array.isArray(playlist?.tracks)
-      ? playlist.tracks
-      : []
-    ).some((track) => hasMissingJobMbid(track, jobs));
+    const hasMissingJobs = (Array.isArray(playlist?.tracks) ? playlist.tracks : []).some((track) =>
+      hasMissingJobMbid(track, jobs),
+    );
     if (!hasMissingConfig && !hasMissingJobs) continue;
     const jobId = schedulePlaylistMbidEnrichment(playlist.id, {
       reason,
@@ -213,20 +203,18 @@ export function schedulePlaylistMbidEnrichmentForMissingPlaylists(
 }
 
 export async function enrichSharedPlaylistMbids(
-  playlistId,
-  { resolveTrackContext = resolveWeeklyFlowTrackContext } = {},
+  playlistId: unknown,
+  { resolveTrackContext = resolveWeeklyFlowTrackContext }: { resolveTrackContext?: (track: Record<string, unknown>) => Promise<unknown> } = {},
 ) {
-  const safePlaylistId = String(playlistId || "").trim();
+  const safePlaylistId = String(playlistId || '').trim();
   if (!safePlaylistId) return { missing: true, changed: false };
 
   const snapshotPlaylist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
   if (!snapshotPlaylist) return { missing: true, changed: false };
 
   const snapshotJobs = downloadTracker.getByPlaylistType(safePlaylistId);
-  const snapshotTracks = Array.isArray(snapshotPlaylist.tracks)
-    ? snapshotPlaylist.tracks
-    : [];
-  const resolutions = [];
+  const snapshotTracks = Array.isArray(snapshotPlaylist.tracks) ? snapshotPlaylist.tracks : [];
+  const resolutions: unknown[] = [];
   let tracksExamined = 0;
   let tracksResolved = 0;
 
@@ -235,7 +223,7 @@ export async function enrichSharedPlaylistMbids(
     const resolution = await buildResolution(
       track,
       snapshotJobs,
-      typeof resolveTrackContext === "function"
+      typeof resolveTrackContext === 'function'
         ? resolveTrackContext
         : resolveWeeklyFlowTrackContext,
     );
@@ -261,57 +249,49 @@ export async function enrichSharedPlaylistMbids(
   return withHonkerLock(
     `playlist-mutation:${safePlaylistId}`,
     async () => {
-      const currentPlaylist =
-        flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
+      const currentPlaylist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
       if (!currentPlaylist) return { missing: true, changed: false };
 
-      const currentTracks = Array.isArray(currentPlaylist.tracks)
-        ? currentPlaylist.tracks
-        : [];
-      const usedResolutionIndexes = new Set();
+      const currentTracks = Array.isArray(currentPlaylist.tracks) ? currentPlaylist.tracks : [];
+      const usedResolutionIndexes = new Set<number>();
       let playlistTracksUpdated = 0;
       const nextTracks = currentTracks.map((track) => {
-        const resolution = findResolutionForTrack(
-          track,
-          resolutions,
-          usedResolutionIndexes,
-        );
+        const resolution = findResolutionForTrack(track, resolutions, usedResolutionIndexes);
         if (!resolution) return track;
-        const nextTrack = applyPlaylistTrackPatch(
-          track,
-          resolution.resolvedTrack,
-        );
+        const nextTrack = applyPlaylistTrackPatch(track, resolution.resolvedTrack);
         if (nextTrack !== track) playlistTracksUpdated += 1;
         return nextTrack;
       });
 
-      let updatedPlaylist = currentPlaylist;
+      let updatedPlaylist: unknown = currentPlaylist;
       if (playlistTracksUpdated > 0) {
-        updatedPlaylist = flowPlaylistConfig.updateSharedPlaylist(
-          safePlaylistId,
-          { tracks: nextTracks },
-        );
+        updatedPlaylist = flowPlaylistConfig.updateSharedPlaylist(safePlaylistId, {
+          tracks: nextTracks,
+        });
       }
 
       const jobs = downloadTracker.getByPlaylistType(safePlaylistId);
       let jobsUpdated = 0;
-      const updatedJobIds = new Set();
+      const updatedJobIds = new Set<unknown>();
       for (const track of nextTracks) {
         const resolution = resolutions.find(
-          (entry) =>
-            tracksShareMembership(track, entry.originalTrack) ||
-            tracksShareMembership(track, entry.resolvedTrack),
-        );
+          (entry) => {
+            const e = entry as AnyRecord;
+            return tracksShareMembership(track, e.originalTrack) ||
+              tracksShareMembership(track, e.resolvedTrack);
+          },
+        ) as AnyRecord | undefined;
         const source = resolution?.jobMetadata || resolution?.resolvedTrack || track;
         for (const job of matchingJobsForTrack(track, jobs)) {
-          if (updatedJobIds.has(job.id)) continue;
-          const patch = mergeMissingMetadata(job, source, {
+          const j = job as AnyRecord;
+          if (updatedJobIds.has(j.id)) continue;
+          const patch = mergeMissingMetadata(j, source, {
             includeJobFields: true,
           });
           if (!hasPatch(patch)) continue;
-          if (downloadTracker.updateMetadata(job.id, patch)) {
+          if (downloadTracker.updateMetadata(j.id as string, patch)) {
             jobsUpdated += 1;
-            updatedJobIds.add(job.id);
+            updatedJobIds.add(j.id);
           }
         }
       }

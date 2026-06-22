@@ -1,38 +1,74 @@
-import path from "path";
-import fs from "fs/promises";
-import { db } from "../config/db-sqlite.js";
-import { isSlskdCleanupAfterRunsEnabled, slskdClient } from "./slskdClient.js";
-import { logger } from "./logger.js";
-import { enqueuePipelineJob } from "./honkerDb.js";
-import { downloadTracker } from "./playlistDownloadTracker.js";
+import path from 'path';
+import fs from 'fs/promises';
+import { db } from '../config/db-sqlite.js';
+import { isSlskdCleanupAfterRunsEnabled, slskdClient } from './slskdClient.js';
+import { logger } from './logger.js';
+import { enqueuePipelineJob } from './honkerDb.js';
+import { downloadTracker } from './playlistDownloadTracker.js';
 import {
   buildFlowSearchTiers,
   countPreDownloadValidCandidates,
   rankFlowSearchResults,
   selectRankedMatchAttempts,
   validateDownloadedTrack,
-} from "./weeklyFlowSoulseekMatcher.js";
-import { resolvePlaylistRoot } from "./playlistPaths.js";
-import { getPathMappings, resolveLocalPath } from "./pathMappings.js";
+} from './weeklyFlowSoulseekMatcher.js';
+import { resolvePlaylistRoot } from './playlistPaths.js';
+import { getPathMappings, resolveLocalPath } from './pathMappings.js';
 import {
   buildSlskdRankingHistoryOptions,
   recordSlskdTransferOutcome,
-} from "./slskdTransferHistory.js";
-import { processUsenetPipelinePayload } from "./usenetOrchestrator.js";
+} from './slskdTransferHistory.js';
+import { processUsenetPipelinePayload } from './usenetOrchestrator.js';
 import {
   getDownloadSourceNotConfiguredMessage,
   getEnabledDownloadSources,
   getSourceLabel,
   isAnyDownloadSourceConfigured,
-} from "./downloadSourceService.js";
+} from './downloadSourceService.js';
 import {
   buildResolvedPlaylistTrack as buildResolvedTrack,
   commitImportToPlaylistLibrary,
   joinUnderRoot,
   sanitizePathPart,
-} from "./playlistDownloadUtils.js";
+} from './playlistDownloadUtils.js';
 
 export { commitImportToPlaylistLibrary };
+
+interface SearchTier {
+  queries: { searchText?: string; [key: string]: unknown }[];
+  [key: string]: unknown;
+}
+
+interface SearchResultEntry {
+  raw: { user: string; file: string; size?: number; [key: string]: unknown };
+  score: number;
+  resolvedAlbumName?: string;
+  preDownloadValid: boolean;
+  [key: string]: unknown;
+}
+
+interface SearchCandidate {
+  raw: { user: string; file: string; size?: number; [key: string]: unknown };
+  score: number;
+  resolvedAlbumName?: string | null;
+  preDownloadValid: boolean;
+}
+
+type PipelinePayload = Record<string, unknown>;
+
+type JobRecord = Record<string, unknown> & {
+  id: string;
+  status: string;
+  slskdBatchId?: string | null;
+  slskdSearchId?: string | null;
+  playlistId?: string;
+  playlistType?: string;
+  artistName?: string;
+  trackName?: string;
+  albumName?: string;
+  remoteUsername?: string | null;
+  remoteFilename?: string | null;
+};
 
 const updateSlskdMetaStmt = db.prepare(`
   UPDATE playlist_download_jobs
@@ -48,36 +84,35 @@ const MAX_DOWNLOAD_CANDIDATES = 7;
 const MAX_TRANSFER_RETRIES_PER_CANDIDATE = 1;
 const POLL_DELAY_SECONDS = 3;
 const SLSKD_NOT_CONFIGURED_MESSAGE =
-  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
+  'slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.';
 
 export function buildSlskdSearchTierGroups(resolvedTrack: unknown) {
-  return buildFlowSearchTiers(resolvedTrack);
+  return buildFlowSearchTiers(resolvedTrack as Record<string, unknown>);
 }
 
 export function hasSlskdSearchCandidates(
-  aggregated,
-  resolvedTrack,
-  searchOptions,
+  aggregated: Record<string, unknown>[],
+  resolvedTrack: unknown,
+  searchOptions: Record<string, unknown>,
 ) {
   return (
-    countPreDownloadValidCandidates(aggregated, resolvedTrack, searchOptions) >=
+    countPreDownloadValidCandidates(aggregated, resolvedTrack as Record<string, unknown>, searchOptions) >=
     MIN_SEARCH_CANDIDATES
   );
 }
 
 export function shouldStopSlskdSearching(
-  aggregated,
-  resolvedTrack,
-  searchOptions,
+  aggregated: Record<string, unknown>[],
+  resolvedTrack: unknown,
+  searchOptions: Record<string, unknown>,
 ) {
   return hasSlskdSearchCandidates(aggregated, resolvedTrack, searchOptions);
 }
 
-const MAX_EMPTY_POLL_ATTEMPTS = 60;
 const MAX_POLL_ATTEMPTS = 600;
 
 async function getWorkerSearchOptions() {
-  const { getSlskdSearchFormatOptions } = await import("./slskdClient.js");
+  const { getSlskdSearchFormatOptions } = await import('./slskdClient.js');
   const format = getSlskdSearchFormatOptions();
   const history = buildSlskdRankingHistoryOptions();
   return {
@@ -86,89 +121,86 @@ async function getWorkerSearchOptions() {
   };
 }
 
-function classifyTransferState(state: string) {
-  const normalized = String(state || "").toLowerCase();
-  if (!normalized) return "pending";
+function classifyTransferState(state: unknown) {
+  const normalized = String(state || '').toLowerCase();
+  if (!normalized) return 'pending';
   if (
-    normalized.includes("error") ||
-    normalized.includes("fail") ||
-    normalized.includes("cancel") ||
-    normalized.includes("abort") ||
-    normalized.includes("reject") ||
-    normalized.includes("timeout")
+    normalized.includes('error') ||
+    normalized.includes('fail') ||
+    normalized.includes('cancel') ||
+    normalized.includes('abort') ||
+    normalized.includes('reject') ||
+    normalized.includes('timeout')
   ) {
-    return "failed";
+    return 'failed';
   }
-  if (normalized.includes("completed") || normalized.includes("succeeded")) {
-    return "success";
+  if (normalized.includes('completed') || normalized.includes('succeeded')) {
+    return 'success';
   }
-  return "pending";
+  return 'pending';
 }
 
-function readBatchTransfers(batch: unknown) {
+function readBatchTransfers(batch: Record<string, unknown>) {
   const transfers = batch?.transfers || batch?.Transfers;
   if (Array.isArray(transfers)) return transfers;
-  if (Array.isArray(transfers?.$values)) return transfers.$values;
+  if (Array.isArray((transfers as Record<string, unknown>)?.$values))
+    return (transfers as Record<string, unknown>).$values as unknown[];
   return [];
 }
 
-function readTransferState(transfer: unknown) {
-  return transfer?.state || transfer?.State || "";
+function readTransferState(transfer: Record<string, unknown>) {
+  return transfer?.state || transfer?.State || '';
 }
 
-function readTransferId(transfer: unknown) {
+function readTransferId(transfer: Record<string, unknown>) {
   return String(
-    transfer?.id ||
-      transfer?.Id ||
-      transfer?.transferId ||
-      transfer?.TransferId ||
-      "",
+    transfer?.id || transfer?.Id || transfer?.transferId || transfer?.TransferId || '',
   ).trim();
 }
 
-function getPayloadCandidate(payload: Record<string, unknown>) {
+function getPayloadCandidate(payload: PipelinePayload) {
   const candidateIndex = Number(payload?.candidateIndex || 0);
   return (
     payload?.candidate ||
-    (Array.isArray(payload?.candidates)
-      ? payload.candidates[candidateIndex]
-      : null)
+    (Array.isArray(payload?.candidates) ? payload.candidates[candidateIndex] : null)
   );
 }
 
-function getPayloadSearchIds(payload: Record<string, unknown>) {
-  const ids = [];
-  if (Array.isArray(payload?.searchIds)) ids.push(...payload.searchIds);
-  if (payload?.searchId) ids.push(payload.searchId);
-  return [...new Set(ids.map((entry) => String(entry || "").trim()).filter(Boolean))];
+function getPayloadSearchIds(payload: PipelinePayload) {
+  const ids: string[] = [];
+  if (Array.isArray(payload?.searchIds)) ids.push(...(payload.searchIds as string[]));
+  if (payload?.searchId) ids.push(String(payload.searchId));
+  return [...new Set(ids.map((entry) => String(entry || '').trim()).filter(Boolean))];
 }
 
-function getCandidateRetryCount(payload: Record<string, unknown>, candidateIndex = null) {
+function getCandidateRetryCount(payload: PipelinePayload, candidateIndex: number | null = null) {
   const index =
-    candidateIndex == null
-      ? Number(payload?.candidateIndex || 0)
-      : Number(candidateIndex || 0);
-  const counts =
-    payload?.candidateRetryCounts && typeof payload.candidateRetryCounts === "object"
-      ? payload.candidateRetryCounts
+    candidateIndex == null ? Number(payload?.candidateIndex || 0) : Number(candidateIndex || 0);
+  const counts: Record<string, unknown> =
+    payload?.candidateRetryCounts && typeof payload.candidateRetryCounts === 'object'
+      ? (payload.candidateRetryCounts as Record<string, unknown>)
       : {};
   return Number(counts[index] || 0);
 }
 
-function withCandidateRetryCount(payload: Record<string, unknown>, candidateIndex, retryCount) {
+function withCandidateRetryCount(
+  payload: PipelinePayload,
+  candidateIndex: number,
+  retryCount: number,
+) {
   return {
     ...payload,
     candidateRetryCounts: {
-      ...(payload?.candidateRetryCounts || {}),
+      ...((payload?.candidateRetryCounts as Record<string, unknown>) || {}),
       [Number(candidateIndex || 0)]: Number(retryCount || 0),
     },
   };
 }
 
-function buildNextCandidatePayload(payload: Record<string, unknown>) {
+function buildNextCandidatePayload(payload: PipelinePayload) {
   return {
     ...payload,
-    phase: "download",
+    phase: 'download',
     candidate: null,
     candidateIndex: Number(payload?.candidateIndex || 0) + 1,
     pollAttempts: 0,
@@ -177,19 +209,19 @@ function buildNextCandidatePayload(payload: Record<string, unknown>) {
   };
 }
 
-function hasNextCandidate(payload: Record<string, unknown>) {
+function hasNextCandidate(payload: PipelinePayload) {
   return (
     Number(payload?.candidateIndex || 0) + 1 <
     (Array.isArray(payload?.candidates) ? payload.candidates.length : 0)
   );
 }
 
-function buildRetrySameCandidatePayload(payload: Record<string, unknown>, delaySeconds = 5) {
+function buildRetrySameCandidatePayload(payload: PipelinePayload, delaySeconds = 5) {
   const candidateIndex = Number(payload?.candidateIndex || 0);
   const retryCount = getCandidateRetryCount(payload, candidateIndex) + 1;
   return {
     ...withCandidateRetryCount(payload, candidateIndex, retryCount),
-    phase: "download",
+    phase: 'download',
     candidate: null,
     pollAttempts: 0,
     batchId: null,
@@ -198,10 +230,10 @@ function buildRetrySameCandidatePayload(payload: Record<string, unknown>, delayS
   };
 }
 
-function readEventData(record: unknown) {
+function readEventData(record: Record<string, unknown>) {
   const data = record?.data ?? record?.Data;
   if (!data) return null;
-  if (typeof data === "object") return data;
+  if (typeof data === 'object') return data as Record<string, unknown>;
   try {
     return JSON.parse(String(data));
   } catch {
@@ -210,40 +242,50 @@ function readEventData(record: unknown) {
 }
 
 function normalizeRemotePath(value: unknown) {
-  return String(value || "").replace(/\\/g, "/").toLowerCase();
+  return String(value || '')
+    .replace(/\\/g, '/')
+    .toLowerCase();
 }
 
-function eventMatchesCandidate(record: unknown, candidate) {
-  const raw = candidate?.raw || {};
-  const expectedUser = String(raw.user || "").trim().toLowerCase();
+function eventMatchesCandidate(record: Record<string, unknown>, candidate: Record<string, unknown>) {
+  const raw = (candidate?.raw || {}) as Record<string, unknown>;
+  const expectedUser = String(raw.user || '')
+    .trim()
+    .toLowerCase();
   const expectedFile = normalizeRemotePath(raw.file);
   if (!expectedUser || !expectedFile) return false;
   const data = readEventData(record);
   const transfer = data?.transfer || data?.Transfer || data;
   const eventUser = String(
-    transfer?.username || transfer?.Username || data?.username || data?.Username || "",
+    (transfer as Record<string, unknown>)?.username ||
+      (transfer as Record<string, unknown>)?.Username ||
+      (data as Record<string, unknown>)?.username ||
+      (data as Record<string, unknown>)?.Username ||
+      '',
   )
     .trim()
     .toLowerCase();
   const eventFile = normalizeRemotePath(
-    transfer?.filename ||
-      transfer?.Filename ||
-      transfer?.file ||
-      transfer?.File ||
-      data?.filename ||
-      data?.Filename ||
-      "",
+    (transfer as Record<string, unknown>)?.filename ||
+      (transfer as Record<string, unknown>)?.Filename ||
+      (transfer as Record<string, unknown>)?.file ||
+      (transfer as Record<string, unknown>)?.File ||
+      (data as Record<string, unknown>)?.filename ||
+      (data as Record<string, unknown>)?.Filename ||
+      '',
   );
   if (eventUser && eventUser !== expectedUser) return false;
   if (eventFile && eventFile === expectedFile) return true;
   const eventDir = normalizeRemotePath(
-    data?.remoteDirectoryName || data?.RemoteDirectoryName || "",
+    (data as Record<string, unknown>)?.remoteDirectoryName ||
+      (data as Record<string, unknown>)?.RemoteDirectoryName ||
+      '',
   );
   const expectedParent = normalizeRemotePath(parseSlskdRemoteFile(raw.file).parentDir);
   return !!eventDir && !!expectedParent && eventDir.endsWith(expectedParent);
 }
 
-async function pollSlskdEventsForCandidate(payload: Record<string, unknown>) {
+async function pollSlskdEventsForCandidate(payload: PipelinePayload) {
   const offset = Number(payload?.eventOffset);
   if (!Number.isFinite(offset) || offset < 0) {
     return { eventOffset: payload?.eventOffset ?? null, completionTransfer: null };
@@ -254,22 +296,16 @@ async function pollSlskdEventsForCandidate(payload: Record<string, unknown>) {
   }
   const result = await slskdClient.getEvents(offset, 50);
   const events = Array.isArray(result?.events) ? result.events : [];
-  const nextOffset = Math.max(
-    offset + events.length,
-    Number(result?.totalCount || 0),
-  );
-  let completionTransfer = null;
+  const nextOffset = Math.max(offset + events.length, Number(result?.totalCount || 0));
+  let completionTransfer: Record<string, unknown> | null = null;
   for (const event of events) {
-    const type = String(event?.type || event?.Type || "");
-    if (
-      !type.includes("DownloadFileComplete") &&
-      !type.includes("DownloadDirectoryComplete")
-    ) {
+    const type = String((event as Record<string, unknown>)?.type || (event as Record<string, unknown>)?.Type || '');
+    if (!type.includes('DownloadFileComplete') && !type.includes('DownloadDirectoryComplete')) {
       continue;
     }
-    if (!eventMatchesCandidate(event, candidate)) continue;
-    const data = readEventData(event);
-    completionTransfer = data?.transfer || data?.Transfer || data || null;
+    if (!eventMatchesCandidate(event as Record<string, unknown>, candidate as Record<string, unknown>)) continue;
+    const data = readEventData(event as Record<string, unknown>);
+    completionTransfer = ((data as Record<string, unknown>)?.transfer || (data as Record<string, unknown>)?.Transfer || data) as Record<string, unknown> | null;
   }
   return { eventOffset: nextOffset, completionTransfer };
 }
@@ -286,23 +322,23 @@ async function readCurrentEventOffset() {
   }
 }
 
-function isPathInside(childPath: unknown, rootPath) {
-  if (!String(childPath || "").trim() || !String(rootPath || "").trim()) {
+function isPathInside(childPath: unknown, rootPath: unknown) {
+  if (!String(childPath || '').trim() || !String(rootPath || '').trim()) {
     return false;
   }
-  const child = path.resolve(String(childPath || ""));
-  const root = path.resolve(String(rootPath || ""));
+  const child = path.resolve(String(childPath || ''));
+  const root = path.resolve(String(rootPath || ''));
   return child === root || child.startsWith(`${root}${path.sep}`);
 }
 
-export function enqueueJobPipeline(jobId: unknown) {
-  return downloadTracker.enqueueSlskdPipeline(jobId);
+export function enqueueJobPipeline(jobId: string | number) {
+  return downloadTracker.enqueueSlskdPipeline(String(jobId));
 }
 
 export function enqueuePendingJobsWithoutBatch() {
   if (!isAnyDownloadSourceConfigured()) return 0;
   let count = 0;
-  for (const job of downloadTracker.getByStatus("pending")) {
+  for (const job of downloadTracker.getByStatus('pending')) {
     if (job.slskdBatchId || job.slskdSearchId) {
       downloadTracker.clearSlskdPipelineState(job.id);
     }
@@ -311,22 +347,20 @@ export function enqueuePendingJobsWithoutBatch() {
   return count;
 }
 
-async function failJob(job: unknown, message) {
+async function failJob(job: JobRecord, message: string) {
   downloadTracker.setFailed(job.id, message);
   try {
-    const { recordTrackJobFailed } = await import("./aurralHistoryService.js");
+    const { recordTrackJobFailed } = await import('./aurralHistoryService.js');
     recordTrackJobFailed(job, message);
   } catch {}
   try {
-    const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
+    const { weeklyFlowWorker } = await import('./weeklyFlowWorker.js');
     weeklyFlowWorker.wake(0);
-    await weeklyFlowWorker.checkPlaylistComplete(
-      job.playlistId || job.playlistType,
-    );
-  } catch (error) {
-    logger.slskd("warn", "Failed to run post-failure playlist checks", {
+    await weeklyFlowWorker.checkPlaylistComplete(String(job.playlistId || job.playlistType || ''));
+  } catch (error: unknown) {
+    logger.slskd(2, 'Failed to run post-failure playlist checks', {
       jobId: job.id,
-      error: error?.message || String(error),
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -335,21 +369,21 @@ function isSourceConfigured(sourceId: unknown) {
   return getEnabledDownloadSources().some((source) => source.id === sourceId);
 }
 
-function buildNextSourcePayload(payload: Record<string, unknown>, failedSource = null, reason = null) {
+function buildNextSourcePayload(
+  payload: PipelinePayload,
+  failedSource: string | null = null,
+  reason: string | null = null,
+) {
   const sources = getEnabledDownloadSources();
   if (sources.length === 0) return null;
-  const tried = new Set(
-    Array.isArray(payload?.triedSources) ? payload.triedSources : [],
-  );
-  const sourceErrors = Array.isArray(payload?.sourceErrors)
-    ? [...payload.sourceErrors]
-    : [];
+  const tried = new Set(Array.isArray(payload?.triedSources) ? payload.triedSources : []);
+  const sourceErrors = Array.isArray(payload?.sourceErrors) ? [...payload.sourceErrors] : [];
   if (failedSource) {
     tried.add(failedSource);
     if (reason) {
       sourceErrors.push({
         source: failedSource,
-        message: String(reason || "").trim(),
+        message: String(reason || '').trim(),
       });
     }
   }
@@ -358,7 +392,7 @@ function buildNextSourcePayload(payload: Record<string, unknown>, failedSource =
   return {
     ...payload,
     source: next.id,
-    phase: "search",
+    phase: 'search',
     searchId: null,
     searchIds: [],
     candidates: [],
@@ -375,35 +409,38 @@ function buildNextSourcePayload(payload: Record<string, unknown>, failedSource =
   };
 }
 
-function summarizeSourceErrors(payload: Record<string, unknown>, message) {
-  const errors = Array.isArray(payload?.sourceErrors)
-    ? [...payload.sourceErrors]
-    : [];
-  const source = String(payload?.source || "").trim();
+function summarizeSourceErrors(payload: PipelinePayload, message: string) {
+  const errors = Array.isArray(payload?.sourceErrors) ? [...payload.sourceErrors] : [];
+  const source = String(payload?.source || '').trim();
   if (source && message) {
-    errors.push({ source, message: String(message || "").trim() });
+    errors.push({ source, message: String(message || '').trim() });
   }
   const summary = errors
     .map((entry) => {
-      const label = getSourceLabel(entry.source);
-      const entryMessage = String(entry.message || "").trim();
+      const label = getSourceLabel(String((entry as Record<string, unknown>).source || ''));
+      const entryMessage = String((entry as Record<string, unknown>).message || '').trim();
       return entryMessage ? `${label}: ${entryMessage}` : label;
     })
     .filter(Boolean)
-    .join("; ");
+    .join('; ');
   return summary || message;
 }
 
-async function failOrTryNextSource(payload: Record<string, unknown>, job, message, logDetails = {}) {
+async function failOrTryNextSource(
+  payload: PipelinePayload,
+  job: JobRecord,
+  message: string,
+  logDetails: Record<string, unknown> = {},
+) {
   const nextPayload = buildNextSourcePayload(
     payload,
-    payload?.source || "slskd",
+    String(payload?.source || 'slskd'),
     message,
   );
   if (nextPayload) {
-    logger.slskd("info", "Trying next download source", {
+    logger.slskd(1, 'Trying next download source', {
       jobId: job?.id,
-      failedSource: payload?.source || "slskd",
+      failedSource: payload?.source || 'slskd',
       nextSource: nextPayload.source,
       reason: message,
       ...logDetails,
@@ -415,39 +452,41 @@ async function failOrTryNextSource(payload: Record<string, unknown>, job, messag
   return null;
 }
 
-export async function failPipelineJob(payload: Record<string, unknown>, message) {
+export async function failPipelineJob(payload: PipelinePayload, message: string) {
   const jobId = payload?.jobId;
   if (!jobId) return;
-  const job = downloadTracker.getJob(jobId);
+  const job = downloadTracker.getJob(String(jobId)) as JobRecord | null;
   if (!job) return;
-  if (job.status === "downloading" || job.status === "pending") {
+  if (job.status === 'downloading' || job.status === 'pending') {
     await failJob(job, message);
   }
 }
 
 export function parseSlskdRemoteFile(remoteFile: unknown) {
-  const normalized = String(remoteFile || "").replace(/\\/g, "/").trim();
-  const parts = normalized.split("/").filter(Boolean);
+  const normalized = String(remoteFile || '')
+    .replace(/\\/g, '/')
+    .trim();
+  const parts = normalized.split('/').filter(Boolean);
   if (parts.length === 0) {
-    return { fileName: "", parentDir: "" };
+    return { fileName: '', parentDir: '' };
   }
   return {
     fileName: parts[parts.length - 1],
-    parentDir: parts.length > 1 ? parts[parts.length - 2] : "",
+    parentDir: parts.length > 1 ? parts[parts.length - 2] : '',
   };
 }
 
-export function predictSlskdLocalPathCandidates(root: unknown, remoteFile) {
-  const base = String(root || "").trim();
+export function predictSlskdLocalPathCandidates(root: unknown, remoteFile: unknown) {
+  const base = String(root || '').trim();
   if (!base) return [];
   const { fileName, parentDir } = parseSlskdRemoteFile(remoteFile);
   if (!fileName) return [];
-  const candidates = [];
+  const candidates: string[] = [];
   if (parentDir) {
     candidates.push(path.join(base, parentDir, fileName));
   }
   candidates.push(path.join(base, fileName));
-  const seen = new Set();
+  const seen = new Set<string>();
   return candidates.filter((candidate) => {
     const resolved = path.resolve(candidate);
     if (seen.has(resolved)) return false;
@@ -456,37 +495,30 @@ export function predictSlskdLocalPathCandidates(root: unknown, remoteFile) {
   });
 }
 
-function readTransferFilename(transfer: unknown) {
+function readTransferFilename(transfer: Record<string, unknown>) {
   return String(
-    transfer?.filename ||
-      transfer?.Filename ||
-      transfer?.file ||
-      transfer?.File ||
-      "",
+    transfer?.filename || transfer?.Filename || transfer?.file || transfer?.File || '',
   ).trim();
 }
 
-function resolveTransferLocalPath(transferFilename: unknown, slskdRoot) {
-  const raw = String(transferFilename || "").trim();
+function resolveTransferLocalPath(transferFilename: unknown, slskdRoot: unknown) {
+  const raw = String(transferFilename || '').trim();
   if (!raw) return null;
   const normalized = raw.replace(/\\/g, path.sep);
-  const slskdMappings = getPathMappings("slskd");
+  const slskdMappings = getPathMappings('slskd');
   if (path.isAbsolute(normalized)) {
     return path.resolve(resolveLocalPath(normalized, slskdMappings));
   }
-  const slskdBase = String(slskdRoot || "").trim();
+  const slskdBase = String(slskdRoot || '').trim();
   if (!slskdBase) return null;
   const resolvedBase = path.resolve(slskdBase);
-  if (
-    normalized === resolvedBase ||
-    normalized.startsWith(`${resolvedBase}${path.sep}`)
-  ) {
+  if (normalized === resolvedBase || normalized.startsWith(`${resolvedBase}${path.sep}`)) {
     return path.resolve(normalized);
   }
   return path.resolve(resolvedBase, normalized);
 }
 
-async function statMatchingFile(filePath: string, expectedSizeBytes) {
+async function statMatchingFile(filePath: string, expectedSizeBytes: number) {
   try {
     const stat = await fs.stat(filePath);
     if (!stat.isFile()) return null;
@@ -498,24 +530,32 @@ async function statMatchingFile(filePath: string, expectedSizeBytes) {
   }
 }
 
+interface FileMatchEntry {
+  path: string;
+  size: number;
+  mtimeMs: number;
+}
+
 async function findFileRecursive(
-  dir,
-  fileName,
-  expectedSizeBytes,
+  dir: string,
+  fileName: string,
+  expectedSizeBytes: number,
   depth = 0,
-  matches = null,
-) {
-  if (depth > 8) return matches;
-  const collected = matches || [];
-  let entries = [];
+  matches: FileMatchEntry[] | null = null,
+): Promise<string | null> {
+  if (depth > 8) return matches ? null : null;
+  const collected: FileMatchEntry[] = matches || [];
+  let entries: unknown[] = [];
   try {
     entries = await fs.readdir(dir, { withFileTypes: true });
   } catch {
-    return collected;
+    return depth === 0 ? null : collected.length > 0 ? null : null;
   }
   for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isFile() && entry.name === fileName) {
+    const e = entry as { name: unknown; isFile?: () => boolean; isDirectory?: () => boolean };
+    const entryName = String(e.name || '');
+    const fullPath = path.join(dir, entryName);
+    if (typeof e.isFile === 'function' && e.isFile() && entryName === fileName) {
       const stat = await fs.stat(fullPath).catch(() => null);
       if (stat?.isFile()) {
         collected.push({ path: fullPath, size: stat.size, mtimeMs: stat.mtimeMs });
@@ -523,28 +563,29 @@ async function findFileRecursive(
     }
   }
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    const e = entry as { name: unknown; isFile?: () => boolean; isDirectory?: () => boolean };
+    const entryName2 = String(e.name || '');
+    if (typeof e.isDirectory !== 'function' || !e.isDirectory()) continue;
     await findFileRecursive(
-      path.join(dir, entry.name),
+      path.join(dir, entryName2),
       fileName,
       expectedSizeBytes,
       depth + 1,
       collected,
     );
   }
-  if (depth > 0 || matches) return collected;
+  if (depth > 0 || matches) return null;
   return pickBestFileMatch(collected, expectedSizeBytes);
 }
 
-function pickBestFileMatch(matches: unknown, expectedSizeBytes) {
+function pickBestFileMatch(matches: FileMatchEntry[], expectedSizeBytes: number) {
   if (!Array.isArray(matches) || matches.length === 0) return null;
   const expected = Number(expectedSizeBytes || 0);
   if (expected > 0) {
     const sizeMatches = matches.filter((entry) => entry.size === expected);
     if (sizeMatches.length === 1) return sizeMatches[0].path;
     if (sizeMatches.length > 1) {
-      return sizeMatches.sort((left, right) => right.mtimeMs - left.mtimeMs)[0]
-        .path;
+      return sizeMatches.sort((left, right) => right.mtimeMs - left.mtimeMs)[0].path;
     }
     return null;
   }
@@ -552,30 +593,32 @@ function pickBestFileMatch(matches: unknown, expectedSizeBytes) {
   return matches.sort((left, right) => right.mtimeMs - left.mtimeMs)[0].path;
 }
 
+interface LocateOptions {
+  expectedSizeBytes?: number;
+  transfer?: Record<string, unknown>;
+}
+
 export async function locateCompletedDownload(
-  slskdRoot,
-  playlistRoot,
-  remoteFile,
-  options = {},
+  slskdRoot: string,
+  playlistRoot: string,
+  remoteFile: unknown,
+  options: LocateOptions = {},
 ) {
   const expectedSizeBytes = Number(options.expectedSizeBytes || 0);
-  const transferFilename = readTransferFilename(options.transfer);
+  const transferFilename = readTransferFilename(options.transfer || {});
   const transferPath = resolveTransferLocalPath(transferFilename, slskdRoot);
   if (transferPath) {
-    const directTransfer = await statMatchingFile(
-      transferPath,
-      expectedSizeBytes,
-    );
+    const directTransfer = await statMatchingFile(transferPath, expectedSizeBytes);
     if (directTransfer) return directTransfer;
   }
 
-  const searchRoots = [];
+  const searchRoots: string[] = [];
   if (slskdRoot) searchRoots.push(slskdRoot);
   if (playlistRoot) {
     const resolvedPlaylist = path.resolve(playlistRoot);
-    const resolvedSlskd = String(slskdRoot || "").trim()
-      ? path.resolve(String(slskdRoot || "").trim())
-      : "";
+    const resolvedSlskd = String(slskdRoot || '').trim()
+      ? path.resolve(String(slskdRoot || '').trim())
+      : '';
     if (!resolvedSlskd || resolvedPlaylist !== resolvedSlskd) {
       searchRoots.push(playlistRoot);
     }
@@ -589,31 +632,39 @@ export async function locateCompletedDownload(
   }
 
   for (const root of searchRoots) {
-    const found = await findFileRecursive(root, parseSlskdRemoteFile(remoteFile).fileName, expectedSizeBytes);
+    const found = await findFileRecursive(
+      root,
+      parseSlskdRemoteFile(remoteFile).fileName,
+      expectedSizeBytes,
+    );
     if (found) return found;
   }
   return null;
 }
 
+interface CleanupRejectedOptions {
+  sourcePath?: string;
+  slskdRoot?: string;
+  playlistRoot?: string;
+  transfer?: Record<string, unknown>;
+  username?: string;
+}
+
 async function cleanupRejectedDownload({
-  sourcePath,
-  slskdRoot,
-  playlistRoot,
-  transfer,
-  username,
-} = {}) {
-  const transferId = readTransferId(transfer);
-  const transferUser = String(
-    username || transfer?.username || transfer?.Username || "",
-  ).trim();
+  sourcePath = '',
+  slskdRoot = '',
+  playlistRoot = '',
+  transfer = undefined,
+  username = '',
+}: CleanupRejectedOptions = {}) {
+  const transferId = transfer ? readTransferId(transfer) : '';
+  const transferUser = String(username || transfer?.username || transfer?.Username || '').trim();
   if (transferUser && transferId) {
-    await slskdClient
-      .deleteTransfer(transferUser, transferId, { remove: true })
-      .catch(() => {});
+    await slskdClient.deleteTransfer(transferUser, transferId, { remove: true }).catch(() => {});
   }
-  const safeSource = String(sourcePath || "").trim();
-  const safeSlskdRoot = String(slskdRoot || "").trim();
-  const safePlaylistRoot = String(playlistRoot || "").trim();
+  const safeSource = String(sourcePath || '').trim();
+  const safeSlskdRoot = String(slskdRoot || '').trim();
+  const safePlaylistRoot = String(playlistRoot || '').trim();
   if (
     safeSource &&
     safeSlskdRoot &&
@@ -621,40 +672,31 @@ async function cleanupRejectedDownload({
     (!safePlaylistRoot || !isPathInside(safeSource, safePlaylistRoot))
   ) {
     await fs.rm(safeSource, { force: true }).catch(() => {});
-    await cleanupEmptyAncestors(path.dirname(safeSource), safeSlskdRoot).catch(
-      () => {},
-    );
+    await cleanupEmptyAncestors(path.dirname(safeSource), safeSlskdRoot).catch(() => {});
   }
 }
 
-async function cleanupTransferForPayload(payload: Record<string, unknown>, transfer) {
+async function cleanupTransferForPayload(payload: PipelinePayload, transfer: Record<string, unknown>) {
   const transferId = readTransferId(transfer);
   if (!transferId) return;
-  const candidate = getPayloadCandidate(payload);
   const username = String(
-    transfer?.username ||
-      transfer?.Username ||
-      candidate?.raw?.user ||
-      "",
+    transfer?.username || transfer?.Username || ((getPayloadCandidate(payload) as Record<string, unknown>)?.raw as Record<string, unknown>)?.user || '',
   ).trim();
   if (!username) return;
-  await slskdClient
-    .deleteTransfer(username, transferId, { remove: true })
-    .catch(() => {});
+  await slskdClient.deleteTransfer(username, transferId, { remove: true }).catch(() => {});
 }
 
-async function cleanupSuccessfulRunArtifacts(payload: Record<string, unknown>, transfer) {
+async function cleanupSuccessfulRunArtifacts(
+  payload: PipelinePayload,
+  transfer: Record<string, unknown>,
+) {
   if (!isSlskdCleanupAfterRunsEnabled()) return;
   const searchIds = getPayloadSearchIds(payload);
   const transferId = readTransferId(transfer);
-  const candidate = getPayloadCandidate(payload);
   const username = String(
-    transfer?.username ||
-      transfer?.Username ||
-      candidate?.raw?.user ||
-      "",
+    transfer?.username || transfer?.Username || ((getPayloadCandidate(payload) as Record<string, unknown>)?.raw as Record<string, unknown>)?.user || '',
   ).trim();
-  const transfers =
+  const transfers: { username: string; transferId: string }[] =
     username && transferId
       ? [
           {
@@ -664,21 +706,19 @@ async function cleanupSuccessfulRunArtifacts(payload: Record<string, unknown>, t
         ]
       : [];
   if (searchIds.length === 0 && transfers.length === 0) return;
-  await slskdClient
-    .cleanupAfterRun({ searchIds, transfers })
-    .catch((error) =>
-      logger.slskd("warn", "Failed to clean up successful slskd run", {
-        error: error?.message || String(error),
-        searchIds,
-        transferCount: transfers.length,
-      }),
-    );
+  await slskdClient.cleanupAfterRun({ searchIds, transfers }).catch((error: unknown) =>
+    logger.slskd(2, 'Failed to clean up successful slskd run', {
+      error: error instanceof Error ? error.message : String(error),
+      searchIds,
+      transferCount: transfers.length,
+    }),
+  );
 }
 
-async function cleanupEmptyAncestors(dir: unknown, rootBoundary) {
-  const root = path.resolve(String(rootBoundary || "").trim());
+async function cleanupEmptyAncestors(dir: unknown, rootBoundary: unknown) {
+  const root = path.resolve(String(rootBoundary || '').trim());
   if (!root) return;
-  let current = path.resolve(String(dir || "").trim());
+  let current = path.resolve(String(dir || '').trim());
   if (!current || current === root) return;
   while (current.startsWith(`${root}${path.sep}`)) {
     try {
@@ -693,31 +733,52 @@ async function cleanupEmptyAncestors(dir: unknown, rootBoundary) {
   }
 }
 
+interface OutcomeDetails {
+  candidate?: Record<string, unknown> | null;
+  transfer?: Record<string, unknown> | null;
+  transferId?: string | null;
+  batchId?: string | null;
+  sourcePath?: string | null;
+  finalPath?: string | null;
+  validation?: Record<string, unknown> | null;
+}
 
-function recordPayloadOutcome(job: unknown, payload, status, reason, details = {}) {
+function recordPayloadOutcome(
+  job: JobRecord,
+  payload: PipelinePayload,
+  status: string,
+  reason: string | null,
+  details: OutcomeDetails = {},
+) {
   recordSlskdTransferOutcome({
-    job,
+    job: job as Record<string, unknown>,
     candidate: details.candidate || getPayloadCandidate(payload),
     status,
     reason,
     transfer: details.transfer || null,
     transferId: details.transferId || null,
     searchIds: getPayloadSearchIds(payload),
-    batchId: details.batchId || payload?.batchId || job?.slskdBatchId || null,
+    batchId: details.batchId || (payload?.batchId as string) || (job?.slskdBatchId as string) || null,
     sourcePath: details.sourcePath || null,
     finalPath: details.finalPath || null,
     validation: details.validation || null,
   });
 }
 
-function retrySameCandidateAllowed(payload: Record<string, unknown>) {
+function retrySameCandidateAllowed(payload: PipelinePayload) {
   return (
     getCandidateRetryCount(payload, Number(payload?.candidateIndex || 0)) <
     MAX_TRANSFER_RETRIES_PER_CANDIDATE
   );
 }
 
-function retrySameCandidateOrNext(payload: Record<string, unknown>, job, status, reason, details = {}) {
+function retrySameCandidateOrNext(
+  payload: PipelinePayload,
+  job: JobRecord,
+  status: string,
+  reason: string,
+  details: OutcomeDetails = {},
+) {
   recordPayloadOutcome(job, payload, status, reason, details);
   if (retrySameCandidateAllowed(payload)) {
     return buildRetrySameCandidatePayload(payload, 5);
@@ -728,7 +789,11 @@ function retrySameCandidateOrNext(payload: Record<string, unknown>, job, status,
   return null;
 }
 
-function mergeSearchResults(aggregated: unknown, seen, results) {
+function mergeSearchResults(
+  aggregated: Record<string, unknown>[],
+  seen: Set<string>,
+  results: Record<string, unknown>[],
+) {
   for (const result of results) {
     const key = `${result.user}\0${result.file}`;
     if (seen.has(key)) continue;
@@ -737,7 +802,11 @@ function mergeSearchResults(aggregated: unknown, seen, results) {
   }
 }
 
-function probeAggregatedResults(aggregated: unknown, queryResults, seen) {
+function probeAggregatedResults(
+  aggregated: Record<string, unknown>[],
+  queryResults: Record<string, unknown>[],
+  seen: Set<string>,
+) {
   const probe = aggregated.slice();
   const probeSeen = new Set(seen);
   for (const result of queryResults) {
@@ -750,15 +819,15 @@ function probeAggregatedResults(aggregated: unknown, queryResults, seen) {
 }
 
 async function runSearchQuery(
-  query,
-  searchIdRef,
-  searchIds,
-  resolvedTrack,
-  searchOptions,
-  aggregated,
-  seen,
+  query: { searchText?: string; [key: string]: unknown },
+  searchIdRef: { value: string | null },
+  searchIds: string[],
+  resolvedTrack: unknown,
+  searchOptions: Record<string, unknown>,
+  aggregated: Record<string, unknown>[],
+  seen: Set<string>,
 ) {
-  const created = await slskdClient.createSearch(query);
+  const created = await slskdClient.createSearch(String(query.searchText || ''), query) as { id: string; searchText: string };
   if (Array.isArray(searchIds)) {
     searchIds.push(created.id);
   }
@@ -768,11 +837,7 @@ async function runSearchQuery(
   const completed = await slskdClient.waitForSearch(created.id, undefined, {
     earlyExitWhen: (data: Record<string, unknown>) =>
       shouldStopSlskdSearching(
-        probeAggregatedResults(
-          aggregated,
-          slskdClient.flattenSearchResults(data),
-          seen,
-        ),
+        probeAggregatedResults(aggregated, slskdClient.flattenSearchResults(data), seen),
         resolvedTrack,
         searchOptions,
       ),
@@ -787,25 +852,25 @@ async function runSearchQuery(
   return results;
 }
 
-async function handleSearch(payload: Record<string, unknown>) {
-  const job = downloadTracker.getJob(payload.jobId);
+async function handleSearch(payload: PipelinePayload) {
+  const job = downloadTracker.getJob(String(payload.jobId || '')) as JobRecord | null;
   if (!job) return null;
-  if (job.status === "failed" || job.status === "done") return null;
+  if (job.status === 'failed' || job.status === 'done') return null;
   downloadTracker.setDownloading(job.id);
   downloadTracker.updateDownloadMetadata(job.id, {
-    downloadSource: "slskd",
+    downloadSource: 'slskd',
   });
-  import("./aurralHistoryService.js")
+  import('./aurralHistoryService.js')
     .then(({ recordTrackJobSearching }) => recordTrackJobSearching(job))
     .catch(() => {});
-  const resolvedTrack = buildResolvedTrack(job, payload.track);
-  const searchTiers = buildSlskdSearchTierGroups(resolvedTrack);
+  const resolvedTrack = buildResolvedTrack(job as Record<string, unknown>, payload.track as Record<string, unknown>);
+  const searchTiers = buildSlskdSearchTierGroups(resolvedTrack) as SearchTier[];
   const searchOptions = await getWorkerSearchOptions();
-  const aggregated = [];
-  const seen = new Set();
-  const searchIdRef = { value: null };
-  const searchIds = [];
-  const queries = [];
+  const aggregated: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  const searchIdRef: { value: string | null } = { value: null };
+  const searchIds: string[] = [];
+  const queries: { searchText?: string; [key: string]: unknown }[] = [];
   for (const tier of searchTiers) {
     if (hasSlskdSearchCandidates(aggregated, resolvedTrack, searchOptions)) {
       break;
@@ -834,29 +899,30 @@ async function handleSearch(payload: Record<string, unknown>) {
     updateSlskdMetaStmt.run(searchIdRef.value, null, null, null, job.id);
     job.slskdSearchId = searchIdRef.value;
   }
-  const ranked = rankFlowSearchResults(
-    aggregated,
-    resolvedTrack,
-    searchOptions,
-  );
-  const eligible = ranked.filter((entry: Record<string, unknown>) => entry.preDownloadValid);
+  const ranked = rankFlowSearchResults(aggregated, resolvedTrack, searchOptions);
+  const eligible = ranked.filter((entry: SearchResultEntry) => entry.preDownloadValid);
   const eligibleKeys = new Set(
-    eligible.map((entry: Record<string, unknown>) => `${entry.raw?.user || ""}\0${entry.raw?.file || ""}`),
+    eligible.map(
+      (entry: SearchResultEntry) => `${entry.raw?.user || ''}\0${entry.raw?.file || ''}`,
+    ),
   );
   const candidatePool = [
     ...eligible,
     ...ranked.filter(
-      (entry: Record<string, unknown>) => !eligibleKeys.has(`${entry.raw?.user || ""}\0${entry.raw?.file || ""}`),
+      (entry: SearchResultEntry) =>
+        !eligibleKeys.has(`${entry.raw?.user || ''}\0${entry.raw?.file || ''}`),
     ),
   ];
-  const candidates = selectRankedMatchAttempts(candidatePool, MAX_DOWNLOAD_CANDIDATES).map((entry: Record<string, unknown>) => ({
-    raw: entry.raw,
-    score: entry.score,
-    resolvedAlbumName: entry.resolvedAlbumName,
-    preDownloadValid: entry.preDownloadValid === true,
-  }));
+  const candidates: SearchCandidate[] = selectRankedMatchAttempts(candidatePool, MAX_DOWNLOAD_CANDIDATES).map(
+    (entry: SearchResultEntry) => ({
+      raw: entry.raw,
+      score: entry.score,
+      resolvedAlbumName: entry.resolvedAlbumName,
+      preDownloadValid: entry.preDownloadValid === true,
+    }),
+  );
   if (candidates.length === 0) {
-    logger.slskd("warn", "No slskd download candidates after search", {
+    logger.slskd(2, 'No slskd download candidates after search', {
       jobId: job.id,
       artistName: job.artistName,
       trackName: job.trackName,
@@ -866,11 +932,9 @@ async function handleSearch(payload: Record<string, unknown>) {
       eligibleCount: eligible.length,
     });
     if (searchIds.length > 0) {
-      await slskdClient
-        .cleanupAfterRun({ searchIds, transfers: [] })
-        .catch(() => {});
+      await slskdClient.cleanupAfterRun({ searchIds, transfers: [] }).catch(() => {});
     }
-    return failOrTryNextSource(payload, job, "No suitable slskd search results", {
+    return failOrTryNextSource(payload, job, 'No suitable slskd search results', {
       queryCount: queries.length,
       rawResultCount: aggregated.length,
       rankedCount: ranked.length,
@@ -879,7 +943,7 @@ async function handleSearch(payload: Record<string, unknown>) {
   }
   return {
     ...payload,
-    phase: "download",
+    phase: 'download',
     searchId: searchIdRef.value,
     searchIds: [...new Set(searchIds)],
     candidates,
@@ -888,36 +952,28 @@ async function handleSearch(payload: Record<string, unknown>) {
   };
 }
 
-async function handleDownload(payload: Record<string, unknown>) {
-  const job = downloadTracker.getJob(payload.jobId);
+async function handleDownload(payload: PipelinePayload) {
+  const job = downloadTracker.getJob(String(payload.jobId || '')) as JobRecord | null;
   if (!job) return null;
-  if (job.status === "failed" || job.status === "done") return null;
-  import("./aurralHistoryService.js")
+  if (job.status === 'failed' || job.status === 'done') return null;
+  import('./aurralHistoryService.js')
     .then(({ recordTrackJobDownloading }) => recordTrackJobDownloading(job))
     .catch(() => {});
-  const candidates = Array.isArray(payload.candidates)
-    ? payload.candidates
-    : [];
+  const candidates = (Array.isArray(payload.candidates) ? payload.candidates : []) as SearchCandidate[];
   const index = Number(payload.candidateIndex || 0);
   const candidate = candidates[index];
   if (!candidate?.raw?.user || !candidate?.raw?.file) {
-    return failOrTryNextSource(payload, job, "No download candidate available");
+    return failOrTryNextSource(payload, job, 'No download candidate available');
   }
-  const searchId = payload.searchId || null;
-  updateSlskdMetaStmt.run(
-    searchId,
-    null,
-    candidate.raw.user,
-    candidate.raw.file,
-    job.id,
-  );
+  const searchId = (payload.searchId as string) || null;
+  updateSlskdMetaStmt.run(searchId, null, candidate.raw.user, candidate.raw.file, job.id);
   downloadTracker.updateDownloadMetadata(job.id, {
-    downloadSource: "slskd",
-    downloadClient: "slskd",
+    downloadSource: 'slskd',
+    downloadClient: 'slskd',
     remoteUsername: candidate.raw.user,
     remoteFilename: candidate.raw.file,
   });
-  let result;
+  let result: Record<string, unknown>;
   try {
     result = await slskdClient.enqueueBatch({
       username: candidate.raw.user,
@@ -927,21 +983,13 @@ async function handleDownload(payload: Record<string, unknown>) {
           size: Number(candidate.raw.size || 0),
         },
       ],
-      options: {
-        externalId: job.id,
-        searchId,
-      },
+    }) as Record<string, unknown>;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    recordPayloadOutcome(job, { ...payload, candidate }, 'enqueue_failed', message, {
+      candidate: candidate as unknown as Record<string, unknown>,
     });
-  } catch (error) {
-    const message = error?.message || String(error);
-    recordPayloadOutcome(
-      job,
-      { ...payload, candidate },
-      "enqueue_failed",
-      message,
-      { candidate },
-    );
-    logger.slskd("warn", "slskd batch enqueue failed for candidate", {
+    logger.slskd(2, 'slskd batch enqueue failed for candidate', {
       jobId: job.id,
       username: candidate.raw.user,
       file: candidate.raw.file,
@@ -952,12 +1000,12 @@ async function handleDownload(payload: Record<string, unknown>) {
     if (nextIndex < candidates.length) {
       return {
         ...payload,
-        phase: "download",
+        phase: 'download',
         candidateIndex: nextIndex,
         pollAttempts: 0,
       };
     }
-    logger.slskd("warn", "All slskd download candidates exhausted", {
+    logger.slskd(2, 'All slskd download candidates exhausted', {
       jobId: job.id,
       artistName: job.artistName,
       trackName: job.trackName,
@@ -973,12 +1021,12 @@ async function handleDownload(payload: Record<string, unknown>) {
     );
   }
   updateSlskdMetaStmt.run(null, result.batchId || null, null, null, job.id);
-  job.slskdBatchId = result.batchId || null;
+  job.slskdBatchId = (result.batchId as string) || null;
   const eventOffset =
     payload.eventOffset != null ? payload.eventOffset : await readCurrentEventOffset();
   return {
     ...payload,
-    phase: "poll",
+    phase: 'poll',
     batchId: result.batchId,
     legacyTransfer: result.legacy
       ? {
@@ -993,14 +1041,14 @@ async function handleDownload(payload: Record<string, unknown>) {
   };
 }
 
-async function handlePoll(payload: Record<string, unknown>) {
-  const job = downloadTracker.getJob(payload.jobId);
+async function handlePoll(payload: PipelinePayload) {
+  const job = downloadTracker.getJob(String(payload.jobId || '')) as JobRecord | null;
   if (!job) return null;
-  if (job.status === "failed" || job.status === "done") return null;
+  if (job.status === 'failed' || job.status === 'done') return null;
   const pollAttempts = Number(payload.pollAttempts || 0) + 1;
   if (pollAttempts > MAX_POLL_ATTEMPTS) {
-    recordPayloadOutcome(job, payload, "transfer_timeout", "slskd transfer polling timed out");
-    return failOrTryNextSource(payload, job, "slskd transfer polling timed out");
+    recordPayloadOutcome(job, payload, 'transfer_timeout', 'slskd transfer polling timed out');
+    return failOrTryNextSource(payload, job, 'slskd transfer polling timed out');
   }
   const eventSignal = await pollSlskdEventsForCandidate(payload).catch(() => ({
     eventOffset: payload.eventOffset ?? null,
@@ -1014,42 +1062,43 @@ async function handlePoll(payload: Record<string, unknown>) {
     const candidate = getPayloadCandidate(basePayload);
     return {
       ...basePayload,
-      phase: "finalize",
+      phase: 'finalize',
       batch: { transfers: [eventSignal.completionTransfer] },
       pollAttempts,
       candidate,
     };
   }
-  if (payload.legacyTransfer?.id && payload.legacyTransfer?.username) {
+  const legacyTransfer = payload.legacyTransfer as Record<string, unknown> | null | undefined;
+  if (legacyTransfer?.id && legacyTransfer?.username) {
     const transfer = await slskdClient.getTransfer(
-      payload.legacyTransfer.username,
-      payload.legacyTransfer.id,
+      String(legacyTransfer.username),
+      String(legacyTransfer.id),
     );
     if (!transfer) {
       return {
         ...basePayload,
-        phase: "poll",
+        phase: 'poll',
         delaySeconds: POLL_DELAY_SECONDS,
         pollAttempts,
       };
     }
-    const state = classifyTransferState(readTransferState(transfer));
-    if (state === "failed") {
-      await cleanupTransferForPayload(basePayload, transfer);
+    const state = classifyTransferState(readTransferState(transfer as Record<string, unknown>));
+    if (state === 'failed') {
+      await cleanupTransferForPayload(basePayload, transfer as Record<string, unknown>);
       const nextPayload = retrySameCandidateOrNext(
         basePayload,
         job,
-        "transfer_failed",
-        "slskd transfer failed",
-        { transfer },
+        'transfer_failed',
+        'slskd transfer failed',
+        { transfer: transfer as Record<string, unknown> },
       );
       if (nextPayload) return nextPayload;
-      return failOrTryNextSource(basePayload, job, "slskd transfer failed");
+      return failOrTryNextSource(basePayload, job, 'slskd transfer failed');
     }
-    if (state !== "success") {
+    if (state !== 'success') {
       return {
         ...basePayload,
-        phase: "poll",
+        phase: 'poll',
         delaySeconds: POLL_DELAY_SECONDS,
         pollAttempts,
       };
@@ -1057,7 +1106,7 @@ async function handlePoll(payload: Record<string, unknown>) {
     const candidate = getPayloadCandidate(basePayload);
     return {
       ...basePayload,
-      phase: "finalize",
+      phase: 'finalize',
       batch: { transfers: [transfer] },
       pollAttempts,
       candidate,
@@ -1065,76 +1114,66 @@ async function handlePoll(payload: Record<string, unknown>) {
   }
   return {
     ...basePayload,
-    phase: "poll",
+    phase: 'poll',
     delaySeconds: POLL_DELAY_SECONDS,
     pollAttempts,
   };
 }
 
-async function handleFinalize(payload: Record<string, unknown>) {
-  const job = downloadTracker.getJob(payload.jobId);
+async function handleFinalize(payload: PipelinePayload) {
+  const job = downloadTracker.getJob(String(payload.jobId || '')) as JobRecord | null;
   if (!job) return null;
-  if (job.status === "failed" || job.status === "done") return null;
+  if (job.status === 'failed' || job.status === 'done') return null;
   const playlistRoot = resolvePlaylistRoot();
   const slskdRoot = resolveLocalPath(
     await slskdClient.getDownloadDirectory(),
-    getPathMappings("slskd"),
+    getPathMappings('slskd'),
   );
-  const destination = String(payload.destination || "").trim();
+  const destination = String(payload.destination || '').trim();
   const candidateIndex = Number(payload.candidateIndex || 0);
   const candidate =
     payload.candidate ||
-    (Array.isArray(payload.candidates)
-      ? payload.candidates[candidateIndex]
-      : null);
-  const remoteFile = String(candidate?.raw?.file || "");
+    (Array.isArray(payload.candidates) ? payload.candidates[candidateIndex] : null);
+  const remoteFile = String(((candidate as Record<string, unknown>)?.raw as Record<string, unknown>)?.file || '');
   const { fileName } = parseSlskdRemoteFile(remoteFile);
-  const transfers = readBatchTransfers(payload.batch);
-  const transfer = transfers[0] || null;
-  const sourcePath = await locateCompletedDownload(
-    slskdRoot,
-    playlistRoot,
-    remoteFile,
-    {
-      expectedSizeBytes: Number(candidate?.raw?.size || 0),
-      transfer,
-    },
-  );
+  const transfers = readBatchTransfers(payload.batch as Record<string, unknown>);
+  const transfer = (transfers[0] || null) as Record<string, unknown> | null;
+  const sourcePath = await locateCompletedDownload(slskdRoot, playlistRoot, remoteFile, {
+    expectedSizeBytes: Number(((candidate as Record<string, unknown>)?.raw as Record<string, unknown>)?.size || 0),
+    transfer: transfer || undefined,
+  });
   if (!sourcePath) {
     const searchRoot = slskdRoot || playlistRoot;
-    const [predictedPath] = predictSlskdLocalPathCandidates(
-      searchRoot,
-      remoteFile,
-    );
+    const [predictedPath] = predictSlskdLocalPathCandidates(searchRoot, remoteFile);
     const expectedPath = predictedPath || fileName;
     const nextPayload = retrySameCandidateOrNext(
       payload,
       job,
-      "missing_file",
+      'missing_file',
       `Downloaded file missing: ${expectedPath}`,
-      { transfer },
+      { transfer: transfer || undefined },
     );
     if (nextPayload) return nextPayload;
     return failOrTryNextSource(payload, job, `Downloaded file missing: ${expectedPath}`);
   }
   const ext = path.extname(sourcePath).toLowerCase();
   const finalDir = joinUnderRoot(playlistRoot, destination);
-  const finalName = `${sanitizePathPart(job.trackName, "Unknown Track")}${ext || ".mp3"}`;
+  const finalName = `${sanitizePathPart(String(job.trackName || 'Unknown Track'), 'Unknown Track')}${ext || '.mp3'}`;
   const finalPath = path.join(finalDir, finalName);
   const validation = await validateDownloadedTrack(
     sourcePath,
-    candidate,
-    buildResolvedTrack(job, payload.track),
+    candidate as Record<string, unknown>,
+    buildResolvedTrack(job as Record<string, unknown>, payload.track as Record<string, unknown>),
   );
   if (!validation.valid) {
-    logger.slskd("warn", "slskd download validation failed", {
+    logger.slskd(2, 'slskd download validation failed', {
       jobId: job.id,
       artistName: job.artistName,
       trackName: job.trackName,
       candidateIndex,
-      preDownloadValid: candidate?.preDownloadValid === true,
-      expectedDurationMs: buildResolvedTrack(job, payload.track).durationMs,
-      actualDurationMs: validation.actualDurationMs ?? null,
+      preDownloadValid: (candidate as Record<string, unknown>)?.preDownloadValid === true,
+      expectedDurationMs: buildResolvedTrack(job as Record<string, unknown>, payload.track as Record<string, unknown>).durationMs,
+      actualDurationMs: (validation as Record<string, unknown>).actualDurationMs ?? null,
       reason: validation.reason,
       remoteFile,
       sourcePath,
@@ -1142,70 +1181,59 @@ async function handleFinalize(payload: Record<string, unknown>) {
     recordPayloadOutcome(
       job,
       payload,
-      "validation_failed",
-      validation.reason || "Download validation failed",
-      { transfer, sourcePath, validation },
+      'validation_failed',
+      validation.reason || 'Download validation failed',
+      { transfer: transfer || undefined, sourcePath, validation: validation as Record<string, unknown> },
     );
     await cleanupRejectedDownload({
       sourcePath,
       slskdRoot,
       playlistRoot,
-      transfer,
-      username: candidate?.raw?.user,
+      transfer: transfer || undefined,
+      username: ((candidate as Record<string, unknown>)?.raw as Record<string, unknown>)?.user as string | undefined,
     });
-    const nextPayload = hasNextCandidate(payload)
-      ? buildNextCandidatePayload(payload)
-      : null;
+    const nextPayload = hasNextCandidate(payload) ? buildNextCandidatePayload(payload) : null;
     if (nextPayload) return nextPayload;
-    return failOrTryNextSource(
-      payload,
-      job,
-      validation.reason || "Download validation failed",
-    );
+    return failOrTryNextSource(payload, job, validation.reason || 'Download validation failed');
   }
-  import("./aurralHistoryService.js")
+  import('./aurralHistoryService.js')
     .then(({ recordTrackJobMoving }) => recordTrackJobMoving(job))
     .catch(() => {});
-  const committedFinalPath = await commitImportToPlaylistLibrary(
-    sourcePath,
-    finalPath,
-  );
+  const committedFinalPath = await commitImportToPlaylistLibrary(sourcePath, finalPath);
   if (slskdRoot) {
-    await cleanupEmptyAncestors(path.dirname(sourcePath), slskdRoot).catch(
-      () => {},
-    );
+    await cleanupEmptyAncestors(path.dirname(sourcePath), slskdRoot).catch(() => {});
   }
   downloadTracker.setDone(
     job.id,
     committedFinalPath,
-    candidate?.resolvedAlbumName || job.albumName,
+    String((candidate as Record<string, unknown>)?.resolvedAlbumName || job.albumName || ''),
   );
-  recordPayloadOutcome(job, payload, "success", null, {
-    transfer,
+  recordPayloadOutcome(job, payload, 'success', null, {
+    transfer: transfer || undefined,
     sourcePath,
     finalPath: committedFinalPath,
-    validation,
+    validation: validation as Record<string, unknown>,
   });
-  await cleanupSuccessfulRunArtifacts(payload, transfer);
-  import("./aurralHistoryService.js")
+  await cleanupSuccessfulRunArtifacts(payload, transfer || {});
+  import('./aurralHistoryService.js')
     .then(({ recordTrackJobCompleted }) => recordTrackJobCompleted(job))
     .catch(() => {});
-  const playlistType = job.playlistId || job.playlistType;
-  const { playlistManager } = await import("./weeklyFlowPlaylistManager.js");
+  const playlistType = String(job.playlistId || job.playlistType || '');
+  const { playlistManager } = await import('./weeklyFlowPlaylistManager.js');
   await playlistManager.refreshPlaylist(playlistType);
   playlistManager.scheduleScanLibrary();
-  const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
+  const { weeklyFlowWorker } = await import('./weeklyFlowWorker.js');
   weeklyFlowWorker.wake(0);
   await weeklyFlowWorker.checkPlaylistComplete(playlistType);
   return null;
 }
 
-export async function processPipelinePayload(payload: Record<string, unknown>) {
+export async function processPipelinePayload(payload: PipelinePayload) {
   if (!payload || !payload.phase || !payload.jobId) {
-    throw new Error("Invalid pipeline payload");
+    throw new Error('Invalid pipeline payload');
   }
   if (!isAnyDownloadSourceConfigured()) {
-    const job = downloadTracker.getJob(payload.jobId);
+    const job = downloadTracker.getJob(String(payload.jobId || '')) as JobRecord | null;
     if (job) {
       await failJob(job, getDownloadSourceNotConfiguredMessage());
     }
@@ -1214,52 +1242,44 @@ export async function processPipelinePayload(payload: Record<string, unknown>) {
   if (!payload.source) {
     const nextPayload = buildNextSourcePayload(payload, null, null);
     if (!nextPayload) {
-      const job = downloadTracker.getJob(payload.jobId);
+      const job = downloadTracker.getJob(String(payload.jobId || '')) as JobRecord | null;
       if (job) await failJob(job, getDownloadSourceNotConfiguredMessage());
       return null;
     }
     return processPipelinePayload(nextPayload);
   }
-  if (payload.source === "usenet") {
-    if (!isSourceConfigured("usenet")) {
-      const job = downloadTracker.getJob(payload.jobId);
-      return job
-        ? failOrTryNextSource(payload, job, "Usenet is not configured")
-        : null;
+  if (payload.source === 'usenet') {
+    if (!isSourceConfigured('usenet')) {
+      const job = downloadTracker.getJob(String(payload.jobId || '')) as JobRecord | null;
+      return job ? failOrTryNextSource(payload, job, 'Usenet is not configured') : null;
     }
     return processUsenetPipelinePayload(payload, { failOrTryNextSource });
   }
-  if (payload.source !== "slskd") {
-    const job = downloadTracker.getJob(payload.jobId);
+  if (payload.source !== 'slskd') {
+    const job = downloadTracker.getJob(String(payload.jobId || '')) as JobRecord | null;
     return job
-      ? failOrTryNextSource(
-          payload,
-          job,
-          `Unknown download source: ${payload.source}`,
-        )
+      ? failOrTryNextSource(payload, job, `Unknown download source: ${payload.source}`)
       : null;
   }
-  if (!slskdClient.isConfigured() || !isSourceConfigured("slskd")) {
-    const job = downloadTracker.getJob(payload.jobId);
-    return job
-      ? failOrTryNextSource(payload, job, SLSKD_NOT_CONFIGURED_MESSAGE)
-      : null;
+  if (!slskdClient.isConfigured() || !isSourceConfigured('slskd')) {
+    const job = downloadTracker.getJob(String(payload.jobId || '')) as JobRecord | null;
+    return job ? failOrTryNextSource(payload, job, SLSKD_NOT_CONFIGURED_MESSAGE) : null;
   }
   switch (payload.phase) {
-    case "search":
+    case 'search':
       return handleSearch(payload);
-    case "download":
+    case 'download':
       return handleDownload(payload);
-    case "poll":
+    case 'poll':
       return handlePoll(payload);
-    case "finalize":
+    case 'finalize':
       return handleFinalize(payload);
     default:
       throw new Error(`Unknown pipeline phase: ${payload.phase}`);
   }
 }
 
-export async function continuePipeline(payload: Record<string, unknown>) {
+export async function continuePipeline(payload: PipelinePayload) {
   if (!payload) return;
   if (payload.delaySeconds) {
     enqueuePipelineJob(payload, {

@@ -1,22 +1,21 @@
-import express from "express";
-import { UUID_REGEX } from "../config/constants.js";
-import { noCache } from "../middleware/cache.js";
-import {
-  requireAuth,
-  requirePermission,
-} from "../middleware/requirePermission.js";
-import { invalidateAllDownloadStatusesCache } from "./library/handlers/downloads.js";
+import { Router, Request, Response } from 'express';
+import { UUID_REGEX } from '../config/constants.js';
+import { noCache } from '../middleware/cache.js';
+import { requireAuth, requirePermission } from '../middleware/requirePermission.js';
+import { invalidateAllDownloadStatusesCache } from './library/handlers/downloads.js';
 
-const router = express.Router();
-const dismissedAlbumIds = new Map();
+const router = Router();
+const dismissedAlbumIds = new Map<string, number>();
 const DISMISSED_ALBUM_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_DISMISSED_ALBUMS = 1000;
 const REQUESTS_CACHE_MS = 15000;
 const REQUESTS_STALE_MS = 5 * 60 * 1000;
 const STALE_GRABBED_MS = 15 * 60 * 1000;
-let lastRequestsResponse = null;
+let lastRequestsResponse: unknown[] | null = null;
 let lastRequestsAt = 0;
-let pendingRequestsRefresh = null;
+let pendingRequestsRefresh: Promise<unknown> | null = null;
+
+type AnyRecord = Record<string, unknown>;
 
 const pruneDismissedAlbumIds = () => {
   const now = Date.now();
@@ -28,48 +27,44 @@ const pruneDismissedAlbumIds = () => {
   if (dismissedAlbumIds.size <= MAX_DISMISSED_ALBUMS) {
     return;
   }
-  const entries = Array.from(dismissedAlbumIds.entries()).sort(
-    (a, b) => a[1] - b[1],
-  );
+  const entries = Array.from(dismissedAlbumIds.entries()).sort((a, b) => a[1] - b[1]);
   const removeCount = dismissedAlbumIds.size - MAX_DISMISSED_ALBUMS;
   for (let i = 0; i < removeCount; i++) {
     dismissedAlbumIds.delete(entries[i][0]);
   }
 };
 
-const toIso = (value) => {
+const toIso = (value: unknown): string => {
   if (!value) return new Date().toISOString();
-  if (typeof value === "string") return value;
+  if (typeof value === 'string') return value;
   try {
-    return new Date(value).toISOString();
+    return new Date(value as string | number | Date).toISOString();
   } catch {
     return new Date().toISOString();
   }
 };
 
-const filterDismissedRequests = (requests) =>
+const filterDismissedRequests = (requests: unknown[]): unknown[] =>
   Array.isArray(requests)
-    ? requests.filter(
-        (r) => !r.albumId || !dismissedAlbumIds.has(String(r.albumId)),
-      )
+    ? requests.filter((r) => !(r as AnyRecord).albumId || !dismissedAlbumIds.has(String((r as AnyRecord).albumId)))
     : [];
 
-const updateRequestsCache = (requests) => {
+const updateRequestsCache = (requests: unknown[]) => {
   lastRequestsResponse = filterDismissedRequests(requests);
   lastRequestsAt = Date.now();
   return lastRequestsResponse;
 };
 
-const removeAlbumFromRequestsCache = (albumId) => {
+const removeAlbumFromRequestsCache = (albumId: unknown) => {
   if (!lastRequestsResponse) return;
   const normalizedAlbumId = String(albumId);
   lastRequestsResponse = lastRequestsResponse.filter(
-    (request) => String(request?.albumId) !== normalizedAlbumId,
+    (request) => String((request as AnyRecord)?.albumId) !== normalizedAlbumId,
   );
   lastRequestsAt = Date.now();
 };
 
-const refreshRequestsCache = async (lidarrClient) => {
+const refreshRequestsCache = async (lidarrClient: unknown) => {
   if (pendingRequestsRefresh) {
     return pendingRequestsRefresh;
   }
@@ -83,93 +78,91 @@ const refreshRequestsCache = async (lidarrClient) => {
   return pendingRequestsRefresh;
 };
 
-const filterRedundantAurralRequests = (aurralRequests, lidarrRequests) => {
+const filterRedundantAurralRequests = (aurralRequests: unknown[], lidarrRequests: unknown[]) => {
   const lidarrAlbumIds = new Set(
     lidarrRequests
-      .map((request) => request.albumId)
+      .map((request) => (request as AnyRecord).albumId)
       .filter(Boolean)
-      .map((albumId) => String(albumId)),
+      .map((albumId) => String(albumId as string)),
   );
   if (!lidarrAlbumIds.size) return aurralRequests;
   return aurralRequests.filter((request) => {
-    if (request.kind !== "album_requested") return true;
-    if (!request.albumId) return true;
-    return !lidarrAlbumIds.has(String(request.albumId));
+    const r = request as AnyRecord;
+    if (r.kind !== 'album_requested') return true;
+    if (!r.albumId) return true;
+    return !lidarrAlbumIds.has(String(r.albumId));
   });
 };
 
-const buildLidarrRequests = async (lidarrClient) => {
+const buildLidarrRequests = async (lidarrClient: unknown) => {
+  const client = lidarrClient as AnyRecord;
   const [queue, history] = await Promise.all([
-    lidarrClient.getQueue().catch(() => []),
-    lidarrClient.getHistory(1, 200).catch(() => ({ records: [] })),
+    ((client as AnyRecord).getQueue as () => Promise<unknown>)().catch(() => []),
+    ((client as AnyRecord).getHistory as (page: number, size: number) => Promise<unknown>)(1, 200).catch(() => ({ records: [] })),
   ]);
 
-  const requestsByAlbumId = new Map();
+  const requestsByAlbumId = new Map<string, AnyRecord>();
 
-  const queueItems = Array.isArray(queue) ? queue : queue?.records || [];
-  const queueByAlbumId = new Map();
+  const queueItems = Array.isArray(queue) ? queue : (queue as AnyRecord)?.records as unknown[] || [];
+  const queueByAlbumId = new Map<string, unknown>();
   for (const item of queueItems) {
-    const albumId = item?.albumId ?? item?.album?.id;
+    const i = item as AnyRecord;
+    const albumId = i?.albumId ?? (i?.album as AnyRecord)?.id;
     if (albumId == null) continue;
     queueByAlbumId.set(String(albumId), item);
   }
 
   for (const item of queueItems) {
-    const albumId = item?.albumId ?? item?.album?.id;
+    const i = item as AnyRecord;
+    const albumId = i?.albumId ?? (i?.album as AnyRecord)?.id;
     if (albumId == null) continue;
 
-    const albumName = item?.album?.title || item?.title || "Album";
-    const artistName = item?.artist?.artistName || "Artist";
+    const albumName = (i?.album as AnyRecord)?.title || i?.title || 'Album';
+    const artistName = (i?.artist as AnyRecord)?.artistName || 'Artist';
 
-    let artistMbid = null;
+    let artistMbid: string | null = null;
 
-    artistMbid = item?.artist?.foreignArtistId || null;
+    artistMbid = ((i.artist as AnyRecord)?.foreignArtistId as string | undefined) || null;
 
-    const queueStatus = String(item.status || "").toLowerCase();
-    const title = String(item.title || "").toLowerCase();
-    const trackedDownloadState = String(
-      item.trackedDownloadState || "",
-    ).toLowerCase();
-    const trackedDownloadStatus = String(
-      item.trackedDownloadStatus || "",
-    ).toLowerCase();
-    const errorMessage = String(item.errorMessage || "").toLowerCase();
-    const statusMessages = Array.isArray(item.statusMessages)
-      ? item.statusMessages
-          .map((m) => String(m || "").toLowerCase())
-          .join(" ")
-      : "";
+    const queueStatus = String(i.status || '').toLowerCase();
+    const title = String(i.title || '').toLowerCase();
+    const trackedDownloadState = String(i.trackedDownloadState || '').toLowerCase();
+    const trackedDownloadStatus = String(i.trackedDownloadStatus || '').toLowerCase();
+    const errorMessage = String(i.errorMessage || '').toLowerCase();
+    const statusMessages = Array.isArray(i.statusMessages)
+      ? (i.statusMessages as unknown[]).map((m: unknown) => String(m || '').toLowerCase()).join(' ')
+      : '';
 
     const isFailed =
-      trackedDownloadState === "importfailed" ||
-      trackedDownloadState === "importFailed" ||
-      queueStatus.includes("fail") ||
-      queueStatus.includes("import fail") ||
-      title.includes("import fail") ||
-      title.includes("downloaded - import fail") ||
-      trackedDownloadState.includes("fail") ||
-      trackedDownloadStatus.includes("fail") ||
-      trackedDownloadStatus === "warning" ||
-      errorMessage.includes("fail") ||
-      errorMessage.includes("retrying") ||
-      statusMessages.includes("fail") ||
-      statusMessages.includes("unmatched");
+      trackedDownloadState === 'importfailed' ||
+      trackedDownloadState === 'importFailed' ||
+      queueStatus.includes('fail') ||
+      queueStatus.includes('import fail') ||
+      title.includes('import fail') ||
+      title.includes('downloaded - import fail') ||
+      trackedDownloadState.includes('fail') ||
+      trackedDownloadStatus.includes('fail') ||
+      trackedDownloadStatus === 'warning' ||
+      errorMessage.includes('fail') ||
+      errorMessage.includes('retrying') ||
+      statusMessages.includes('fail') ||
+      statusMessages.includes('unmatched');
 
-    const status = isFailed ? "failed" : "processing";
+    const status = isFailed ? 'failed' : 'processing';
 
     requestsByAlbumId.set(String(albumId), {
-      id: `lidarr-queue-${item.id ?? albumId}`,
-      source: "lidarr",
-      type: "album",
+      id: `lidarr-queue-${i.id ?? albumId}`,
+      source: 'lidarr',
+      type: 'album',
       albumId: String(albumId),
-      albumMbid: item?.album?.foreignAlbumId || null,
+      albumMbid: (i?.album as AnyRecord)?.foreignAlbumId || null,
       albumName,
-      artistId: item?.artist?.id != null ? String(item.artist.id) : null,
+      artistId: (i?.artist as AnyRecord)?.id != null ? String((i.artist as AnyRecord).id) : null,
       artistMbid,
       artistName,
       status,
-      statusLabel: isFailed ? "Failed" : "Downloading",
-      requestedAt: toIso(item?.added),
+      statusLabel: isFailed ? 'Failed' : 'Downloading',
+      requestedAt: toIso(i?.added),
       mbid: artistMbid,
       name: albumName,
       image: null,
@@ -178,19 +171,19 @@ const buildLidarrRequests = async (lidarrClient) => {
     });
   }
 
-  const historyRecords = Array.isArray(history?.records)
-    ? history.records
+  const h = history as AnyRecord;
+  const historyRecords = Array.isArray(h?.records)
+    ? h.records
     : Array.isArray(history)
       ? history
       : [];
 
-  const latestHistoryByAlbum = new Map();
+  const latestHistoryByAlbum = new Map<string, { record: unknown; recordTime: number }>();
   for (const record of historyRecords) {
-    const albumId = record?.albumId;
+    const r = record as AnyRecord;
+    const albumId = r?.albumId;
     if (albumId == null) continue;
-    const recordTime = new Date(
-      record?.date || record?.eventDate || 0,
-    ).getTime();
+    const recordTime = new Date((r.date || r.eventDate || 0) as string | number | Date).getTime();
     const existing = latestHistoryByAlbum.get(String(albumId));
     if (!existing || recordTime > existing.recordTime) {
       latestHistoryByAlbum.set(String(albumId), {
@@ -204,145 +197,136 @@ const buildLidarrRequests = async (lidarrClient) => {
     const existing = requestsByAlbumId.get(String(albumId));
     if (existing) continue;
 
-    const albumName = record?.album?.title || record?.sourceTitle || "Album";
-    const artistName = record?.artist?.artistName || "Artist";
+    const r = record as AnyRecord;
+    const albumName = (r?.album as AnyRecord)?.title || r?.sourceTitle || 'Album';
+    const artistName = (r?.artist as AnyRecord)?.artistName || 'Artist';
 
-    let artistMbid = null;
+    let artistMbid: string | null = null;
 
-    artistMbid = record?.artist?.foreignArtistId || null;
+    artistMbid = ((r.artist as AnyRecord)?.foreignArtistId as string | undefined) || null;
 
-    const eventType = String(record?.eventType || "").toLowerCase();
-    const data = record?.data || {};
-    const statusMessages = Array.isArray(data?.statusMessages)
-      ? data.statusMessages
-          .map((m) => String(m || "").toLowerCase())
-          .join(" ")
-      : String(data?.statusMessages?.[0] || "").toLowerCase();
-    const errorMessage = String(data?.errorMessage || "").toLowerCase();
-    const sourceTitle = String(record?.sourceTitle || "").toLowerCase();
+    const eventType = String(r?.eventType || '').toLowerCase();
+    const data = r?.data || {};
+    const dataRecord = data as AnyRecord;
+    const statusMessages = Array.isArray(dataRecord?.statusMessages)
+      ? (dataRecord.statusMessages as unknown[]).map((m: unknown) => String(m || '').toLowerCase()).join(' ')
+      : String((dataRecord?.statusMessages as unknown[])?.[0] || '').toLowerCase();
+    const errorMessage = String(dataRecord?.errorMessage || '').toLowerCase();
+    const sourceTitle = String(r?.sourceTitle || '').toLowerCase();
     const dataString = JSON.stringify(data).toLowerCase();
     const hasQueue = queueByAlbumId.has(String(albumId));
     const isGrabbed =
-      eventType.includes("grabbed") ||
-      sourceTitle.includes("grabbed") ||
-      dataString.includes("grabbed");
+      eventType.includes('grabbed') ||
+      sourceTitle.includes('grabbed') ||
+      dataString.includes('grabbed');
     const isFailedDownload =
-      eventType.includes("fail") ||
-      statusMessages.includes("fail") ||
-      statusMessages.includes("error") ||
-      errorMessage.includes("fail") ||
-      errorMessage.includes("error") ||
-      sourceTitle.includes("fail") ||
-      dataString.includes("fail");
+      eventType.includes('fail') ||
+      statusMessages.includes('fail') ||
+      statusMessages.includes('error') ||
+      errorMessage.includes('fail') ||
+      errorMessage.includes('error') ||
+      sourceTitle.includes('fail') ||
+      dataString.includes('fail');
 
     const isFailedImport =
-      eventType === "albumimportincomplete" ||
-      eventType.includes("incomplete") ||
-      statusMessages.includes("fail") ||
-      statusMessages.includes("error") ||
-      statusMessages.includes("import fail") ||
-      statusMessages.includes("incomplete") ||
-      errorMessage.includes("fail") ||
-      errorMessage.includes("error") ||
-      sourceTitle.includes("import fail") ||
-      dataString.includes("import fail");
+      eventType === 'albumimportincomplete' ||
+      eventType.includes('incomplete') ||
+      statusMessages.includes('fail') ||
+      statusMessages.includes('error') ||
+      statusMessages.includes('import fail') ||
+      statusMessages.includes('incomplete') ||
+      errorMessage.includes('fail') ||
+      errorMessage.includes('error') ||
+      sourceTitle.includes('import fail') ||
+      dataString.includes('import fail');
 
     const isSuccessfulImport =
-      eventType.includes("import") &&
-      !isFailedImport &&
-      eventType !== "albumimportincomplete";
-    const isStaleGrabbed =
-      isGrabbed && !hasQueue && Date.now() - recordTime > STALE_GRABBED_MS;
-    const isActive =
-      hasQueue || (isGrabbed && !isStaleGrabbed);
+      eventType.includes('import') && !isFailedImport && eventType !== 'albumimportincomplete';
+    const isStaleGrabbed = isGrabbed && !hasQueue && Date.now() - recordTime > STALE_GRABBED_MS;
+    const isActive = hasQueue || (isGrabbed && !isStaleGrabbed);
     if (!isActive && !isSuccessfulImport) {
       if (!(isFailedImport || isFailedDownload || isStaleGrabbed)) {
         continue;
       }
     }
     const status = hasQueue
-      ? "processing"
+      ? 'processing'
       : isSuccessfulImport
-        ? "available"
+        ? 'available'
         : isFailedImport || isFailedDownload || isStaleGrabbed
-          ? "failed"
-          : "processing";
+          ? 'failed'
+          : 'processing';
     const statusLabel =
-      status === "available"
-        ? "Complete"
-        : status === "failed"
-          ? "Failed"
+      status === 'available'
+        ? 'Complete'
+        : status === 'failed'
+          ? 'Failed'
           : isGrabbed
-            ? "Downloading"
-            : "In progress";
+            ? 'Downloading'
+            : 'In progress';
 
     requestsByAlbumId.set(String(albumId), {
-      id: `lidarr-history-${record.id ?? albumId}`,
-      source: "lidarr",
-      type: "album",
+      id: `lidarr-history-${r.id ?? albumId}`,
+      source: 'lidarr',
+      type: 'album',
       albumId: String(albumId),
-      albumMbid: record?.album?.foreignAlbumId || null,
+      albumMbid: (r?.album as AnyRecord)?.foreignAlbumId || null,
       albumName,
-      artistId: record?.artistId != null ? String(record.artistId) : null,
+      artistId: r?.artistId != null ? String(r.artistId) : null,
       artistMbid,
       artistName,
       status,
       statusLabel,
-      requestedAt: toIso(record?.date || record?.eventDate),
+      requestedAt: toIso(r?.date || r?.eventDate),
       mbid: artistMbid,
       name: albumName,
       image: null,
       inQueue: false,
-      canReSearch: status === "failed",
+      canReSearch: status === 'failed',
     });
   }
 
   let sorted = [...requestsByAlbumId.values()].sort(
-    (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
+    (a, b) => new Date((b as AnyRecord).requestedAt as string).getTime() - new Date((a as AnyRecord).requestedAt as string).getTime(),
   );
 
-  const isPlaceholder = (value, fallback) => {
+  const isPlaceholder = (value: unknown, fallback: unknown): boolean => {
     if (!value) return true;
     const normalized = String(value).trim().toLowerCase();
     return normalized === String(fallback).trim().toLowerCase();
   };
 
-  const missingAlbumIds = new Set();
-  const missingArtistIds = new Set();
+  const missingAlbumIds = new Set<string>();
+  const missingArtistIds = new Set<string>();
 
   for (const request of sorted) {
-    if (request.albumId) {
-      if (
-        !request.albumMbid ||
-        isPlaceholder(request.albumName, "Album") ||
-        !request.artistId
-      ) {
-        missingAlbumIds.add(String(request.albumId));
+    const r = request as AnyRecord;
+    if (r.albumId) {
+      if (!r.albumMbid || isPlaceholder(r.albumName, 'Album') || !r.artistId) {
+        missingAlbumIds.add(String(r.albumId));
       }
     }
-    if (request.artistId) {
-      if (
-        !request.artistMbid ||
-        isPlaceholder(request.artistName, "Artist")
-      ) {
-        missingArtistIds.add(String(request.artistId));
+    if (r.artistId) {
+      if (!r.artistMbid || isPlaceholder(r.artistName, 'Artist')) {
+        missingArtistIds.add(String(r.artistId));
       }
     }
   }
 
-  const albumDetailsById = new Map();
-  const artistDetailsById = new Map();
+  const albumDetailsById = new Map<string, unknown>();
+  const artistDetailsById = new Map<string, unknown>();
 
   if (missingAlbumIds.size > 0) {
     const albumIds = Array.from(missingAlbumIds);
+    const getAlbum = (client as AnyRecord).getAlbum as (id: string) => Promise<unknown>;
     const albums = await Promise.all(
-      albumIds.map((id) => lidarrClient.getAlbum(id).catch(() => null)),
+      albumIds.map((id) => getAlbum(id).catch(() => null)),
     );
     for (let i = 0; i < albumIds.length; i++) {
       if (albums[i]) {
         albumDetailsById.set(String(albumIds[i]), albums[i]);
-        if (albums[i]?.artistId != null) {
-          missingArtistIds.add(String(albums[i].artistId));
+        if ((albums[i] as AnyRecord)?.artistId != null) {
+          missingArtistIds.add(String((albums[i] as AnyRecord).artistId));
         }
       }
     }
@@ -350,8 +334,9 @@ const buildLidarrRequests = async (lidarrClient) => {
 
   if (missingArtistIds.size > 0) {
     const artistIds = Array.from(missingArtistIds);
+    const getArtist = (client as AnyRecord).getArtist as (id: string) => Promise<unknown>;
     const artists = await Promise.all(
-      artistIds.map((id) => lidarrClient.getArtist(id).catch(() => null)),
+      artistIds.map((id) => getArtist(id).catch(() => null)),
     );
     for (let i = 0; i < artistIds.length; i++) {
       if (artists[i]) {
@@ -362,17 +347,14 @@ const buildLidarrRequests = async (lidarrClient) => {
 
   if (albumDetailsById.size > 0 || artistDetailsById.size > 0) {
     sorted = sorted.map((request) => {
-      const enriched = { ...request };
-      if (
-        enriched.albumId &&
-        albumDetailsById.has(String(enriched.albumId))
-      ) {
-        const album = albumDetailsById.get(String(enriched.albumId));
+      const enriched = { ...(request as AnyRecord) };
+      if (enriched.albumId && albumDetailsById.has(String(enriched.albumId))) {
+        const album = albumDetailsById.get(String(enriched.albumId)) as AnyRecord;
         if (album) {
           if (!enriched.albumMbid && album.foreignAlbumId) {
             enriched.albumMbid = album.foreignAlbumId;
           }
-          if (isPlaceholder(enriched.albumName, "Album") && album.title) {
+          if (isPlaceholder(enriched.albumName, 'Album') && album.title) {
             enriched.albumName = album.title;
             enriched.name = album.title;
           }
@@ -381,16 +363,10 @@ const buildLidarrRequests = async (lidarrClient) => {
           }
         }
       }
-      if (
-        enriched.artistId &&
-        artistDetailsById.has(String(enriched.artistId))
-      ) {
-        const artist = artistDetailsById.get(String(enriched.artistId));
+      if (enriched.artistId && artistDetailsById.has(String(enriched.artistId))) {
+        const artist = artistDetailsById.get(String(enriched.artistId)) as AnyRecord;
         if (artist) {
-          if (
-            isPlaceholder(enriched.artistName, "Artist") &&
-            artist.artistName
-          ) {
+          if (isPlaceholder(enriched.artistName, 'Artist') && artist.artistName) {
             enriched.artistName = artist.artistName;
           }
           if (!enriched.artistMbid && artist.foreignArtistId) {
@@ -406,37 +382,31 @@ const buildLidarrRequests = async (lidarrClient) => {
   return filterDismissedRequests(sorted);
 };
 
-const buildAurralRequests = async (lidarrClient = null) => {
-  const { getAurralHistoryRequests } = await import(
-    "../services/aurralHistoryService.js"
-  );
+const buildAurralRequests = async (lidarrClient: unknown = null) => {
+  const { getAurralHistoryRequests } = await import('../services/aurralHistoryService.js');
   return getAurralHistoryRequests(lidarrClient);
 };
 
-const buildRequestsResponse = async (lidarrClient) => {
+const buildRequestsResponse = async (lidarrClient: unknown) => {
+  const client = lidarrClient as AnyRecord;
   const [lidarrRequests, aurralRequests] = await Promise.all([
-    lidarrClient?.isConfigured()
-      ? buildLidarrRequests(lidarrClient)
-      : Promise.resolve([]),
+    client?.isConfigured ? (client.isConfigured as () => boolean)() ? buildLidarrRequests(lidarrClient) : Promise.resolve([]) : Promise.resolve([]),
     buildAurralRequests(lidarrClient),
   ]);
-  const filteredAurral = filterRedundantAurralRequests(
-    aurralRequests,
-    lidarrRequests,
-  );
-  return [...lidarrRequests, ...filteredAurral].sort(
-    (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
+  const filteredAurral = filterRedundantAurralRequests(aurralRequests as unknown[], lidarrRequests as unknown[]);
+  return [...(lidarrRequests as unknown[]), ...(filteredAurral as unknown[])].sort(
+    (a, b) => new Date((a as AnyRecord).requestedAt as string).getTime() - new Date((b as AnyRecord).requestedAt as string).getTime(),
   );
 };
 
-router.get("/", requireAuth, noCache, async (req, res) => {
+router.get('/', requireAuth, noCache, async (_req: Request, res: Response) => {
   try {
     pruneDismissedAlbumIds();
-    const { lidarrClient } = await import("../services/lidarrClient.js");
+    const { lidarrClient } = await import('../services/lidarrClient.js');
 
     if (!lidarrClient?.isConfigured()) {
       const aurralOnly = await buildAurralRequests();
-      lastRequestsResponse = aurralOnly;
+      lastRequestsResponse = aurralOnly as unknown[];
       lastRequestsAt = Date.now();
       return res.json(aurralOnly);
     }
@@ -454,92 +424,85 @@ router.get("/", requireAuth, noCache, async (req, res) => {
 
     const requests = await refreshRequestsCache(lidarrClient);
     res.json(requests);
-  } catch (error) {
+  } catch {
     if (lastRequestsResponse) {
       return res.json(filterDismissedRequests(lastRequestsResponse));
     }
-    res.status(500).json({ error: "Failed to fetch requests" });
+    res.status(500).json({ error: 'Failed to fetch requests' });
   }
 });
 
 router.delete(
-  "/album/:albumId",
+  '/album/:albumId',
   requireAuth,
-  requirePermission("deleteAlbum"),
-  async (req, res) => {
-  const { albumId } = req.params;
-  if (!albumId) return res.status(400).json({ error: "albumId is required" });
+  requirePermission('deleteAlbum'),
+  async (req: Request, res: Response) => {
+    const albumId = req.params.albumId as string;
+    if (!albumId) return res.status(400).json({ error: 'albumId is required' });
 
-  dismissedAlbumIds.set(String(albumId), Date.now());
-  pruneDismissedAlbumIds();
-  removeAlbumFromRequestsCache(albumId);
+    dismissedAlbumIds.set(String(albumId), Date.now());
+    pruneDismissedAlbumIds();
+    removeAlbumFromRequestsCache(albumId);
 
-  try {
-    const { lidarrClient } = await import("../services/lidarrClient.js");
-    if (lidarrClient?.isConfigured()) {
-      const queue = await lidarrClient.getQueue().catch(() => []);
-      const queueItems = Array.isArray(queue) ? queue : queue?.records || [];
-      const targetAlbumId = parseInt(albumId, 10);
+    try {
+      const { lidarrClient } = await import('../services/lidarrClient.js');
+      if (lidarrClient?.isConfigured()) {
+        const queue = await lidarrClient.getQueue().catch(() => []);
+        const queueItems = Array.isArray(queue) ? queue : (queue as AnyRecord)?.records as unknown[] || [];
+        const targetAlbumId = parseInt(albumId, 10);
 
-      for (const item of queueItems) {
-        const match =
-          (item?.albumId != null && item.albumId === targetAlbumId) ||
-          (item?.album?.id != null && item.album.id === targetAlbumId);
-        if (match && item?.id != null) {
-          await lidarrClient
-            .request(`/queue/${item.id}`, "DELETE")
-            .catch(() => null);
+        for (const item of queueItems) {
+          const i = item as AnyRecord;
+          const match =
+            (i?.albumId != null && i.albumId === targetAlbumId) ||
+            ((i.album as AnyRecord)?.id != null && (i.album as AnyRecord).id === targetAlbumId);
+          if (match && i?.id != null) {
+            await lidarrClient.request(`/queue/${i.id}`, 'DELETE').catch(() => null);
+          }
         }
       }
-    }
-    invalidateAllDownloadStatusesCache();
+      invalidateAllDownloadStatusesCache();
 
-    res.json({ success: true });
-  } catch {
-    res.status(500).json({ error: "Failed to remove request" });
-  }
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: 'Failed to remove request' });
+    }
   },
 );
 
-router.delete(
-  "/:mbid",
-  requireAuth,
-  requirePermission("deleteArtist"),
-  async (req, res) => {
-  const { mbid } = req.params;
+router.delete('/:mbid', requireAuth, requirePermission('deleteArtist'), async (req: Request, res: Response) => {
+  const mbid = req.params.mbid as string;
   if (!UUID_REGEX.test(mbid)) {
-    return res.status(400).json({ error: "Invalid MBID format" });
+    return res.status(400).json({ error: 'Invalid MBID format' });
   }
 
   try {
-    const { lidarrClient } = await import("../services/lidarrClient.js");
+    const { lidarrClient } = await import('../services/lidarrClient.js');
     if (!lidarrClient?.isConfigured()) {
       return res.json({ success: true });
     }
 
-    const artist = await lidarrClient.getArtistByMbid(mbid).catch(() => null);
+    const artist = await (lidarrClient as any).getArtistByMbid(mbid).catch(() => null) as AnyRecord | null;
     if (!artist?.id) {
       return res.json({ success: true });
     }
 
     const queue = await lidarrClient.getQueue().catch(() => []);
-    const queueItems = Array.isArray(queue) ? queue : queue?.records || [];
+    const queueItems = Array.isArray(queue) ? queue : (queue as AnyRecord)?.records as unknown[] || [];
 
     for (const item of queueItems) {
-      const itemArtistId = item?.artist?.id ?? item?.album?.artistId;
-      if (itemArtistId === artist.id && item?.id != null) {
-        await lidarrClient
-          .request(`/queue/${item.id}`, "DELETE")
-          .catch(() => null);
+      const i = item as AnyRecord;
+      const itemArtistId = (i.artist as AnyRecord)?.id ?? (i.album as AnyRecord)?.artistId;
+      if (itemArtistId === artist.id && i?.id != null) {
+        await lidarrClient.request(`/queue/${i.id}`, 'DELETE').catch(() => null);
       }
     }
     invalidateAllDownloadStatusesCache();
 
     res.json({ success: true });
   } catch {
-    res.status(500).json({ error: "Failed to remove request" });
+    res.status(500).json({ error: 'Failed to remove request' });
   }
-  },
-);
+});
 
 export default router;

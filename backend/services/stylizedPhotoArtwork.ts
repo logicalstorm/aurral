@@ -1,31 +1,31 @@
-import axios from "axios";
-import sharp from "./sharpResourcePolicy.js";
-import { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } from "../config/discoverPlaylistPresets.js";
+import axios from 'axios';
+import sharp from './sharpResourcePolicy.js';
+import { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } from '../config/discoverPlaylistPresets.js';
 
 const ARTWORK_SIZE = 1200;
 const TITLE_PADDING_X = 72;
 
 export const PHOTO_ARTWORK_COLORS = [
-  "#e6194B",
-  "#3cb44b",
-  "#ffe119",
-  "#4363d8",
-  "#f58231",
-  "#42d4f4",
-  "#f032e6",
-  "#fabed4",
-  "#469990",
-  "#dcbeff",
-  "#9A6324",
-  "#fffac8",
-  "#800000",
-  "#aaffc3",
-  "#000075",
+  '#e6194B',
+  '#3cb44b',
+  '#ffe119',
+  '#4363d8',
+  '#f58231',
+  '#42d4f4',
+  '#f032e6',
+  '#fabed4',
+  '#469990',
+  '#dcbeff',
+  '#9A6324',
+  '#fffac8',
+  '#800000',
+  '#aaffc3',
+  '#000075',
 ];
 
-const hexToRgb = (hex) => {
-  const normalized = String(hex || "")
-    .replace("#", "")
+const hexToRgb = (hex: unknown) => {
+  const normalized = String(hex || '')
+    .replace('#', '')
     .trim();
   if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
     return { r: 67, g: 99, b: 216 };
@@ -37,7 +37,7 @@ const hexToRgb = (hex) => {
   };
 };
 
-const buildPaletteFromHex = (hex) => {
+const buildPaletteFromHex = (hex: unknown) => {
   const light = hexToRgb(hex);
   return {
     dark: {
@@ -49,9 +49,9 @@ const buildPaletteFromHex = (hex) => {
   };
 };
 
-const hashString = (value) => {
+const hashString = (value: unknown): number => {
   let hash = 0;
-  const input = String(value || "");
+  const input = String(value || '');
   for (let index = 0; index < input.length; index += 1) {
     hash = input.charCodeAt(index) + ((hash << 5) - hash);
     hash |= 0;
@@ -64,24 +64,24 @@ export const pickRandomPhotoArtworkPalette = () => {
   return buildPaletteFromHex(PHOTO_ARTWORK_COLORS[index]);
 };
 
-export const pickSeededPhotoArtworkPalette = (seed) => {
-  const presetId = String(seed || "").trim();
-  const fixedHex = FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS[presetId];
+export const pickSeededPhotoArtworkPalette = (seed: unknown) => {
+  const presetId = String(seed || '').trim();
+  const fixedHex = FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS[presetId as keyof typeof FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS];
   if (fixedHex) return buildPaletteFromHex(fixedHex);
   const index = hashString(presetId) % PHOTO_ARTWORK_COLORS.length;
   return buildPaletteFromHex(PHOTO_ARTWORK_COLORS[index]);
 };
 
-const escapeXml = (value) =>
-  String(value || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
+const escapeXml = (value: unknown): string =>
+  String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
 
-const buildCoverTitleLines = (title) => {
-  const words = String(title || "")
+const buildCoverTitleLines = (title: unknown): string[] => {
+  const words = String(title || '')
     .trim()
     .split(/\s+/)
     .filter(Boolean);
@@ -91,13 +91,12 @@ const buildCoverTitleLines = (title) => {
     if (previous && previous.toLowerCase() === word.toLowerCase()) continue;
     cleaned.push(word);
   }
-  return cleaned.length > 0 ? cleaned : ["Untitled"];
+  return cleaned.length > 0 ? cleaned : ['Untitled'];
 };
 
-const estimateTextWidth = (line, fontSize) =>
-  String(line || "").length * fontSize * 0.56;
+const estimateTextWidth = (line: unknown, fontSize: number): number => String(line || '').length * fontSize * 0.56;
 
-const renderArtworkTitleOverlay = async (titleLines) => {
+const renderArtworkTitleOverlay = async (titleLines: string[]) => {
   const maxWidth = ARTWORK_SIZE - TITLE_PADDING_X * 2;
   const maxHeight = ARTWORK_SIZE - 144;
   let fontSize = 132;
@@ -105,10 +104,7 @@ const renderArtworkTitleOverlay = async (titleLines) => {
   while (fontSize > 28) {
     const lineHeight = fontSize * 1.05;
     const totalHeight = titleLines.length * lineHeight;
-    const widestLine = Math.max(
-      ...titleLines.map((line) => estimateTextWidth(line, fontSize)),
-      0,
-    );
+    const widestLine = Math.max(...titleLines.map((line: string) => estimateTextWidth(line, fontSize)), 0);
     if (totalHeight <= maxHeight && widestLine <= maxWidth) break;
     fontSize -= 2;
   }
@@ -118,10 +114,10 @@ const renderArtworkTitleOverlay = async (titleLines) => {
   const startY = (ARTWORK_SIZE - totalHeight) / 2 + fontSize * 0.82;
   const titleMarkup = titleLines
     .map(
-      (line, index) =>
+      (line: string, index: number) =>
         `<tspan x="${TITLE_PADDING_X}" dy="${index === 0 ? 0 : lineHeight}">${escapeXml(line)}</tspan>`,
     )
-    .join("");
+    .join('');
 
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${ARTWORK_SIZE}" height="${ARTWORK_SIZE}" viewBox="0 0 ${ARTWORK_SIZE} ${ARTWORK_SIZE}">
@@ -138,7 +134,7 @@ const renderArtworkTitleOverlay = async (titleLines) => {
   return sharp(Buffer.from(svg)).png().toBuffer();
 };
 
-const mapToneBufferToPalette = (toneMapRaw, palette) => {
+const mapToneBufferToPalette = (toneMapRaw: Buffer, palette: { dark: { r: number; g: number; b: number }; light: { r: number; g: number; b: number } }) => {
   const pixelCount = ARTWORK_SIZE * ARTWORK_SIZE;
   const mapped = Buffer.alloc(pixelCount * 3);
   const { dark, light } = palette;
@@ -148,20 +144,16 @@ const mapToneBufferToPalette = (toneMapRaw, palette) => {
     const mappedLuminance = 0.05 + luminance ** 1.38 * 0.32;
     const offset = index * 3;
     mapped[offset] = Math.round(dark.r + (light.r - dark.r) * mappedLuminance);
-    mapped[offset + 1] = Math.round(
-      dark.g + (light.g - dark.g) * mappedLuminance,
-    );
-    mapped[offset + 2] = Math.round(
-      dark.b + (light.b - dark.b) * mappedLuminance,
-    );
+    mapped[offset + 1] = Math.round(dark.g + (light.g - dark.g) * mappedLuminance);
+    mapped[offset + 2] = Math.round(dark.b + (light.b - dark.b) * mappedLuminance);
   }
 
   return mapped;
 };
 
-export async function fetchImageBuffer(imageUrl) {
-  const response = await axios.get(String(imageUrl || "").trim(), {
-    responseType: "arraybuffer",
+export async function fetchImageBuffer(imageUrl: unknown) {
+  const response = await axios.get(String(imageUrl || '').trim(), {
+    responseType: 'arraybuffer',
     timeout: 20000,
     maxRedirects: 5,
     validateStatus: (status) => status >= 200 && status < 400,
@@ -169,13 +161,9 @@ export async function fetchImageBuffer(imageUrl) {
   return Buffer.from(response.data);
 }
 
-export async function renderStylizedPhotoArtwork({
-  imageBuffer,
-  title,
-  paletteSeed = null,
-}) {
+export async function renderStylizedPhotoArtwork({ imageBuffer, title, paletteSeed = null }: { imageBuffer: Buffer; title: unknown; paletteSeed?: unknown }) {
   const base = sharp(imageBuffer, { animated: false })
-    .resize(ARTWORK_SIZE, ARTWORK_SIZE, { fit: "cover", position: "attention" })
+    .resize(ARTWORK_SIZE, ARTWORK_SIZE, { fit: 'cover', position: 'attention' })
     .ensureAlpha();
 
   const toneMapRaw = await base
@@ -217,23 +205,21 @@ export async function renderStylizedPhotoArtwork({
     .png()
     .toBuffer();
 
-  const titleOverlay = await renderArtworkTitleOverlay(
-    buildCoverTitleLines(title),
-  );
+  const titleOverlay = await renderArtworkTitleOverlay(buildCoverTitleLines(title));
 
   return sharp({
     create: {
       width: ARTWORK_SIZE,
       height: ARTWORK_SIZE,
       channels: 4,
-      background: "#000000",
+      background: '#000000',
     },
   })
     .composite([
-      { input: mappedImage, blend: "over" },
-      { input: detailLayer, blend: "overlay" },
-      { input: darkWash, blend: "multiply" },
-      { input: titleOverlay, blend: "over" },
+      { input: mappedImage, blend: 'over' },
+      { input: detailLayer, blend: 'overlay' },
+      { input: darkWash, blend: 'multiply' },
+      { input: titleOverlay, blend: 'over' },
     ])
     .linear(0.96, -10)
     .jpeg({ quality: 90, mozjpeg: true })

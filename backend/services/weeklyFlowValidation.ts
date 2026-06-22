@@ -1,12 +1,12 @@
-import { getLastfmApiKey } from "./apiClients.js";
+import { getLastfmApiKey } from './apiClients.js';
 
-export function normalizeFlowMixForValidation(mix, recipe) {
+export function normalizeFlowMixForValidation(mix: unknown, recipe?: unknown) {
   const source =
-    mix && typeof mix === "object" && !Array.isArray(mix)
+    (mix && typeof mix === 'object' && !Array.isArray(mix)
       ? mix
-      : recipe && typeof recipe === "object" && !Array.isArray(recipe)
+      : recipe && typeof recipe === 'object' && !Array.isArray(recipe)
         ? recipe
-        : {};
+        : {}) as Record<string, number>;
   return {
     discover: Math.max(0, Number(source?.discover || 0) || 0),
     mix: Math.max(0, Number(source?.mix || 0) || 0),
@@ -15,14 +15,14 @@ export function normalizeFlowMixForValidation(mix, recipe) {
   };
 }
 
-export function getUnavailableFlowSourceError(mix) {
+export function getUnavailableFlowSourceError(mix: unknown) {
   if (getLastfmApiKey()) return null;
   const normalizedMix = normalizeFlowMixForValidation(mix);
-  if (normalizedMix.discover > 0) return "Discover flow source requires Last.fm";
-  if (normalizedMix.trending > 0) return "Trending flow source requires Last.fm";
-  if (normalizedMix.focus > 0) return "Focus flow source requires Last.fm";
+  if (normalizedMix.discover > 0) return 'Discover flow source requires Last.fm';
+  if (normalizedMix.trending > 0) return 'Trending flow source requires Last.fm';
+  if (normalizedMix.focus > 0) return 'Focus flow source requires Last.fm';
   if (normalizedMix.mix > 0) {
-    return "Library flow source requires Last.fm in this version";
+    return 'Library flow source requires Last.fm in this version';
   }
   return null;
 }

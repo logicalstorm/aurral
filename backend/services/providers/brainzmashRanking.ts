@@ -1,24 +1,24 @@
-function normalizeText(value) {
-  return String(value || "")
-    .normalize("NFKD")
+function normalizeText(value: unknown) {
+  return String(value || '')
+    .normalize('NFKD')
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\s+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
-function splitWords(value) {
+function splitWords(value: unknown) {
   return normalizeText(value)
-    .split(" ")
+    .split(' ')
     .map((entry) => entry.trim())
     .filter(Boolean);
 }
 
-export function getNormalizedText(value) {
+export function getNormalizedText(value: unknown) {
   return normalizeText(value);
 }
 
-export function scoreTextMatch(left, right) {
+export function scoreTextMatch(left: unknown, right: unknown) {
   const a = normalizeText(left);
   const b = normalizeText(right);
   if (!a || !b) return 0;
@@ -31,35 +31,32 @@ export function scoreTextMatch(left, right) {
   for (const word of leftWords) {
     if (rightWords.has(word)) overlap += 1;
   }
-  const ratio =
-    (2 * overlap) / Math.max(1, leftWords.size + rightWords.size);
+  const ratio = (2 * overlap) / Math.max(1, leftWords.size + rightWords.size);
   return Math.round(ratio * 100);
 }
 
-function getYear(value) {
-  const match = String(value || "").match(/\b(19\d{2}|20\d{2})\b/);
+function getYear(value: unknown) {
+  const match = String(value || '').match(/\b(19\d{2}|20\d{2})\b/);
   return match ? match[1] : null;
 }
 
-function typeRank(value) {
-  if (value === "Album") return 0;
-  if (value === "EP") return 1;
-  if (value === "Single") return 2;
+function typeRank(value: unknown) {
+  if (value === 'Album') return 0;
+  if (value === 'EP') return 1;
+  if (value === 'Single') return 2;
   return 3;
 }
 
-function bootlegPenalty(item) {
+function bootlegPenalty(item: any) {
   const statuses = Array.isArray(item?.releaseStatuses) ? item.releaseStatuses : [];
-  return statuses.some((status) => String(status || "").toLowerCase() === "bootleg")
-    ? 1
-    : 0;
+  return statuses.some((status: any) => String(status || '').toLowerCase() === 'bootleg') ? 1 : 0;
 }
 
-export function rankArtistCandidates(query, candidates = []) {
+export function rankArtistCandidates(query: string, candidates: any[] = []) {
   const normalizedQuery = normalizeText(query);
-  return [...candidates].sort((left, right) => {
-    const leftName = String(left?.name || "").trim();
-    const rightName = String(right?.name || "").trim();
+  return [...candidates].sort((left: any, right: any) => {
+    const leftName = String(left?.name || '').trim();
+    const rightName = String(right?.name || '').trim();
     const leftExact = normalizeText(leftName) === normalizedQuery ? 1 : 0;
     const rightExact = normalizeText(rightName) === normalizedQuery ? 1 : 0;
     if (leftExact !== rightExact) return rightExact - leftExact;
@@ -83,25 +80,21 @@ export function rankArtistCandidates(query, candidates = []) {
 }
 
 export function rankAlbumCandidates(
-  albumTitle,
-  candidates = [],
-  { artistName = "", releaseYear = null } = {},
+  albumTitle: string,
+  candidates: any[] = [],
+  { artistName = '', releaseYear = null }: { artistName?: string; releaseYear?: any } = {},
 ) {
   const normalizedArtist = normalizeText(artistName);
   const targetYear = getYear(releaseYear);
-  return [...candidates].sort((left, right) => {
+  return [...candidates].sort((left: any, right: any) => {
     const leftTitleScore = scoreTextMatch(left?.title, albumTitle);
     const rightTitleScore = scoreTextMatch(right?.title, albumTitle);
     if (leftTitleScore !== rightTitleScore) {
       return rightTitleScore - leftTitleScore;
     }
 
-    const leftArtistScore = normalizedArtist
-      ? scoreTextMatch(left?.artistName, artistName)
-      : 0;
-    const rightArtistScore = normalizedArtist
-      ? scoreTextMatch(right?.artistName, artistName)
-      : 0;
+    const leftArtistScore = normalizedArtist ? scoreTextMatch(left?.artistName, artistName) : 0;
+    const rightArtistScore = normalizedArtist ? scoreTextMatch(right?.artistName, artistName) : 0;
     if (leftArtistScore !== rightArtistScore) {
       return rightArtistScore - leftArtistScore;
     }
@@ -111,11 +104,7 @@ export function rankAlbumCandidates(
     const leftYearScore =
       targetYear && leftYear === targetYear ? 1 : targetYear && leftYear ? -1 : 0;
     const rightYearScore =
-      targetYear && rightYear === targetYear
-        ? 1
-        : targetYear && rightYear
-          ? -1
-          : 0;
+      targetYear && rightYear === targetYear ? 1 : targetYear && rightYear ? -1 : 0;
     if (leftYearScore !== rightYearScore) {
       return rightYearScore - leftYearScore;
     }
@@ -132,6 +121,6 @@ export function rankAlbumCandidates(
     const rightScore = Number(right?.score || 0);
     if (leftScore !== rightScore) return rightScore - leftScore;
 
-    return String(left?.title || "").localeCompare(String(right?.title || ""));
+    return String(left?.title || '').localeCompare(String(right?.title || ''));
   });
 }

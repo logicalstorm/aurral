@@ -1,6 +1,6 @@
-import { getImagePrefetchQueue, getWorkerId } from "./honkerDb.js";
-import { dbOps } from "../config/db-helpers.js";
-import { getArtistImage } from "./imageService.js";
+import { getImagePrefetchQueue, getWorkerId } from './honkerDb.js';
+import { dbOps } from '../config/db-helpers.js';
+import { getArtistImage } from './imageService.js';
 import {
   createIdleAbortController,
   getWorkerIdleStopMs,
@@ -8,32 +8,28 @@ import {
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
   withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
+} from './honkerWorkerRuntime.js';
 
-const WORKER_NAME = "image-prefetch";
+const WORKER_NAME = 'image-prefetch';
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
-let idleController = null;
+let idleController: ReturnType<typeof createIdleAbortController> | null = null;
 
-async function processImagePrefetch(payload = {}) {
-  const mbids = (Array.isArray(payload?.mbids) ? payload.mbids : [])
-    .map((mbid) => String(mbid || "").trim())
+async function processImagePrefetch(payload: Record<string, unknown> = {}) {
+  const mbids = (Array.isArray(payload?.mbids) ? (payload.mbids as unknown[]) : [])
+    .map((mbid: unknown) => String(mbid || '').trim())
     .filter(Boolean);
   if (mbids.length === 0) return { skipped: true };
 
-  const artistNames =
-    payload?.artistNames && typeof payload.artistNames === "object"
-      ? payload.artistNames
-      : {};
+  const artistNames: Record<string, string> =
+    payload?.artistNames && typeof payload.artistNames === 'object' ? payload.artistNames as Record<string, string> : {};
   await Promise.allSettled(
-    mbids.map((mbid) => {
+    mbids.map((mbid: string) => {
       const cached = dbOps.getImage(mbid);
       return getArtistImage(mbid, {
-        artistName:
-          typeof artistNames[mbid] === "string" ? artistNames[mbid] : null,
-        forceRefresh: cached?.imageUrl === "NOT_FOUND",
+        artistName: typeof artistNames[mbid] === 'string' ? artistNames[mbid] : null,
+        forceRefresh: cached?.imageUrl === 'NOT_FOUND',
       });
     }),
   );
@@ -55,10 +51,10 @@ async function runLoop() {
       idleController.disarm();
       if (!running || stopRequested) break;
       try {
-        await withJobHeartbeat(job, queue, () => processImagePrefetch(job.payload));
+        await withJobHeartbeat(job, queue, () => processImagePrefetch(job.payload as Record<string, unknown>));
         job.ack();
-      } catch (error) {
-        const message = error?.message || String(error);
+      } catch (error: unknown) {
+        const message = (error as Error)?.message || String(error);
         if (job.attempts >= 4) {
           job.fail(message);
         } else {
@@ -69,14 +65,13 @@ async function runLoop() {
     }
   } catch (error) {
     if (!idleController?.idleStopped && !stopRequested) {
-      console.error("[imagePrefetchWorker] loop error:", error);
+      console.error('[imagePrefetchWorker] loop error:', error);
     }
   } finally {
     const idleStopped = idleController?.idleStopped === true;
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
     const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startImagePrefetchWorker, {
@@ -89,7 +84,7 @@ export function startImagePrefetchWorker() {
   if (running || isHonkerShuttingDown()) return;
   running = true;
   stopRequested = false;
-  loopPromise = runLoop();
+  runLoop();
 }
 
 export function stopImagePrefetchWorker() {

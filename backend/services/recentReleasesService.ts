@@ -1,62 +1,56 @@
-import { libraryManager } from "./libraryManager.js";
+import { libraryManager } from './libraryManager.js';
 
 const RECENT_RELEASE_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
-function resolveTimeMs(value, fallback = Date.now()) {
+function resolveTimeMs(value: unknown, fallback: number = Date.now()) {
   if (value == null) return fallback;
   if (value instanceof Date) {
     const time = value.getTime();
     return Number.isFinite(time) ? time : fallback;
   }
-  if (typeof value === "number") {
+  if (typeof value === 'number') {
     return Number.isFinite(value) ? value : fallback;
   }
-  const time = new Date(value).getTime();
+  const time = new Date(value as string | number | Date).getTime();
   return Number.isFinite(time) ? time : fallback;
 }
 
-function resolveDayMs(value) {
+function resolveDayMs(value: unknown) {
   if (value == null) return null;
-  const text = String(value || "").trim();
+  const text = String(value || '').trim();
   const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (dateOnly) {
     const [, year, month, day] = dateOnly;
     const time = Date.UTC(Number(year), Number(month) - 1, Number(day));
     return Number.isFinite(time) ? time : null;
   }
-  const time = resolveTimeMs(value, null);
+  const time = resolveTimeMs(value, NaN);
   if (!Number.isFinite(time)) return null;
   const date = new Date(time);
-  return Date.UTC(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate(),
-  );
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
-export async function getRecentMissingReleases(limit = 24, options = {}) {
-  const { lidarrClient } = await import("./lidarrClient.js");
+export async function getRecentMissingReleases(limit: number = 24, options: Record<string, unknown> = {}) {
+  const { lidarrClient } = await import('./lidarrClient.js');
   if (!lidarrClient.isConfigured()) {
     return [];
   }
 
   const providedArtists =
-    Array.isArray(options?.artists) && options.artists.length > 0
-      ? options.artists
-      : null;
+    Array.isArray(options?.artists) && options.artists.length > 0 ? options.artists : null;
   const providedAlbums = Array.isArray(options?.albums) ? options.albums : null;
   let artists = providedArtists;
   let albums = providedAlbums;
 
   if (!artists && !albums) {
     [artists, albums] = await Promise.all([
-      lidarrClient.request("/artist"),
-      lidarrClient.request("/album"),
+      lidarrClient.request('/artist') as Promise<unknown[]>,
+      lidarrClient.request('/album') as Promise<unknown[]>,
     ]);
   } else if (!artists) {
-    artists = await lidarrClient.request("/artist");
+    artists = await lidarrClient.request('/artist') as unknown[];
   } else if (!albums) {
-    albums = await lidarrClient.request("/album");
+    albums = await lidarrClient.request('/album') as unknown[];
   }
 
   if (!Array.isArray(albums) || albums.length === 0) {
@@ -80,8 +74,7 @@ export async function getRecentMissingReleases(limit = 24, options = {}) {
 
   return albums
     .map((album) => {
-      const artist =
-        artistsById.get(album.artistId) || artistsById.get(String(album.artistId));
+      const artist = artistsById.get(album.artistId) || artistsById.get(String(album.artistId));
       if (!artist) return null;
       const mapped = libraryManager.mapLidarrAlbum(album, artist);
       const releaseDate = mapped.releaseDate || album.releaseDate || null;
@@ -89,12 +82,7 @@ export async function getRecentMissingReleases(limit = 24, options = {}) {
       const releaseTime = new Date(releaseDate).getTime();
       if (!Number.isFinite(releaseTime) || releaseTime < recentCutoff) return null;
       const releaseDay = resolveDayMs(releaseDate);
-      if (
-        !includeFuture &&
-        releaseDay != null &&
-        today != null &&
-        releaseDay > today
-      ) {
+      if (!includeFuture && releaseDay != null && today != null && releaseDay > today) {
         return null;
       }
       const percent = mapped.statistics?.percentOfTracks || 0;
@@ -102,16 +90,15 @@ export async function getRecentMissingReleases(limit = 24, options = {}) {
       if (percent > 0 || size > 0) return null;
       return {
         ...mapped,
-        artistName:
-          mapped.artistName || artist.artistName || artist.name || null,
+        artistName: mapped.artistName || artist.artistName || artist.name || null,
         artistMbid: artist.foreignArtistId || artist.mbid || null,
         foreignArtistId: artist.foreignArtistId || artist.mbid || null,
       };
     })
     .filter(Boolean)
     .sort((left, right) => {
-      const dateA = left.releaseDate || "";
-      const dateB = right.releaseDate || "";
+      const dateA = left?.releaseDate || '';
+      const dateB = right?.releaseDate || '';
       return dateB.localeCompare(dateA);
     })
     .slice(0, Math.max(1, Math.round(Number(limit) || 24)));

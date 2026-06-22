@@ -1,42 +1,41 @@
-import path from "path";
-import fs from "fs/promises";
+import path from 'path';
+import fs from 'fs/promises';
 
-export function sanitizePathPart(value, fallback = "Unknown") {
-  const text = String(value || "")
-    .replace(/[<>:"/\\|?*]/g, "_")
+export function sanitizePathPart(value: unknown, fallback = 'Unknown') {
+  const text = String(value || '')
+    .replace(/[<>:"/\\|?*]/g, '_')
     .trim();
   return text || fallback;
 }
 
-export function normalizePositiveInteger(value) {
+export function normalizePositiveInteger(value: unknown) {
   if (value == null || !Number.isFinite(Number(value))) return null;
   const normalized = Math.floor(Number(value));
   return normalized > 0 ? normalized : null;
 }
 
-export function normalizeStringList(value) {
+export function normalizeStringList(value: unknown) {
   return Array.isArray(value)
-    ? value.map((entry) => String(entry || "").trim()).filter(Boolean)
+    ? value.map((entry: unknown) => String(entry || '').trim()).filter(Boolean)
     : [];
 }
 
-export function parseStringListJson(value) {
+export function parseStringListJson(value: unknown) {
   if (!value) return [];
   try {
-    return normalizeStringList(JSON.parse(value));
+    return normalizeStringList(JSON.parse(String(value)));
   } catch {
     return [];
   }
 }
 
-export function stringifyStringListJson(value) {
+export function stringifyStringListJson(value: unknown) {
   const normalized = normalizeStringList(value);
   return normalized.length > 0 ? JSON.stringify(normalized) : null;
 }
 
-export function buildResolvedPlaylistTrack(job, payloadTrack = {}) {
-  const track =
-    payloadTrack && typeof payloadTrack === "object" ? payloadTrack : {};
+export function buildResolvedPlaylistTrack(job: any, payloadTrack: any = {}) {
+  const track = payloadTrack && typeof payloadTrack === 'object' ? payloadTrack : {};
   return {
     artistName: job.artistName || track.artistName,
     trackName: job.trackName || track.trackName,
@@ -47,12 +46,9 @@ export function buildResolvedPlaylistTrack(job, payloadTrack = {}) {
     releaseYear: job.releaseYear || track.releaseYear,
     durationMs: job.durationMs ?? track.durationMs ?? null,
     trackNumber: normalizePositiveInteger(job.trackNumber ?? track.trackNumber),
-    albumTrackCount: normalizePositiveInteger(
-      job.albumTrackCount ?? track.albumTrackCount,
-    ),
+    albumTrackCount: normalizePositiveInteger(job.albumTrackCount ?? track.albumTrackCount),
     albumTrackTitles: normalizeStringList(
-      (job.albumTrackTitles?.length ? job.albumTrackTitles : null) ||
-        track.albumTrackTitles,
+      (job.albumTrackTitles?.length ? job.albumTrackTitles : null) || track.albumTrackTitles,
     ),
     artistAliases:
       Array.isArray(job.artistAliases) && job.artistAliases.length
@@ -61,10 +57,10 @@ export function buildResolvedPlaylistTrack(job, payloadTrack = {}) {
   };
 }
 
-export function joinUnderRoot(root, relativePath, fileName = null) {
-  const parts = String(relativePath || "")
-    .replace(/\\/g, "/")
-    .split("/")
+export function joinUnderRoot(root: string, relativePath: string, fileName: string | null = null) {
+  const parts = String(relativePath || '')
+    .replace(/\\/g, '/')
+    .split('/')
     .filter(Boolean);
   if (fileName) {
     parts.push(fileName);
@@ -72,7 +68,7 @@ export function joinUnderRoot(root, relativePath, fileName = null) {
   return path.join(root, ...parts);
 }
 
-async function fileExists(filePath) {
+async function fileExists(filePath: string) {
   try {
     await fs.access(filePath);
     return true;
@@ -81,7 +77,7 @@ async function fileExists(filePath) {
   }
 }
 
-async function resolveAvailableTargetPath(targetPath) {
+async function resolveAvailableTargetPath(targetPath: string) {
   if (!(await fileExists(targetPath))) return targetPath;
   const dir = path.dirname(targetPath);
   const ext = path.extname(targetPath);
@@ -93,7 +89,7 @@ async function resolveAvailableTargetPath(targetPath) {
   return path.join(dir, `${base} (${Date.now()})${ext}`);
 }
 
-export async function commitImportToPlaylistLibrary(sourcePath, targetPath) {
+export async function commitImportToPlaylistLibrary(sourcePath: string, targetPath: string) {
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   if (path.resolve(sourcePath) === path.resolve(targetPath)) {
     return targetPath;
@@ -101,20 +97,17 @@ export async function commitImportToPlaylistLibrary(sourcePath, targetPath) {
   const resolvedTarget = await resolveAvailableTargetPath(targetPath);
   try {
     await fs.rename(sourcePath, resolvedTarget);
-  } catch (error) {
-    if (error?.code !== "EXDEV") throw error;
+  } catch (error: any) {
+    if (error?.code !== 'EXDEV') throw error;
     const tempTarget = path.join(
       path.dirname(resolvedTarget),
       `.aurral-import-${process.pid}-${Date.now()}-${path.basename(resolvedTarget)}.tmp`,
     );
     await fs.copyFile(sourcePath, tempTarget);
-    const [sourceStat, tempStat] = await Promise.all([
-      fs.stat(sourcePath),
-      fs.stat(tempTarget),
-    ]);
+    const [sourceStat, tempStat] = await Promise.all([fs.stat(sourcePath), fs.stat(tempTarget)]);
     if (sourceStat.size !== tempStat.size) {
       await fs.rm(tempTarget, { force: true }).catch(() => {});
-      throw new Error("Imported file copy did not match source size");
+      throw new Error('Imported file copy did not match source size');
     }
     await fs.rename(tempTarget, resolvedTarget);
     await fs.rm(sourcePath, { force: true });

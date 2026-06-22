@@ -1,11 +1,8 @@
-import {
-  getDiscoveryRecommendationEnrichmentQueue,
-  getWorkerId,
-} from "./honkerDb.js";
+import { getDiscoveryRecommendationEnrichmentQueue, getWorkerId } from './honkerDb.js';
 import {
   markDiscoveryRecommendationEnrichmentFailed,
   runDiscoveryRecommendationEnrichment,
-} from "./discoveryService.js";
+} from './discoveryService.js';
 import {
   createIdleAbortController,
   getWorkerIdleStopMs,
@@ -13,19 +10,15 @@ import {
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
   withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
-import {
-  HEAVY_WORK_TYPES,
-  withHeavyWorkBudget,
-} from "./resourceBudget.js";
-import { withWorkerPerfSpan } from "./workerPerfMetrics.js";
+} from './honkerWorkerRuntime.js';
+import { HEAVY_WORK_TYPES, withHeavyWorkBudget } from './resourceBudget.js';
+import { withWorkerPerfSpan } from './workerPerfMetrics.js';
 
-const WORKER_NAME = "discovery-recommendation-enrichment";
+const WORKER_NAME = 'discovery-recommendation-enrichment';
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
-let idleController = null;
+let idleController: ReturnType<typeof createIdleAbortController> | null = null;
 
 async function runLoop() {
   const queue = getDiscoveryRecommendationEnrichmentQueue();
@@ -42,23 +35,24 @@ async function runLoop() {
       idleController.disarm();
       if (!running || stopRequested) break;
       try {
+        const payload = job.payload as Record<string, unknown>;
         await withJobHeartbeat(job, queue, () =>
           withHeavyWorkBudget(
             HEAVY_WORK_TYPES.DISCOVERY_ENRICHMENT,
             () =>
               withWorkerPerfSpan(
-                "discovery-enrichment",
-                () => runDiscoveryRecommendationEnrichment(job.payload),
-                job.payload?.discoveryRunId || null,
+                'discovery-enrichment',
+                () => runDiscoveryRecommendationEnrichment(payload),
+                (payload?.['discoveryRunId'] as string) || null,
               ),
-            job.payload?.discoveryRunId || "discovery-enrichment",
+            (payload?.['discoveryRunId'] as string) || 'discovery-enrichment',
           ),
         );
         job.ack();
-      } catch (error) {
-        const message = error?.message || String(error);
+      } catch (error: unknown) {
+        const message = (error as { message?: string })?.message || String(error);
         if (job.attempts >= 4) {
-          markDiscoveryRecommendationEnrichmentFailed(job.payload, error);
+          markDiscoveryRecommendationEnrichmentFailed(job.payload as Record<string, unknown>, error);
           job.fail(message);
         } else {
           job.retry(300, message);
@@ -68,21 +62,18 @@ async function runLoop() {
     }
   } catch (error) {
     if (!idleController?.idleStopped && !stopRequested) {
-      console.error("[discoveryRecommendationEnrichmentWorker] loop error:", error);
+      console.error('[discoveryRecommendationEnrichmentWorker] loop error:', error);
     }
   } finally {
     const idleStopped = idleController?.idleStopped === true;
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
     const intentional = stopRequested || idleStopped;
     stopRequested = false;
-    markHonkerWorkerLoopEnded(
-      WORKER_NAME,
-      startDiscoveryRecommendationEnrichmentWorker,
-      { intentional },
-    );
+    markHonkerWorkerLoopEnded(WORKER_NAME, startDiscoveryRecommendationEnrichmentWorker, {
+      intentional,
+    });
   }
 }
 
@@ -90,7 +81,7 @@ export function startDiscoveryRecommendationEnrichmentWorker() {
   if (running || isHonkerShuttingDown()) return;
   running = true;
   stopRequested = false;
-  loopPromise = runLoop();
+  runLoop();
 }
 
 export function stopDiscoveryRecommendationEnrichmentWorker() {

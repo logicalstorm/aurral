@@ -1,12 +1,12 @@
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
-import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
-import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
-import { slskdClient } from "./slskdClient.js";
-import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
+import { downloadTracker } from './weeklyFlowDownloadTracker.js';
+import { weeklyFlowWorker } from './weeklyFlowWorker.js';
+import { flowPlaylistConfig } from './weeklyFlowPlaylistConfig.js';
+import { slskdClient } from './slskdClient.js';
+import { weeklyFlowOperationQueue } from './weeklyFlowOperationQueue.js';
 import {
   createWeeklyFlowOperationToken,
   markLatestWeeklyFlowOperationToken,
-} from "./weeklyFlowOperations.js";
+} from './weeklyFlowOperations.js';
 
 export async function runScheduledRefresh() {
   if (!slskdClient.isConfigured()) return;
@@ -21,7 +21,7 @@ export async function runScheduledRefresh() {
       markLatestWeeklyFlowOperationToken(tokenScope, token);
       await weeklyFlowOperationQueue.enqueuePayload(
         {
-          kind: "scheduled-flow-refresh",
+          kind: 'scheduled-flow-refresh',
           label: `scheduled:${flow.id}`,
           flowId: flow.id,
           tokenScope,
@@ -30,10 +30,7 @@ export async function runScheduledRefresh() {
         { waitForCompletion: false },
       );
     } catch (error) {
-      console.error(
-        `[WeeklyFlowScheduler] Failed to refresh ${flow.id}:`,
-        error.message,
-      );
+      console.error(`[WeeklyFlowScheduler] Failed to refresh ${flow.id}:`, error instanceof Error ? error.message : String(error));
     }
   }
 }
@@ -50,11 +47,9 @@ export async function startWorkerIfPending() {
   }
   const flowIds = flowPlaylistConfig
     .getFlows()
-    .filter((flow) => flow?.enabled === true)
-    .map((flow) => flow.id);
-  const sharedIds = flowPlaylistConfig
-    .getSharedPlaylists()
-    .map((playlist) => playlist.id);
+    .filter((flow: { enabled?: boolean }) => flow?.enabled === true)
+    .map((flow: { id: string }) => flow.id);
+  const sharedIds = flowPlaylistConfig.getSharedPlaylists().map((playlist: { id: string }) => playlist.id);
   const playlistIds = [...new Set([...flowIds, ...sharedIds])];
   for (const playlistId of playlistIds) {
     await weeklyFlowWorker.retryIncompletePlaylist(playlistId);

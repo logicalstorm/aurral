@@ -1,13 +1,14 @@
-import express from "express";
-import registerStream from "./handlers/stream.js";
-import registerArtists from "./handlers/artists.js";
-import registerAlbums from "./handlers/albums.js";
-import registerTracks from "./handlers/tracks.js";
-import registerDownloads from "./handlers/downloads.js";
-import registerMisc from "./handlers/misc.js";
+import express from 'express';
+import registerStream from './handlers/stream.js';
+import registerArtists from './handlers/artists.js';
+import registerAlbums from './handlers/albums.js';
+import registerTracks from './handlers/tracks.js';
+import registerDownloads from './handlers/downloads.js';
+import registerMisc from './handlers/misc.js';
 
 const router = express.Router();
-registerStream(router);
+ 
+registerStream(router as unknown as Record<string, (...args: unknown[]) => unknown>);
 registerArtists(router);
 registerAlbums(router);
 registerTracks(router);

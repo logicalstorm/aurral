@@ -1,19 +1,22 @@
-import { buildExistingArtistKeySet } from "./discoveryRecommendations.js";
+import { buildExistingArtistKeySet } from './discoveryRecommendations.js';
 
-const mapTasteArtist = (artist = {}) => ({
-  mbid: artist.mbid || artist.id || artist.foreignArtistId || null,
-  artistName: String(artist.artistName || artist.name || "").trim(),
-  source: artist.source || null,
-  playcount:
-    artist.playcount != null && Number.isFinite(Number(artist.playcount))
-      ? Number(artist.playcount)
-      : null,
-  affinityWeight:
-    artist.affinityWeight != null && Number.isFinite(Number(artist.affinityWeight))
-      ? Number(artist.affinityWeight)
-      : null,
-  profileBucket: artist.profileBucket || null,
-});
+const mapTasteArtist = (artist: unknown) => {
+  const a = (artist || {}) as Record<string, unknown>;
+  return {
+    mbid: a.mbid || a.id || a.foreignArtistId || null,
+    artistName: String((a.artistName || a.name || '') as string).trim(),
+    source: a.source || null,
+    playcount:
+      a.playcount != null && Number.isFinite(Number(a.playcount))
+        ? Number(a.playcount)
+        : null,
+    affinityWeight:
+      a.affinityWeight != null && Number.isFinite(Number(a.affinityWeight))
+        ? Number(a.affinityWeight)
+        : null,
+    profileBucket: a.profileBucket || null,
+  };
+};
 
 export function buildRustDiscoveryRefreshPayload({
   recentLibraryArtists = [],
@@ -22,6 +25,13 @@ export function buildRustDiscoveryRefreshPayload({
   existingArtistKeys = [],
   seedLimit = null,
   includeGlobalTop = false,
+}: {
+  recentLibraryArtists?: unknown[];
+  allLibraryArtists?: unknown[];
+  historyArtists?: unknown[];
+  existingArtistKeys?: string[] | Set<string>;
+  seedLimit?: number | null;
+  includeGlobalTop?: boolean;
 } = {}) {
   const keySet =
     existingArtistKeys instanceof Set
@@ -31,14 +41,11 @@ export function buildRustDiscoveryRefreshPayload({
         : [...buildExistingArtistKeySet(existingArtistKeys || [])];
 
   return {
-    recentLibraryArtists: recentLibraryArtists.map(mapTasteArtist),
-    allLibraryArtists: allLibraryArtists.map(mapTasteArtist),
-    historyArtists: historyArtists.map(mapTasteArtist),
+    recentLibraryArtists: (recentLibraryArtists as unknown[]).map(mapTasteArtist),
+    allLibraryArtists: (allLibraryArtists as unknown[]).map(mapTasteArtist),
+    historyArtists: (historyArtists as unknown[]).map(mapTasteArtist),
     existingArtistKeys: keySet,
-    seedLimit:
-      seedLimit != null && Number.isFinite(Number(seedLimit))
-        ? Number(seedLimit)
-        : null,
+    seedLimit: seedLimit != null && Number.isFinite(Number(seedLimit)) ? Number(seedLimit) : null,
     includeGlobalTop: includeGlobalTop === true,
   };
 }
@@ -50,6 +57,13 @@ const buildRustDiscoveryEnrichPayload = ({
   existingRecommendations = [],
   feedback = [],
   limits = {},
+}: {
+  payload?: Record<string, unknown>;
+  seeds?: unknown[];
+  existingArtistKeys?: string[] | Set<string>;
+  existingRecommendations?: unknown[];
+  feedback?: unknown[];
+  limits?: Record<string, number>;
 } = {}) => {
   const keySet =
     existingArtistKeys instanceof Set
@@ -59,32 +73,37 @@ const buildRustDiscoveryEnrichPayload = ({
         : [...buildExistingArtistKeySet(existingArtistKeys || [])];
 
   return {
-    seeds: seeds.map((seed) => ({
-      mbid: seed.mbid || seed.id || null,
-      artistName: seed.artistName || seed.name || "",
-      source: seed.source || "library",
-      weight: seed.weight ?? null,
-      affinityWeight: seed.affinityWeight ?? null,
-      profileBucket: seed.profileBucket || null,
-      discoveryDepth: seed.discoveryDepth ?? null,
-      similarityMultiplier: seed.similarityMultiplier ?? null,
-      tagAffinityMultiplier: seed.tagAffinityMultiplier ?? null,
-    })),
+    seeds: (seeds as unknown[]).map((raw: unknown) => {
+      const seed = (raw || {}) as Record<string, unknown>;
+      return {
+        mbid: seed.mbid || seed.id || null,
+        artistName: seed.artistName || seed.name || '',
+        source: seed.source || 'library',
+        weight: seed.weight ?? null,
+        affinityWeight: seed.affinityWeight ?? null,
+        profileBucket: seed.profileBucket || null,
+        discoveryDepth: seed.discoveryDepth ?? null,
+        similarityMultiplier: seed.similarityMultiplier ?? null,
+        tagAffinityMultiplier: seed.tagAffinityMultiplier ?? null,
+      };
+    }),
     existingArtistKeys: keySet,
-    discoveryMode: payload?.discoveryMode || "balanced",
+    discoveryMode: payload?.discoveryMode || 'balanced',
     existingRecommendations,
-    feedback: (Array.isArray(feedback) ? feedback : []).map((entry) => ({
-      artistName: entry?.artistName || entry?.name || null,
-      artistMbid: entry?.artistMbid || entry?.mbid || null,
-      action: entry?.action || entry?.feedbackAction || null,
-      tags: Array.isArray(entry?.tags) ? entry.tags : [],
-    })),
+    feedback: (Array.isArray(feedback) ? feedback : []).map((raw: unknown) => {
+      const entry = (raw || {}) as Record<string, unknown>;
+      return {
+        artistName: entry?.artistName || entry?.name || null,
+        artistMbid: entry?.artistMbid || entry?.mbid || null,
+        action: entry?.action || entry?.feedbackAction || null,
+        tags: Array.isArray(entry?.tags) ? entry.tags : [],
+      };
+    }),
     limits: {
       poolCap: Number(limits.poolCap) || 500,
       perRefresh: Number(limits.perRefresh) || 200,
     },
-    recommendationRunStartedAt:
-      payload?.recommendationRunStartedAt || new Date().toISOString(),
+    recommendationRunStartedAt: payload?.recommendationRunStartedAt || new Date().toISOString(),
   };
 };
 
@@ -100,6 +119,18 @@ const buildRustPlaylistPlanPayload = async ({
   libraryMixArtists = null,
   releaseRadarReleases = null,
   releaseRadarSize = 30,
+}: {
+  presets?: unknown[];
+  existingArtistKeys?: string[] | Set<string>;
+  recommendations?: unknown[];
+  globalTop?: unknown[];
+  basedOn?: unknown[];
+  topGenres?: unknown[];
+  topTags?: unknown[];
+  libraryArtists?: unknown[];
+  libraryMixArtists?: unknown[] | null;
+  releaseRadarReleases?: unknown[] | null;
+  releaseRadarSize?: number;
 } = {}) => {
   const keySet =
     existingArtistKeys instanceof Set
@@ -116,19 +147,22 @@ const buildRustPlaylistPlanPayload = async ({
     releaseRadarReleases,
   });
   const resolvedLibraryMix = prep.libraryMixArtists;
-  const releaseAlbums = prep.releaseAlbums;
+  const releaseAlbums: unknown[] = prep.releaseAlbums;
 
   return {
-    presets: presets.map((preset) => ({
-      id: preset.id,
-      name: preset.name,
-      description: preset.description || null,
-      size: preset.size || 30,
-      tags: preset.tags || [],
-      relatedArtists: preset.relatedArtists || [],
-      mix: preset.mix || null,
-      deepDive: preset.deepDive === true,
-    })),
+    presets: (presets as unknown[]).map((raw: unknown) => {
+      const preset = (raw || {}) as Record<string, unknown>;
+      return {
+        id: preset.id,
+        name: preset.name,
+        description: preset.description || null,
+        size: preset.size || 30,
+        tags: preset.tags || [],
+        relatedArtists: preset.relatedArtists || [],
+        mix: preset.mix || null,
+        deepDive: preset.deepDive === true,
+      };
+    }),
     existingArtistKeys: keySet,
     recommendations,
     globalTop,
@@ -136,46 +170,56 @@ const buildRustPlaylistPlanPayload = async ({
     topGenres,
     topTags,
     libraryMixArtists: resolvedLibraryMix,
-    releaseRadarReleases: releaseAlbums.map((album) => ({
-      artistName: album.artistName,
-      albumName: album.albumName,
-      albumMbid: album.albumMbid || album.mbid || album.foreignAlbumId || null,
-      artistMbid: album.artistMbid || album.foreignArtistId || null,
-      releaseYear:
-        album.releaseYear ||
-        (album.releaseDate ? String(album.releaseDate).slice(0, 4) : null),
-    })),
+    releaseRadarReleases: releaseAlbums.map((raw: unknown) => {
+      const album = (raw || {}) as Record<string, unknown>;
+      return {
+        artistName: album.artistName,
+        albumName: album.albumName,
+        albumMbid: album.albumMbid || album.mbid || album.foreignAlbumId || null,
+        artistMbid: album.artistMbid || album.foreignArtistId || null,
+        releaseYear:
+          album.releaseYear || (album.releaseDate ? String(album.releaseDate).slice(0, 4) : null),
+      };
+    }),
     releaseRadarSize,
   };
 };
 
 export { buildRustPlaylistPlanPayload };
 
-const mapPrepArtist = (artist = {}) => ({
-  id:
-    artist?.id != null
-      ? String(artist.id)
-      : artist?.artistId != null
-        ? String(artist.artistId)
-        : null,
-  artistName: String(artist?.artistName || artist?.name || "").trim(),
-  artistMbid: artist?.mbid || artist?.foreignArtistId || null,
-});
+const mapPrepArtist = (artist: unknown) => {
+  const a = (artist || {}) as Record<string, unknown>;
+  return {
+    id:
+      a?.id != null
+        ? String(a.id)
+        : a?.artistId != null
+          ? String(a.artistId)
+          : null,
+    artistName: String((a?.artistName || a?.name || '') as string).trim(),
+    artistMbid: a?.mbid || a?.foreignArtistId || null,
+  };
+};
 
 export async function buildRustDiscoveryPrepPayload({
   libraryArtists = [],
   releaseRadarLimit = 30,
   includeFuture = false,
   includeReleaseRadar = true,
+}: {
+  libraryArtists?: unknown[];
+  releaseRadarLimit?: number;
+  includeFuture?: boolean;
+  includeReleaseRadar?: boolean;
 } = {}) {
-  const { lidarrClient } = await import("./lidarrClient.js");
+  const { lidarrClient } = await import('./lidarrClient.js');
   const configured = lidarrClient.isConfigured();
   const config = configured ? lidarrClient.getConfig() : null;
   const artists = (Array.isArray(libraryArtists) ? libraryArtists : [])
     .map(mapPrepArtist)
     .filter((artist) => artist.artistName);
   return {
-    lidarr: configured
+    lidarr: configured && config
       ? {
           url: config.url,
           apiKey: config.apiKey,
@@ -199,18 +243,23 @@ export async function resolveDiscoveryPrep({
   includeReleaseRadar = true,
   libraryMixArtists = null,
   releaseRadarReleases = null,
+}: {
+  libraryArtists?: unknown[];
+  releaseRadarLimit?: number;
+  includeFuture?: boolean;
+  includeReleaseRadar?: boolean;
+  libraryMixArtists?: unknown[] | null;
+  releaseRadarReleases?: unknown[] | null;
 } = {}) {
   if (libraryMixArtists != null && releaseRadarReleases != null) {
     return {
       libraryMixArtists,
       releaseRadarReleases,
       releaseAlbums: releaseRadarReleases,
-      source: "provided",
+      source: 'provided',
     };
   }
-  const { isRustWorkerAvailable, runRustDiscoveryPrep } = await import(
-    "./rustWorkerRunner.js"
-  );
+  const { isRustWorkerAvailable, runRustDiscoveryPrep } = await import('./rustWorkerRunner.js');
   if (isRustWorkerAvailable()) {
     try {
       const payload = await buildRustDiscoveryPrepPayload({
@@ -219,11 +268,9 @@ export async function resolveDiscoveryPrep({
         includeFuture,
         includeReleaseRadar,
       });
-      const response = await runRustDiscoveryPrep(payload);
-      const result = response?.result || {};
-      const libraryMix = Array.isArray(result.libraryMixArtists)
-        ? result.libraryMixArtists
-        : [];
+      const response = await runRustDiscoveryPrep(payload) as Record<string, unknown>;
+      const result = (response?.result || {}) as Record<string, unknown>;
+      const libraryMix = Array.isArray(result.libraryMixArtists) ? result.libraryMixArtists : [];
       const releases = Array.isArray(result.releaseRadarReleases)
         ? result.releaseRadarReleases
         : [];
@@ -231,17 +278,17 @@ export async function resolveDiscoveryPrep({
         libraryMixArtists: libraryMix,
         releaseRadarReleases: releases,
         releaseAlbums: releases,
-        source: "rust",
+        source: 'rust',
         stats: response?.stats || {},
       };
     } catch (error) {
       console.warn(
-        `[Discovery] Rust discovery-prep failed, falling back to Node: ${error?.message || error}`,
+        `[Discovery] Rust discovery-prep failed, falling back to Node: ${(error as Error)?.message || error}`,
       );
     }
   }
-  const { playlistSource } = await import("./weeklyFlowPlaylistSource.js");
-  const { getRecentMissingReleases } = await import("./recentReleasesService.js");
+  const { playlistSource } = await import('./weeklyFlowPlaylistSource.js');
+  const { getRecentMissingReleases } = await import('./recentReleasesService.js');
   const [resolvedLibraryMix, releaseAlbums] = await Promise.all([
     libraryMixArtists != null
       ? Promise.resolve(libraryMixArtists)
@@ -255,17 +302,18 @@ export async function resolveDiscoveryPrep({
   ]);
   return {
     libraryMixArtists: resolvedLibraryMix,
-    releaseRadarReleases: releaseAlbums.map((album) => ({
-      artistName: album.artistName,
-      albumName: album.albumName,
-      albumMbid: album.mbid || album.foreignAlbumId || null,
-      artistMbid: album.artistMbid || album.foreignArtistId || null,
-      releaseYear: album.releaseDate
-        ? String(album.releaseDate).slice(0, 4)
-        : null,
-    })),
+    releaseRadarReleases: (releaseAlbums as Record<string, unknown>[]).map((raw: unknown) => {
+      const album = (raw || {}) as Record<string, unknown>;
+      return {
+        artistName: album.artistName,
+        albumName: album.albumName,
+        albumMbid: album.mbid || album.foreignAlbumId || null,
+        artistMbid: album.artistMbid || album.foreignArtistId || null,
+        releaseYear: album.releaseDate ? String(album.releaseDate).slice(0, 4) : null,
+      };
+    }),
     releaseAlbums,
-    source: "node",
+    source: 'node',
   };
 }
 
@@ -281,6 +329,18 @@ export async function buildRustDiscoveryRunPayload({
   historyTopArtists = [],
   imageHydration = {},
   skipPlaylistPlan = false,
+}: {
+  payload?: Record<string, unknown>;
+  seeds?: unknown[];
+  existingArtistKeys?: string[] | Set<string>;
+  existingRecommendations?: unknown[];
+  feedback?: unknown[];
+  limits?: Record<string, number>;
+  baseDiscoveryData?: Record<string, unknown>;
+  libraryArtists?: unknown[];
+  historyTopArtists?: unknown[];
+  imageHydration?: Record<string, unknown>;
+  skipPlaylistPlan?: boolean;
 }) {
   const enrich = buildRustDiscoveryEnrichPayload({
     payload,
@@ -291,37 +351,34 @@ export async function buildRustDiscoveryRunPayload({
     limits,
   });
 
-  const { getDiscoverPlaylistPresetsForBuild } = await import(
-    "./discoverPlaylistService.js"
-  );
+  const { getDiscoverPlaylistPresetsForBuild } = await import('./discoverPlaylistService.js');
   const presets = getDiscoverPlaylistPresetsForBuild({
-    topGenres: baseDiscoveryData.topGenres || [],
-    topTags: baseDiscoveryData.topTags || [],
-    basedOn: baseDiscoveryData.basedOn || [],
-    recommendations:
-      baseDiscoveryData.recommendations || existingRecommendations || [],
-    historyTopArtists,
+    topGenres: (baseDiscoveryData.topGenres || []) as never[],
+    topTags: (baseDiscoveryData.topTags || []) as never[],
+    basedOn: (baseDiscoveryData.basedOn || []) as never[],
+    recommendations: ((baseDiscoveryData.recommendations || existingRecommendations) || []) as never[],
+    historyTopArtists: historyTopArtists as never[],
   });
 
   const playlist = skipPlaylistPlan
     ? {
         presets,
-        globalTop: baseDiscoveryData.globalTop || [],
-        basedOn: baseDiscoveryData.basedOn || [],
-        topGenres: baseDiscoveryData.topGenres || [],
-        topTags: baseDiscoveryData.topTags || [],
-        libraryMixArtists: [],
-        releaseRadarReleases: [],
+        globalTop: (baseDiscoveryData.globalTop || []) as never[],
+        basedOn: (baseDiscoveryData.basedOn || []) as never[],
+        topGenres: (baseDiscoveryData.topGenres || []) as never[],
+        topTags: (baseDiscoveryData.topTags || []) as never[],
+        libraryMixArtists: [] as never[],
+        releaseRadarReleases: [] as never[],
         releaseRadarSize: 30,
       }
     : await buildRustPlaylistPlanPayload({
         presets,
         existingArtistKeys,
         recommendations: existingRecommendations,
-        globalTop: baseDiscoveryData.globalTop || [],
-        basedOn: baseDiscoveryData.basedOn || [],
-        topGenres: baseDiscoveryData.topGenres || [],
-        topTags: baseDiscoveryData.topTags || [],
+        globalTop: (baseDiscoveryData.globalTop || []) as never[],
+        basedOn: (baseDiscoveryData.basedOn || []) as never[],
+        topGenres: (baseDiscoveryData.topGenres || []) as never[],
+        topTags: (baseDiscoveryData.topTags || []) as never[],
         libraryArtists,
       });
 
@@ -337,14 +394,8 @@ export async function buildRustDiscoveryRunPayload({
     releaseRadarSize: playlist.releaseRadarSize,
     skipPlaylistPlan,
     imageHydration: {
-      freshLimit:
-        imageHydration.freshLimit != null
-          ? Number(imageHydration.freshLimit)
-          : null,
-      poolLimit:
-        imageHydration.poolLimit != null
-          ? Number(imageHydration.poolLimit)
-          : null,
+      freshLimit: imageHydration.freshLimit != null ? Number(imageHydration.freshLimit) : null,
+      poolLimit: imageHydration.poolLimit != null ? Number(imageHydration.poolLimit) : null,
     },
   };
 }
@@ -365,6 +416,22 @@ export async function buildRustDiscoveryPipelinePayload({
   historyTopArtists = [],
   imageHydration = {},
   skipPlaylistPlan = false,
+}: {
+  recentLibraryArtists?: unknown[];
+  allLibraryArtists?: unknown[];
+  historyArtists?: unknown[];
+  existingArtistKeys?: string[] | Set<string>;
+  seedLimit?: number | null;
+  includeGlobalTop?: boolean;
+  payload?: Record<string, unknown>;
+  existingRecommendations?: unknown[];
+  feedback?: unknown[];
+  limits?: Record<string, number>;
+  baseDiscoveryData?: Record<string, unknown>;
+  libraryArtists?: unknown[];
+  historyTopArtists?: unknown[];
+  imageHydration?: Record<string, unknown>;
+  skipPlaylistPlan?: boolean;
 } = {}) {
   const refresh = buildRustDiscoveryRefreshPayload({
     recentLibraryArtists,
@@ -406,30 +473,25 @@ export async function buildRustDiscoveryPipelinePayload({
   };
 }
 
-export async function buildRustFlowPlanPayload(flow = {}, options = {}) {
-  const { libraryManager } = await import("./libraryManager.js");
-  const { playlistSource } = await import("./weeklyFlowPlaylistSource.js");
-  const allLibraryArtistsRaw =
-    options.libraryArtists || (await libraryManager.getAllArtists());
-  const allLibraryArtists = Array.isArray(allLibraryArtistsRaw)
-    ? allLibraryArtistsRaw
-    : [];
-  const existingArtistKeys = buildExistingArtistKeySet(allLibraryArtists);
-  const discoveryCache = playlistSource._resolveDiscoveryCache(options);
+export async function buildRustFlowPlanPayload(flow: Record<string, unknown> = {}, options: Record<string, unknown> = {}) {
+  const { libraryManager } = await import('./libraryManager.js');
+  const { playlistSource } = await import('./weeklyFlowPlaylistSource.js');
+  const allLibraryArtistsRaw = options.libraryArtists || (await libraryManager.getAllArtists());
+  const allLibraryArtists: unknown[] = Array.isArray(allLibraryArtistsRaw) ? allLibraryArtistsRaw : [];
+  const existingArtistKeys = buildExistingArtistKeySet(allLibraryArtists as never[]);
+  const discoveryCache = playlistSource._resolveDiscoveryCache(options) as Record<string, unknown>;
   const requestedSize = Number(flow?.size || 0);
   const targetSize =
-    Number.isFinite(requestedSize) && requestedSize > 0
-      ? Math.round(requestedSize)
-      : 30;
+    Number.isFinite(requestedSize) && requestedSize > 0 ? Math.round(requestedSize) : 30;
   const prep = await resolveDiscoveryPrep({
     libraryArtists: allLibraryArtists,
     releaseRadarLimit: targetSize,
     includeFuture: false,
-    includeReleaseRadar: flow?.discoverPresetId === "release-radar",
+    includeReleaseRadar: flow?.discoverPresetId === 'release-radar',
   });
   const libraryMixArtists = prep.libraryMixArtists;
   const releaseRadarReleases =
-    flow?.discoverPresetId === "release-radar" ? prep.releaseRadarReleases : [];
+    flow?.discoverPresetId === 'release-radar' ? prep.releaseRadarReleases : [];
 
   return {
     flow: {
@@ -437,24 +499,24 @@ export async function buildRustFlowPlanPayload(flow = {}, options = {}) {
       mix: flow?.mix || { discover: 34, mix: 33, trending: 33, focus: 0 },
       deepDive: flow?.deepDive === true,
       tags: Array.isArray(flow?.tags) ? flow.tags : [],
-      relatedArtists: Array.isArray(flow?.relatedArtists)
-        ? flow.relatedArtists
-        : [],
+      relatedArtists: Array.isArray(flow?.relatedArtists) ? flow.relatedArtists : [],
     },
     discoverPresetId: flow?.discoverPresetId || null,
     existingArtistKeys: [...existingArtistKeys],
-    recommendations: discoveryCache?.recommendations || [],
-    globalTop: discoveryCache?.globalTop || [],
+    recommendations: (discoveryCache?.recommendations as unknown[]) || [],
+    globalTop: (discoveryCache?.globalTop as unknown[]) || [],
     libraryMixArtists,
-    releaseRadarReleases: releaseRadarReleases.map((album) => ({
-      artistName: album.artistName,
-      albumName: album.albumName,
-      albumMbid: album.albumMbid || album.mbid || album.foreignAlbumId || null,
-      artistMbid: album.artistMbid || album.foreignArtistId || null,
-      releaseYear:
-        album.releaseYear ||
-        (album.releaseDate ? String(album.releaseDate).slice(0, 4) : null),
-    })),
+    releaseRadarReleases: (releaseRadarReleases as unknown[]).map((raw: unknown) => {
+      const album = (raw || {}) as Record<string, unknown>;
+      return {
+        artistName: album.artistName,
+        albumName: album.albumName,
+        albumMbid: album.albumMbid || album.mbid || album.foreignAlbumId || null,
+        artistMbid: album.artistMbid || album.foreignArtistId || null,
+        releaseYear:
+          album.releaseYear || (album.releaseDate ? String(album.releaseDate).slice(0, 4) : null),
+      };
+    }),
     releaseRadarSize: targetSize,
   };
 }

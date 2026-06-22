@@ -1,47 +1,40 @@
-import { randomUUID } from "crypto";
-import fs from "fs/promises";
-import path from "path";
-import { dbOps } from "../config/db-helpers.js";
-import { lidarrClient } from "./lidarrClient.js";
-import { slskdClient } from "./slskdClient.js";
-import { nzbgetClient } from "./nzbgetClient.js";
-import { NavidromeClient } from "./navidrome.js";
-import { runLidarrLibraryAccessTest } from "./lidarrLibraryAccessTest.js";
-import {
-  PLAYLIST_LIBRARY_DIR,
-  resolvePlaylistRoot,
-} from "./playlistPaths.js";
+import { randomUUID } from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
+import { dbOps } from '../config/db-helpers.js';
+import { lidarrClient } from './lidarrClient.js';
+import { slskdClient } from './slskdClient.js';
+import { nzbgetClient } from './nzbgetClient.js';
+import { NavidromeClient } from './navidrome.js';
+import { runLidarrLibraryAccessTest } from './lidarrLibraryAccessTest.js';
+import { PLAYLIST_LIBRARY_DIR, resolvePlaylistRoot } from './playlistPaths.js';
 import {
   getPathMappings,
   looksLikeExternalOnlyPath,
   resolveLocalPath,
   resolveRemotePath,
-} from "./pathMappings.js";
-import {
-  getM3uPathMappings,
-  getM3uPathMode,
-  resolveM3uVisiblePath,
-} from "./playlistM3uPaths.js";
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
-import { pathsShareDevice } from "./weeklyFlowFileReuse.js";
-import { remapLegacyWeeklyFlowPath, resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
+} from './pathMappings.js';
+import { getM3uPathMappings, getM3uPathMode, resolveM3uVisiblePath } from './playlistM3uPaths.js';
+import { downloadTracker } from './weeklyFlowDownloadTracker.js';
+import { pathsShareDevice } from './weeklyFlowFileReuse.js';
+import { remapLegacyWeeklyFlowPath, resolveWeeklyFlowRoot } from './weeklyFlowPaths.js';
 import {
   getFilesystemBrowseRoots,
   resolveEnvDownloadFolder,
   getSuggestedDownloadFolderPath,
-} from "./downloadFolderConfig.js";
+} from './downloadFolderConfig.js';
 
 const MEDIA_EXTENSIONS = new Set([
-  ".flac",
-  ".mp3",
-  ".m4a",
-  ".aac",
-  ".ogg",
-  ".opus",
-  ".wav",
-  ".ape",
-  ".wv",
-  ".alac",
+  '.flac',
+  '.mp3',
+  '.m4a',
+  '.aac',
+  '.ogg',
+  '.opus',
+  '.wav',
+  '.ape',
+  '.wv',
+  '.alac',
 ]);
 
 const DOWNLOAD_SPACE_WARNING_BYTES = 1024 ** 3;
@@ -55,20 +48,34 @@ const PLAYLIST_FILE_HEALTH_SAMPLE_LIMIT = Math.max(
   Math.floor(Number(process.env.AURRAL_PLAYLIST_FILE_HEALTH_SAMPLE_LIMIT) || 500),
 );
 
-let storageHealthCache = null;
+let storageHealthCache: Record<string, unknown> | null = null;
 let storageHealthCacheExpiresAt = 0;
-let storageHealthCacheKey = "";
-let storageHealthInflight = null;
-let storageHealthInflightKey = "";
+let storageHealthCacheKey = '';
+let storageHealthInflight: Promise<Record<string, unknown>> | null = null;
+let storageHealthInflightKey = '';
 
-function healthStep(id, status, label, extra = {}) {
-  return { id, status, label, ...extra };
+type HealthStep = { id: string; status: string; label: string; detail?: string; fix?: string };
+type HealthSection = {
+  id: string;
+  title: string;
+  status: string;
+  steps: HealthStep[];
+  skipReason?: string | null;
+};
+
+function healthStep(
+  id: string,
+  status: string,
+  label: string,
+  extra: Record<string, unknown> = {},
+): HealthStep {
+  return { id, status, label, ...extra } as HealthStep;
 }
 
-function formatBytes(bytes) {
+function formatBytes(bytes: number | string) {
   const value = Number(bytes);
-  if (!Number.isFinite(value) || value < 0) return "unknown";
-  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  if (!Number.isFinite(value) || value < 0) return 'unknown';
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
   let size = value;
   let unitIndex = 0;
   while (size >= 1024 && unitIndex < units.length - 1) {
@@ -79,23 +86,23 @@ function formatBytes(bytes) {
   return `${size.toFixed(decimals)} ${units[unitIndex]}`;
 }
 
-function formatLimitedList(items, limit = DETAIL_LIST_LIMIT) {
+function formatLimitedList(items: string[], limit: number = DETAIL_LIST_LIMIT) {
   const values = (Array.isArray(items) ? items : [])
-    .map((entry) => String(entry || "").trim())
+    .map((entry) => String(entry || '').trim())
     .filter(Boolean);
-  if (values.length <= limit) return values.join(", ");
-  return `${values.slice(0, limit).join(", ")} (+${values.length - limit} more)`;
+  if (values.length <= limit) return values.join(', ');
+  return `${values.slice(0, limit).join(', ')} (+${values.length - limit} more)`;
 }
 
-function normalizePathCompare(value) {
-  return String(value || "")
+function normalizePathCompare(value: unknown) {
+  return String(value || '')
     .trim()
-    .replace(/\\/g, "/")
-    .replace(/\/+$/, "")
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '')
     .toLowerCase();
 }
 
-function pathCoversPrefix(parentPath, childPath) {
+function pathCoversPrefix(parentPath: unknown, childPath: unknown) {
   const parent = normalizePathCompare(parentPath);
   const child = normalizePathCompare(childPath);
   if (!parent || !child) return false;
@@ -103,39 +110,38 @@ function pathCoversPrefix(parentPath, childPath) {
   return child.startsWith(`${parent}/`);
 }
 
-function isAbsolutePathReference(value) {
-  const trimmed = String(value || "").trim();
+function isAbsolutePathReference(value: unknown) {
+  const trimmed = String(value || '').trim();
   return (
     path.isAbsolute(trimmed) ||
     /^[A-Za-z]:[\\/]/.test(trimmed) ||
     /^\\\\/.test(trimmed) ||
-    trimmed.startsWith("//")
+    trimmed.startsWith('//')
   );
 }
 
-function getLikelySharedBrowseRoots(browseRoots) {
+function getLikelySharedBrowseRoots(browseRoots: string[]) {
   const dedicatedRoots = (Array.isArray(browseRoots) ? browseRoots : []).filter(
     (root) => !isFilesystemRootPath(root),
   );
-  if (String(process.env.FILE_BROWSE_ROOTS || "").trim()) {
+  if (String(process.env.FILE_BROWSE_ROOTS || '').trim()) {
     return dedicatedRoots;
   }
 
   const envDownloadFolder = resolveEnvDownloadFolder();
   return dedicatedRoots.filter((root) => {
-    if (pathCoversPrefix("/data", root) || pathCoversPrefix(root, "/data")) {
+    if (pathCoversPrefix('/data', root) || pathCoversPrefix(root, '/data')) {
       return true;
     }
     return (
       envDownloadFolder &&
-      (pathCoversPrefix(root, envDownloadFolder) ||
-        pathCoversPrefix(envDownloadFolder, root))
+      (pathCoversPrefix(root, envDownloadFolder) || pathCoversPrefix(envDownloadFolder, root))
     );
   });
 }
 
-async function realOrResolvedPath(targetPath) {
-  const resolved = path.resolve(String(targetPath || ""));
+async function realOrResolvedPath(targetPath: string) {
+  const resolved = path.resolve(String(targetPath || ''));
   try {
     return await fs.realpath(resolved);
   } catch {
@@ -143,7 +149,7 @@ async function realOrResolvedPath(targetPath) {
   }
 }
 
-async function pathIsWithinAnyRoot(targetPath, roots) {
+async function pathIsWithinAnyRoot(targetPath: string, roots: string[]) {
   const candidates = Array.isArray(roots) ? roots : [];
   if (!targetPath || candidates.length === 0) return false;
   const realTarget = await realOrResolvedPath(targetPath);
@@ -151,25 +157,20 @@ async function pathIsWithinAnyRoot(targetPath, roots) {
     const realRoot = await realOrResolvedPath(root);
     if (isFilesystemRootPath(realRoot)) return true;
     const relative = path.relative(realRoot, realTarget);
-    if (
-      relative === "" ||
-      (relative && !relative.startsWith("..") && !path.isAbsolute(relative))
-    ) {
+    if (relative === '' || (relative && !relative.startsWith('..') && !path.isAbsolute(relative))) {
       return true;
     }
   }
   return false;
 }
 
-async function checkPathReadable(filePath, mappingSource = null) {
-  const raw = String(filePath || "").trim();
+async function checkPathReadable(filePath: string, mappingSource: string | null = null) {
+  const raw = String(filePath || '').trim();
   if (!raw) return false;
-  const mappings = getPathMappings(mappingSource || undefined);
+  const mappings = getPathMappings(mappingSource as unknown as null || undefined);
   const candidates = [raw, resolveLocalPath(raw, mappings)];
   const uniqueCandidates = [
-    ...new Set(
-      candidates.map((entry) => String(entry || "").trim()).filter(Boolean),
-    ),
+    ...new Set(candidates.map((entry) => String(entry || '').trim()).filter(Boolean)),
   ];
   for (const candidate of uniqueCandidates) {
     try {
@@ -184,42 +185,43 @@ async function checkPathReadable(filePath, mappingSource = null) {
   return false;
 }
 
-function formatProbeError(error) {
-  const code = error?.code ? `${error.code}: ` : "";
-  return `${code}${error?.message || "Filesystem operation failed"}`;
+function formatProbeError(error: unknown) {
+  const err = error as { code?: string; message?: string };
+  const code = err?.code ? `${err.code}: ` : '';
+  return `${code}${err?.message || 'Filesystem operation failed'}`;
 }
 
-async function runDirectoryWriteProbe(dirPath) {
-  const root = String(dirPath || "").trim();
+async function runDirectoryWriteProbe(dirPath: string) {
+  const root = String(dirPath || '').trim();
   if (!root) {
-    return { ok: false, detail: "No directory configured" };
+    return { ok: false, detail: 'No directory configured' };
   }
   const probeDir = path.join(
     root,
     `.aurral-health-${process.pid}-${Date.now()}-${randomUUID().slice(0, 8)}`,
   );
-  const probeFile = path.join(probeDir, "probe.tmp");
-  const renamedFile = path.join(probeDir, "probe-renamed.tmp");
-  const contents = "aurral storage health probe\n";
+  const probeFile = path.join(probeDir, 'probe.tmp');
+  const renamedFile = path.join(probeDir, 'probe-renamed.tmp');
+  const contents = 'aurral storage health probe\n';
   try {
     await fs.mkdir(probeDir);
-    const handle = await fs.open(probeFile, "wx");
+    const handle = await fs.open(probeFile, 'wx');
     try {
-      await handle.writeFile(contents, "utf8");
+      await handle.writeFile(contents, 'utf8');
       await handle.sync().catch(() => {});
     } finally {
       await handle.close().catch(() => {});
     }
-    const readBack = await fs.readFile(probeFile, "utf8");
+    const readBack = await fs.readFile(probeFile, 'utf8');
     if (readBack !== contents) {
-      throw new Error("Probe file contents changed after write");
+      throw new Error('Probe file contents changed after write');
     }
     await fs.rename(probeFile, renamedFile);
     await fs.unlink(renamedFile);
     await fs.rmdir(probeDir);
     return {
       ok: true,
-      detail: "Created, read, renamed, and removed a probe file",
+      detail: 'Created, read, renamed, and removed a probe file',
     };
   } catch (error) {
     return {
@@ -231,10 +233,11 @@ async function runDirectoryWriteProbe(dirPath) {
   }
 }
 
-async function getFilesystemSpace(dirPath) {
-  if (typeof fs.statfs !== "function") return null;
+async function getFilesystemSpace(dirPath: string) {
+  if (typeof (fs as unknown as Record<string, unknown>).statfs !== 'function') return null;
   try {
-    const stats = await fs.statfs(dirPath);
+    const statfs = (fs as unknown as Record<string, (...args: unknown[]) => unknown>).statfs;
+    const stats = (await statfs(dirPath)) as Record<string, unknown>;
     const blockSize = Number(stats.bsize || stats.frsize || 0);
     const availableBlocks = Number(stats.bavail ?? stats.bfree ?? 0);
     const totalBlocks = Number(stats.blocks || 0);
@@ -248,16 +251,14 @@ async function getFilesystemSpace(dirPath) {
   }
 }
 
-async function findSampleMediaFileInDirectory(
-  dirPath,
-  { maxDepth = 4, maxDirs = 80 } = {},
-) {
-  const root = String(dirPath || "").trim();
+async function findSampleMediaFileInDirectory(dirPath: string, { maxDepth = 4, maxDirs = 80 }: { maxDepth?: number; maxDirs?: number } = {}) {
+  const root = String(dirPath || '').trim();
   if (!root) return null;
-  const queue = [{ dir: root, depth: 0 }];
+  const queue: { dir: string; depth: number }[] = [{ dir: root, depth: 0 }];
   let dirsVisited = 0;
   while (queue.length > 0) {
-    const { dir, depth } = queue.shift();
+    const item = queue.shift()!;
+    const { dir, depth } = item;
     dirsVisited += 1;
     if (dirsVisited > maxDirs) break;
     let entries = [];
@@ -275,16 +276,16 @@ async function findSampleMediaFileInDirectory(
     }
     if (depth >= maxDepth) continue;
     for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
       queue.push({ dir: path.join(dir, entry.name), depth: depth + 1 });
     }
   }
   return null;
 }
 
-function formatPathAccessDetail(reportedPath, readablePath) {
-  const reported = String(reportedPath || "").trim();
-  const readable = String(readablePath || "").trim();
+function formatPathAccessDetail(reportedPath: string, readablePath: string) {
+  const reported = String(reportedPath || '').trim();
+  const readable = String(readablePath || '').trim();
   if (!reported || !readable) return reported || readable;
   if (normalizePathCompare(reported) === normalizePathCompare(readable)) {
     return reported;
@@ -292,14 +293,19 @@ function formatPathAccessDetail(reportedPath, readablePath) {
   return `${reported} -> ${readable}`;
 }
 
-function buildSection(id, title, steps, { skipped = false, skipReason = null } = {}) {
+function buildSection(
+  id: string,
+  title: string,
+  steps: HealthStep[],
+  { skipped = false, skipReason = null }: { skipped?: boolean; skipReason?: string | null } = {},
+): HealthSection {
   const status = skipped
-    ? "skip"
-    : steps.some((entry) => entry.status === "fail")
-      ? "fail"
-      : steps.some((entry) => entry.status === "warn")
-        ? "warn"
-        : "pass";
+    ? 'skip'
+    : steps.some((entry: HealthStep) => entry.status === 'fail')
+      ? 'fail'
+      : steps.some((entry: HealthStep) => entry.status === 'warn')
+        ? 'warn'
+        : 'pass';
   return {
     id,
     title,
@@ -309,16 +315,16 @@ function buildSection(id, title, steps, { skipped = false, skipReason = null } =
   };
 }
 
-function summarizeResult(sections) {
-  const active = sections.filter((entry) => entry.status !== "skip");
-  const hasFail = active.some((entry) => entry.status === "fail");
-  const hasWarn = active.some((entry) => entry.status === "warn");
+function summarizeResult(sections: HealthSection[]) {
+  const active = sections.filter((entry: HealthSection) => entry.status !== 'skip');
+  const hasFail = active.some((entry: HealthSection) => entry.status === 'fail');
+  const hasWarn = active.some((entry: HealthSection) => entry.status === 'warn');
   return {
     ok: !hasFail,
     partial: !hasFail && hasWarn,
     sectionCount: sections.length,
-    failedCount: active.filter((entry) => entry.status === "fail").length,
-    warningCount: active.filter((entry) => entry.status === "warn").length,
+    failedCount: active.filter((entry: HealthSection) => entry.status === 'fail').length,
+    warningCount: active.filter((entry: HealthSection) => entry.status === 'warn').length,
   };
 }
 
@@ -328,17 +334,17 @@ function getStorageHealthCacheKey() {
     settings,
     downloadTrackerRevision: downloadTracker.getRevision(),
     env: {
-      DOWNLOAD_FOLDER: process.env.DOWNLOAD_FOLDER || "",
-      FILE_BROWSE_ROOTS: process.env.FILE_BROWSE_ROOTS || "",
-      PATH_MAPPINGS: process.env.PATH_MAPPINGS || "",
-      AURRAL_DB_PATH: process.env.AURRAL_DB_PATH || "",
+      DOWNLOAD_FOLDER: process.env.DOWNLOAD_FOLDER || '',
+      FILE_BROWSE_ROOTS: process.env.FILE_BROWSE_ROOTS || '',
+      PATH_MAPPINGS: process.env.PATH_MAPPINGS || '',
+      AURRAL_DB_PATH: process.env.AURRAL_DB_PATH || '',
     },
   });
 }
 
-function isFilesystemRootPath(value) {
+function isFilesystemRootPath(value: unknown) {
   const normalized = normalizePathCompare(value);
-  return normalized === "/" || normalized === "";
+  return normalized === '/' || normalized === '';
 }
 
 async function checkSharedVolumeSection() {
@@ -348,54 +354,44 @@ async function checkSharedVolumeSection() {
 
   if (browseRoots.length === 0) {
     steps.push(
-      healthStep("roots", "fail", "Aurral can browse a shared media folder", {
-        fix: "Mount your host media folder into the Aurral container at a dedicated path, such as /mnt/user/data:/data. Use the same path in every container, then recreate the container.",
+      healthStep('roots', 'fail', 'Aurral can browse a shared media folder', {
+        fix: 'Mount your host media folder into the Aurral container at a dedicated path, such as /mnt/user/data:/data. Use the same path in every container, then recreate the container.',
       }),
     );
-    return buildSection("volume", "Shared volume", steps);
+    return buildSection('volume', 'Shared volume', steps);
   }
 
   steps.push(
-    healthStep("roots", "pass", "Browsable storage roots in Aurral", {
+    healthStep('roots', 'pass', 'Browsable storage roots in Aurral', {
       detail: formatLimitedList(browseRoots),
     }),
   );
 
   if (sharedRoots.length > 0) {
     steps.push(
-      healthStep(
-        "shared-mount",
-        "pass",
-        "Dedicated shared media folder detected",
-        {
-          detail: formatLimitedList(sharedRoots),
-          fix: "Use the same container path in Lidarr, slskd, NZBGet, and Navidrome. /data is a common convention but any matching path works.",
-        },
-      ),
+      healthStep('shared-mount', 'pass', 'Dedicated shared media folder detected', {
+        detail: formatLimitedList(sharedRoots),
+        fix: 'Use the same container path in Lidarr, slskd, NZBGet, and Navidrome. /data is a common convention but any matching path works.',
+      }),
     );
   } else {
     steps.push(
-      healthStep(
-        "shared-mount",
-        "warn",
-        "No dedicated shared media folder detected",
-        {
-          detail: formatLimitedList(browseRoots),
-          fix: "Docker users should mount one host media folder at the same dedicated path in every container, such as /data. Native installs can ignore this if Aurral, Lidarr, and players all use the same absolute paths.",
-        },
-      ),
+      healthStep('shared-mount', 'warn', 'No dedicated shared media folder detected', {
+        detail: formatLimitedList(browseRoots),
+        fix: 'Docker users should mount one host media folder at the same dedicated path in every container, such as /data. Native installs can ignore this if Aurral, Lidarr, and players all use the same absolute paths.',
+      }),
     );
   }
 
-  return buildSection("volume", "Shared volume", steps);
+  return buildSection('volume', 'Shared volume', steps);
 }
 
 async function checkPathMappingsSection() {
   const mappings = getPathMappings();
   if (mappings.length === 0) {
-    return buildSection("path-mappings", "Remote path mappings", [], {
+    return buildSection('path-mappings', 'Remote path mappings', [], {
       skipped: true,
-      skipReason: "No remote path mappings are configured.",
+      skipReason: 'No remote path mappings are configured.',
     });
   }
 
@@ -405,19 +401,17 @@ async function checkPathMappingsSection() {
   );
   if (relativeRemoteMappings.length > 0) {
     steps.push(
-      healthStep("remote-absolute", "warn", "Remote paths are absolute", {
+      healthStep('remote-absolute', 'warn', 'Remote paths are absolute', {
         detail: formatLimitedList(
-          relativeRemoteMappings.map(
-            (mapping) => `${mapping.source}: ${mapping.remote}`,
-          ),
+          relativeRemoteMappings.map((mapping) => `${mapping.source}: ${mapping.remote}`),
         ),
-        fix: "Remote paths should match the absolute path reported by the source app, such as /downloads/complete, N:\\Music, or \\\\server\\share.",
+        fix: 'Remote paths should match the absolute path reported by the source app, such as /downloads/complete, N:\\Music, or \\\\server\\share.',
       }),
     );
   } else {
     steps.push(
-      healthStep("remote-absolute", "pass", "Remote paths are absolute", {
-        detail: `${mappings.length} mapping${mappings.length === 1 ? "" : "s"} configured`,
+      healthStep('remote-absolute', 'pass', 'Remote paths are absolute', {
+        detail: `${mappings.length} mapping${mappings.length === 1 ? '' : 's'} configured`,
       }),
     );
   }
@@ -440,45 +434,41 @@ async function checkPathMappingsSection() {
 
   if (inaccessibleLocalPaths.length > 0) {
     steps.push(
-      healthStep("local-readable", "fail", "Mapped local paths are readable directories", {
+      healthStep('local-readable', 'fail', 'Mapped local paths are readable directories', {
         detail: formatLimitedList(inaccessibleLocalPaths),
-        fix: "Create or mount the local side of each mapping inside the Aurral container. Remove mappings for apps that already share the same container paths.",
+        fix: 'Create or mount the local side of each mapping inside the Aurral container. Remove mappings for apps that already share the same container paths.',
       }),
     );
   } else {
     steps.push(
-      healthStep("local-readable", "pass", "Mapped local paths are readable directories", {
+      healthStep('local-readable', 'pass', 'Mapped local paths are readable directories', {
         detail: formatLimitedList(
-          mappings.map(
-            (mapping) => `${mapping.source}: ${mapping.remote} -> ${mapping.local}`,
-          ),
+          mappings.map((mapping) => `${mapping.source}: ${mapping.remote} -> ${mapping.local}`),
         ),
       }),
     );
   }
 
-  return buildSection("path-mappings", "Remote path mappings", steps);
+  return buildSection('path-mappings', 'Remote path mappings', steps);
 }
 
 async function checkDownloadsSection() {
   const steps = [];
   const settings = dbOps.getSettings();
-  const downloadFolder = String(
-    settings.downloadFolderPath || resolvePlaylistRoot() || "",
-  ).trim();
+  const downloadFolder = String(settings.downloadFolderPath || resolvePlaylistRoot() || '').trim();
   const suggested = getSuggestedDownloadFolderPath();
 
   if (!downloadFolder) {
     steps.push(
-      healthStep("configured", "fail", "Downloads folder is configured", {
+      healthStep('configured', 'fail', 'Downloads folder is configured', {
         fix: `Choose a downloads folder under your shared mount, for example ${suggested}.`,
       }),
     );
-    return buildSection("downloads", "Aurral downloads", steps);
+    return buildSection('downloads', 'Aurral downloads', steps);
   }
 
   steps.push(
-    healthStep("configured", "pass", "Downloads folder is configured", {
+    healthStep('configured', 'pass', 'Downloads folder is configured', {
       detail: downloadFolder,
     }),
   );
@@ -491,16 +481,16 @@ async function checkDownloadsSection() {
 
   if (!exists) {
     steps.push(
-      healthStep("exists", "fail", "Downloads folder exists in the container", {
+      healthStep('exists', 'fail', 'Downloads folder exists in the container', {
         detail: downloadFolder,
-        fix: "Create the folder or pick a path that already exists inside the mounted volume.",
+        fix: 'Create the folder or pick a path that already exists inside the mounted volume.',
       }),
     );
-    return buildSection("downloads", "Aurral downloads", steps);
+    return buildSection('downloads', 'Aurral downloads', steps);
   }
 
   steps.push(
-    healthStep("exists", "pass", "Downloads folder exists in the container", {
+    healthStep('exists', 'pass', 'Downloads folder exists in the container', {
       detail: downloadFolder,
     }),
   );
@@ -511,22 +501,22 @@ async function checkDownloadsSection() {
     const insideSharedRoot = await pathIsWithinAnyRoot(downloadFolder, sharedRoots);
     steps.push(
       healthStep(
-        "shared-root",
-        insideSharedRoot ? "pass" : "warn",
-        "Downloads folder is under shared storage",
+        'shared-root',
+        insideSharedRoot ? 'pass' : 'warn',
+        'Downloads folder is under shared storage',
         {
           detail: downloadFolder,
           fix: insideSharedRoot
-            ? "Keep Lidarr, slskd, NZBGet, Navidrome, and Aurral using this same shared root where possible."
-            : "Move Aurral downloads under the shared media mount, or add FILE_BROWSE_ROOTS so Aurral can distinguish app data from media storage.",
+            ? 'Keep Lidarr, slskd, NZBGet, Navidrome, and Aurral using this same shared root where possible.'
+            : 'Move Aurral downloads under the shared media mount, or add FILE_BROWSE_ROOTS so Aurral can distinguish app data from media storage.',
         },
       ),
     );
   } else {
     steps.push(
-      healthStep("shared-root", "warn", "Downloads folder is under shared storage", {
+      healthStep('shared-root', 'warn', 'Downloads folder is under shared storage', {
         detail: downloadFolder,
-        fix: "Set FILE_BROWSE_ROOTS or mount a shared folder such as /data, then choose a downloads folder under that shared root.",
+        fix: 'Set FILE_BROWSE_ROOTS or mount a shared folder such as /data, then choose a downloads folder under that shared root.',
       }),
     );
   }
@@ -534,16 +524,16 @@ async function checkDownloadsSection() {
   const writeProbe = await runDirectoryWriteProbe(downloadFolder);
   if (!writeProbe.ok) {
     steps.push(
-      healthStep("writable", "fail", "Aurral can create and move files", {
+      healthStep('writable', 'fail', 'Aurral can create and move files', {
         detail: writeProbe.detail,
-        fix: "Check container permissions (PUID/PGID), read-only mounts, ACLs, and filesystem permissions for the configured downloads folder.",
+        fix: 'Check container permissions (PUID/PGID), read-only mounts, ACLs, and filesystem permissions for the configured downloads folder.',
       }),
     );
-    return buildSection("downloads", "Aurral downloads", steps);
+    return buildSection('downloads', 'Aurral downloads', steps);
   }
 
   steps.push(
-    healthStep("writable", "pass", "Aurral can create and move files", {
+    healthStep('writable', 'pass', 'Aurral can create and move files', {
       detail: writeProbe.detail,
     }),
   );
@@ -555,15 +545,15 @@ async function checkDownloadsSection() {
       : `${formatBytes(space.availableBytes)} available`;
     steps.push(
       healthStep(
-        "space",
-        space.availableBytes < DOWNLOAD_SPACE_WARNING_BYTES ? "warn" : "pass",
-        "Downloads filesystem has free space",
+        'space',
+        space.availableBytes < DOWNLOAD_SPACE_WARNING_BYTES ? 'warn' : 'pass',
+        'Downloads filesystem has free space',
         {
           detail,
           fix:
             space.availableBytes < DOWNLOAD_SPACE_WARNING_BYTES
-              ? "Free at least 1 GiB before starting large playlist or album downloads."
-              : "Large lossless playlists can still need substantially more free space.",
+              ? 'Free at least 1 GiB before starting large playlist or album downloads.'
+              : 'Large lossless playlists can still need substantially more free space.',
         },
       ),
     );
@@ -573,143 +563,141 @@ async function checkDownloadsSection() {
   try {
     await fs.mkdir(playlistLibraryRoot, { recursive: true });
     steps.push(
-      healthStep("playlist-root", "pass", "Playlist library folder is ready", {
+      healthStep('playlist-root', 'pass', 'Playlist library folder is ready', {
         detail: playlistLibraryRoot,
       }),
     );
-  } catch (error) {
+  } catch (error: unknown) {
     steps.push(
-      healthStep("playlist-root", "fail", "Playlist library folder is ready", {
+      healthStep('playlist-root', 'fail', 'Playlist library folder is ready', {
         detail: playlistLibraryRoot,
-        fix: error?.message || "Could not create the Aurral playlist library folder.",
+        fix: (error as Error)?.message || 'Could not create the Aurral playlist library folder.',
       }),
     );
   }
 
-  return buildSection("downloads", "Aurral downloads", steps);
+  return buildSection('downloads', 'Aurral downloads', steps);
 }
 
 async function checkLidarrSection() {
   lidarrClient.updateConfig();
   if (!lidarrClient.isConfigured()) {
     return {
-      section: buildSection("lidarr", "Lidarr library", [], {
+      section: buildSection('lidarr', 'Lidarr library', [], {
         skipped: true,
-        skipReason: "Lidarr is not configured.",
+        skipReason: 'Lidarr is not configured.',
       }),
       sample: null,
       rootPaths: [],
     };
   }
 
-  const result = await runLidarrLibraryAccessTest(lidarrClient);
-  const rootStep = (result.steps || []).find((entry) => entry.id === "root");
+  const result = await runLidarrLibraryAccessTest(lidarrClient as unknown as Record<string, unknown>);
+  const steps = (result.steps || []) as HealthStep[];
+  const rootStep = steps.find((entry) => entry.id === 'root');
   const rootPaths = rootStep?.detail
     ? String(rootStep.detail)
-        .split(",")
+        .split(',')
         .map((entry) => entry.trim())
         .filter(Boolean)
     : [];
 
   return {
-    section: buildSection("lidarr", "Lidarr library", result.steps || []),
+    section: buildSection('lidarr', 'Lidarr library', result.steps || []),
     sample: result.sample || null,
     rootPaths,
   };
 }
 
 async function checkSlskdSection() {
-  const integrations = dbOps.getSettings()?.integrations || {};
-  const slskd = integrations.slskd || {};
+  const integrations = (dbOps.getSettings()?.integrations as Record<string, unknown> | undefined) || {};
+  const slskd = (integrations.slskd as Record<string, unknown> | undefined) || {};
   if (slskd.enabled === false || !slskdClient.isConfigured()) {
-    return buildSection("slskd", "slskd downloads", [], {
+    return buildSection('slskd', 'slskd downloads', [], {
       skipped: true,
-      skipReason: "slskd is not configured.",
+      skipReason: 'slskd is not configured.',
     });
   }
 
-  const steps = [];
-  const connection = await slskdClient.testConnection({ force: true });
+  const steps: HealthStep[] = [];
+  const connection = (await slskdClient.testConnection({ force: true })) as Record<string, unknown>;
   if (!connection.ok) {
     steps.push(
-      healthStep("api", "fail", "Connected to slskd", {
-        detail: connection.message || "Connection failed",
-        fix: "Check the slskd URL and API key in Settings → Download Clients. From Docker, use a URL Aurral can reach inside the network.",
+      healthStep('api', 'fail', 'Connected to slskd', {
+        detail: (connection.message as string) || 'Connection failed',
+        fix: 'Check the slskd URL and API key in Settings → Download Clients. From Docker, use a URL Aurral can reach inside the network.',
       }),
     );
-    return buildSection("slskd", "slskd downloads", steps);
+    return buildSection('slskd', 'slskd downloads', steps);
   }
 
   steps.push(
-    healthStep("api", "pass", "Connected to slskd", {
-      detail: connection.message || "slskd is reachable",
+    healthStep('api', 'pass', 'Connected to slskd', {
+      detail: (connection.message as string) || 'slskd is reachable',
     }),
   );
 
   if (connection.soulseekConnected === false) {
     steps.push(
-      healthStep("soulseek", "warn", "Soulseek network is connected", {
-        detail: connection.serverState || "Disconnected",
-        fix: "Open slskd, log in, and connect to the Soulseek server before starting downloads.",
+      healthStep('soulseek', 'warn', 'Soulseek network is connected', {
+        detail: (connection.serverState as string) || 'Disconnected',
+        fix: 'Open slskd, log in, and connect to the Soulseek server before starting downloads.',
       }),
     );
   } else {
     steps.push(
-      healthStep("soulseek", "pass", "Soulseek network is connected", {
-        detail: connection.serverState || "Connected",
+      healthStep('soulseek', 'pass', 'Soulseek network is connected', {
+        detail: (connection.serverState as string) || 'Connected',
       }),
     );
   }
 
-  const downloadPath = String(connection.downloadPath || "").trim();
+  const downloadPath = String(connection.downloadPath || '').trim();
   if (!downloadPath) {
     steps.push(
-      healthStep("path-reported", "warn", "slskd download folder is reported", {
-        fix: "Set a download folder in slskd options, for example /data/downloads/slskd/complete.",
+      healthStep('path-reported', 'warn', 'slskd download folder is reported', {
+        fix: 'Set a download folder in slskd options, for example /data/downloads/slskd/complete.',
       }),
     );
-    return buildSection("slskd", "slskd downloads", steps);
+    return buildSection('slskd', 'slskd downloads', steps);
   }
 
   steps.push(
-    healthStep("path-reported", "pass", "slskd download folder is reported", {
+    healthStep('path-reported', 'pass', 'slskd download folder is reported', {
       detail: downloadPath,
     }),
   );
 
-  const readablePath = await checkPathReadable(downloadPath, "slskd");
+  const readablePath = await checkPathReadable(downloadPath, 'slskd');
   if (!readablePath) {
     steps.push(
-      healthStep("path-readable", "fail", "Aurral can read slskd completed files", {
+      healthStep('path-readable', 'fail', 'Aurral can read slskd completed files', {
         detail: downloadPath,
         fix: looksLikeExternalOnlyPath(downloadPath)
-          ? "slskd reports a host path Aurral cannot read inside Docker. Mount the shared parent folder into both containers, or add an slskd mapping under Settings → Download Clients → Remote Path Mappings."
+          ? 'slskd reports a host path Aurral cannot read inside Docker. Mount the shared parent folder into both containers, or add an slskd mapping under Settings → Download Clients → Remote Path Mappings.'
           : `Mount the same host folder into Aurral at the path slskd uses, or add an slskd mapping for ${downloadPath} under Settings → Download Clients → Remote Path Mappings.`,
       }),
     );
-    return buildSection("slskd", "slskd downloads", steps);
+    return buildSection('slskd', 'slskd downloads', steps);
   }
 
   steps.push(
-    healthStep("path-readable", "pass", "Aurral can read slskd completed files", {
+    healthStep('path-readable', 'pass', 'Aurral can read slskd completed files', {
       detail: formatPathAccessDetail(downloadPath, readablePath),
     }),
   );
 
-  const sharesPlaylistFilesystem = await pathsShareDevice(
-    readablePath,
-    resolvePlaylistRoot(),
-  );
+  const sharesPlaylistFilesystem = await pathsShareDevice(readablePath, resolvePlaylistRoot());
   steps.push(
     healthStep(
-      "same-filesystem",
-      sharesPlaylistFilesystem ? "pass" : "warn",
-      "slskd and Aurral downloads share a filesystem",
+      'same-filesystem',
+      sharesPlaylistFilesystem ? 'pass' : 'warn',
+      'slskd and Aurral downloads share a filesystem',
       {
         detail: `${readablePath} -> ${resolvePlaylistRoot()}`,
         fix: sharesPlaylistFilesystem
-          ? "Completed files can usually be moved into the Aurral playlist folder without a cross-device copy."
-          : "Aurral can copy across filesystems, but same-filesystem mounts are faster and avoid failures from low space, permissions, or partial copy cleanup.",
+          ? 'Completed files can usually be moved into the Aurral playlist folder without a cross-device copy.'
+          : 'Aurral can copy across filesystems, but same-filesystem mounts are faster and avoid failures from low space, permissions, or partial copy cleanup.',
       },
     ),
   );
@@ -717,103 +705,97 @@ async function checkSlskdSection() {
   const sampleFile = await findSampleMediaFileInDirectory(readablePath);
   if (!sampleFile) {
     steps.push(
-      healthStep("sample-file", "warn", "Sample slskd completed file on disk", {
+      healthStep('sample-file', 'warn', 'Sample slskd completed file on disk', {
         detail: readablePath,
-        fix: "Complete at least one slskd download, then run checks again to verify a real file path.",
+        fix: 'Complete at least one slskd download, then run checks again to verify a real file path.',
       }),
     );
   } else {
     steps.push(
-      healthStep("sample-file", "pass", "Sample slskd completed file on disk", {
+      healthStep('sample-file', 'pass', 'Sample slskd completed file on disk', {
         detail: sampleFile,
       }),
     );
   }
 
-  return buildSection("slskd", "slskd downloads", steps);
+  return buildSection('slskd', 'slskd downloads', steps);
 }
 
 async function checkNzbgetSection() {
-  const integrations = dbOps.getSettings()?.integrations || {};
-  const nzbget = integrations.nzbget || {};
+  const integrations = (dbOps.getSettings()?.integrations as Record<string, unknown> | undefined) || {};
+  const nzbget = (integrations.nzbget as Record<string, unknown> | undefined) || {};
   if (nzbget.enabled !== true || !nzbgetClient.isConfigured()) {
-    return buildSection("nzbget", "NZBGet downloads", [], {
+    return buildSection('nzbget', 'NZBGet downloads', [], {
       skipped: true,
-      skipReason: "NZBGet is not enabled.",
+      skipReason: 'NZBGet is not enabled.',
     });
   }
 
-  const steps = [];
-  const connection = await nzbgetClient.testConnection({ force: true });
+  const steps: HealthStep[] = [];
+  const connection = (await nzbgetClient.testConnection({ force: true })) as Record<string, unknown>;
   if (!connection.ok) {
     steps.push(
-      healthStep("api", "fail", "Connected to NZBGet", {
-        detail: connection.message || "Connection failed",
-        fix: "Check the NZBGet URL and credentials in Settings → Download Clients.",
+      healthStep('api', 'fail', 'Connected to NZBGet', {
+        detail: (connection.message as string) || 'Connection failed',
+        fix: 'Check the NZBGet URL and credentials in Settings → Download Clients.',
       }),
     );
-    return buildSection("nzbget", "NZBGet downloads", steps);
+    return buildSection('nzbget', 'NZBGet downloads', steps);
   }
 
   steps.push(
-    healthStep("api", "pass", "Connected to NZBGet", {
-      detail: connection.message || "NZBGet is reachable",
+    healthStep('api', 'pass', 'Connected to NZBGet', {
+      detail: (connection.message as string) || 'NZBGet is reachable',
     }),
   );
 
   const completedPath = String(
-    nzbget.completedPath ||
-      connection.downloadPath ||
-      connection.directories?.completedPath ||
-      "",
+    (nzbget.completedPath as string) || connection.downloadPath || (connection.directories as Record<string, unknown>)?.completedPath || '',
   ).trim();
 
   if (!completedPath) {
     steps.push(
-      healthStep("path-reported", "warn", "NZBGet completed folder is configured", {
-        fix: "Set the completed download path in Settings → Download Clients → NZBGet.",
+      healthStep('path-reported', 'warn', 'NZBGet completed folder is configured', {
+        fix: 'Set the completed download path in Settings → Download Clients → NZBGet.',
       }),
     );
-    return buildSection("nzbget", "NZBGet downloads", steps);
+    return buildSection('nzbget', 'NZBGet downloads', steps);
   }
 
   steps.push(
-    healthStep("path-reported", "pass", "NZBGet completed folder is configured", {
+    healthStep('path-reported', 'pass', 'NZBGet completed folder is configured', {
       detail: completedPath,
     }),
   );
 
-  const readablePath = await checkPathReadable(completedPath, "nzbget");
+  const readablePath = await checkPathReadable(completedPath, 'nzbget');
   if (!readablePath) {
     steps.push(
-      healthStep("path-readable", "fail", "Aurral can read NZBGet completed files", {
+      healthStep('path-readable', 'fail', 'Aurral can read NZBGet completed files', {
         detail: completedPath,
-        fix: "Mount the same host folder into Aurral and NZBGet, or add an NZBGet mapping under Settings → Download Clients → Remote Path Mappings.",
+        fix: 'Mount the same host folder into Aurral and NZBGet, or add an NZBGet mapping under Settings → Download Clients → Remote Path Mappings.',
       }),
     );
-    return buildSection("nzbget", "NZBGet downloads", steps);
+    return buildSection('nzbget', 'NZBGet downloads', steps);
   }
 
   steps.push(
-    healthStep("path-readable", "pass", "Aurral can read NZBGet completed files", {
+    healthStep('path-readable', 'pass', 'Aurral can read NZBGet completed files', {
       detail: formatPathAccessDetail(completedPath, readablePath),
     }),
   );
 
-  const sharesPlaylistFilesystem = await pathsShareDevice(
-    readablePath,
-    resolvePlaylistRoot(),
-  );
+  const sharesPlaylistFilesystem = await pathsShareDevice(readablePath, resolvePlaylistRoot());
   steps.push(
     healthStep(
-      "same-filesystem",
-      sharesPlaylistFilesystem ? "pass" : "warn",
-      "NZBGet and Aurral downloads share a filesystem",
+      'same-filesystem',
+      sharesPlaylistFilesystem ? 'pass' : 'warn',
+      'NZBGet and Aurral downloads share a filesystem',
       {
         detail: `${readablePath} -> ${resolvePlaylistRoot()}`,
         fix: sharesPlaylistFilesystem
-          ? "Completed files can usually be moved into the Aurral playlist folder without a cross-device copy."
-          : "Aurral can copy across filesystems, but same-filesystem mounts are faster and avoid failures from low space, permissions, or partial copy cleanup.",
+          ? 'Completed files can usually be moved into the Aurral playlist folder without a cross-device copy.'
+          : 'Aurral can copy across filesystems, but same-filesystem mounts are faster and avoid failures from low space, permissions, or partial copy cleanup.',
       },
     ),
   );
@@ -821,27 +803,27 @@ async function checkNzbgetSection() {
   const sampleFile = await findSampleMediaFileInDirectory(readablePath);
   if (!sampleFile) {
     steps.push(
-      healthStep("sample-file", "warn", "Sample NZBGet completed file on disk", {
+      healthStep('sample-file', 'warn', 'Sample NZBGet completed file on disk', {
         detail: readablePath,
-        fix: "Complete at least one NZBGet download, then run checks again to verify a real file path.",
+        fix: 'Complete at least one NZBGet download, then run checks again to verify a real file path.',
       }),
     );
   } else {
     steps.push(
-      healthStep("sample-file", "pass", "Sample NZBGet completed file on disk", {
+      healthStep('sample-file', 'pass', 'Sample NZBGet completed file on disk', {
         detail: sampleFile,
       }),
     );
   }
 
-  return buildSection("nzbget", "NZBGet downloads", steps);
+  return buildSection('nzbget', 'NZBGet downloads', steps);
 }
 
-function uniqueVisiblePathCandidates(paths) {
+function uniqueVisiblePathCandidates(paths: (string | null)[]) {
   const seen = new Set();
   const result = [];
   for (const entry of paths) {
-    const value = String(entry || "").trim();
+    const value = String(entry || '').trim();
     if (!value) continue;
     const key = normalizePathCompare(value);
     if (seen.has(key)) continue;
@@ -851,10 +833,14 @@ function uniqueVisiblePathCandidates(paths) {
   return result;
 }
 
-function resolveNavidromeVisiblePath(localPath, mode, mappings) {
-  const local = String(localPath || "").trim();
-  if (!local || mode !== "remote") return local;
-  const mapped = resolveM3uVisiblePath(local, mappings);
+function resolveNavidromeVisiblePath(
+  localPath: string,
+  mode: string,
+  mappings: Record<string, unknown>[],
+) {
+  const local = String(localPath || '').trim();
+  if (!local || mode !== 'remote') return local;
+  const mapped = resolveM3uVisiblePath(local, mappings as unknown as { local: string; remote: string }[]);
   if (mapped) return mapped;
   if (mappings.length === 0) {
     const fallback = resolveRemotePath(local);
@@ -865,74 +851,80 @@ function resolveNavidromeVisiblePath(localPath, mode, mappings) {
   return null;
 }
 
-function getNavidromePathCandidates(localPath, mode, mappings) {
-  const local = String(localPath || "").trim();
+function getNavidromePathCandidates(
+  localPath: string,
+  mode: string,
+  mappings: Record<string, unknown>[],
+) {
+  const local = String(localPath || '').trim();
   const visible = resolveNavidromeVisiblePath(local, mode, mappings);
   return uniqueVisiblePathCandidates([local, visible]);
 }
 
-function libraryCoversAnyPath(libraryList, candidates) {
+function libraryCoversAnyPath(
+  libraryList: Record<string, unknown>[],
+  candidates: string[],
+) {
   return (Array.isArray(libraryList) ? libraryList : []).find((library) =>
-    candidates.some((candidate) => pathCoversPrefix(library?.path, candidate)),
+    candidates.some((candidate) => pathCoversPrefix(library?.path as string, candidate)),
   );
 }
 
-async function checkNavidromeSection({ lidarrRootPaths = [], lidarrSample = null } = {}) {
-  const integrations = dbOps.getSettings()?.integrations || {};
-  const navidrome = integrations.navidrome || {};
+async function checkNavidromeSection({
+  lidarrRootPaths = [] as string[],
+  lidarrSample = null as { path: string } | null,
+}: { lidarrRootPaths?: string[]; lidarrSample?: { path: string } | null } = {}) {
+  const integrations = (dbOps.getSettings()?.integrations as Record<string, unknown> | undefined) || {};
+  const navidrome = (integrations.navidrome as Record<string, unknown> | undefined) || {};
   if (!navidrome.url || !navidrome.username || !navidrome.password) {
-    return buildSection("navidrome", "Navidrome playback", [], {
+    return buildSection('navidrome', 'Navidrome playback', [], {
       skipped: true,
-      skipReason: "Navidrome is not configured.",
+      skipReason: 'Navidrome is not configured.',
     });
   }
 
   const steps = [];
-  const client = new NavidromeClient(
-    navidrome.url,
-    navidrome.username,
-    navidrome.password,
-  );
+  const client = new NavidromeClient(String(navidrome.url), String(navidrome.username), String(navidrome.password));
 
   try {
     await client.ping();
     steps.push(
-      healthStep("api", "pass", "Connected to Navidrome", {
+      healthStep('api', 'pass', 'Connected to Navidrome', {
         detail: navidrome.url,
       }),
     );
-  } catch (error) {
+  } catch (error: unknown) {
     steps.push(
-      healthStep("api", "fail", "Connected to Navidrome", {
-        detail: error?.message || "Connection failed",
-        fix: "Check the Navidrome URL, username, and password in Settings → Playback.",
+      healthStep('api', 'fail', 'Connected to Navidrome', {
+        detail: (error as Error)?.message || 'Connection failed',
+        fix: 'Check the Navidrome URL, username, and password in Settings → Playback.',
       }),
     );
-    return buildSection("navidrome", "Navidrome playback", steps);
+    return buildSection('navidrome', 'Navidrome playback', steps);
   }
 
   const m3uMode = getM3uPathMode();
   const m3uMappings = getM3uPathMappings();
   const expectedLibraryPath = path
     .join(resolvePlaylistRoot(), PLAYLIST_LIBRARY_DIR)
-    .replace(/\\/g, "/")
-    .replace(/\/+$/, "");
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '');
   const expectedLibraryCandidates = getNavidromePathCandidates(
     expectedLibraryPath,
     m3uMode,
     m3uMappings,
   );
 
-  let libraries = [];
+  let libraries: any[] = [];
   let librariesListed = true;
   try {
-    libraries = await client.getLibraries();
-  } catch (error) {
+    libraries = await client.getLibraries() as any[];
+  } catch (error: unknown) {
     librariesListed = false;
     steps.push(
-      healthStep("libraries", "warn", "Navidrome music libraries are readable", {
-        detail: error?.message || "Could not list libraries",
-        fix: "Confirm the Navidrome account can manage libraries and that the API is reachable.",
+      healthStep('libraries', 'warn', 'Navidrome music libraries are readable', {
+        detail: (error as Error)?.message || 'Could not list libraries',
+        fix: 'Confirm the Navidrome account can manage libraries and that the API is reachable.',
       }),
     );
   }
@@ -940,17 +932,15 @@ async function checkNavidromeSection({ lidarrRootPaths = [], lidarrSample = null
   const libraryList = Array.isArray(libraries) ? libraries : [];
   if (librariesListed && libraryList.length === 0) {
     steps.push(
-      healthStep("libraries", "warn", "Navidrome music libraries are configured", {
-        fix: "Add the Aurral playlist folder and any reused Lidarr library folders as Navidrome music libraries, then scan them.",
+      healthStep('libraries', 'warn', 'Navidrome music libraries are configured', {
+        fix: 'Add the Aurral playlist folder and any reused Lidarr library folders as Navidrome music libraries, then scan them.',
       }),
     );
   } else if (libraryList.length > 0) {
     steps.push(
-      healthStep("libraries", "pass", "Navidrome music libraries are configured", {
+      healthStep('libraries', 'pass', 'Navidrome music libraries are configured', {
         detail: formatLimitedList(
-          libraryList
-            .map((entry) => String(entry?.path || "").trim())
-            .filter(Boolean),
+          libraryList.map((entry) => String(entry?.path || '').trim()).filter(Boolean),
         ),
       }),
     );
@@ -958,7 +948,7 @@ async function checkNavidromeSection({ lidarrRootPaths = [], lidarrSample = null
 
   const unreadableLibraries = [];
   for (const library of libraryList) {
-    const libraryPath = String(library?.path || "").trim();
+    const libraryPath = String(library?.path || '').trim();
     if (!libraryPath) continue;
     const readablePath = await checkPathReadable(libraryPath);
     if (!readablePath) {
@@ -969,48 +959,43 @@ async function checkNavidromeSection({ lidarrRootPaths = [], lidarrSample = null
   if (libraryList.length > 0 && unreadableLibraries.length > 0) {
     steps.push(
       healthStep(
-        "library-readable",
-        m3uMode === "remote" ? "pass" : "fail",
-        m3uMode === "remote"
-          ? "Navidrome library paths use a separate filesystem view"
-          : "Navidrome library paths are readable from Aurral",
+        'library-readable',
+        m3uMode === 'remote' ? 'pass' : 'fail',
+        m3uMode === 'remote'
+          ? 'Navidrome library paths use a separate filesystem view'
+          : 'Navidrome library paths are readable from Aurral',
         {
           detail: formatLimitedList(unreadableLibraries),
           fix:
-            m3uMode === "remote"
-              ? "This is expected when Navidrome runs on Windows or uses different mounts. The M3U path checks below verify that generated playlists use Navidrome-visible paths."
-              : "Mount each Navidrome music library into Aurral at the same path, or enable Settings → Playback → Navidrome Playlist Paths → Use Navidrome paths in M3U files and add Navidrome path mappings.",
+            m3uMode === 'remote'
+              ? 'This is expected when Navidrome runs on Windows or uses different mounts. The M3U path checks below verify that generated playlists use Navidrome-visible paths.'
+              : 'Mount each Navidrome music library into Aurral at the same path, or enable Settings → Playback → Navidrome Playlist Paths → Use Navidrome paths in M3U files and add Navidrome path mappings.',
         },
       ),
     );
   } else if (libraryList.length > 0) {
     steps.push(
-      healthStep("library-readable", "pass", "Navidrome library paths are readable from Aurral", {
+      healthStep('library-readable', 'pass', 'Navidrome library paths are readable from Aurral', {
         detail: formatLimitedList(
-          libraryList
-            .map((entry) => String(entry?.path || "").trim())
-            .filter(Boolean),
+          libraryList.map((entry) => String(entry?.path || '').trim()).filter(Boolean),
         ),
       }),
     );
   }
 
-  const playlistLibrary = libraryCoversAnyPath(
-    libraryList,
-    expectedLibraryCandidates,
-  );
+  const playlistLibrary = libraryCoversAnyPath(libraryList, expectedLibraryCandidates);
 
   if (playlistLibrary) {
     steps.push(
-      healthStep("aurral-library", "pass", "Navidrome scans the Aurral playlist folder", {
+      healthStep('aurral-library', 'pass', 'Navidrome scans the Aurral playlist folder', {
         detail: playlistLibrary.path,
       }),
     );
   } else {
     steps.push(
-      healthStep("aurral-library", "warn", "Navidrome scans the Aurral playlist folder", {
+      healthStep('aurral-library', 'warn', 'Navidrome scans the Aurral playlist folder', {
         detail: formatLimitedList(expectedLibraryCandidates),
-        fix: "Save Navidrome settings, then create or update a playlist or flow so Aurral can create the playlist library. Add that folder as a music library in Navidrome and scan it.",
+        fix: 'Save Navidrome settings, then create or update a playlist or flow so Aurral can create the playlist library. Add that folder as a music library in Navidrome and scan it.',
       }),
     );
   }
@@ -1025,42 +1010,42 @@ async function checkNavidromeSection({ lidarrRootPaths = [], lidarrSample = null
 
   if (lidarrRootPaths.length > 0 && uncoveredRoots.length > 0) {
     steps.push(
-      healthStep("lidarr-library", "warn", "Navidrome scans Lidarr library folders", {
+      healthStep('lidarr-library', 'warn', 'Navidrome scans Lidarr library folders', {
         detail: formatLimitedList(uncoveredRoots),
-        fix: "Reused playlist tracks point at your Lidarr library. Add those folders as Navidrome music libraries, or use Settings → Playback → Navidrome Playlist Paths when Navidrome sees them at different paths.",
+        fix: 'Reused playlist tracks point at your Lidarr library. Add those folders as Navidrome music libraries, or use Settings → Playback → Navidrome Playlist Paths when Navidrome sees them at different paths.',
       }),
     );
   } else if (lidarrRootPaths.length > 0) {
     steps.push(
-      healthStep("lidarr-library", "pass", "Navidrome scans Lidarr library folders", {
+      healthStep('lidarr-library', 'pass', 'Navidrome scans Lidarr library folders', {
         detail: formatLimitedList(lidarrRootPaths),
       }),
     );
   }
 
   if (lidarrSample?.path) {
-    const samplePath = String(lidarrSample.path || "").trim();
+    const samplePath = String(lidarrSample.path || '').trim();
     const navidromeCoversSample = libraryCoversAnyPath(
       libraryList,
       getNavidromePathCandidates(samplePath, m3uMode, m3uMappings),
     );
     if (!navidromeCoversSample) {
       steps.push(
-        healthStep("lidarr-sample", "warn", "Navidrome scans the sample Lidarr track folder", {
+        healthStep('lidarr-sample', 'warn', 'Navidrome scans the sample Lidarr track folder', {
           detail: samplePath,
-          fix: "Add the Lidarr library folder that contains this track as a Navidrome music library.",
+          fix: 'Add the Lidarr library folder that contains this track as a Navidrome music library.',
         }),
       );
     } else {
       steps.push(
-        healthStep("lidarr-sample", "pass", "Navidrome scans the sample Lidarr track folder", {
+        healthStep('lidarr-sample', 'pass', 'Navidrome scans the sample Lidarr track folder', {
           detail: samplePath,
         }),
       );
     }
   }
 
-  return buildSection("navidrome", "Navidrome playback", steps);
+  return buildSection('navidrome', 'Navidrome playback', steps);
 }
 
 async function checkPlaylistFilesSection() {
@@ -1070,10 +1055,10 @@ async function checkPlaylistFilesSection() {
   const m3uMappings = getM3uPathMappings();
   const playlistLibraryPath = path
     .join(resolvePlaylistRoot(), PLAYLIST_LIBRARY_DIR)
-    .replace(/\\/g, "/")
-    .replace(/\/+$/, "");
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '');
 
-  if (m3uMode === "remote") {
+  if (m3uMode === 'remote') {
     const visiblePlaylistPath = resolveNavidromeVisiblePath(
       playlistLibraryPath,
       m3uMode,
@@ -1081,40 +1066,38 @@ async function checkPlaylistFilesSection() {
     );
     steps.push(
       healthStep(
-        "m3u-mode",
-        visiblePlaylistPath ? "pass" : "fail",
-        "Generated M3U paths resolve for playlist consumers",
+        'm3u-mode',
+        visiblePlaylistPath ? 'pass' : 'fail',
+        'Generated M3U paths resolve for playlist consumers',
         {
           detail: visiblePlaylistPath
             ? `${playlistLibraryPath} -> ${visiblePlaylistPath}`
             : playlistLibraryPath,
           fix: visiblePlaylistPath
-            ? "Remote mode is appropriate when Navidrome sees different paths than Aurral."
-            : "Add a Navidrome path mapping under Settings → Playback → Navidrome Playlist Paths from the Aurral playlist folder to the path Navidrome scans, or turn off remote mode when both apps share the same paths.",
+            ? 'Remote mode is appropriate when Navidrome sees different paths than Aurral.'
+            : 'Add a Navidrome path mapping under Settings → Playback → Navidrome Playlist Paths from the Aurral playlist folder to the path Navidrome scans, or turn off remote mode when both apps share the same paths.',
         },
       ),
     );
   } else {
     steps.push(
-      healthStep("m3u-mode", "pass", "Playlist files use local container paths", {
-        detail: "M3U files use the same paths Aurral reads on disk.",
+      healthStep('m3u-mode', 'pass', 'Playlist files use local container paths', {
+        detail: 'M3U files use the same paths Aurral reads on disk.',
       }),
     );
   }
 
   const totalDoneJobs = Number(downloadTracker.getStats()?.done || 0);
-  const doneJobs = downloadTracker.getDoneWithFinalPath(
-    PLAYLIST_FILE_HEALTH_SAMPLE_LIMIT,
-  );
+  const doneJobs = downloadTracker.getDoneWithFinalPath(PLAYLIST_FILE_HEALTH_SAMPLE_LIMIT);
 
   if (doneJobs.length === 0) {
     steps.push(
-      healthStep("tracked", "warn", "Completed playlist files are accessible", {
-        detail: "No completed playlist tracks to verify yet.",
-        fix: "Create or import a playlist, or run a flow, then run this check again.",
+      healthStep('tracked', 'warn', 'Completed playlist files are accessible', {
+        detail: 'No completed playlist tracks to verify yet.',
+        fix: 'Create or import a playlist, or run a flow, then run this check again.',
       }),
     );
-    return buildSection("playlists", "Playlist files", steps);
+    return buildSection('playlists', 'Playlist files', steps);
   }
 
   let totalMissing = 0;
@@ -1124,9 +1107,7 @@ async function checkPlaylistFilesSection() {
   let sampleUnreadable = null;
   let sampleEmpty = null;
   for (const job of doneJobs) {
-    const localPath = path.resolve(
-      remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot),
-    );
+    const localPath = path.resolve(remapLegacyWeeklyFlowPath(job.finalPath as string, weeklyFlowRoot));
     try {
       const stat = await fs.stat(localPath);
       if (!stat.isFile()) {
@@ -1152,49 +1133,49 @@ async function checkPlaylistFilesSection() {
 
   if (totalMissing > 0) {
     steps.push(
-      healthStep("tracked", "fail", "Completed playlist files are accessible", {
+      healthStep('tracked', 'fail', 'Completed playlist files are accessible', {
         detail: `${totalMissing} of ${doneJobs.length} completed tracks are missing on disk`,
         fix: sampleMissing
           ? `Example missing path: ${sampleMissing}. Restore the missing file or fix the mount that should contain it, then update the affected playlist or flow so Aurral rewrites its playlist files.`
-          : "Restore the missing files or fix the mount that should contain them, then update the affected playlist or flow so Aurral rewrites its playlist files.",
+          : 'Restore the missing files or fix the mount that should contain them, then update the affected playlist or flow so Aurral rewrites its playlist files.',
       }),
     );
-    return buildSection("playlists", "Playlist files", steps);
+    return buildSection('playlists', 'Playlist files', steps);
   }
 
   if (totalUnreadable > 0) {
     steps.push(
-      healthStep("tracked-readable", "fail", "Completed playlist files are readable", {
+      healthStep('tracked-readable', 'fail', 'Completed playlist files are readable', {
         detail: `${totalUnreadable} of ${doneJobs.length} completed tracks cannot be read`,
         fix: sampleUnreadable
           ? `Example unreadable path: ${sampleUnreadable}. Check ownership, ACLs, and read permissions for the mounted folder.`
-          : "Check ownership, ACLs, and read permissions for the mounted folder.",
+          : 'Check ownership, ACLs, and read permissions for the mounted folder.',
       }),
     );
-    return buildSection("playlists", "Playlist files", steps);
+    return buildSection('playlists', 'Playlist files', steps);
   }
 
   if (totalEmpty > 0) {
     steps.push(
-      healthStep("tracked-nonempty", "warn", "Completed playlist files are non-empty", {
+      healthStep('tracked-nonempty', 'warn', 'Completed playlist files are non-empty', {
         detail: `${totalEmpty} of ${doneJobs.length} completed tracks are zero bytes`,
         fix: sampleEmpty
           ? `Example empty path: ${sampleEmpty}. Re-run the affected flow, or remove and add the track again in the affected playlist, so Aurral replaces the empty file.`
-          : "Re-run the affected flow, or remove and add the tracks again in the affected playlist, so Aurral replaces empty files.",
+          : 'Re-run the affected flow, or remove and add the tracks again in the affected playlist, so Aurral replaces empty files.',
       }),
     );
   }
 
   steps.push(
-    healthStep("tracked", "pass", "Completed playlist files are accessible", {
+    healthStep('tracked', 'pass', 'Completed playlist files are accessible', {
       detail:
         totalDoneJobs > doneJobs.length
           ? `${doneJobs.length} of ${totalDoneJobs} completed tracks sampled`
-          : `${doneJobs.length} completed track${doneJobs.length === 1 ? "" : "s"} verified`,
+          : `${doneJobs.length} completed track${doneJobs.length === 1 ? '' : 's'} verified`,
     }),
   );
 
-  return buildSection("playlists", "Playlist files", steps);
+  return buildSection('playlists', 'Playlist files', steps);
 }
 
 async function buildStorageHealthCheck() {
@@ -1250,13 +1231,12 @@ export async function runStorageHealthCheck({ force = false } = {}) {
     .then((result) => {
       storageHealthCache = result;
       storageHealthCacheKey = cacheKey;
-      storageHealthCacheExpiresAt =
-        Date.now() + STORAGE_HEALTH_CACHE_TTL_MS;
+      storageHealthCacheExpiresAt = Date.now() + STORAGE_HEALTH_CACHE_TTL_MS;
       return result;
     })
     .finally(() => {
       storageHealthInflight = null;
-      storageHealthInflightKey = "";
+      storageHealthInflightKey = '';
     });
 
   return storageHealthInflight;

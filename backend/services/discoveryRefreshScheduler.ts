@@ -1,6 +1,6 @@
-import { dbOps } from "../config/db-helpers.js";
-import { getLastfmApiKey } from "./apiClients.js";
-import { libraryManager } from "./libraryManager.js";
+import { dbOps } from '../config/db-helpers.js';
+import { getLastfmApiKey } from './apiClients.js';
+import { libraryManager } from './libraryManager.js';
 import {
   enqueueDiscoveryRefreshJob,
   getHonkerDb,
@@ -8,19 +8,19 @@ import {
   isHonkerLockHeld,
   tryAcquireDiscoveryRefreshQueueLock,
   releaseDiscoveryRefreshQueueLock,
-} from "./honkerDb.js";
+} from './honkerDb.js';
 import {
   clearDiscoveryUpdateProgress,
   getDiscoveryAutoRefreshHours,
   getDiscoveryCache,
   recordDiscoveryUpdateProgress,
-} from "./discoveryService.js";
+} from './discoveryService.js';
 
-const DISCOVERY_GLOBAL_REFRESH_LOCK = "discovery-global-refresh";
+const DISCOVERY_GLOBAL_REFRESH_LOCK = 'discovery-global-refresh';
 
-function parseQueuedPayload(payload) {
+function parseQueuedPayload(payload: string) {
   try {
-    return JSON.parse(String(payload || "{}"));
+    return JSON.parse(String(payload || '{}'));
   } catch {
     return {};
   }
@@ -42,10 +42,7 @@ function getPendingScheduledDiscoveryRefresh() {
     return (
       rows.find((row) => {
         const payload = parseQueuedPayload(row.payload);
-        return (
-          payload?.scheduleOnly === true &&
-          String(payload?.reason || "") === "scheduled"
-        );
+        return payload?.scheduleOnly === true && String(payload?.reason || '') === 'scheduled';
       }) || null
     );
   } catch {
@@ -69,17 +66,14 @@ export function pruneDuplicateScheduledDiscoveryRefreshes() {
     );
     const scheduled = rows.filter((row) => {
       const payload = parseQueuedPayload(row.payload);
-      return (
-        payload?.scheduleOnly === true &&
-        String(payload?.reason || "") === "scheduled"
-      );
+      return payload?.scheduleOnly === true && String(payload?.reason || '') === 'scheduled';
     });
     if (scheduled.length <= 1) return 0;
     const removeIds = scheduled.slice(1).map((row) => row.id);
     const tx = getHonkerDb().transaction();
     try {
       for (const id of removeIds) {
-        tx.execute("DELETE FROM _honker_live WHERE id = ?", [id]);
+        tx.execute('DELETE FROM _honker_live WHERE id = ?', [id]);
       }
       tx.commit();
     } catch (error) {
@@ -113,8 +107,7 @@ export function discoveryNeedsRefresh(cache = getDiscoveryCache()) {
   const lastUpdated = cache?.lastUpdated;
   const hasRecommendations =
     Array.isArray(cache?.recommendations) && cache.recommendations.length > 0;
-  const hasGenres =
-    Array.isArray(cache?.topGenres) && cache.topGenres.length > 0;
+  const hasGenres = Array.isArray(cache?.topGenres) && cache.topGenres.length > 0;
   const refreshHours = getDiscoveryAutoRefreshHours();
   const staleCutoff = Date.now() - refreshHours * 60 * 60 * 1000;
   return (
@@ -125,34 +118,35 @@ export function discoveryNeedsRefresh(cache = getDiscoveryCache()) {
   );
 }
 
-function emitDiscoveryQueued(reason) {
-  recordDiscoveryUpdateProgress(
-    "queued",
-    "Discovery refresh queued",
-    1,
-    { reason },
-  );
+function emitDiscoveryQueued(reason: string) {
+  recordDiscoveryUpdateProgress('queued', 'Discovery refresh queued', 1, { reason });
 }
 
-export function enqueueDiscoveryRefresh(options = {}) {
+export function enqueueDiscoveryRefresh(options: Record<string, unknown> = {}) {
   const {
     force = false,
-    reason = "manual",
+    reason = 'manual',
     runAt = null,
     delaySeconds = null,
     scheduleOnly = false,
-  } = options;
+  } = options as {
+    force?: boolean;
+    reason?: string;
+    runAt?: number | null;
+    delaySeconds?: number | null;
+    scheduleOnly?: boolean;
+  };
   const cache = getDiscoveryCache();
 
   if (!scheduleOnly) {
     if (isHonkerLockHeld(DISCOVERY_GLOBAL_REFRESH_LOCK)) {
-      return { enqueued: false, reason: "updating" };
+      return { enqueued: false, reason: 'updating' };
     }
     if (!force && isDiscoveryRefreshQueueLocked()) {
-      return { enqueued: false, reason: "queued" };
+      return { enqueued: false, reason: 'queued' };
     }
     if (!tryAcquireDiscoveryRefreshQueueLock()) {
-      return { enqueued: false, reason: "queued" };
+      return { enqueued: false, reason: 'queued' };
     }
     if (!cache.isUpdating) {
       cache.isUpdating = true;
@@ -161,12 +155,8 @@ export function enqueueDiscoveryRefresh(options = {}) {
   }
 
   try {
-    if (
-      scheduleOnly &&
-      reason === "scheduled" &&
-      getPendingScheduledDiscoveryRefresh()
-    ) {
-      return { enqueued: false, reason: "already_scheduled" };
+    if (scheduleOnly && reason === 'scheduled' && getPendingScheduledDiscoveryRefresh()) {
+      return { enqueued: false, reason: 'already_scheduled' };
     }
     enqueueDiscoveryRefreshJob(
       {
@@ -174,7 +164,7 @@ export function enqueueDiscoveryRefresh(options = {}) {
         requestedAt: Date.now(),
         scheduleOnly: scheduleOnly === true,
       },
-      { runAt, delaySeconds },
+      { runAt: runAt ?? undefined, delaySeconds: delaySeconds ?? undefined },
     );
   } catch (error) {
     if (!scheduleOnly) {
@@ -190,15 +180,13 @@ export function scheduleNextDiscoveryRefresh() {
   pruneDuplicateScheduledDiscoveryRefreshes();
   const cache = getDiscoveryCache();
   const refreshMs = getDiscoveryAutoRefreshHours() * 60 * 60 * 1000;
-  const base = cache.lastUpdated
-    ? new Date(cache.lastUpdated).getTime()
-    : Date.now();
+  const base = cache.lastUpdated ? new Date(cache.lastUpdated).getTime() : Date.now();
   const runAtMs = base + refreshMs;
   if (runAtMs <= Date.now()) {
-    return enqueueDiscoveryRefresh({ reason: "scheduled" });
+    return enqueueDiscoveryRefresh({ reason: 'scheduled' });
   }
   return enqueueDiscoveryRefresh({
-    reason: "scheduled",
+    reason: 'scheduled',
     runAt: runAtMs,
     scheduleOnly: true,
   });
@@ -206,28 +194,23 @@ export function scheduleNextDiscoveryRefresh() {
 
 export async function enqueueDiscoveryRefreshIfNeeded(options = {}) {
   if (!(await isDiscoveryRefreshConfigured())) {
-    return { enqueued: false, reason: "not_configured" };
+    return { enqueued: false, reason: 'not_configured' };
   }
-  if (!options.force && !discoveryNeedsRefresh()) {
-    return { enqueued: false, reason: "fresh" };
+    if (!(options as Record<string, unknown>).force && !discoveryNeedsRefresh()) {
+    return { enqueued: false, reason: 'fresh' };
   }
   return enqueueDiscoveryRefresh(options);
 }
 
 export async function bootstrapDiscoveryRefresh() {
   const cache = getDiscoveryCache();
-  if (
-    !isHonkerLockHeld("discovery-global-refresh") &&
-    !isDiscoveryRefreshQueueLocked()
-  ) {
+  if (!isHonkerLockHeld('discovery-global-refresh') && !isDiscoveryRefreshQueueLocked()) {
     cache.isUpdating = false;
     clearDiscoveryUpdateProgress();
   }
 
   if (!(await isDiscoveryRefreshConfigured())) {
-    console.log(
-      "Discovery not configured (no Last.fm API key and no artists). Clearing cache.",
-    );
+    console.log('Discovery not configured (no Last.fm API key and no artists). Clearing cache.');
     try {
       dbOps.updateDiscoveryCache({
         recommendations: [],
@@ -246,24 +229,22 @@ export async function bootstrapDiscoveryRefresh() {
         lastUpdated: null,
         isUpdating: false,
       });
-    } catch (error) {
-      console.error("Failed to clear discovery cache:", error.message);
+    } catch (error: unknown) {
+      console.error('Failed to clear discovery cache:', (error as Error).message);
     }
     return;
   }
 
-  const result = await enqueueDiscoveryRefreshIfNeeded({ reason: "startup" });
-  if (result.reason === "fresh") {
+  const result = await enqueueDiscoveryRefreshIfNeeded({ reason: 'startup' });
+  if (result.reason === 'fresh') {
     const latest = getDiscoveryCache();
     if (
       (!latest.recommendations?.length && !latest.globalTop?.length) ||
       !latest.topGenres?.length
     ) {
-      const retry = enqueueDiscoveryRefresh({ reason: "startup_incomplete" });
+      const retry = enqueueDiscoveryRefresh({ reason: 'startup_incomplete' });
       if (retry.enqueued) {
-        console.log(
-          "Discovery cache timestamp exists but data is incomplete. Re-queued refresh.",
-        );
+        console.log('Discovery cache timestamp exists but data is incomplete. Re-queued refresh.');
       }
       return;
     }
@@ -274,14 +255,14 @@ export async function bootstrapDiscoveryRefresh() {
     return;
   }
   if (result.enqueued) {
-    console.log("Discovery cache needs update. Queued refresh.");
+    console.log('Discovery cache needs update. Queued refresh.');
   }
 }
 
 export function requestDiscoveryRefresh(options = {}) {
   return enqueueDiscoveryRefresh({
     ...options,
-    reason: options.reason || "manual",
-    force: options.force === true,
+    reason: (options as Record<string, unknown>).reason || 'manual',
+    force: (options as Record<string, unknown>).force === true,
   });
 }

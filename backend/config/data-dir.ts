@@ -1,11 +1,11 @@
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_DATA_DIR = path.join(__dirname, "..", "data");
-const CANONICAL_CONTAINER_DATA_DIR = "/config";
-const LEGACY_CONTAINER_DATA_DIR = "/app/backend/data";
+const DEFAULT_DATA_DIR = path.join(__dirname, '..', 'data');
+const CANONICAL_CONTAINER_DATA_DIR = '/config';
+const LEGACY_CONTAINER_DATA_DIR = '/app/backend/data';
 
 function isDirectory(dir: string) {
   try {
@@ -17,7 +17,7 @@ function isDirectory(dir: string) {
 
 function hasDatabaseFile(dir: string) {
   try {
-    return fs.existsSync(path.join(dir, "aurral.db"));
+    return fs.existsSync(path.join(dir, 'aurral.db'));
   } catch {
     return false;
   }

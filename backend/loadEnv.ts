@@ -1,13 +1,13 @@
-import dotenv from "dotenv";
-import { basename, dirname, join } from "path";
-import { fileURLToPath } from "url";
+import dotenv from 'dotenv';
+import { basename, dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
 declare global {
-  // eslint-disable-next-line no-var
+   
   var __aurralConsoleTimestampPatched: boolean | undefined;
 }
 
-const TRUE_ENV_VALUES = new Set(["1", "true", "yes", "on", "verbose", "debug"]);
+const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'on', 'verbose', 'debug']);
 const DEFAULT_VISIBLE_MESSAGES = [
   /^Server running on port \d+/,
   /^Port \d+ is already in use\./,
@@ -19,49 +19,44 @@ const DEFAULT_VISIBLE_MESSAGES = [
 
 export const isVerboseConsoleEnabled = (env = process.env) =>
   TRUE_ENV_VALUES.has(
-    String(env.AURRAL_VERBOSE_LOGS || "").trim().toLowerCase(),
+    String(env.AURRAL_VERBOSE_LOGS || '')
+      .trim()
+      .toLowerCase(),
   );
 
-const isServerProcess = (argv = process.argv) =>
-  basename(argv[1] || "") === "server.ts";
+const isServerProcess = (argv = process.argv) => basename(argv[1] || '') === 'server.ts';
 
-const formatLogTimestamp = () =>
-  new Date().toISOString().replace("T", " ").slice(0, 19);
+const formatLogTimestamp = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
 
 const hasTimestampPrefix = (value: unknown) =>
-  typeof value === "string" &&
-  /^\[\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(value);
+  typeof value === 'string' && /^\[\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(value);
 
 const toCompactConsoleValue = (value: unknown) => {
-  if (value == null) return "";
+  if (value == null) return '';
   if (value instanceof Error) return value.message || value.name;
-  if (typeof value === "string") return value;
-  if (
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    typeof value === "bigint"
-  ) {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
     return String(value);
   }
-  return "";
+  return '';
 };
 
 export const shouldEmitDefaultConsoleMessage = (method: string, args: unknown[] = []) => {
-  if (method === "debug") return false;
-  if (method === "warn" || method === "error") return true;
+  if (method === 'debug') return false;
+  if (method === 'warn' || method === 'error') return true;
 
   const first = args[0];
-  if (typeof first !== "string") return false;
+  if (typeof first !== 'string') return false;
   return DEFAULT_VISIBLE_MESSAGES.some((pattern) => pattern.test(first));
 };
 
 const formatDefaultConsoleArgs = (args: unknown[] = []): string[] => {
   const values = args.map(toCompactConsoleValue).filter(Boolean) as string[];
-  if (values.length > 0) return [values.join(" ")];
+  if (values.length > 0) return [values.join(' ')];
   if (args.length > 0) {
-    return ["Details hidden. Set AURRAL_VERBOSE_LOGS=true for full logs."];
+    return ['Details hidden. Set AURRAL_VERBOSE_LOGS=true for full logs.'];
   }
-  return [""];
+  return [''];
 };
 
 const patchConsoleWithTimestamp = () => {
@@ -70,16 +65,14 @@ const patchConsoleWithTimestamp = () => {
   const verbose = isVerboseConsoleEnabled();
   const compactServerConsole = isServerProcess() && !verbose;
 
-  for (const method of ["log", "info", "warn", "error", "debug"] as const) {
-    const original = (console as any)[method].bind(console);
-    (console as any)[method] = (...args: any[]) => {
+  for (const method of ['log', 'info', 'warn', 'error', 'debug'] as const) {
+    const original = (console as unknown as Record<string, (...args: unknown[]) => void>)[method].bind(console);
+    (console as unknown as Record<string, (...args: unknown[]) => void>)[method] = (...args: unknown[]) => {
       if (compactServerConsole && !shouldEmitDefaultConsoleMessage(method, args)) {
         return;
       }
 
-      const visibleArgs = compactServerConsole
-        ? formatDefaultConsoleArgs(args)
-        : args;
+      const visibleArgs = compactServerConsole ? formatDefaultConsoleArgs(args) : args;
       const timestamp = `[${formatLogTimestamp()}]`;
       if (visibleArgs.length === 0) {
         original(timestamp);
@@ -87,7 +80,7 @@ const patchConsoleWithTimestamp = () => {
       }
 
       const [first, ...rest] = visibleArgs;
-      if (typeof first === "string") {
+      if (typeof first === 'string') {
         if (hasTimestampPrefix(first)) {
           original(first, ...rest);
           return;
@@ -101,6 +94,6 @@ const patchConsoleWithTimestamp = () => {
 };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: join(__dirname, ".env"), quiet: true });
+dotenv.config({ path: join(__dirname, '.env'), quiet: true });
 
 patchConsoleWithTimestamp();

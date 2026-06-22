@@ -1,53 +1,54 @@
-import { validateExternalUrl } from "../middleware/urlValidator.js";
+import { validateExternalUrl } from '../middleware/urlValidator.js';
 
-export function resolveLidarrTestCredentials(query = {}, configuredClient = null) {
-  const testUrl = String(query.url || "").trim();
-  const testApiKey = String(query.apiKey || "").trim();
+export function resolveLidarrTestCredentials(query: Record<string, unknown> = {}, configuredClient: Record<string, unknown> | null = null) {
+  const testUrl = String(query.url || '').trim();
+  const testApiKey = String(query.apiKey || '').trim();
   if (testUrl && testApiKey) {
     return { url: testUrl, apiKey: testApiKey, usingProvided: true };
   }
-  configuredClient?.updateConfig?.();
-  const config = configuredClient?.getConfig?.() || {};
+  ((configuredClient as any).updateConfig as (() => void) | undefined)?.();
+  const config = ((configuredClient as any).getConfig as (() => Record<string, unknown>) | undefined)?.() || {};
   return {
-    url: String(config.url || "").trim(),
-    apiKey: String(config.apiKey || "").trim(),
+    url: String(config.url || '').trim(),
+    apiKey: String(config.apiKey || '').trim(),
     usingProvided: false,
   };
 }
 
-export function validateLidarrTestCredentials(url, apiKey) {
+export function validateLidarrTestCredentials(url: unknown, apiKey: unknown) {
   if (!url || !apiKey) {
-    return { valid: false, error: "Lidarr URL and API key are required" };
+    return { valid: false, error: 'Lidarr URL and API key are required' };
   }
-  const urlValidation = validateExternalUrl(url);
+  const urlValidation = validateExternalUrl(String(url));
   if (!urlValidation.valid) {
     return { valid: false, error: urlValidation.error };
   }
-  return { valid: true, url: urlValidation.url.replace(/\/+$/, "") };
+  return { valid: true, url: (urlValidation.url || '').replace(/\/+$/, '') };
 }
 
-export async function withTemporaryLidarrClient(url, apiKey, fn) {
-  const { lidarrClient } = await import("./lidarrClient.js");
-  const originalConfig = { ...lidarrClient.config };
-  const originalApiPath = lidarrClient.apiPath;
-  const originalHoldConfig = lidarrClient._holdConfig;
+export async function withTemporaryLidarrClient(url: unknown, apiKey: unknown, fn: (client: unknown) => unknown | Promise<unknown>) {
+  const { lidarrClient } = await import('./lidarrClient.js');
+  const client = lidarrClient as unknown as Record<string, unknown>;
+  const originalConfig = { ...(client.config as Record<string, unknown>) };
+  const originalApiPath = client.apiPath;
+  const originalHoldConfig = client._holdConfig;
 
-  lidarrClient._holdConfig = true;
-  lidarrClient.config = {
-    url: url.replace(/\/+$/, ""),
-    apiKey: apiKey.trim(),
-    insecure: originalConfig.insecure,
-    timeoutMs: originalConfig.timeoutMs,
+  client._holdConfig = true;
+  client.config = {
+    url: String(url).replace(/\/+$/, ''),
+    apiKey: String(apiKey).trim(),
+    insecure: (originalConfig as Record<string, unknown>).insecure,
+    timeoutMs: (originalConfig as Record<string, unknown>).timeoutMs,
     circuitDisabled: true,
   };
-  lidarrClient.apiPath = "/api/v1";
+  client.apiPath = '/api/v1';
 
   try {
     return await fn(lidarrClient);
   } finally {
-    lidarrClient._holdConfig = originalHoldConfig;
-    lidarrClient.config = originalConfig;
-    lidarrClient.apiPath = originalApiPath;
-    lidarrClient.updateConfig();
+    client._holdConfig = originalHoldConfig;
+    client.config = originalConfig;
+    client.apiPath = originalApiPath;
+    (lidarrClient as unknown as { updateConfig: () => void }).updateConfig();
   }
 }

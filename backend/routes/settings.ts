@@ -1,93 +1,97 @@
-import express from "express";
-import { dbOps } from "../config/db-helpers.js";
+import { Request, Response } from 'express';
+import express from 'express';
+import { dbOps } from '../config/db-helpers.js';
 import {
   DEFAULT_METADATA_BASE_URL,
   DEFAULT_SEARCH_URL,
   LEGACY_METADATA_BASE_URL,
   defaultData,
-} from "../config/constants.js";
-import { reconcileLocalNetworkBypassSetting } from "../middleware/auth.js";
-import { noCache } from "../middleware/cache.js";
-import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
-import { validateExternalUrl } from "../middleware/urlValidator.js";
-import { websocketService } from "../services/websocketService.js";
-import { resolvePlaylistRoot } from "../services/playlistPaths.js";
-import { normalizePathMappings } from "../services/pathMappings.js";
-import {
-  normalizeM3uPathMappings,
-  normalizeM3uPathMode,
-} from "../services/playlistM3uPaths.js";
+} from '../config/constants.js';
+import { reconcileLocalNetworkBypassSetting } from '../middleware/auth.js';
+import { noCache } from '../middleware/cache.js';
+import { requireAuth, requireAdmin } from '../middleware/requirePermission.js';
+import { validateExternalUrl } from '../middleware/urlValidator.js';
+import { websocketService } from '../services/websocketService.js';
+import { resolvePlaylistRoot } from '../services/playlistPaths.js';
+import { normalizePathMappings } from '../services/pathMappings.js';
+import { normalizeM3uPathMappings, normalizeM3uPathMode } from '../services/playlistM3uPaths.js';
+
+ 
+type Settings = Record<string, any>;
 
 const router = express.Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
-function normalizeMetadataBaseUrl(baseUrl) {
-  const trimmed = String(baseUrl || "").trim().replace(/\/+$/, "");
+function normalizeMetadataBaseUrl(baseUrl: unknown) {
+  const trimmed = String(baseUrl || '')
+    .trim()
+    .replace(/\/+$/, '');
   return trimmed === LEGACY_METADATA_BASE_URL ? DEFAULT_METADATA_BASE_URL : trimmed;
 }
 
-router.get("/", noCache, (req, res) => {
+router.get('/', noCache, (req: Request, res: Response) => {
   try {
-    const settings = dbOps.getSettings();
-    if (settings?.integrations?.coverArtArchive) {
-      delete settings.integrations.coverArtArchive;
+    const settings: Settings = dbOps.getSettings();
+    const integrations: Settings = settings.integrations || {};
+    if (integrations.coverArtArchive) {
+      delete integrations.coverArtArchive;
     }
-    if (settings?.integrations?.musicbrainz) {
-      delete settings.integrations.musicbrainz;
+    if (integrations.musicbrainz) {
+      delete integrations.musicbrainz;
     }
-    if (!settings?.integrations?.search) {
-      settings.integrations.search = {
+    if (!integrations.search) {
+      integrations.search = {
         url: DEFAULT_SEARCH_URL,
-        apiKey: "",
+        apiKey: '',
       };
     } else {
-      settings.integrations.search = {
-        url: settings.integrations.search.url || DEFAULT_SEARCH_URL,
-        apiKey: settings.integrations.search.apiKey || "",
+      integrations.search = {
+        url: integrations.search.url || DEFAULT_SEARCH_URL,
+        apiKey: integrations.search.apiKey || '',
       };
     }
-    if (!settings?.integrations?.metadata) {
-      const legacyMusicbrainz = dbOps.getSettings()?.integrations?.musicbrainz || {};
-      settings.integrations.metadata = {
-        provider: "brainzmash",
+    if (!integrations.metadata) {
+      const legacyMusicbrainz =
+        (dbOps.getSettings() as Settings).integrations?.musicbrainz || {};
+      integrations.metadata = {
+        provider: 'brainzmash',
         baseUrl: normalizeMetadataBaseUrl(
-          String(legacyMusicbrainz.customUrl || "").trim().replace(/\/ws\/2\/?$/, "") ||
-            DEFAULT_METADATA_BASE_URL,
+          String(legacyMusicbrainz.customUrl || '')
+            .trim()
+            .replace(/\/ws\/2\/?$/, '') || DEFAULT_METADATA_BASE_URL,
         ),
-        userAgentSuffix: "",
+        userAgentSuffix: '',
         enableNarrowFallbacks: true,
       };
     } else {
-      settings.integrations.metadata = {
-        ...settings.integrations.metadata,
+      integrations.metadata = {
+        ...integrations.metadata,
         baseUrl: normalizeMetadataBaseUrl(
-          settings.integrations.metadata.baseUrl || DEFAULT_METADATA_BASE_URL,
+          integrations.metadata.baseUrl || DEFAULT_METADATA_BASE_URL,
         ),
       };
     }
+    const security: Settings = settings.security || {};
     settings.security = {
-      ...(settings.security || {}),
+      ...security,
       localNetworkBypass: {
-        enabled: settings?.security?.localNetworkBypass?.enabled === true,
+        enabled: security.localNetworkBypass?.enabled === true,
       },
     };
     res.json({
       ...settings,
-      downloadFolderPath:
-        settings.downloadFolderPath || resolvePlaylistRoot(),
+      downloadFolderPath: settings.downloadFolderPath || resolvePlaylistRoot(),
     });
-  } catch (error) {
-    console.error("Settings GET error:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch settings", message: error.message });
+  } catch (error: unknown) {
+    console.error('Settings GET error:', error);
+    res.status(500).json({ error: 'Failed to fetch settings', message: (error as Error).message });
   }
 });
 
-router.post("/slskd/test", async (req, res) => {
+router.post('/slskd/test', async (req: Request, res: Response) => {
   try {
-    const { slskdClient } = await import("../services/slskdClient.js");
+    const { slskdClient } = await import('../services/slskdClient.js');
     const result = await slskdClient.testConnection({ force: true });
     if (!result.configured) {
       return res.status(400).json(result);
@@ -97,20 +101,20 @@ router.post("/slskd/test", async (req, res) => {
     }
     return res.json({
       success: true,
-      warning: result.warning === true,
+      warning: (result as Settings).warning === true,
       ...result,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     return res.status(500).json({
-      error: "slskd test failed",
-      message: error.message,
+      error: 'slskd test failed',
+      message: (error as Error).message,
     });
   }
 });
 
-router.post("/prowlarr/test", async (req, res) => {
+router.post('/prowlarr/test', async (req: Request, res: Response) => {
   try {
-    const { prowlarrClient } = await import("../services/prowlarrClient.js");
+    const { prowlarrClient } = await import('../services/prowlarrClient.js');
     const result = await prowlarrClient.testConnection({ force: true });
     if (!result.configured) {
       return res.status(400).json(result);
@@ -122,30 +126,30 @@ router.post("/prowlarr/test", async (req, res) => {
       success: true,
       ...result,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     return res.status(500).json({
-      error: "Prowlarr test failed",
-      message: error.message,
+      error: 'Prowlarr test failed',
+      message: (error as Error).message,
     });
   }
 });
 
-router.get("/prowlarr/indexers", async (_req, res) => {
+router.get('/prowlarr/indexers', async (_req: Request, res: Response) => {
   try {
-    const { prowlarrClient } = await import("../services/prowlarrClient.js");
+    const { prowlarrClient } = await import('../services/prowlarrClient.js');
     const indexers = await prowlarrClient.listUsenetIndexers();
     return res.json({ indexers });
-  } catch (error) {
+  } catch (error: unknown) {
     return res.status(500).json({
-      error: "Failed to load Prowlarr indexers",
-      message: error.message,
+      error: 'Failed to load Prowlarr indexers',
+      message: (error as Error).message,
     });
   }
 });
 
-router.post("/nzbget/test", async (req, res) => {
+router.post('/nzbget/test', async (req: Request, res: Response) => {
   try {
-    const { nzbgetClient } = await import("../services/nzbgetClient.js");
+    const { nzbgetClient } = await import('../services/nzbgetClient.js');
     const result = await nzbgetClient.testConnection({ force: true });
     if (!result.configured) {
       return res.status(400).json(result);
@@ -157,31 +161,33 @@ router.post("/nzbget/test", async (req, res) => {
       success: true,
       ...result,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     return res.status(500).json({
-      error: "NZBGet test failed",
-      message: error.message,
+      error: 'NZBGet test failed',
+      message: (error as Error).message,
     });
   }
 });
 
-router.post("/", async (req, res) => {
+router.post('/', async (req: Request, res: Response) => {
   try {
+    const body = req.body as Settings;
     const {
       quality,
       releaseTypes,
-      integrations,
+      integrations: bodyIntegrations,
       rootFolderPath,
       downloadFolderPath,
       pathMappings,
-      security,
+      security: bodySecurity,
       playlistArtwork,
-    } = req.body;
+    } = body;
 
-    const currentSettings = dbOps.getSettings();
-    const localBypassWasEnabled =
-      currentSettings?.security?.localNetworkBypass?.enabled === true;
-    const lidarrExternalUrl = integrations?.lidarr?.externalUrl;
+    const currentSettings: Settings = dbOps.getSettings();
+    const currentIntegrations: Settings = currentSettings.integrations || {};
+    const currentSecurity: Settings = currentSettings.security || {};
+    const localBypassWasEnabled = currentSecurity.localNetworkBypass?.enabled === true;
+    const lidarrExternalUrl = bodyIntegrations?.lidarr?.externalUrl;
     if (lidarrExternalUrl !== undefined) {
       const trimmedExternalUrl = String(lidarrExternalUrl).trim();
       if (trimmedExternalUrl) {
@@ -189,18 +195,18 @@ router.post("/", async (req, res) => {
         if (!urlValidation.valid) {
           return res.status(400).json({ error: urlValidation.error });
         }
-        integrations.lidarr.externalUrl = urlValidation.url;
+        bodyIntegrations.lidarr.externalUrl = urlValidation.url!;
       } else {
-        integrations.lidarr.externalUrl = "";
+        bodyIntegrations.lidarr.externalUrl = '';
       }
     }
 
-    if (integrations?.search) {
-      const nextSearch = {
-        ...(currentSettings.integrations?.search || {}),
-        ...integrations.search,
+    if (bodyIntegrations?.search) {
+      const nextSearch: Settings = {
+        ...(currentIntegrations.search || {}),
+        ...bodyIntegrations.search,
       };
-      const trimmedSearchUrl = String(nextSearch.url || "").trim();
+      const trimmedSearchUrl = String(nextSearch.url || '').trim();
       if (trimmedSearchUrl) {
         const urlValidation = validateExternalUrl(trimmedSearchUrl);
         if (!urlValidation.valid) {
@@ -208,44 +214,42 @@ router.post("/", async (req, res) => {
             error: `Invalid search URL: ${urlValidation.error}`,
           });
         }
-        nextSearch.url = urlValidation.url.replace(/\/+$/, "");
+        nextSearch.url = urlValidation.url!.replace(/\/+$/, '');
       } else {
-        nextSearch.url = "";
+        nextSearch.url = '';
       }
-      nextSearch.apiKey =
-        typeof nextSearch.apiKey === "string" ? nextSearch.apiKey.trim() : "";
-      integrations.search = nextSearch;
+      nextSearch.apiKey = typeof nextSearch.apiKey === 'string' ? nextSearch.apiKey.trim() : '';
+      bodyIntegrations.search = nextSearch;
     }
-    if (integrations?.metadata) {
-      const nextMetadata = {
-        ...(currentSettings.integrations?.metadata || {}),
-        ...integrations.metadata,
+    if (bodyIntegrations?.metadata) {
+      const nextMetadata: Settings = {
+        ...(currentIntegrations.metadata || {}),
+        ...bodyIntegrations.metadata,
       };
-      nextMetadata.provider = "brainzmash";
-      const baseUrlValidation = validateExternalUrl(nextMetadata.baseUrl || "");
+      nextMetadata.provider = 'brainzmash';
+      const baseUrlValidation = validateExternalUrl(String(nextMetadata.baseUrl || ''));
       if (!baseUrlValidation.valid) {
         return res.status(400).json({
           error: `Invalid metadata base URL: ${baseUrlValidation.error}`,
         });
       }
-      nextMetadata.baseUrl = normalizeMetadataBaseUrl(baseUrlValidation.url);
+      nextMetadata.baseUrl = normalizeMetadataBaseUrl(baseUrlValidation.url!);
       nextMetadata.userAgentSuffix =
-        typeof nextMetadata.userAgentSuffix === "string"
+        typeof nextMetadata.userAgentSuffix === 'string'
           ? nextMetadata.userAgentSuffix.trim()
-          : "";
-      nextMetadata.enableNarrowFallbacks =
-        nextMetadata.enableNarrowFallbacks !== false;
-      integrations.metadata = nextMetadata;
+          : '';
+      nextMetadata.enableNarrowFallbacks = nextMetadata.enableNarrowFallbacks !== false;
+      bodyIntegrations.metadata = nextMetadata;
     }
-    if (integrations?.coverArtArchive) {
-      delete integrations.coverArtArchive;
+    if (bodyIntegrations?.coverArtArchive) {
+      delete bodyIntegrations.coverArtArchive;
     }
-    if (integrations?.prowlarr) {
-      const nextProwlarr = {
-        ...(currentSettings.integrations?.prowlarr || {}),
-        ...integrations.prowlarr,
+    if (bodyIntegrations?.prowlarr) {
+      const nextProwlarr: Settings = {
+        ...(currentIntegrations.prowlarr || {}),
+        ...bodyIntegrations.prowlarr,
       };
-      const trimmedUrl = String(nextProwlarr.url || "").trim();
+      const trimmedUrl = String(nextProwlarr.url || '').trim();
       if (trimmedUrl) {
         const urlValidation = validateExternalUrl(trimmedUrl);
         if (!urlValidation.valid) {
@@ -253,37 +257,35 @@ router.post("/", async (req, res) => {
             error: `Invalid Prowlarr URL: ${urlValidation.error}`,
           });
         }
-        nextProwlarr.url = urlValidation.url.replace(/\/+$/, "");
+        nextProwlarr.url = urlValidation.url!.replace(/\/+$/, '');
       } else {
-        nextProwlarr.url = "";
+        nextProwlarr.url = '';
       }
       nextProwlarr.enabled = nextProwlarr.enabled === true;
       nextProwlarr.apiKey =
-        typeof nextProwlarr.apiKey === "string"
-          ? nextProwlarr.apiKey.trim()
-          : "";
+        typeof nextProwlarr.apiKey === 'string' ? nextProwlarr.apiKey.trim() : '';
       nextProwlarr.categories = Array.isArray(nextProwlarr.categories)
         ? nextProwlarr.categories
-            .map((entry) => Number.parseInt(entry, 10))
-            .filter((entry) => Number.isFinite(entry) && entry > 0)
-        : String(nextProwlarr.categories || "")
-            .split(",")
-            .map((entry) => Number.parseInt(entry.trim(), 10))
-            .filter((entry) => Number.isFinite(entry) && entry > 0);
+            .map((entry: unknown) => Number.parseInt(entry as string, 10))
+            .filter((entry: number) => Number.isFinite(entry) && entry > 0)
+        : String(nextProwlarr.categories || '')
+            .split(',')
+            .map((entry: string) => Number.parseInt(entry.trim(), 10))
+            .filter((entry: number) => Number.isFinite(entry) && entry > 0);
       if (nextProwlarr.categories.length === 0) {
         nextProwlarr.categories = [3000];
       }
-      const maxResults = Number.parseInt(nextProwlarr.maxResults, 10);
+      const maxResults = Number.parseInt(String(nextProwlarr.maxResults), 10);
       nextProwlarr.maxResults = Number.isFinite(maxResults)
         ? Math.min(200, Math.max(10, maxResults))
         : 60;
-      const indexers =
-        nextProwlarr.indexers && typeof nextProwlarr.indexers === "object"
+      const indexers: Settings =
+        nextProwlarr.indexers && typeof nextProwlarr.indexers === 'object'
           ? nextProwlarr.indexers
           : {};
       nextProwlarr.indexers = Object.fromEntries(
         Object.entries(indexers)
-          .map(([id, entry]) => {
+          .map(([id, entry]: [string, Settings]) => {
             const parsedId = Number.parseInt(id, 10);
             if (!Number.isFinite(parsedId)) return null;
             const priority = Number.parseInt(entry?.priority, 10);
@@ -291,22 +293,20 @@ router.post("/", async (req, res) => {
               String(parsedId),
               {
                 enabled: entry?.enabled !== false,
-                priority: Number.isFinite(priority)
-                  ? Math.min(1000, Math.max(1, priority))
-                  : 25,
+                priority: Number.isFinite(priority) ? Math.min(1000, Math.max(1, priority)) : 25,
               },
             ];
           })
-          .filter(Boolean),
+          .filter(Boolean) as [string, Settings][],
       );
-      integrations.prowlarr = nextProwlarr;
+      bodyIntegrations.prowlarr = nextProwlarr;
     }
-    if (integrations?.nzbget) {
-      const nextNzbget = {
-        ...(currentSettings.integrations?.nzbget || {}),
-        ...integrations.nzbget,
+    if (bodyIntegrations?.nzbget) {
+      const nextNzbget: Settings = {
+        ...(currentIntegrations.nzbget || {}),
+        ...bodyIntegrations.nzbget,
       };
-      const trimmedUrl = String(nextNzbget.url || "").trim();
+      const trimmedUrl = String(nextNzbget.url || '').trim();
       if (trimmedUrl) {
         const urlValidation = validateExternalUrl(trimmedUrl);
         if (!urlValidation.valid) {
@@ -314,169 +314,155 @@ router.post("/", async (req, res) => {
             error: `Invalid NZBGet URL: ${urlValidation.error}`,
           });
         }
-        nextNzbget.url = urlValidation.url.replace(/\/+$/, "");
+        nextNzbget.url = urlValidation.url!.replace(/\/+$/, '');
       } else {
-        nextNzbget.url = "";
+        nextNzbget.url = '';
       }
       nextNzbget.enabled = nextNzbget.enabled === true;
       nextNzbget.username =
-        typeof nextNzbget.username === "string"
-          ? nextNzbget.username.trim()
-          : "";
+        typeof nextNzbget.username === 'string' ? nextNzbget.username.trim() : '';
       nextNzbget.password =
-        typeof nextNzbget.password === "string" ? nextNzbget.password : "";
-      nextNzbget.category =
-        String(nextNzbget.category || "aurral").trim() || "aurral";
-      const priority = Number.parseInt(nextNzbget.priority, 10);
+        typeof nextNzbget.password === 'string' ? nextNzbget.password : '';
+      nextNzbget.category = String(nextNzbget.category || 'aurral').trim() || 'aurral';
+      const priority = Number.parseInt(String(nextNzbget.priority), 10);
       nextNzbget.priority = Number.isFinite(priority)
         ? Math.min(1000, Math.max(1, priority))
         : 20;
-      const nzbPriority = Number.parseInt(nextNzbget.nzbPriority, 10);
+      const nzbPriority = Number.parseInt(String(nextNzbget.nzbPriority), 10);
       nextNzbget.nzbPriority = Number.isFinite(nzbPriority)
         ? Math.min(900, Math.max(-100, nzbPriority))
         : 0;
       nextNzbget.addPaused = nextNzbget.addPaused === true;
       nextNzbget.completedPath =
-        typeof nextNzbget.completedPath === "string"
-          ? nextNzbget.completedPath.trim()
-          : "";
-      integrations.nzbget = nextNzbget;
+        typeof nextNzbget.completedPath === 'string' ? nextNzbget.completedPath.trim() : '';
+      bodyIntegrations.nzbget = nextNzbget;
     }
-    if (integrations?.slskd) {
-      const priority = Number.parseInt(integrations.slskd.priority, 10);
-      integrations.slskd.enabled = integrations.slskd.enabled !== false;
-      integrations.slskd.priority = Number.isFinite(priority)
-        ? Math.min(1000, Math.max(1, priority))
+    if (bodyIntegrations?.slskd) {
+      const slskdPriority = Number.parseInt(String(bodyIntegrations.slskd.priority), 10);
+      bodyIntegrations.slskd.enabled = bodyIntegrations.slskd.enabled !== false;
+      bodyIntegrations.slskd.priority = Number.isFinite(slskdPriority)
+        ? Math.min(1000, Math.max(1, slskdPriority))
         : 10;
     }
-    if (integrations?.navidrome) {
-      integrations.navidrome.m3uPathMode = normalizeM3uPathMode(
-        integrations.navidrome.m3uPathMode,
+    if (bodyIntegrations?.navidrome) {
+      bodyIntegrations.navidrome.m3uPathMode = normalizeM3uPathMode(
+        bodyIntegrations.navidrome.m3uPathMode,
       );
-      integrations.navidrome.pathMappings = normalizeM3uPathMappings(
-        integrations.navidrome.pathMappings,
+      bodyIntegrations.navidrome.pathMappings = normalizeM3uPathMappings(
+        bodyIntegrations.navidrome.pathMappings,
       );
     }
 
-    let mergedIntegrations =
+    let mergedIntegrations: Settings =
       currentSettings.integrations || defaultData.settings.integrations || {};
-    if (integrations) {
+    if (bodyIntegrations) {
       mergedIntegrations = {
         ...mergedIntegrations,
-        ...integrations,
-        lidarr: integrations.lidarr
+        ...bodyIntegrations,
+        lidarr: bodyIntegrations.lidarr
           ? {
               ...(mergedIntegrations.lidarr || {}),
-              ...integrations.lidarr,
+              ...bodyIntegrations.lidarr,
             }
           : mergedIntegrations.lidarr,
-        navidrome: integrations.navidrome
+        navidrome: bodyIntegrations.navidrome
           ? {
               ...(mergedIntegrations.navidrome || {}),
-              ...integrations.navidrome,
+              ...bodyIntegrations.navidrome,
             }
           : mergedIntegrations.navidrome,
-        plex: integrations.plex
+        plex: bodyIntegrations.plex
           ? {
               ...(mergedIntegrations.plex || {}),
-              ...integrations.plex,
-              // Never let a blank token/clientId from the client wipe the
-              // stored credentials (the UI doesn't always carry them).
-              token:
-                integrations.plex.token ||
-                mergedIntegrations.plex?.token ||
-                "",
+              ...bodyIntegrations.plex,
+              token: bodyIntegrations.plex.token || mergedIntegrations.plex?.token || '',
               clientId:
-                integrations.plex.clientId ||
-                mergedIntegrations.plex?.clientId ||
-                "",
+                bodyIntegrations.plex.clientId || mergedIntegrations.plex?.clientId || '',
             }
           : mergedIntegrations.plex,
-        slskd: integrations.slskd
+        slskd: bodyIntegrations.slskd
           ? {
               ...(mergedIntegrations.slskd || {}),
-              ...integrations.slskd,
+              ...bodyIntegrations.slskd,
             }
           : mergedIntegrations.slskd,
-        prowlarr: integrations.prowlarr
+        prowlarr: bodyIntegrations.prowlarr
           ? {
               ...(mergedIntegrations.prowlarr || {}),
-              ...integrations.prowlarr,
+              ...bodyIntegrations.prowlarr,
             }
           : mergedIntegrations.prowlarr,
-        nzbget: integrations.nzbget
+        nzbget: bodyIntegrations.nzbget
           ? {
               ...(mergedIntegrations.nzbget || {}),
-              ...integrations.nzbget,
+              ...bodyIntegrations.nzbget,
             }
           : mergedIntegrations.nzbget,
-        lastfm: integrations.lastfm
+        lastfm: bodyIntegrations.lastfm
           ? {
               ...(mergedIntegrations.lastfm || {}),
-              ...integrations.lastfm,
+              ...bodyIntegrations.lastfm,
             }
           : mergedIntegrations.lastfm,
-        ticketmaster: integrations.ticketmaster
+        ticketmaster: bodyIntegrations.ticketmaster
           ? {
               ...(mergedIntegrations.ticketmaster || {}),
-              ...integrations.ticketmaster,
+              ...bodyIntegrations.ticketmaster,
             }
           : mergedIntegrations.ticketmaster,
-        metadata: integrations.metadata
+        metadata: bodyIntegrations.metadata
           ? {
               ...(mergedIntegrations.metadata || {}),
-              ...integrations.metadata,
+              ...bodyIntegrations.metadata,
             }
           : mergedIntegrations.metadata,
-        search: integrations.search
+        search: bodyIntegrations.search
           ? {
               ...(mergedIntegrations.search || {}),
-              ...integrations.search,
+              ...bodyIntegrations.search,
             }
           : mergedIntegrations.search,
-        general: integrations.general
+        general: bodyIntegrations.general
           ? {
               ...(mergedIntegrations.general || {}),
-              ...integrations.general,
+              ...bodyIntegrations.general,
             }
           : mergedIntegrations.general,
-        gotify: integrations.gotify
+        gotify: bodyIntegrations.gotify
           ? {
               ...(mergedIntegrations.gotify || {}),
-              ...integrations.gotify,
+              ...bodyIntegrations.gotify,
             }
           : mergedIntegrations.gotify,
-        webhooks: integrations.webhooks !== undefined
-          ? integrations.webhooks
-          : mergedIntegrations.webhooks,
-        webhookEvents: integrations.webhookEvents
+        webhooks:
+          bodyIntegrations.webhooks !== undefined
+            ? bodyIntegrations.webhooks
+            : mergedIntegrations.webhooks,
+        webhookEvents: bodyIntegrations.webhookEvents
           ? {
               ...(mergedIntegrations.webhookEvents || {}),
-              ...integrations.webhookEvents,
+              ...bodyIntegrations.webhookEvents,
             }
           : mergedIntegrations.webhookEvents,
       };
     }
 
-    if (mergedIntegrations?.coverArtArchive) {
+    if (mergedIntegrations.coverArtArchive) {
       delete mergedIntegrations.coverArtArchive;
     }
 
-    const updatedSettings = {
+    const updatedSettings: Settings = {
       ...currentSettings,
-      quality:
-        quality !== undefined ? quality : currentSettings.quality || "standard",
+      quality: quality !== undefined ? quality : currentSettings.quality || 'standard',
       rootFolderPath:
-        rootFolderPath !== undefined
-          ? rootFolderPath
-          : currentSettings.rootFolderPath || null,
+        rootFolderPath !== undefined ? rootFolderPath : currentSettings.rootFolderPath || null,
       downloadFolderPath:
         downloadFolderPath !== undefined
           ? downloadFolderPath
           : currentSettings.downloadFolderPath || null,
       pathMappings:
         pathMappings !== undefined
-          ? normalizePathMappings(pathMappings)
+          ? normalizePathMappings(pathMappings as Settings[])
           : currentSettings.pathMappings || [],
       releaseTypes:
         releaseTypes !== undefined
@@ -484,138 +470,125 @@ router.post("/", async (req, res) => {
           : currentSettings.releaseTypes || defaultData.settings.releaseTypes,
       integrations: mergedIntegrations,
       security:
-        security !== undefined
+        bodySecurity !== undefined
           ? {
-              ...(currentSettings.security || {}),
-              ...security,
-              localNetworkBypass: security.localNetworkBypass
+              ...currentSecurity,
+              ...bodySecurity,
+              localNetworkBypass: bodySecurity.localNetworkBypass
                 ? {
-                    ...(
-                      currentSettings.security?.localNetworkBypass ||
-                      defaultData.settings.security.localNetworkBypass
-                    ),
-                    ...security.localNetworkBypass,
-                    enabled: security.localNetworkBypass.enabled === true,
+                    ...(currentSecurity.localNetworkBypass ||
+                      defaultData.settings.security.localNetworkBypass),
+                    ...bodySecurity.localNetworkBypass,
+                    enabled: bodySecurity.localNetworkBypass.enabled === true,
                   }
-                : currentSettings.security?.localNetworkBypass ||
+                : currentSecurity.localNetworkBypass ||
                   defaultData.settings.security.localNetworkBypass,
             }
-          : currentSettings.security || defaultData.settings.security,
+          : currentSecurity || defaultData.settings.security,
       playlistArtwork:
         playlistArtwork !== undefined
           ? {
-              ...(currentSettings.playlistArtwork ||
-                defaultData.settings.playlistArtwork),
+              ...(currentSettings.playlistArtwork || defaultData.settings.playlistArtwork),
               ...playlistArtwork,
             }
-          : currentSettings.playlistArtwork ||
-            defaultData.settings.playlistArtwork,
+          : currentSettings.playlistArtwork || defaultData.settings.playlistArtwork,
     };
 
-    if (updatedSettings?.integrations?.coverArtArchive) {
+    if (updatedSettings.integrations?.coverArtArchive) {
       delete updatedSettings.integrations.coverArtArchive;
     }
-    if (updatedSettings?.integrations?.musicbrainz) {
+    if (updatedSettings.integrations?.musicbrainz) {
       delete updatedSettings.integrations.musicbrainz;
     }
 
     dbOps.updateSettings(updatedSettings);
     if (downloadFolderPath !== undefined) {
-      const { refreshPlaylistRuntimeRoots } = await import(
-        "../services/playlistRuntime.js"
-      );
+      const { refreshPlaylistRuntimeRoots } = await import('../services/playlistRuntime.js');
       await refreshPlaylistRuntimeRoots();
     }
     const reconciled = reconcileLocalNetworkBypassSetting().settings;
-    if (
-      localBypassWasEnabled &&
-      reconciled?.security?.localNetworkBypass?.enabled !== true
-    ) {
+    const reconciledSecurity: Settings = reconciled?.security || {};
+    if (localBypassWasEnabled && reconciledSecurity.localNetworkBypass?.enabled !== true) {
       websocketService.reconcileAuthState();
     }
     res.json(reconciled);
-  } catch (error) {
-    console.error("Settings POST error:", error);
+  } catch (error: unknown) {
+    console.error('Settings POST error:', error);
     res
       .status(500)
-      .json({ error: "Failed to save settings", message: error.message });
+      .json({ error: 'Failed to save settings', message: (error as Error).message });
   }
 });
 
-router.get("/logs", async (req, res) => {
+router.get('/logs', async (req: Request, res: Response) => {
   try {
-    const { logger } = await import("../services/logger.js");
-    const { limit = 100, category, level } = req.query;
+    const { logger } = await import('../services/logger.js');
+    const { limit = '100', category, level } = req.query;
+    const parsedLimit = parseInt(String(limit), 10);
 
     const logs = logger.getRecentLogs({
-      limit: parseInt(limit, 10),
-      category,
-      level,
+      limit: parsedLimit,
+      category: category ? String(category) : undefined,
+      level: level ? String(level) : undefined,
     });
 
     res.json({
       logs,
       count: logs.length,
     });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ error: "Failed to get logs", message: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ error: 'Failed to get logs', message: (error as Error).message });
   }
 });
 
-router.get("/logs/stats", async (req, res) => {
+router.get('/logs/stats', async (req: Request, res: Response) => {
   try {
-    const { logger } = await import("../services/logger.js");
+    const { logger } = await import('../services/logger.js');
     const stats = logger.getLogStats();
     res.json(stats);
-  } catch (error) {
-    res
-      .status(500)
-      .json({ error: "Failed to get log stats", message: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ error: 'Failed to get log stats', message: (error as Error).message });
   }
 });
 
-router.get("/tasks", noCache, async (_req, res) => {
+router.get('/tasks', noCache, async (_req: Request, res: Response) => {
   try {
-    const { getHonkerTaskStatus } = await import(
-      "../services/honkerTaskStatus.js"
-    );
+    const { getHonkerTaskStatus } = await import('../services/honkerTaskStatus.js');
     res.json(await getHonkerTaskStatus());
-  } catch (error) {
+  } catch (error: unknown) {
     res.status(500).json({
-      error: "Failed to get task status",
-      message: error.message,
+      error: 'Failed to get task status',
+      message: (error as Error).message,
     });
   }
 });
 
-router.post("/tasks/clear-stale", noCache, async (_req, res) => {
+router.post('/tasks/clear-stale', noCache, async (_req: Request, res: Response) => {
   try {
-    const { clearStaleHonkerJobs, getHonkerTaskStatus } = await import(
-      "../services/honkerTaskStatus.js"
-    );
+    const { clearStaleHonkerJobs, getHonkerTaskStatus } =
+      await import('../services/honkerTaskStatus.js');
     const result = await clearStaleHonkerJobs();
     res.json({
       ...result,
       tasks: await getHonkerTaskStatus(),
     });
-  } catch (error) {
+  } catch (error: unknown) {
     res.status(500).json({
-      error: "Failed to clear stuck jobs",
-      message: error.message,
+      error: 'Failed to clear stuck jobs',
+      message: (error as Error).message,
     });
   }
 });
 
-router.get("/lidarr/profiles", async (req, res) => {
+router.get('/lidarr/profiles', async (req: Request, res: Response) => {
   try {
-    const { lidarrClient } = await import("../services/lidarrClient.js");
+    const { lidarrClient } = await import('../services/lidarrClient.js');
 
-    const testUrl = req.query.url;
-    const testApiKey = req.query.apiKey;
+    const testUrl = String(req.query.url || '');
+    const testApiKey = String(req.query.apiKey || '');
 
-    let url, apiKey;
+    let url: string;
+    let apiKey: string;
     if (testUrl && testApiKey) {
       url = testUrl.trim();
       apiKey = testApiKey.trim();
@@ -628,51 +601,53 @@ router.get("/lidarr/profiles", async (req, res) => {
 
     if (!url || !apiKey) {
       return res.status(400).json({
-        error: "Lidarr not configured",
-        message: "Please configure Lidarr URL and API key in settings first",
+        error: 'Lidarr not configured',
+        message: 'Please configure Lidarr URL and API key in settings first',
       });
     }
     const urlValidation = validateExternalUrl(url);
     if (!urlValidation.valid) {
       return res.status(400).json({ error: urlValidation.error });
     }
-    url = urlValidation.url;
+    url = urlValidation.url!;
 
-    const originalConfig = { ...lidarrClient.config };
-    const originalApiPath = lidarrClient.apiPath;
+    const originalConfig = { ...(lidarrClient as Settings).config };
+    const originalApiPath = (lidarrClient as Settings).apiPath;
 
-    lidarrClient.config = {
-      url: url.replace(/\/+$/, ""),
+    (lidarrClient as Settings).config = {
+      url: url!.replace(/\/+$/, ''),
       apiKey: apiKey.trim(),
     };
-    lidarrClient.apiPath = "/api/v1";
+    (lidarrClient as Settings).apiPath = '/api/v1';
 
     try {
       const profiles = await lidarrClient.getQualityProfiles(true);
       res.json(profiles);
     } finally {
-      lidarrClient.config = originalConfig;
-      lidarrClient.apiPath = originalApiPath;
+      (lidarrClient as Settings).config = originalConfig;
+      (lidarrClient as Settings).apiPath = originalApiPath;
       lidarrClient.updateConfig();
     }
-  } catch (error) {
-    console.error("[Settings] Failed to fetch Lidarr profiles:", error);
+  } catch (error: unknown) {
+    console.error('[Settings] Failed to fetch Lidarr profiles:', error);
+    const err = error as Settings;
     res.status(500).json({
-      error: "Failed to fetch Lidarr quality profiles",
-      message: error.message,
-      details: error.response?.data,
+      error: 'Failed to fetch Lidarr quality profiles',
+      message: err.message,
+      details: err.response?.data,
     });
   }
 });
 
-router.get("/lidarr/metadata-profiles", async (req, res) => {
+router.get('/lidarr/metadata-profiles', async (req: Request, res: Response) => {
   try {
-    const { lidarrClient } = await import("../services/lidarrClient.js");
+    const { lidarrClient } = await import('../services/lidarrClient.js');
 
-    const testUrl = req.query.url;
-    const testApiKey = req.query.apiKey;
+    const testUrl = String(req.query.url || '');
+    const testApiKey = String(req.query.apiKey || '');
 
-    let url, apiKey;
+    let url: string;
+    let apiKey: string;
     if (testUrl && testApiKey) {
       url = testUrl.trim();
       apiKey = testApiKey.trim();
@@ -685,54 +660,53 @@ router.get("/lidarr/metadata-profiles", async (req, res) => {
 
     if (!url || !apiKey) {
       return res.status(400).json({
-        error: "Lidarr not configured",
-        message: "Please configure Lidarr URL and API key in settings first",
+        error: 'Lidarr not configured',
+        message: 'Please configure Lidarr URL and API key in settings first',
       });
     }
     const urlValidation = validateExternalUrl(url);
     if (!urlValidation.valid) {
       return res.status(400).json({ error: urlValidation.error });
     }
-    url = urlValidation.url;
+    url = urlValidation.url!;
 
-    const originalConfig = { ...lidarrClient.config };
-    const originalApiPath = lidarrClient.apiPath;
+    const originalConfig = { ...(lidarrClient as Settings).config };
+    const originalApiPath = (lidarrClient as Settings).apiPath;
 
-    lidarrClient.config = {
-      url: url.replace(/\/+$/, ""),
+    (lidarrClient as Settings).config = {
+      url: url!.replace(/\/+$/, ''),
       apiKey: apiKey.trim(),
     };
-    lidarrClient.apiPath = "/api/v1";
+    (lidarrClient as Settings).apiPath = '/api/v1';
 
     try {
       const profiles = await lidarrClient.getMetadataProfiles(true);
       res.json(profiles);
     } finally {
-      lidarrClient.config = originalConfig;
-      lidarrClient.apiPath = originalApiPath;
+      (lidarrClient as Settings).config = originalConfig;
+      (lidarrClient as Settings).apiPath = originalApiPath;
       lidarrClient.updateConfig();
     }
-  } catch (error) {
-    console.error(
-      "[Settings] Failed to fetch Lidarr metadata profiles:",
-      error,
-    );
+  } catch (error: unknown) {
+    console.error('[Settings] Failed to fetch Lidarr metadata profiles:', error);
+    const err = error as Settings;
     res.status(500).json({
-      error: "Failed to fetch Lidarr metadata profiles",
-      message: error.message,
-      details: error.response?.data,
+      error: 'Failed to fetch Lidarr metadata profiles',
+      message: err.message,
+      details: err.response?.data,
     });
   }
 });
 
-router.get("/lidarr/tags", async (req, res) => {
+router.get('/lidarr/tags', async (req: Request, res: Response) => {
   try {
-    const { lidarrClient } = await import("../services/lidarrClient.js");
+    const { lidarrClient } = await import('../services/lidarrClient.js');
 
-    const testUrl = req.query.url;
-    const testApiKey = req.query.apiKey;
+    const testUrl = String(req.query.url || '');
+    const testApiKey = String(req.query.apiKey || '');
 
-    let url, apiKey;
+    let url: string;
+    let apiKey: string;
     if (testUrl && testApiKey) {
       url = testUrl.trim();
       apiKey = testApiKey.trim();
@@ -745,104 +719,116 @@ router.get("/lidarr/tags", async (req, res) => {
 
     if (!url || !apiKey) {
       return res.status(400).json({
-        error: "Lidarr not configured",
-        message: "Please configure Lidarr URL and API key in settings first",
+        error: 'Lidarr not configured',
+        message: 'Please configure Lidarr URL and API key in settings first',
       });
     }
     const urlValidation = validateExternalUrl(url);
     if (!urlValidation.valid) {
       return res.status(400).json({ error: urlValidation.error });
     }
-    url = urlValidation.url;
+    url = urlValidation.url!;
 
-    const originalConfig = { ...lidarrClient.config };
-    const originalApiPath = lidarrClient.apiPath;
+    const originalConfig = { ...(lidarrClient as Settings).config };
+    const originalApiPath = (lidarrClient as Settings).apiPath;
 
-    lidarrClient.config = {
-      url: url.replace(/\/+$/, ""),
+    (lidarrClient as Settings).config = {
+      url: url!.replace(/\/+$/, ''),
       apiKey: apiKey.trim(),
     };
-    lidarrClient.apiPath = "/api/v1";
+    (lidarrClient as Settings).apiPath = '/api/v1';
 
     try {
       const tags = await lidarrClient.getTags(true);
       res.json(tags);
     } finally {
-      lidarrClient.config = originalConfig;
-      lidarrClient.apiPath = originalApiPath;
+      (lidarrClient as Settings).config = originalConfig;
+      (lidarrClient as Settings).apiPath = originalApiPath;
       lidarrClient.updateConfig();
     }
-  } catch (error) {
-    console.error("[Settings] Failed to fetch Lidarr tags:", error);
+  } catch (error: unknown) {
+    console.error('[Settings] Failed to fetch Lidarr tags:', error);
+    const err = error as Settings;
     res.status(500).json({
-      error: "Failed to fetch Lidarr tags",
-      message: error.message,
-      details: error.response?.data,
+      error: 'Failed to fetch Lidarr tags',
+      message: err.message,
+      details: err.response?.data,
     });
   }
 });
 
-router.get("/storage-health", noCache, async (req, res) => {
+router.get('/storage-health', noCache, async (req: Request, res: Response) => {
   try {
-    const { runStorageHealthCheck } =
-      await import("../services/storageHealthService.js");
-    const force = req.query.force === "1" || req.query.force === "true";
+    const { runStorageHealthCheck } = await import('../services/storageHealthService.js');
+    const force = String(req.query.force || '') === '1' || String(req.query.force || '') === 'true';
     const result = await runStorageHealthCheck({ force });
     res.json({
       success: result.ok,
       ...result,
     });
-  } catch (error) {
-    console.error("[Settings] Storage health check error:", error);
+  } catch (error: unknown) {
+    console.error('[Settings] Storage health check error:', error);
     res.status(500).json({
-      error: "Storage health check failed",
-      message: error.message,
+      error: 'Storage health check failed',
+      message: (error as Error).message,
     });
   }
 });
 
-router.get("/lidarr/test-library-access", async (req, res) => {
+router.get('/lidarr/test-library-access', async (req: Request, res: Response) => {
   try {
-    const { lidarrClient } = await import("../services/lidarrClient.js");
-    const { resolveLidarrTestCredentials, validateLidarrTestCredentials, withTemporaryLidarrClient } =
-      await import("../services/lidarrTestSession.js");
-    const { runLidarrLibraryAccessTest } =
-      await import("../services/lidarrLibraryAccessTest.js");
+    const { lidarrClient } = await import('../services/lidarrClient.js');
+    const {
+      resolveLidarrTestCredentials,
+      validateLidarrTestCredentials,
+      withTemporaryLidarrClient,
+    } = await import('../services/lidarrTestSession.js');
+    const { runLidarrLibraryAccessTest } = await import(
+      '../services/lidarrLibraryAccessTest.js'
+    );
 
-    const { url, apiKey } = resolveLidarrTestCredentials(req.query, lidarrClient);
+    const { url, apiKey } = resolveLidarrTestCredentials(
+      req.query as Settings,
+       
+      lidarrClient as any,
+    );
     const validation = validateLidarrTestCredentials(url, apiKey);
     if (!validation.valid) {
       return res.status(400).json({ error: validation.error });
     }
 
-    const result = await withTemporaryLidarrClient(validation.url, apiKey, (client) =>
-      runLidarrLibraryAccessTest(client),
+    const result = await withTemporaryLidarrClient(
+      validation.url,
+      apiKey,
+      (client: unknown) => runLidarrLibraryAccessTest(client as Record<string, unknown>),
     );
 
+    const typedResult = result as Record<string, unknown>;
     res.json({
-      success: result.ok,
-      ok: result.ok,
-      partial: !!result.partial,
-      steps: result.steps,
-      sample: result.sample,
+      success: typedResult.ok,
+      ok: typedResult.ok,
+      partial: !!typedResult.partial,
+      steps: typedResult.steps,
+      sample: typedResult.sample,
     });
-  } catch (error) {
-    console.error("[Settings] Lidarr library access test error:", error);
+  } catch (error: unknown) {
+    console.error('[Settings] Lidarr library access test error:', error);
     res.status(500).json({
-      error: "Library access check failed",
-      message: error.message,
+      error: 'Library access check failed',
+      message: (error as Error).message,
     });
   }
 });
 
-router.get("/lidarr/test", async (req, res) => {
+router.get('/lidarr/test', async (req: Request, res: Response) => {
   try {
-    const { lidarrClient } = await import("../services/lidarrClient.js");
+    const { lidarrClient } = await import('../services/lidarrClient.js');
 
-    const testUrl = req.query.url;
-    const testApiKey = req.query.apiKey;
+    const testUrl = String(req.query.url || '');
+    const testApiKey = String(req.query.apiKey || '');
 
-    let url, apiKey;
+    let url: string;
+    let apiKey: string;
     if (testUrl && testApiKey) {
       url = testUrl.trim();
       apiKey = testApiKey.trim();
@@ -853,48 +839,46 @@ router.get("/lidarr/test", async (req, res) => {
       apiKey = config.apiKey;
     }
 
-    console.log("[Settings] Testing Lidarr connection...", {
-      url: url,
+    console.log('[Settings] Testing Lidarr connection...', {
+      url,
       hasApiKey: !!apiKey,
       apiKeyLength: apiKey?.length || 0,
       usingProvided: !!(testUrl && testApiKey),
     });
 
     if (!url || !apiKey) {
-      return res
-        .status(400)
-        .json({ error: "Lidarr URL and API key are required" });
+      return res.status(400).json({ error: 'Lidarr URL and API key are required' });
     }
     const urlValidation = validateExternalUrl(url);
     if (!urlValidation.valid) {
       return res.status(400).json({ error: urlValidation.error });
     }
-    url = urlValidation.url;
+    url = urlValidation.url!;
 
-    const originalConfig = { ...lidarrClient.config };
-    const originalApiPath = lidarrClient.apiPath;
+    const originalConfig = { ...(lidarrClient as Settings).config };
+    const originalApiPath = (lidarrClient as Settings).apiPath;
 
-    lidarrClient.config = {
-      url: url.replace(/\/+$/, ""),
+    (lidarrClient as Settings).config = {
+      url: url!.replace(/\/+$/, ''),
       apiKey: apiKey.trim(),
     };
-    lidarrClient.apiPath = "/api/v1";
+    (lidarrClient as Settings).apiPath = '/api/v1';
 
     try {
       const result = await lidarrClient.testConnection(true);
-      console.log("[Settings] Lidarr test result:", result);
+      console.log('[Settings] Lidarr test result:', result);
 
       if (result.connected) {
         res.json({
           success: true,
-          message: "Connection successful",
+          message: 'Connection successful',
           version: result.version,
           instanceName: result.instanceName,
           apiPath: result.apiPath,
         });
       } else {
         res.status(400).json({
-          error: "Connection failed",
+          error: 'Connection failed',
           message: result.error,
           details: result.details,
           url: result.url,
@@ -904,82 +888,81 @@ router.get("/lidarr/test", async (req, res) => {
         });
       }
     } finally {
-      lidarrClient.config = originalConfig;
-      lidarrClient.apiPath = originalApiPath;
+      (lidarrClient as Settings).config = originalConfig;
+      (lidarrClient as Settings).apiPath = originalApiPath;
       lidarrClient.updateConfig();
     }
-  } catch (error) {
-    console.error("[Settings] Lidarr test error:", error);
+  } catch (error: unknown) {
+    console.error('[Settings] Lidarr test error:', error);
+    const err = error as Settings;
     res.status(500).json({
-      error: "Connection failed",
-      message: error.message,
-      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      error: 'Connection failed',
+      message: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
     });
   }
 });
 
-router.post("/gotify/test", async (req, res) => {
+router.post('/gotify/test', async (req: Request, res: Response) => {
   try {
-    const { sendGotifyTest } =
-      await import("../services/notificationService.js");
-    const url = req.body?.url?.trim();
-    const token = req.body?.token?.trim();
+    const { sendGotifyTest } = await import('../services/notificationService.js');
+    const body = req.body as Settings;
+    const url = String(body.url || '').trim();
+    const token = String(body.token || '').trim();
     if (!url || !token) {
       return res.status(400).json({
-        error: "URL and token required",
-        message: "Provide Gotify URL and application token in the request body",
+        error: 'URL and token required',
+        message: 'Provide Gotify URL and application token in the request body',
       });
     }
     const urlValidation = validateExternalUrl(url);
     if (!urlValidation.valid) {
       return res.status(400).json({ error: urlValidation.error });
     }
-    await sendGotifyTest(urlValidation.url, token);
-    res.json({ success: true, message: "Test notification sent" });
-  } catch (error) {
-    if (error.code === "MISSING_CONFIG") {
+    await sendGotifyTest(urlValidation.url!, token);
+    res.json({ success: true, message: 'Test notification sent' });
+  } catch (error: unknown) {
+    const err = error as Settings;
+    if (err.code === 'MISSING_CONFIG') {
       return res.status(400).json({
-        error: "Invalid configuration",
-        message: error.message,
+        error: 'Invalid configuration',
+        message: err.message,
       });
     }
-    const status = error.response?.status;
-    const msg =
-      error.response?.data?.description ||
-      error.response?.data?.error ||
-      error.message;
+    const status = err.response?.status;
+    const msg = err.response?.data?.description || err.response?.data?.error || err.message;
     res
       .status(status && status >= 400 ? status : 500)
-      .json({ error: "Gotify test failed", message: msg });
+      .json({ error: 'Gotify test failed', message: msg });
   }
 });
 
-router.post("/lidarr/apply-community-guide", async (req, res) => {
+router.post('/lidarr/apply-community-guide', async (req: Request, res: Response) => {
   try {
-    const { lidarrClient } = await import("../services/lidarrClient.js");
-    const { applyLidarrCommunityGuide } =
-      await import("../services/lidarrCommunityGuide.js");
+    const { lidarrClient } = await import('../services/lidarrClient.js');
+    const { applyLidarrCommunityGuide } = await import('../services/lidarrCommunityGuide.js');
 
     lidarrClient.updateConfig();
     const config = lidarrClient.getConfig();
 
     if (!config.url || !config.apiKey) {
       return res.status(400).json({
-        error: "Lidarr not configured",
-        message: "Please configure Lidarr URL and API key in settings first",
+        error: 'Lidarr not configured',
+        message: 'Please configure Lidarr URL and API key in settings first',
       });
     }
 
     try {
-      const results = await applyLidarrCommunityGuide(lidarrClient);
+      const results: Settings = await applyLidarrCommunityGuide(lidarrClient as unknown as Record<string, unknown>);
 
-      const currentSettings = dbOps.getSettings();
+      const currentSettings: Settings = dbOps.getSettings();
+      const currentIntegrations: Settings = currentSettings.integrations || {};
       dbOps.updateSettings({
         ...currentSettings,
         integrations: {
-          ...currentSettings.integrations,
+          ...currentIntegrations,
           lidarr: {
-            ...(currentSettings.integrations?.lidarr || {}),
+            ...(currentIntegrations.lidarr || {}),
             qualityProfileId: results.qualityProfile?.id || null,
             metadataProfileId: results.metadataProfile?.id || null,
           },
@@ -988,32 +971,33 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
 
       res.json({
         success: true,
-        message: "Community guide settings applied successfully",
+        message: 'Community guide settings applied successfully',
         results,
       });
-    } catch (error) {
-      console.error("[Settings] Failed to apply community guide:", error);
+    } catch (innerError: unknown) {
+      console.error('[Settings] Failed to apply community guide:', innerError);
+      const err = innerError as Settings;
       res.status(500).json({
-        error: "Failed to apply community guide settings",
-        message: error.message,
-        details: error.response?.data,
-        partialResults: error.partialResults,
+        error: 'Failed to apply community guide settings',
+        message: err.message,
+        details: err.response?.data,
+        partialResults: err.partialResults,
       });
     }
-  } catch (error) {
-    console.error("[Settings] Error applying community guide:", error);
+  } catch (error: unknown) {
+    console.error('[Settings] Error applying community guide:', error);
     res.status(500).json({
-      error: "Failed to apply community guide settings",
-      message: error.message,
+      error: 'Failed to apply community guide settings',
+      message: (error as Error).message,
     });
   }
 });
 
-router.get("/browse", async (req, res) => {
+router.get('/browse', async (req: Request, res: Response) => {
   try {
-    const fs = await import("fs/promises");
-    const path = await import("path");
-    const target = path.resolve(req.query.path ? String(req.query.path) : "/");
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const target = path.resolve(String(req.query.path || '/'));
     const dirents = await fs.readdir(target, { withFileTypes: true });
     const directories = (
       await Promise.all(
@@ -1030,185 +1014,185 @@ router.get("/browse", async (req, res) => {
         }),
       )
     )
-      .filter(Boolean)
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
       .sort((a, b) => a.name.localeCompare(b.name));
     res.json({
       path: target,
-      parent: target === "/" ? null : path.dirname(target),
+      parent: target === '/' ? null : path.dirname(target),
       directories,
     });
-  } catch (error) {
-    res
-      .status(400)
-      .json({ error: "Cannot read path", message: error.message });
+  } catch (error: unknown) {
+    res.status(400).json({ error: 'Cannot read path', message: (error as Error).message });
   }
 });
 
-function getPlexConfig() {
-  return dbOps.getSettings()?.integrations?.plex || {};
+function getPlexConfig(): Settings {
+  return ((dbOps.getSettings() as Settings).integrations as Settings)?.plex || {};
 }
 
-router.post("/plex/auth/pin", async (req, res) => {
+router.post('/plex/auth/pin', async (req: Request, res: Response) => {
   try {
-    const { PlexClient } = await import("../services/plex.js");
-    const settings = dbOps.getSettings();
-    const plex = settings.integrations?.plex || {};
+    const { PlexClient } = await import('../services/plex.js');
+    const settings: Settings = dbOps.getSettings();
+    const integrations: Settings = settings.integrations || {};
+    const plex: Settings = integrations.plex || {};
     let clientId = plex.clientId;
     if (!clientId) {
       clientId = PlexClient.generateClientId();
       dbOps.updateSettings({
         ...settings,
         integrations: {
-          ...settings.integrations,
+          ...integrations,
           plex: { ...plex, clientId },
         },
       });
     }
+    const body = req.body as Settings;
     const { id, code } = await PlexClient.generatePin(clientId);
-    const forwardUrl = req.body?.forwardUrl;
+    const forwardUrl = body.forwardUrl;
     res.json({
       pinId: id,
       code,
       clientId,
       authUrl: PlexClient.buildAuthUrl(clientId, code, forwardUrl),
     });
-  } catch (error) {
-    console.error("[Settings] Plex PIN generation failed:", error.message);
+  } catch (error: unknown) {
+    console.error('[Settings] Plex PIN generation failed:', (error as Error).message);
     res.status(500).json({
-      error: "Failed to start Plex authentication",
-      message: error.message,
+      error: 'Failed to start Plex authentication',
+      message: (error as Error).message,
     });
   }
 });
 
-router.post("/plex/auth/check", async (req, res) => {
+router.post('/plex/auth/check', async (req: Request, res: Response) => {
   try {
-    const { PlexClient } = await import("../services/plex.js");
-    const { pinId, code } = req.body || {};
+    const { PlexClient } = await import('../services/plex.js');
+    const body = req.body as Settings;
+    const { pinId, code } = body || {};
     if (!pinId || !code) {
-      return res.status(400).json({ error: "pinId and code are required" });
+      return res.status(400).json({ error: 'pinId and code are required' });
     }
     const clientId = getPlexConfig().clientId;
     if (!clientId) {
-      return res.status(400).json({ error: "Plex client not initialized" });
+      return res.status(400).json({ error: 'Plex client not initialized' });
     }
     const token = await PlexClient.checkPin(pinId, code, clientId);
     if (!token) return res.json({ pending: true });
     res.json({ token });
-  } catch (error) {
-    console.error("[Settings] Plex PIN check failed:", error.message);
+  } catch (error: unknown) {
+    console.error('[Settings] Plex PIN check failed:', (error as Error).message);
     res.status(500).json({
-      error: "Failed to check Plex authentication",
-      message: error.message,
+      error: 'Failed to check Plex authentication',
+      message: (error as Error).message,
     });
   }
 });
 
-router.post("/plex/resources", async (req, res) => {
+router.post('/plex/resources', async (req: Request, res: Response) => {
   try {
-    const { PlexClient } = await import("../services/plex.js");
+    const { PlexClient } = await import('../services/plex.js');
     const stored = getPlexConfig();
-    // Use the freshest token the client has (e.g. just-minted during connect),
-    // falling back to the persisted one. The clientId MUST be the stored one
-    // the token was minted under — Plex ties the token to that identifier.
-    const token = req.body?.token || stored.token;
+    const body = req.body as Settings;
+    const token = body.token || stored.token;
     const clientId = stored.clientId;
     if (!token || !clientId) {
-      return res.status(400).json({ error: "Plex authentication required" });
+      return res.status(400).json({ error: 'Plex authentication required' });
     }
     const { servers, total } = await PlexClient.getResources(token, clientId);
     res.json({ servers, total });
-  } catch (error) {
-    const status = error.response?.status;
+  } catch (error: unknown) {
+    const err = error as Settings;
+    const status = err.response?.status;
     console.error(
-      "[Settings] Plex resources failed:",
-      status ? `${status} ${JSON.stringify(error.response?.data)}` : error.message,
+      '[Settings] Plex resources failed:',
+      status ? `${status} ${JSON.stringify(err.response?.data)}` : err.message,
     );
     res.status(status === 401 ? 401 : 500).json({
-      error: "Failed to list Plex servers",
+      error: 'Failed to list Plex servers',
       message:
         status === 401
-          ? "Plex rejected the token (401). Reconnect your Plex account."
-          : error.message,
+          ? 'Plex rejected the token (401). Reconnect your Plex account.'
+          : err.message,
     });
   }
 });
 
-router.post("/plex/test", async (req, res) => {
+router.post('/plex/test', async (req: Request, res: Response) => {
   try {
-    const { PlexClient } = await import("../services/plex.js");
+    const { PlexClient } = await import('../services/plex.js');
     const stored = getPlexConfig();
-    let url = (req.body?.url || stored.url || "").trim().replace(/\/+$/, "");
-    const token = req.body?.token || stored.token;
+    const body = req.body as Settings;
+    let url = String(body.url || stored.url || '').trim().replace(/\/+$/, '');
+    const token = body.token || stored.token;
     const clientId = stored.clientId;
     if (!url || !token) {
-      return res.status(400).json({ error: "Server URL and token are required" });
+      return res.status(400).json({ error: 'Server URL and token are required' });
     }
     const urlValidation = validateExternalUrl(url);
     if (!urlValidation.valid) {
       return res.status(400).json({ error: urlValidation.error });
     }
-    url = urlValidation.url;
+    url = urlValidation.url!;
     const client = new PlexClient(url, token, clientId);
     const identity = await client.ping();
     res.json({
       success: true,
-      message: "Connection successful",
+      message: 'Connection successful',
       machineIdentifier: identity.machineIdentifier,
       version: identity.version,
     });
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as Settings;
     res.status(400).json({
-      error: "Connection failed",
-      message: error.response?.data || error.message,
+      error: 'Connection failed',
+      message: err.response?.data || err.message,
     });
   }
 });
 
-router.post("/plex/sync", async (req, res) => {
+router.post('/plex/sync', async (req: Request, res: Response) => {
   try {
     const plex = getPlexConfig();
     if (!plex.url || !plex.token) {
       return res.status(400).json({
-        error: "Plex not configured",
-        message: "Connect Plex and save settings before syncing",
+        error: 'Plex not configured',
+        message: 'Connect Plex and save settings before syncing',
       });
     }
-    const { playlistManager } = await import(
-      "../services/weeklyFlowPlaylistManager.js"
-    );
+    const { playlistManager } = await import('../services/weeklyFlowPlaylistManager.js');
     playlistManager.updateConfig(false);
     const result = await playlistManager.syncPlexNow();
     res.json({ success: true, ...result });
-  } catch (error) {
-    console.error("[Settings] Plex sync failed:", error.message);
+  } catch (error: unknown) {
+    console.error('[Settings] Plex sync failed:', (error as Error).message);
+    const err = error as Settings;
     res.status(500).json({
-      error: "Plex sync failed",
-      message: error.response?.data || error.message,
+      error: 'Plex sync failed',
+      message: err.response?.data || err.message,
     });
   }
 });
 
-router.post("/logs/level", async (req, res) => {
+router.post('/logs/level', async (req: Request, res: Response) => {
   try {
-    const { logger } = await import("../services/logger.js");
-    const { level, category } = req.body;
+    const { logger } = await import('../services/logger.js');
+    const body = req.body as Settings;
+    const { level, category } = body;
 
     if (!level) {
-      return res.status(400).json({ error: "level is required" });
+      return res.status(400).json({ error: 'level is required' });
     }
 
     if (category) {
-      logger.setCategoryLevel(category, level);
+      logger.setCategoryLevel(String(category), String(level));
       res.json({ message: `Log level for ${category} set to ${level}` });
     } else {
-      logger.setLevel(level);
+      logger.setLevel(String(level));
       res.json({ message: `Global log level set to ${level}` });
     }
-  } catch (error) {
-    res
-      .status(500)
-      .json({ error: "Failed to set log level", message: error.message });
+  } catch (error: unknown) {
+    res.status(500).json({ error: 'Failed to set log level', message: (error as Error).message });
   }
 });
 

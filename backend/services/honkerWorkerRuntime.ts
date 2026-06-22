@@ -1,7 +1,7 @@
-const workers = new Map();
-const restartTimers = new Map();
-const restartAttempts = new Map();
-const shutdownHandlers = [];
+const workers: Map<string, any> = new Map();
+const restartTimers: Map<string, any> = new Map();
+const restartAttempts: Map<string, number> = new Map();
+const shutdownHandlers: Array<() => void | Promise<void>> = [];
 const DEFAULT_WORKER_IDLE_STOP_MS = 60 * 1000;
 
 let shuttingDown = false;
@@ -17,17 +17,17 @@ export function isHonkerShuttingDown() {
   return shuttingDown;
 }
 
-export function isHonkerDatabaseClosedError(error) {
-  return String(error?.message || "")
+export function isHonkerDatabaseClosedError(error: any) {
+  return String(error?.message || '')
     .toLowerCase()
-    .includes("database is closed");
+    .includes('database is closed');
 }
 
-export async function withJobHeartbeat(job, queue, fn, extendSeconds = null) {
+export async function withJobHeartbeat(job: any, queue: any, fn: any, extendSeconds: any = null) {
   let runId = null;
   let recordFinished = null;
   try {
-    const taskStatus = await import("./honkerTaskStatus.js");
+    const taskStatus = await import('./honkerTaskStatus.js');
     runId = taskStatus.recordHonkerTaskRunStarted(job, queue);
     recordFinished = taskStatus.recordHonkerTaskRunFinished;
   } catch {}
@@ -46,12 +46,12 @@ export async function withJobHeartbeat(job, queue, fn, extendSeconds = null) {
   try {
     const result = await Promise.resolve(fn());
     if (recordFinished) {
-      recordFinished(runId, "completed");
+      recordFinished(runId, 'completed');
     }
     return result;
-  } catch (error) {
+  } catch (error: any) {
     if (recordFinished) {
-      recordFinished(runId, "failed", error?.message || String(error));
+      recordFinished(runId, 'failed', error?.message || String(error));
     }
     throw error;
   } finally {
@@ -59,13 +59,10 @@ export async function withJobHeartbeat(job, queue, fn, extendSeconds = null) {
   }
 }
 
-export function createIdleAbortController({
-  idleStopMs = 0,
-  onIdleStop = null,
-} = {}) {
+export function createIdleAbortController({ idleStopMs = 0, onIdleStop = null } = {}) {
   const controller = new AbortController();
   const timeoutMs = Math.max(0, Math.floor(Number(idleStopMs) || 0));
-  let timer = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
   let idleStopped = false;
 
   const clear = () => {
@@ -81,14 +78,14 @@ export function createIdleAbortController({
     timer = setTimeout(() => {
       timer = null;
       idleStopped = true;
-      if (typeof onIdleStop === "function") {
+      if (typeof onIdleStop === 'function') {
         try {
-          onIdleStop();
+          (onIdleStop as () => void)();
         } catch {}
       }
       controller.abort();
     }, timeoutMs);
-    if (typeof timer.unref === "function") timer.unref();
+    if (timer && typeof (timer as any).unref === 'function') (timer as any).unref();
   };
 
   const abort = () => {
@@ -108,7 +105,10 @@ export function createIdleAbortController({
   };
 }
 
-export function registerHonkerWorker(name, { start, stop, isRunning }) {
+export function registerHonkerWorker(
+  name: any,
+  { start, stop, isRunning }: { start: () => void; stop: () => void; isRunning: () => boolean },
+) {
   workers.set(String(name), { start, stop, isRunning });
 }
 
@@ -121,19 +121,17 @@ export function getHonkerWorkerStatuses() {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function registerHonkerShutdownHandler(handler) {
-  if (typeof handler === "function") {
+export function registerHonkerShutdownHandler(handler: any) {
+  if (typeof handler === 'function') {
     shutdownHandlers.push(handler);
   }
 }
 
-export function scheduleHonkerComponentRestart(name, startFn, options = {}) {
-  if (shuttingDown || process.env.NODE_ENV === "test") return;
-  const safeName = String(name || "component");
+export function scheduleHonkerComponentRestart(name: any, startFn: any, options: any = {}) {
+  if (shuttingDown || process.env.NODE_ENV === 'test') return;
+  const safeName = String(name || 'component');
   const shouldRestart =
-    typeof options.shouldRestart === "function"
-      ? options.shouldRestart
-      : () => true;
+    typeof options.shouldRestart === 'function' ? options.shouldRestart : () => true;
   if (!shouldRestart()) return;
 
   const attempts = Number(restartAttempts.get(safeName) || 0);
@@ -149,26 +147,24 @@ export function scheduleHonkerComponentRestart(name, startFn, options = {}) {
     try {
       startFn();
       restartAttempts.set(safeName, 0);
-    } catch (error) {
+    } catch (error: any) {
       console.error(`[honkerRuntime] failed to restart ${safeName}:`, error);
       scheduleHonkerComponentRestart(safeName, startFn, options);
     }
   }, delayMs);
-  if (typeof timer.unref === "function") timer.unref();
+  if (typeof timer.unref === 'function') timer.unref();
   restartTimers.set(safeName, timer);
 }
 
-export function markHonkerWorkerLoopEnded(name, startFn, options = {}) {
-  const safeName = String(name || "worker");
+export function markHonkerWorkerLoopEnded(name: any, startFn: any, options: any = {}) {
+  const safeName = String(name || 'worker');
   if (options.intentional || shuttingDown) return;
   const entry = workers.get(safeName);
   if (entry?.isRunning?.()) return;
   scheduleHonkerComponentRestart(safeName, startFn, options);
 }
 
-export async function shutdownHonkerInfrastructure({
-  timeoutMs = 30000,
-} = {}) {
+export async function shutdownHonkerInfrastructure({ timeoutMs = 30000 } = {}) {
   if (shuttingDown) return;
   shuttingDown = true;
 
@@ -178,7 +174,7 @@ export async function shutdownHonkerInfrastructure({
   restartTimers.clear();
 
   try {
-    const { stopHonkerScheduler } = await import("./honkerDb.js");
+    const { stopHonkerScheduler } = await import('./honkerDb.js');
     stopHonkerScheduler();
   } catch {}
 
@@ -198,13 +194,13 @@ export async function shutdownHonkerInfrastructure({
   for (const handler of shutdownHandlers) {
     try {
       await handler();
-    } catch (error) {
-      console.error("[honkerRuntime] shutdown handler error:", error);
+    } catch (error: any) {
+      console.error('[honkerRuntime] shutdown handler error:', error);
     }
   }
 
   try {
-    const { closeHonkerDb } = await import("./honkerDb.js");
+    const { closeHonkerDb } = await import('./honkerDb.js');
     closeHonkerDb();
   } catch {}
 }

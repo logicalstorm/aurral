@@ -1,10 +1,10 @@
-import { performance } from "node:perf_hooks";
+import { performance } from 'node:perf_hooks';
 
 const MAX_HISTORY = 64;
-const history: any[] = [];
+const history: Record<string, unknown>[] = [];
 
 const snapshotResources = () => {
-  const memory = process.memoryUsage() as any;
+  const memory = process.memoryUsage();
   return {
     heapUsed: memory.heapUsed,
     heapTotal: memory.heapTotal,
@@ -14,8 +14,7 @@ const snapshotResources = () => {
   };
 };
 
-const formatMb = (bytes: any) =>
-  Math.round((Number(bytes || 0) / (1024 * 1024)) * 100) / 100;
+const formatMb = (bytes: unknown) => Math.round((Number(bytes || 0) / (1024 * 1024)) * 100) / 100;
 
 export function captureResourceSnapshot() {
   return snapshotResources();
@@ -25,8 +24,8 @@ export function getWorkerPerfHistory(limit = MAX_HISTORY) {
   return history.slice(-Math.max(1, limit));
 }
 
-export function recordWorkerPerfSpan(entry: any) {
-  const span = {
+export function recordWorkerPerfSpan(entry: Record<string, unknown>) {
+  const span: Record<string, unknown> = {
     ...entry,
     recordedAt: new Date().toISOString(),
   };
@@ -34,22 +33,26 @@ export function recordWorkerPerfSpan(entry: any) {
   if (history.length > MAX_HISTORY) {
     history.splice(0, history.length - MAX_HISTORY);
   }
-  const heapMb = formatMb(span.memoryEnd?.heapUsed);
-  const rssMb = formatMb(span.memoryEnd?.rss);
+  const heapMb = formatMb((span.memoryEnd as Record<string, unknown>)?.heapUsed);
+  const rssMb = formatMb((span.memoryEnd as Record<string, unknown>)?.rss);
   const cpuMs =
-    span.cpuUserUs != null && span.cpuSystemUs != null
-      ? Math.round((span.cpuUserUs + span.cpuSystemUs) / 1000)
+    (span.cpuUserUs as number) != null && (span.cpuSystemUs as number) != null
+      ? Math.round(((span.cpuUserUs as number) + (span.cpuSystemUs as number)) / 1000)
       : null;
   console.log(
-    `[workerPerf] ${span.name} ${span.ok === false ? "FAILED" : "ok"} ` +
+    `[workerPerf] ${span.name} ${span.ok === false ? 'FAILED' : 'ok'} ` +
       `${span.durationMs}ms heap=${heapMb}MB rss=${rssMb}MB` +
-      (cpuMs != null ? ` cpu=${cpuMs}ms` : "") +
-      (span.detail ? ` ${span.detail}` : ""),
+      (cpuMs != null ? ` cpu=${cpuMs}ms` : '') +
+      (span.detail ? ` ${span.detail}` : ''),
   );
   return span;
 }
 
-export async function withWorkerPerfSpan<T>(name: string, fn: () => Promise<T>, detail: string | null = null) {
+export async function withWorkerPerfSpan<T>(
+  name: string,
+  fn: () => Promise<T>,
+  detail: string | null = null,
+) {
   const startedAt = performance.now();
   const memoryStart = snapshotResources();
   const cpuStart = process.cpuUsage();
@@ -86,12 +89,10 @@ export async function withWorkerPerfSpan<T>(name: string, fn: () => Promise<T>, 
 export function summarizeWorkerPerfHistory(limit = 16) {
   const spans = getWorkerPerfHistory(limit);
   if (spans.length === 0) return { count: 0, spans: [] };
-  const peakRss = Math.max(...spans.map((span: any) => span.memoryEnd?.rss || 0));
-  const peakHeap = Math.max(
-    ...spans.map((span: any) => span.memoryEnd?.heapUsed || 0),
-  );
+  const peakRss = Math.max(...spans.map((span) => ((span.memoryEnd as Record<string, unknown>)?.rss as number) || 0));
+  const peakHeap = Math.max(...spans.map((span) => ((span.memoryEnd as Record<string, unknown>)?.heapUsed as number) || 0));
   const totalDurationMs = spans.reduce(
-    (sum: number, span: any) => sum + Number(span.durationMs || 0),
+    (sum: number, span) => sum + Number(span.durationMs || 0),
     0,
   );
   return {

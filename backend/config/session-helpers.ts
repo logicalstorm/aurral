@@ -1,29 +1,25 @@
-import crypto from "crypto";
-import { db } from "./db-sqlite.js";
-import { userOps } from "./db-helpers.js";
+import crypto from 'crypto';
+import { db } from './db-sqlite.js';
+import { userOps } from './db-helpers.js';
+import type { SessionRow } from '../types/db.js';
 
 const DEFAULT_EXPIRY_HOURS = 24;
 
 const insertSessionStmt = db.prepare(
-  "INSERT INTO sessions (user_id, token, created_at, expires_at, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?)",
+  'INSERT INTO sessions (user_id, token, created_at, expires_at, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?)',
 );
-const getSessionByTokenStmt = db.prepare(
-  "SELECT * FROM sessions WHERE token = ? LIMIT 1",
-);
-const deleteSessionByTokenStmt = db.prepare("DELETE FROM sessions WHERE token = ?");
-const deleteSessionsByUserIdStmt = db.prepare("DELETE FROM sessions WHERE user_id = ?");
-const deleteExpiredSessionsStmt = db.prepare(
-  "DELETE FROM sessions WHERE expires_at <= ?",
-);
+const getSessionByTokenStmt = db.prepare('SELECT * FROM sessions WHERE token = ? LIMIT 1');
+const deleteSessionByTokenStmt = db.prepare('DELETE FROM sessions WHERE token = ?');
+const deleteSessionsByUserIdStmt = db.prepare('DELETE FROM sessions WHERE user_id = ?');
+const deleteExpiredSessionsStmt = db.prepare('DELETE FROM sessions WHERE expires_at <= ?');
 
 const getSessionExpiryMs = () => {
   const hours = Number(process.env.SESSION_EXPIRY_HOURS);
-  const safeHours =
-    Number.isFinite(hours) && hours > 0 ? hours : DEFAULT_EXPIRY_HOURS;
+  const safeHours = Number.isFinite(hours) && hours > 0 ? hours : DEFAULT_EXPIRY_HOURS;
   return safeHours * 60 * 60 * 1000;
 };
 
-const toUserPayload = (user: any) => {
+const toUserPayload = (user: Record<string, unknown> | null) => {
   if (!user) return null;
   return {
     id: user.id,
@@ -33,10 +29,14 @@ const toUserPayload = (user: any) => {
   };
 };
 
-export const createSession = (userId: number | string, ipAddress: string | null = null, userAgent: string | null = null) => {
+export const createSession = (
+  userId: number | string,
+  ipAddress: string | null = null,
+  userAgent: string | null = null,
+) => {
   const now = Date.now();
   const expiresAt = now + getSessionExpiryMs();
-  const token = crypto.randomBytes(32).toString("hex");
+  const token = crypto.randomBytes(32).toString('hex');
   insertSessionStmt.run(
     Number(userId),
     token,
@@ -52,9 +52,9 @@ export const createSession = (userId: number | string, ipAddress: string | null 
 };
 
 export const getSessionByToken = (token: string) => {
-  const rawToken = String(token || "").trim();
+  const rawToken = String(token || '').trim();
   if (!rawToken) return null;
-  const row = getSessionByTokenStmt.get(rawToken) as any;
+  const row = getSessionByTokenStmt.get(rawToken) as SessionRow | undefined;
   if (!row) return null;
   if (row.expires_at <= Date.now()) {
     deleteSessionByTokenStmt.run(rawToken);
@@ -78,7 +78,7 @@ export const getSessionByToken = (token: string) => {
 };
 
 export const deleteSession = (token: string) => {
-  const result = deleteSessionByTokenStmt.run(String(token || "").trim());
+  const result = deleteSessionByTokenStmt.run(String(token || '').trim());
   return result.changes > 0;
 };
 

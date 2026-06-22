@@ -1,19 +1,16 @@
-import fs from "fs";
-import path from "path";
-import {
-  PLAYLIST_LIBRARY_DIR,
-  resolvePlaylistRoot,
-} from "./playlistPaths.js";
+import fs from 'fs';
+import path from 'path';
+import { PLAYLIST_LIBRARY_DIR, resolvePlaylistRoot } from './playlistPaths.js';
 
-const PLAYLIST_SIDECAR_EXT = new Set([".m3u", ".nsp", ".webp", ".png"]);
+const PLAYLIST_SIDECAR_EXT = new Set(['.m3u', '.nsp', '.webp', '.png']);
 
-function relocatePlaylistSidecars(playlistRoot) {
-  const playlistsDir = path.join(playlistRoot, "_playlists");
+function relocatePlaylistSidecars(playlistRoot: string) {
+  const playlistsDir = path.join(playlistRoot, '_playlists');
   fs.mkdirSync(playlistsDir, { recursive: true });
   let moved = 0;
   if (!fs.existsSync(playlistRoot)) return moved;
   for (const entry of fs.readdirSync(playlistRoot)) {
-    if (entry === "_playlists") continue;
+    if (entry === '_playlists') continue;
     const full = path.join(playlistRoot, entry);
     if (!fs.statSync(full).isFile()) continue;
     const ext = path.extname(entry).toLowerCase();
@@ -30,7 +27,7 @@ function relocatePlaylistSidecars(playlistRoot) {
 }
 
 export function ensurePlaylistFilesystemLayout(options = {}) {
-  const root = resolvePlaylistRoot(options.root);
+  const root = resolvePlaylistRoot((options as Record<string, unknown>).root as string | undefined);
   const playlistRoot = path.join(root, PLAYLIST_LIBRARY_DIR);
 
   if (!fs.existsSync(playlistRoot)) {

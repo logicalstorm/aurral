@@ -1,21 +1,21 @@
 export const CATALOG_POPULARITY_LOG_BASE = 6;
 
-export function isCatalogPopularityScore(score) {
+export function isCatalogPopularityScore(score: number) {
   return Number.isFinite(score) && score > 100;
 }
 
-export function isMeilisearchRankingScore(score) {
+export function isMeilisearchRankingScore(score: number) {
   return Number.isFinite(score) && score >= 0 && score <= 1;
 }
 
-export function catalogPopularityToUnit(score) {
+export function catalogPopularityToUnit(score: number) {
   return Math.min(1, Math.log10(score + 1) / CATALOG_POPULARITY_LOG_BASE);
 }
 
-export function normalizeRelevanceScore(item) {
+export function normalizeRelevanceScore(item: Record<string, unknown>) {
   const raw = Number(item?.score);
   if (!Number.isFinite(raw) || raw < 0) return 0;
-  if (item?.source === "library") {
+  if (item?.source === 'library') {
     return Math.min(1, raw / 100);
   }
   if (isMeilisearchRankingScore(raw)) {
@@ -29,45 +29,40 @@ export function normalizeRelevanceScore(item) {
 
 const LIBRARY_TIER_STEP = 0.015;
 
-function getLibraryTier(item) {
-  if (item?.type === "playlist" && item.inLibrary) return 10;
+function getLibraryTier(item: Record<string, unknown>) {
+  if (item?.type === 'playlist' && item.inLibrary) return 10;
   if (item?.inPlaylist) {
-    if (item.type === "track") return 7;
-    if (item.type === "album") return 6;
+    if (item.type === 'track') return 7;
+    if (item.type === 'album') return 6;
   }
   if (item?.inLibrary && item?.libraryBoostEligible !== false) {
-    if (item.type === "track") return 7;
-    if (item.type === "artist") return 5;
+    if (item.type === 'track') return 7;
+    if (item.type === 'artist') return 5;
     return 4;
   }
   return 0;
 }
 
-function getContextBoostNormalized(item) {
+function getContextBoostNormalized(item: Record<string, unknown>) {
   const raw = Number(item?.contextBoost || 0);
   if (!Number.isFinite(raw) || raw <= 0) return 0;
   return Math.min(0.1, raw / 5000);
 }
 
-function getPrimaryMatchBoost(item) {
+function getPrimaryMatchBoost(item: Record<string, unknown>) {
   const matchScore = Number(item?.primaryMatchScore || 0);
   if (matchScore >= 100) return 0.03;
   if (matchScore >= 92) return 0.015;
   return 0;
 }
 
-export function getSearchRankScore(item) {
+export function getSearchRankScore(item: Record<string, unknown>) {
   const relevance = normalizeRelevanceScore(item);
   const tierBoost = getLibraryTier(item) * LIBRARY_TIER_STEP;
-  return (
-    relevance +
-    tierBoost +
-    getContextBoostNormalized(item) +
-    getPrimaryMatchBoost(item)
-  );
+  return relevance + tierBoost + getContextBoostNormalized(item) + getPrimaryMatchBoost(item);
 }
 
-export function compareSearchResults(left, right) {
+export function compareSearchResults(left: Record<string, unknown>, right: Record<string, unknown>) {
   const scoreDiff = getSearchRankScore(right) - getSearchRankScore(left);
   if (scoreDiff !== 0) return scoreDiff;
   const leftRank = Number(left?.catalogRank);
@@ -78,8 +73,8 @@ export function compareSearchResults(left, right) {
   return 0;
 }
 
-export function getLocalMatchThreshold(query) {
-  const wordCount = String(query || "")
+export function getLocalMatchThreshold(query: string) {
+  const wordCount = String(query || '')
     .trim()
     .split(/\s+/)
     .filter(Boolean).length;
