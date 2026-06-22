@@ -51,12 +51,18 @@ export function applyIsolatedBackendEnv(paths) {
   process.env.JSON_BODY_LIMIT = "2mb";
 }
 
+function closeHonkerDbSync() {
+  try {
+    import("../backend/services/honkerDb.ts").then(
+      (mod) => mod.closeHonkerDb(),
+      () => {}
+    );
+  } catch {}
+}
+
 export async function cleanupIsolatedState(paths) {
   if (!paths?.baseDir) return;
-  try {
-    const honkerDb = await importFromRepo("backend/services/honkerDb.ts");
-    honkerDb.closeHonkerDb();
-  } catch {}
+  closeHonkerDbSync();
   await rm(paths.baseDir, { recursive: true, force: true });
 }
 
