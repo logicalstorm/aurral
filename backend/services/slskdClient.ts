@@ -163,7 +163,8 @@ export function isSearchInProgress(data: Record<string, unknown>) {
 function readSearchResponses(searchData: Record<string, unknown>) {
   if (Array.isArray(searchData)) return searchData;
   const responses = readProperty(searchData, 'responses', 'Responses');
-  return normalizeArrayPayload(responses);
+  if (responses != null) return normalizeArrayPayload(responses);
+  return normalizeArrayPayload(searchData);
 }
 
 function normalizeSearchFile(
@@ -365,7 +366,14 @@ export class SlskdClient {
   async getSearchResponses(searchId: string) {
     const client = buildClient();
     const response = await client.get(`/api/v0/searches/${searchId}/responses`);
-    if (response.status !== 200) return [];
+    if (response.status !== 200) {
+      logger.slskd(2, 'slskd getSearchResponses returned non-200', {
+        searchId: String(searchId || ''),
+        status: response.status,
+        statusText: String(response.statusText || ''),
+      });
+      return [];
+    }
     return readSearchResponses(response.data);
   }
 
@@ -378,19 +386,33 @@ export class SlskdClient {
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const refreshed = await this.getSearch(searchId);
-      if (this.flattenSearchResults(refreshed).length > 0) {
-        return refreshed;
-      }
-      const responses = await this.getSearchResponses(searchId);
-      if (responses.length > 0) {
-        return { ...refreshed, responses };
+      try {
+        const refreshed = await this.getSearch(searchId);
+        if (this.flattenSearchResults(refreshed).length > 0) {
+          return refreshed;
+        }
+        const responses = await this.getSearchResponses(searchId);
+        if (responses.length > 0) {
+          return { ...refreshed, responses };
+        }
+      } catch (error: unknown) {
+        logger.slskd(2, 'slskd hydrate poll error, retrying', {
+          searchId,
+          error: (error as Error)?.message || String(error),
+        });
       }
     }
 
-    const responses = await this.getSearchResponses(searchId);
-    if (responses.length > 0) {
-      return { ...data, responses };
+    try {
+      const responses = await this.getSearchResponses(searchId);
+      if (responses.length > 0) {
+        return { ...data, responses };
+      }
+    } catch (error: unknown) {
+      logger.slskd(2, 'slskd hydrate final responses error', {
+        searchId,
+        error: (error as Error)?.message || String(error),
+      });
     }
     logger.slskd(2, 'slskd search completed with counts but no file payloads', {
       searchId,
