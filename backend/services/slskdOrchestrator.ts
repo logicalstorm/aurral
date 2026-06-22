@@ -35,8 +35,9 @@ import {
 export { commitImportToPlaylistLibrary };
 
 interface SearchTier {
-  queries: { searchText?: string; [key: string]: unknown }[];
-  [key: string]: unknown;
+  tier: number;
+  name: string;
+  queries: string[];
 }
 
 interface SearchResultEntry {
@@ -819,7 +820,7 @@ function probeAggregatedResults(
 }
 
 async function runSearchQuery(
-  query: { searchText?: string; [key: string]: unknown },
+  query: string | { searchText?: string; [key: string]: unknown },
   searchIdRef: { value: string | null },
   searchIds: string[],
   resolvedTrack: unknown,
@@ -827,7 +828,10 @@ async function runSearchQuery(
   aggregated: Record<string, unknown>[],
   seen: Set<string>,
 ) {
-  const created = await slskdClient.createSearch(String(query.searchText || ''), query) as { id: string; searchText: string };
+  const searchText = (typeof query === 'string' ? query : String(query.searchText || '')).trim();
+  if (!searchText) return [];
+  const queryObj = typeof query === 'string' ? {} : query;
+  const created = await slskdClient.createSearch(searchText, queryObj) as { id: string; searchText: string };
   if (Array.isArray(searchIds)) {
     searchIds.push(created.id);
   }
@@ -870,7 +874,7 @@ async function handleSearch(payload: PipelinePayload) {
   const seen = new Set<string>();
   const searchIdRef: { value: string | null } = { value: null };
   const searchIds: string[] = [];
-  const queries: { searchText?: string; [key: string]: unknown }[] = [];
+  const queries: string[] = [];
   for (const tier of searchTiers) {
     if (hasSlskdSearchCandidates(aggregated, resolvedTrack, searchOptions)) {
       break;
