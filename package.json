@@ -11,7 +11,7 @@
   "scripts": {
     "build": "npm run build --workspace frontend",
     "start": "tsx backend/server.ts",
-    "test": "node --import tsx --test --test-concurrency=1 $(find .tests -name '*.test.ts' -print)",
+    "test": "node --import tsx --test --test-concurrency=1 --test-timeout=600000 --test-force-exit $(find .tests -name '*.test.ts' -print)",
     "dev": "concurrently --kill-others-on-fail \"npm run dev:backend\" \"npm run wait-and-dev:frontend\"",
     "wait-and-dev:frontend": "wait-on -t 15000 http://localhost:3001/api/health && npm run dev --workspace frontend",
     "dev:backend": "nodemon --exec tsx backend/server.ts",

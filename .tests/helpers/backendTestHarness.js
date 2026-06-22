@@ -51,18 +51,8 @@ export function applyIsolatedBackendEnv(paths) {
   process.env.JSON_BODY_LIMIT = "2mb";
 }
 
-function closeHonkerDbSync() {
-  try {
-    import("../backend/services/honkerDb.ts").then(
-      (mod) => mod.closeHonkerDb(),
-      () => {}
-    );
-  } catch {}
-}
-
 export async function cleanupIsolatedState(paths) {
   if (!paths?.baseDir) return;
-  closeHonkerDbSync();
   await rm(paths.baseDir, { recursive: true, force: true });
 }
 
@@ -238,8 +228,9 @@ export async function prepareIntegrationTestServer(
   { admin = false, onboardingComplete = true, settings = {} } = {},
 ) {
   applyIsolatedBackendEnv(paths);
-  closeHonkerDbSync();
-  const sqlite = await importFromRepo("backend/config/db-sqlite.ts");
+
+  const bootstrapServer = await startServerProcess();
+  await bootstrapServer.stop();
   await seedIntegrationDatabase(paths, {
     admin,
     onboardingComplete,
