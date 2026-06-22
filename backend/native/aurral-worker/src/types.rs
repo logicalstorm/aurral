@@ -493,7 +493,8 @@ pub fn existing_key_set(keys: &[String]) -> HashSet<String> {
 }
 
 pub fn normalize_text(value: &str) -> String {
-    value.trim().to_lowercase()
+    use unicode_normalization::UnicodeNormalization;
+    value.trim().nfkd().collect::<String>().to_lowercase()
 }
 
 pub fn normalize_mbid(value: Option<&str>) -> Option<String> {

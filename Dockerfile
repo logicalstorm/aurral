@@ -62,4 +62,4 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/aurral-worker &&
 EXPOSE 3001
 
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["node", "backend/server.js"]
+CMD ["npx", "tsx", "backend/server.ts"]

@@ -1,0 +1,232 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  createIsolatedStateDir,
+  applyIsolatedBackendEnv,
+  cleanupIsolatedState,
+  importFromRepo,
+  resetDatabase,
+} from "../helpers/backendTestHarness.js";
+
+const isolatedState = await createIsolatedStateDir("aurral-history");
+applyIsolatedBackendEnv(isolatedState);
+
+const [{ db }, historyModule] = await Promise.all([
+  importFromRepo("backend/config/db-sqlite.ts"),
+  importFromRepo("backend/services/aurralHistoryService.ts"),
+]);
+
+const { upsertAurralHistory, getAurralHistoryRequests } = historyModule;
+const { downloadTracker } = await importFromRepo(
+  "backend/services/weeklyFlowDownloadTracker.ts",
+);
+
+test.beforeEach(() => {
+  resetDatabase(db);
+  downloadTracker.clearAll();
+});
+
+test.after(async () => {
+  await cleanupIsolatedState(isolatedState);
+});
+
+test("upsertAurralHistory keeps timestamp for unchanged records", async () => {
+  const baseTime = Date.now();
+  upsertAurralHistory({
+    referenceId: "job-1",
+    kind: "track_download",
+    title: "Searching slskd for Song",
+    subtitle: "Artist · Playlist",
+    status: "processing",
+    statusLabel: "Searching",
+    metadata: { jobId: "job-1", trackName: "Song", artistName: "Artist" },
+    createdAt: baseTime - 4000,
+  });
+
+  upsertAurralHistory({
+    referenceId: "job-1",
+    kind: "track_download",
+    title: "Searching slskd for Song",
+    subtitle: "Artist · Playlist",
+    status: "processing",
+    statusLabel: "Searching",
+    metadata: { jobId: "job-1", trackName: "Song", artistName: "Artist" },
+    createdAt: baseTime,
+  });
+
+  const [entry] = await getAurralHistoryRequests();
+  assert.equal(new Date(entry.requestedAt).getTime(), baseTime - 4000);
+});
+
+test("upsertAurralHistory moves changed records to the top", async () => {
+  const baseTime = Date.now();
+  upsertAurralHistory({
+    referenceId: "job-1",
+    kind: "track_download",
+    title: "Searching slskd for Older Song",
+    subtitle: "Artist · Playlist",
+    status: "processing",
+    statusLabel: "Searching",
+    metadata: { jobId: "job-1", trackName: "Older Song", artistName: "Artist" },
+    createdAt: baseTime - 4000,
+  });
+  upsertAurralHistory({
+    referenceId: "job-2",
+    kind: "track_download",
+    title: "Searching slskd for Newer Song",
+    subtitle: "Artist · Playlist",
+    status: "processing",
+    statusLabel: "Searching",
+    metadata: { jobId: "job-2", trackName: "Newer Song", artistName: "Artist" },
+    createdAt: baseTime - 2000,
+  });
+
+  upsertAurralHistory({
+    referenceId: "job-1",
+    kind: "track_download",
+    title: "Failed to download Older Song",
+    subtitle: "No suitable slskd search results",
+    status: "failed",
+    statusLabel: "Failed",
+    metadata: { jobId: "job-1", trackName: "Older Song", artistName: "Artist" },
+    createdAt: baseTime,
+  });
+
+  const entries = await getAurralHistoryRequests();
+  assert.equal(entries[0]?.jobId, "job-1");
+  assert.equal(entries[0]?.status, "failed");
+  assert.equal(new Date(entries[0]?.requestedAt).getTime(), baseTime);
+});
+
+test("track download history separates NZBGet from slskd", async () => {
+  upsertAurralHistory({
+    referenceId: "job-slskd",
+    kind: "track_download",
+    title: "Searching slskd for Soulseek Song",
+    subtitle: "Artist · Playlist",
+    status: "processing",
+    statusLabel: "Searching",
+    metadata: {
+      jobId: "job-slskd",
+      trackName: "Soulseek Song",
+      artistName: "Artist",
+      downloadSource: "slskd",
+    },
+  });
+  upsertAurralHistory({
+    referenceId: "job-usenet",
+    kind: "track_download",
+    title: "Searching NZBGet for Usenet Song",
+    subtitle: "Artist · Playlist",
+    status: "processing",
+    statusLabel: "Searching",
+    metadata: {
+      jobId: "job-usenet",
+      trackName: "Usenet Song",
+      artistName: "Artist",
+      downloadSource: "usenet",
+    },
+  });
+
+  const entries = await getAurralHistoryRequests();
+  const slskdEntry = entries.find((entry) => entry.jobId === "job-slskd");
+  const usenetEntry = entries.find((entry) => entry.jobId === "job-usenet");
+
+  assert.equal(slskdEntry?.source, "slskd");
+  assert.equal(usenetEntry?.source, "nzbget");
+});
+
+test("getAurralHistoryRequests reconciles completed download jobs", async () => {
+  const jobId = downloadTracker.addJob(
+    {
+      artistName: "Artist",
+      trackName: "Song",
+    },
+    "playlist-1",
+  );
+  upsertAurralHistory({
+    referenceId: jobId,
+    kind: "track_download",
+    title: "Downloading Song via slskd",
+    subtitle: "Artist · Playlist",
+    status: "processing",
+    statusLabel: "Downloading",
+    metadata: {
+      jobId,
+      trackName: "Song",
+      artistName: "Artist",
+      playlistId: "playlist-1",
+      downloadSource: "slskd",
+    },
+    createdAt: Date.now() - 60 * 1000,
+  });
+  downloadTracker.setDone(jobId, "/tmp/song.flac", "Album");
+
+  const entries = await getAurralHistoryRequests();
+  const entry = entries.find((item) => item.jobId === jobId);
+
+  assert.equal(entry?.status, "completed");
+  assert.equal(entry?.statusLabel, "Downloaded");
+  assert.equal(entry?.inQueue, false);
+});
+
+test("getAurralHistoryRequests fails stale active download history", async () => {
+  const jobId = downloadTracker.addJob(
+    {
+      artistName: "Artist",
+      trackName: "Stale Song",
+    },
+    "playlist-1",
+  );
+  upsertAurralHistory({
+    referenceId: jobId,
+    kind: "track_download",
+    title: "Searching slskd for Stale Song",
+    subtitle: "Artist · Playlist",
+    status: "processing",
+    statusLabel: "Searching",
+    metadata: {
+      jobId,
+      trackName: "Stale Song",
+      artistName: "Artist",
+      playlistId: "playlist-1",
+      downloadSource: "slskd",
+    },
+    createdAt: Date.now() - 20 * 60 * 1000,
+  });
+  const job = downloadTracker.getJob(jobId);
+  job.createdAt = Date.now() - 20 * 60 * 1000;
+
+  const entries = await getAurralHistoryRequests();
+  const entry = entries.find((item) => item.jobId === jobId);
+
+  assert.equal(entry?.status, "failed");
+  assert.equal(entry?.inQueue, false);
+  assert.equal(downloadTracker.getJob(jobId)?.status, "failed");
+});
+
+test("getAurralHistoryRequests fails orphaned download history", async () => {
+  upsertAurralHistory({
+    referenceId: "missing-job",
+    kind: "track_download",
+    title: "Searching slskd for Missing Song",
+    subtitle: "Artist · Playlist",
+    status: "processing",
+    statusLabel: "Searching",
+    metadata: {
+      jobId: "missing-job",
+      trackName: "Missing Song",
+      artistName: "Artist",
+      playlistId: "playlist-1",
+      downloadSource: "slskd",
+    },
+    createdAt: Date.now() - 20 * 60 * 1000,
+  });
+
+  const entries = await getAurralHistoryRequests();
+  const entry = entries.find((item) => item.jobId === "missing-job");
+
+  assert.equal(entry?.status, "failed");
+  assert.equal(entry?.inQueue, false);
+});

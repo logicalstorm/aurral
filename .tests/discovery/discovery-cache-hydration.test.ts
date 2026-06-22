@@ -1,0 +1,69 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import path from "path";
+import { pathToFileURL } from "url";
+
+import {
+  createIsolatedStateDir,
+  applyIsolatedBackendEnv,
+  cleanupIsolatedState,
+  importFromRepo,
+  resetDatabase,
+} from "../helpers/backendTestHarness.js";
+
+const isolatedState = await createIsolatedStateDir("discovery-cache-hydration");
+applyIsolatedBackendEnv(isolatedState);
+
+const [{ db }, { dbOps }] = await Promise.all([
+  importFromRepo("backend/config/db-sqlite.ts"),
+  importFromRepo("backend/config/db-helpers.ts"),
+]);
+
+test.after(async () => {
+  await cleanupIsolatedState(isolatedState);
+});
+
+test("getDiscoveryCache preserves lastUpdated after an empty completed refresh", async () => {
+  resetDatabase(db);
+
+  dbOps.updateDiscoveryCache({
+    recommendations: [],
+    globalTop: [],
+    basedOn: [],
+    topTags: [],
+    topGenres: [],
+  });
+
+  const moduleUrl = pathToFileURL(
+    path.join(process.cwd(), "backend/services/discoveryService.ts"),
+  ).href;
+  const { getDiscoveryCache } = await import(`${moduleUrl}?t=${Date.now()}`);
+  const cache = getDiscoveryCache();
+
+  assert.ok(cache.lastUpdated);
+  assert.deepEqual(cache.recommendations, []);
+  assert.deepEqual(cache.globalTop, []);
+  assert.deepEqual(cache.topGenres, []);
+  assert.equal(cache.isUpdating, false);
+});
+
+test("getDiscoveryCache persists recommendation enrichment metadata", async () => {
+  resetDatabase(db);
+
+  dbOps.updateDiscoveryCache({
+    recommendations: [{ id: "artist-1", name: "Initial Artist" }],
+    recommendationQuality: "initial",
+    isEnriching: true,
+    discoveryRunId: "run-1",
+    enrichmentStartedAt: "2026-06-18T00:00:00.000Z",
+    enrichmentProgressMessage: "Improving recommendations",
+  });
+
+  const cache = dbOps.getDiscoveryCache();
+
+  assert.equal(cache.recommendationQuality, "initial");
+  assert.equal(cache.isEnriching, true);
+  assert.equal(cache.discoveryRunId, "run-1");
+  assert.equal(cache.enrichmentStartedAt, "2026-06-18T00:00:00.000Z");
+  assert.equal(cache.enrichmentProgressMessage, "Improving recommendations");
+});

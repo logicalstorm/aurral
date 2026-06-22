@@ -75,14 +75,18 @@ pub async fn run(job: FlowPlanJob) -> Result<FlowPlanResult, String> {
     });
     let flow = FlowConfig {
         size: target_size,
-        mix: if job.flow.tags.is_empty() && job.flow.related_artists.is_empty() {
-            mix_from_preset(&mix_value)
-        } else {
-            crate::flow::FlowMix {
-                discover: 0,
-                mix: 0,
-                trending: 0,
-                focus: 100,
+        mix: {
+            let has_focus = !job.flow.tags.is_empty() || !job.flow.related_artists.is_empty();
+            let configured_mix = mix_from_preset(&mix_value);
+            if has_focus && configured_mix.focus == 0 {
+                crate::flow::FlowMix {
+                    discover: 0,
+                    mix: 0,
+                    trending: 0,
+                    focus: 100,
+                }
+            } else {
+                configured_mix
             }
         },
         deep_dive: job.flow.deep_dive.unwrap_or(false),

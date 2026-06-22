@@ -54,7 +54,7 @@ export function applyIsolatedBackendEnv(paths) {
 export async function cleanupIsolatedState(paths) {
   if (!paths?.baseDir) return;
   try {
-    const honkerDb = await importFromRepo("backend/services/honkerDb.js");
+    const honkerDb = await importFromRepo("backend/services/honkerDb.ts");
     honkerDb.closeHonkerDb();
   } catch {}
   await rm(paths.baseDir, { recursive: true, force: true });
@@ -134,7 +134,7 @@ export async function startServerProcess({
     Number.isInteger(port) && port > 0
       ? port
       : 4100 + Math.floor(Math.random() * 1000);
-  const child = spawn("node", ["backend/server.js"], {
+  const child = spawn("npx", ["tsx", "backend/server.ts"], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -233,7 +233,7 @@ export async function prepareIntegrationTestServer(
 ) {
   applyIsolatedBackendEnv(paths);
   try {
-    const honkerDb = await importFromRepo("backend/services/honkerDb.js");
+    const honkerDb = await importFromRepo("backend/services/honkerDb.ts");
     honkerDb.closeHonkerDb();
   } catch {}
 
