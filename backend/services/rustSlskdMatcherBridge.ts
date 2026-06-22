@@ -4,10 +4,6 @@ import { buildSlskdPeerStatsSnapshot } from './slskdTransferHistory.js';
 
 const MAX_BUFFER_BYTES = 64 * 1024 * 1024;
 
-export function isRustSlskdMatcherAvailable() {
-  return Boolean(resolveRustWorkerBinary());
-}
-
 const mapFlowTrackContext = (context: Record<string, unknown> = {}) => ({
   artistName: String(context.artistName || '').trim(),
   trackName: String(context.trackName || '').trim(),
@@ -109,76 +105,6 @@ function invokeRustMatcher(job: Record<string, unknown>) {
     throw new Error(parsed?.error || 'aurral-worker slskd-matcher failed');
   }
   return parsed?.result || {};
-}
-
-const invokeString = (operation: string, payload: Record<string, unknown> = {}) => {
-  const result = invokeRustMatcher({ operation, ...payload });
-  return result?.value ?? '';
-};
-
-const invokeStringList = (operation: string, payload: Record<string, unknown> = {}) => {
-  const result = invokeRustMatcher({ operation, ...payload });
-  return Array.isArray(result?.values) ? result.values : [];
-};
-
-export function bypassBannedArtistTerm(name: string) {
-  return invokeString('bypassBannedArtistTerm', { name });
-}
-
-export function stripReleaseTypeSuffix(value: string) {
-  return invokeString('stripReleaseTypeSuffix', { value });
-}
-
-export function removeSearchAccents(value: string) {
-  return invokeString('removeSearchAccents', { value });
-}
-
-export function buildTrimmedBypassText(value: string) {
-  return invokeString('buildTrimmedBypassText', { value });
-}
-
-export function buildVolumeVariationTexts(value: string) {
-  return invokeStringList('buildVolumeVariationTexts', { value });
-}
-
-export function buildHalfAlbumTitle(albumName: string) {
-  return invokeString('buildHalfAlbumTitle', { albumName });
-}
-
-export function buildFlowAlbumSearchQueries(context: Record<string, unknown>) {
-  return invokeStringList('buildFlowAlbumSearchQueries', {
-    context: mapFlowTrackContext(context),
-  });
-}
-
-export function buildFlowWildcardAlbumSearchQueries(context: Record<string, unknown>) {
-  return invokeStringList('buildFlowWildcardAlbumSearchQueries', {
-    context: mapFlowTrackContext(context),
-  });
-}
-
-export function buildFlowTrackFallbackSearchQueries(context: Record<string, unknown>) {
-  return invokeStringList('buildFlowTrackFallbackSearchQueries', {
-    context: mapFlowTrackContext(context),
-  });
-}
-
-export function buildFlowWildcardTrackFallbackSearchQueries(context: Record<string, unknown>) {
-  return invokeStringList('buildFlowWildcardTrackFallbackSearchQueries', {
-    context: mapFlowTrackContext(context),
-  });
-}
-
-export function buildFlowArtistOnlySearchQueries(context: Record<string, unknown>) {
-  return invokeStringList('buildFlowArtistOnlySearchQueries', {
-    context: mapFlowTrackContext(context),
-  });
-}
-
-export function buildFlowSearchQueries(context: Record<string, unknown>) {
-  return invokeStringList('buildFlowSearchQueries', {
-    context: mapFlowTrackContext(context),
-  });
 }
 
 export function buildFlowSearchTiers(context: Record<string, unknown>) {

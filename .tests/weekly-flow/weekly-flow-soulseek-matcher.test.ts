@@ -5,95 +5,14 @@ import { importFromRepo } from "../helpers/backendTestHarness.js";
 
 const [
   {
-    bypassBannedArtistTerm,
-    buildFlowSearchQueries,
     buildFlowSearchTiers,
-    buildFlowAlbumSearchQueries,
-    buildFlowArtistOnlySearchQueries,
-    buildFlowTrackFallbackSearchQueries,
-    buildFlowWildcardAlbumSearchQueries,
-    buildFlowWildcardTrackFallbackSearchQueries,
-    buildHalfAlbumTitle,
-    buildTrimmedBypassText,
-    buildVolumeVariationTexts,
-    removeSearchAccents,
     rankFlowSearchResults,
     selectRankedMatchAttempts,
-    stripReleaseTypeSuffix,
     validateDownloadedTrack,
   },
 ] = await Promise.all([
   importFromRepo("backend/services/weeklyFlowSoulseekMatcher.ts"),
 ]);
-
-test("bypassBannedArtistTerm replaces the first character of each artist word", () => {
-  assert.equal(bypassBannedArtistTerm("Franz Ferdinand"), "*ranz *erdinand");
-  assert.equal(bypassBannedArtistTerm("*ranz *erdinand"), "*ranz *erdinand");
-  assert.equal(bypassBannedArtistTerm("A"), "A");
-  assert.equal(bypassBannedArtistTerm(""), "");
-});
-
-test("buildFlowWildcardAlbumSearchQueries uses wildcard artist terms", () => {
-  const queries = buildFlowWildcardAlbumSearchQueries({
-    artistName: "Franz Ferdinand",
-    trackName: "Take Me Out",
-    albumName: "Franz Ferdinand",
-    releaseYear: "2004",
-    artistAliases: [],
-  });
-
-  assert.ok(queries.includes("*ranz *erdinand Franz Ferdinand"));
-  assert.ok(queries.includes("*ranz *erdinand Franz Ferdinand 2004"));
-  assert.ok(!queries.includes("Franz Ferdinand Franz Ferdinand"));
-});
-
-test("buildFlowArtistOnlySearchQueries returns wildcard artist-only searches", () => {
-  const queries = buildFlowArtistOnlySearchQueries({
-    artistName: "Franz Ferdinand",
-    trackName: "Take Me Out",
-    albumName: "Franz Ferdinand",
-    artistAliases: ["Franz F."],
-  });
-
-  assert.deepEqual(queries, ["*ranz *erdinand", "*ranz *."]);
-});
-
-test("buildFlowWildcardTrackFallbackSearchQueries wildcard-prefixes artist track searches", () => {
-  const queries = buildFlowWildcardTrackFallbackSearchQueries({
-    artistName: "Franz Ferdinand",
-    trackName: "Take Me Out",
-    albumName: "Franz Ferdinand",
-    artistAliases: [],
-  });
-
-  assert.ok(queries.includes("*ranz *erdinand Take Me Out"));
-  assert.ok(queries.includes("Take Me Out Franz Ferdinand"));
-});
-
-test("stripReleaseTypeSuffix removes terminal release metadata only", () => {
-  assert.equal(
-    stripReleaseTypeSuffix("Object Permanence - Single"),
-    "Object Permanence",
-  );
-  assert.equal(stripReleaseTypeSuffix("Some Release (EP)"), "Some Release");
-  assert.equal(stripReleaseTypeSuffix("Single"), "Single");
-  assert.equal(stripReleaseTypeSuffix("Single Mothers"), "Single Mothers");
-});
-
-test("buildFlowSearchQueries strips release-type suffixes from album searches", () => {
-  const queries = buildFlowSearchQueries({
-    artistName: "Arm's Length",
-    trackName: "Object Permanence",
-    albumName: "Object Permanence - Single",
-    releaseYear: "2019",
-    artistAliases: [],
-  });
-
-  assert.ok(queries.includes("Arm's Length Object Permanence"));
-  assert.ok(queries.includes("Arm's Length Object Permanence 2019"));
-  assert.ok(queries.includes("*rm's *ength Object Permanence"));
-  assert.ok(!queries.some((query) => /Object Permanence - Single/i.test(query)));
-});
 
 test("rankFlowSearchResults rejects same-title single matches from the wrong artist", () => {
   const ranked = rankFlowSearchResults(
@@ -156,33 +75,6 @@ test("rankFlowSearchResults still accepts same-title single matches from the rig
   assert.ok(ranked.length > 0);
   assert.equal(ranked[0].preDownloadValid, true);
 });
-
-test("buildFlowAlbumSearchQueries keeps album-only searches separate from track fallbacks", () => {
-  const albumQueries = buildFlowAlbumSearchQueries({
-    artistName: "Massive Attack",
-    trackName: "Teardrop",
-    albumName: "Mezzanine",
-    releaseYear: "1998",
-    artistAliases: ["Massive Attk"],
-  });
-  const fallbackQueries = buildFlowTrackFallbackSearchQueries({
-    artistName: "Massive Attack",
-    trackName: "Teardrop",
-    albumName: "Mezzanine",
-    releaseYear: "1998",
-    artistAliases: ["Massive Attk"],
-  });
-
-  assert.deepEqual(albumQueries.slice(0, 2), [
-    "Massive Attack Mezzanine",
-    "Massive Attack Mezzanine 1998",
-  ]);
-  assert.ok(albumQueries.includes("Massive Attk Mezzanine"));
-  assert.ok(!albumQueries.includes("Massive Attack Teardrop"));
-  assert.ok(fallbackQueries.includes("Massive Attack Teardrop"));
-  assert.ok(fallbackQueries.includes("Massive Attk Teardrop"));
-});
-
 test("buildFlowSearchTiers uses a short album-first plan", () => {
   const tiers = buildFlowSearchTiers({
     artistName: "Massive Attack",
@@ -209,91 +101,6 @@ test("buildFlowSearchTiers uses a short album-first plan", () => {
         tier.name === "album_track" &&
         tier.queries.includes("Mezzanine Teardrop"),
     ),
-  );
-});
-
-test("buildFlowSearchQueries includes only targeted album and album-track searches", () => {
-  const queries = buildFlowSearchQueries({
-    artistName: "Massive Attack",
-    trackName: "Teardrop",
-    albumName: "Mezzanine",
-    releaseYear: "1998",
-    artistAliases: ["Massive Attk"],
-  });
-
-  assert.equal(queries[0], "Massive Attack Mezzanine 1998");
-  assert.ok(queries.includes("Massive Attack Mezzanine 1998"));
-  assert.ok(queries.includes("*assive *ttack Mezzanine 1998"));
-  assert.ok(queries.includes("Mezzanine Teardrop"));
-  assert.ok(!queries.includes("Massive Attk Teardrop"));
-});
-
-test("search variation helpers normalize and trim bypass text", () => {
-  assert.equal(removeSearchAccents("Björk"), "Bjork");
-  assert.equal(buildTrimmedBypassText("Bob Dylan"), "Bob Dyla");
-  assert.equal(
-    buildVolumeVariationTexts("Artist Album Vol. 2")[0],
-    "Artist Album Vol. 2",
-  );
-  assert.ok(
-    buildVolumeVariationTexts("Artist Album Vol. 2").includes(
-      "Artist Album Volume 2",
-    ),
-  );
-  assert.equal(
-    buildHalfAlbumTitle("The Fiction We Live On Forever"),
-    "The Fiction We",
-  );
-});
-
-test("buildFlowSearchQueries adds album-track plus album searches", () => {
-  const queries = buildFlowSearchQueries({
-    artistName: "Gorillaz",
-    trackName: "Feel Good Inc.",
-    albumName: "Demon Days",
-    releaseYear: "2005",
-    artistAliases: [],
-  });
-
-  assert.ok(queries.includes("Demon Days Feel Good Inc."));
-  assert.ok(queries.includes("Gorillaz Demon Days 2005"));
-  assert.ok(queries.includes("Gorillaz Demon Days"));
-  assert.ok(!queries.includes("Gorillaz Feel Good Inc."));
-});
-
-test("buildFlowTrackFallbackSearchQueries keeps simplified title variants available", () => {
-  const queries = buildFlowSearchQueries({
-    artistName: "Bully",
-    trackName: "Lose You (feat. Soccer Mommy)",
-    albumName: "Lucky For You",
-    artistAliases: [],
-  });
-
-  assert.ok(queries.includes("Lucky For You Lose You (feat. Soccer Mommy)"));
-  assert.ok(!queries.includes("Bully Lose You"));
-
-  const fallbackQueries = buildFlowTrackFallbackSearchQueries({
-    artistName: "Bully",
-    trackName: "Lose You (feat. Soccer Mommy)",
-    albumName: "Lucky For You",
-    artistAliases: [],
-  });
-  assert.ok(fallbackQueries.includes("Bully Lose You"));
-
-  const slashQueries = buildFlowSearchQueries({
-    artistName: "LOVING",
-    trackName: "A long slow little wave / citizen, an activity",
-    albumName: "Any Light",
-    artistAliases: [],
-  });
-
-  assert.ok(
-    slashQueries.includes(
-      "Any Light A long slow little wave / citizen, an activity",
-    ),
-  );
-  assert.ok(
-    !slashQueries.includes("LOVING A long slow little wave"),
   );
 });
 
