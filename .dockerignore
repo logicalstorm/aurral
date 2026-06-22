@@ -13,3 +13,4 @@ backend/data
 backend/node_modules
 *.log
 .DS_Store
+**/target

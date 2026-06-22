@@ -85,8 +85,17 @@ jobs:
 
   publish-image:
     needs: compute-release
-    runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 45
+    strategy:
+      matrix:
+        include:
+          - runner: [self-hosted, Linux, X64]
+            platform: linux/amd64
+            suffix: linux-amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            suffix: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
@@ -95,8 +104,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend/native/aurral-worker
+
+      - name: Build aurral-worker
+        working-directory: backend/native/aurral-worker
+        run: cargo build --release
+
+      - name: Stage Rust binary for Docker
+        run: |
+          mkdir -p .build
+          cp backend/native/aurral-worker/target/release/aurral-worker .build/aurral-worker
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -114,13 +137,15 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=${{ needs.compute-release.outputs.version }}
-            type=raw,value=latest,enable=${{ needs.compute-release.outputs.channel == 'stable' }}
-            type=raw,value=test,enable=${{ needs.compute-release.outputs.channel == 'test' }}
-            type=raw,value=dev,enable=${{ needs.compute-release.outputs.channel == 'dev' }}
+            type=raw,value=${{ needs.compute-release.outputs.version }}-${{ matrix.suffix }}
 
       - name: Prepare local BuildKit cache
-        run: mkdir -p /home/github-runner/.cache/aurral-buildkit
+        id: cache
+        run: |
+          CACHE_DIR="${HOME}/.cache/aurral-buildkit"
+          mkdir -p "${CACHE_DIR}"
+          echo "src=${CACHE_DIR}" >> "$GITHUB_OUTPUT"
+          echo "dest=${CACHE_DIR}-new" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v7
@@ -131,22 +156,60 @@ jobs:
           sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           build-args: |
             APP_VERSION=${{ needs.compute-release.outputs.version }}
             GITHUB_REPO=${{ github.repository }}
             RELEASE_CHANNEL=${{ needs.compute-release.outputs.channel }}
-          cache-from: type=local,src=/home/github-runner/.cache/aurral-buildkit
-          cache-to: type=local,dest=/home/github-runner/.cache/aurral-buildkit-new,mode=max
+          cache-from: type=local,src=${{ steps.cache.outputs.src }}
+          cache-to: type=local,dest=${{ steps.cache.outputs.dest }},mode=max
 
       - name: Rotate BuildKit cache
         if: always()
         run: |
-          rm -rf /home/github-runner/.cache/aurral-buildkit
-          mv /home/github-runner/.cache/aurral-buildkit-new /home/github-runner/.cache/aurral-buildkit || true
+          rm -rf "${{ steps.cache.outputs.src }}"
+          mv "${{ steps.cache.outputs.dest }}" "${{ steps.cache.outputs.src }}" || true
+
+  merge-manifest:
+    needs: [compute-release, publish-image]
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    permissions:
+      packages: write
+    steps:
+      - name: Log into ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create multi-arch manifests
+        env:
+          VERSION: ${{ needs.compute-release.outputs.version }}
+          CHANNEL: ${{ needs.compute-release.outputs.channel }}
+          REPO: ghcr.io/${{ github.repository }}
+        run: |
+          docker buildx imagetools create -t "${REPO}:${VERSION}" \
+            "${REPO}:${VERSION}-linux-amd64" \
+            "${REPO}:${VERSION}-linux-arm64"
+
+          if [ "${CHANNEL}" = "stable" ]; then
+            docker buildx imagetools create -t "${REPO}:latest" \
+              "${REPO}:${VERSION}-linux-amd64" \
+              "${REPO}:${VERSION}-linux-arm64"
+          elif [ "${CHANNEL}" = "test" ]; then
+            docker buildx imagetools create -t "${REPO}:test" \
+              "${REPO}:${VERSION}-linux-amd64" \
+              "${REPO}:${VERSION}-linux-arm64"
+          elif [ "${CHANNEL}" = "dev" ]; then
+            docker buildx imagetools create -t "${REPO}:dev" \
+              "${REPO}:${VERSION}-linux-amd64" \
+              "${REPO}:${VERSION}-linux-arm64"
+          fi
 
   create-tag:
-    needs: [compute-release, publish-image]
+    needs: [compute-release, merge-manifest]
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     permissions:
