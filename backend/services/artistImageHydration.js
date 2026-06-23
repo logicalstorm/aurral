@@ -72,7 +72,6 @@ export const hydrateArtistImages = async (
           const cached = dbOps.getImage(id);
           const cover = await getArtistImage(id, {
             artistName: artist.name || artist.sortName || null,
-            forceRefresh: cached?.imageUrl === "NOT_FOUND",
           });
           if (!cover?.url) return;
           const proxiedImage = buildImageProxyUrl(cover.url) || cover.url;

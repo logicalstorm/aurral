@@ -1,10 +1,6 @@
 import { dbOps } from "../config/db-helpers.js";
-import {
-  musicbrainzGetArtistNameByMbid,
-  musicbrainzGetArtistReleaseGroupsPreview,
-} from "./apiClients.js";
 import { warmImageProxy } from "./imageProxyService.js";
-import { getArtistByMbid } from "./providers/brainzmashProvider.js";
+import { getArtistByMbid, listArtistAlbums } from "./providers/brainzmashProvider.js";
 import { fetchReleaseGroupCoverUrl } from "./releaseGroupCoverService.js";
 
 const MAX_NEGATIVE_CACHE = 1000;
@@ -212,17 +208,17 @@ const recoverArtistCoverFromCachedReleaseGroups = async (resolvedMbid) => {
     }
   }
 
-  const releaseGroups = await musicbrainzGetArtistReleaseGroupsPreview(
-    resolvedMbid,
-    30,
-  ).catch(() => []);
-  const ordered = releaseGroups
+  const albums = await listArtistAlbums(resolvedMbid, {
+    includeTrackCounts: false,
+    hydrateLimit: 30,
+  }).catch(() => []);
+  const ordered = albums
     .filter((rg) => rg?.id)
     .sort((a, b) => {
-      const rankDiff = typeRank(a["primary-type"]) - typeRank(b["primary-type"]);
+      const rankDiff = typeRank(a.type) - typeRank(b.type);
       if (rankDiff !== 0) return rankDiff;
-      const dateA = a["first-release-date"] || "";
-      const dateB = b["first-release-date"] || "";
+      const dateA = a.firstReleaseDate || "";
+      const dateB = b.firstReleaseDate || "";
       return dateB.localeCompare(dateA);
     });
 
@@ -324,42 +320,36 @@ export const getArtistImage = async (
       if (directArtistImage?.url) {
         const images = await buildDirectArtistImagePayload(directArtistImages);
         const primaryImage = images.find((image) => image.front) || images[0];
-        if (!primaryImage?.image) {
-          throw new Error("Artist images could not be proxied");
+        if (primaryImage?.image) {
+          negativeImageCache.delete(mbid);
+          dbOps.setImage(mbid, primaryImage.image);
+          return {
+            url: primaryImage.image,
+            images,
+          };
         }
-        negativeImageCache.delete(mbid);
-        dbOps.setImage(mbid, primaryImage.image);
-        return {
-          url: primaryImage.image,
-          images,
-        };
       }
 
       const resolvedArtistName =
-        artistName ||
-        (await musicbrainzGetArtistNameByMbid(resolvedMbid).catch(() => null));
+        metadataArtist?.name || artistName || null;
       const rgCacheKey = `artist_rg:${resolvedMbid}`;
       const cachedRg = forceRefresh ? null : dbOps.getDeezerMbidCache(rgCacheKey);
-      const releaseGroups = cachedRg
+      const albums = cachedRg
         ? cachedRg === "NOT_FOUND"
           ? []
-          : [
-              {
-                id: cachedRg,
-                title: "",
-                "primary-type": "Album",
-                "first-release-date": null,
-              },
-            ]
-        : await musicbrainzGetArtistReleaseGroupsPreview(resolvedMbid, 30);
+          : [{ id: cachedRg, type: "Album", firstReleaseDate: null }]
+        : await listArtistAlbums(resolvedMbid, {
+            includeTrackCounts: false,
+            hydrateLimit: 30,
+          });
 
-      const ordered = releaseGroups
+      const ordered = albums
         .filter((rg) => rg?.id)
         .sort((a, b) => {
-          const rankDiff = typeRank(a["primary-type"]) - typeRank(b["primary-type"]);
+          const rankDiff = typeRank(a.type) - typeRank(b.type);
           if (rankDiff !== 0) return rankDiff;
-          const dateA = a["first-release-date"] || "";
-          const dateB = b["first-release-date"] || "";
+          const dateA = a.firstReleaseDate || "";
+          const dateB = b.firstReleaseDate || "";
           return dateB.localeCompare(dateA);
         })
         .slice(0, 25);
