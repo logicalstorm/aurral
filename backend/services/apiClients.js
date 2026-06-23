@@ -557,6 +557,9 @@ export async function fetchCoverArtArchiveReleaseGroup(releaseGroupMbid) {
   }
 }
 
+let _lastfmApiCallCount = 0;
+const _lastfmApiCallCountByMethod = new Map();
+
 export const lastfmRequest = lastfmLimiter.wrap(
   async (method, params = {}, options = {}) => {
     const apiKey = getLastfmApiKey();
@@ -567,6 +570,9 @@ export const lastfmRequest = lastfmLimiter.wrap(
     if (cached) return cached;
     const inflight = lastfmInflightRequests.get(cacheKey);
     if (inflight) return inflight;
+    _lastfmApiCallCount += 1;
+    const currentByMethod = _lastfmApiCallCountByMethod.get(method) || 0;
+    _lastfmApiCallCountByMethod.set(method, currentByMethod + 1);
     const timeoutMs = Number.isFinite(Number(options?.timeoutMs))
       ? Math.max(500, Math.floor(Number(options.timeoutMs)))
       : LASTFM_TIMEOUT_MS;
@@ -2061,4 +2067,17 @@ export function clearApiCaches() {
   deezerAlbumCache.flushAll();
   deezerBioCache.flushAll();
   youtubeVideoCache.flushAll();
+}
+
+export function getLastfmApiCallCount() {
+  return _lastfmApiCallCount;
+}
+
+export function getLastfmApiCallCountByMethod() {
+  return Object.fromEntries(_lastfmApiCallCountByMethod);
+}
+
+export function resetLastfmApiCallCount() {
+  _lastfmApiCallCount = 0;
+  _lastfmApiCallCountByMethod.clear();
 }

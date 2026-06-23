@@ -134,7 +134,7 @@ export const applyHydratedCandidateTags = (
       ...recommendation,
       tags: normalizedTags,
       candidateTagsHydrated: true,
-      tagSource: "lastfm_artist",
+      tagSource: options.source || "lastfm_artist",
     };
   }
 
@@ -175,7 +175,7 @@ export const applyHydratedCandidateTags = (
     scoreTotal,
     score: scoreTotal,
     candidateTagsHydrated: true,
-    tagSource: "lastfm_artist",
+    tagSource: options.source || "lastfm_artist",
   };
 };
 

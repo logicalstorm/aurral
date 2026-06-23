@@ -12,7 +12,6 @@ import { startNotificationOutboxWorker } from "./notificationOutboxWorker.js";
 import { startSlskdOrchestratorWorker } from "./slskdOrchestratorWorker.js";
 import { startDiscoveryRefreshWorker } from "./discoveryRefreshWorker.js";
 import { startDiscoveryPlaylistBuildWorker } from "./discoveryPlaylistBuildWorker.js";
-import { startDiscoveryRecommendationEnrichmentWorker } from "./discoveryRecommendationEnrichmentWorker.js";
 import { startDiscoveryUserRefreshWorker } from "./discoveryUserRefreshWorker.js";
 import { startWeeklyFlowOperationWorker } from "./weeklyFlowOperationWorker.js";
 import { startWeeklyFlowPlaylistRetryWorker } from "./weeklyFlowPlaylistRetryWorker.js";
@@ -38,10 +37,6 @@ const QUEUE_WORKERS = [
   { queue: "slskd-pipeline", start: startSlskdOrchestratorWorker },
   { queue: "discovery-refresh", start: startDiscoveryRefreshWorker },
   { queue: "discovery-playlist-build", start: startDiscoveryPlaylistBuildWorker },
-  {
-    queue: "discovery-recommendation-enrichment",
-    start: startDiscoveryRecommendationEnrichmentWorker,
-  },
   { queue: "discovery-user-refresh", start: startDiscoveryUserRefreshWorker },
   { queue: "weekly-flow-operation", start: startWeeklyFlowOperationWorker },
   { queue: "playlist-retry", start: startWeeklyFlowPlaylistRetryWorker },
