@@ -22,6 +22,7 @@ import {
   createSharedPlaylist,
   getDownloadStatus,
   getFlowStatus,
+  getLibraryTracks,
   getReleaseGroupCover,
   getReleaseGroupDetails,
   getReleaseGroupTracks,
@@ -280,14 +281,23 @@ function ReleasePage() {
 
     const loadTracks = async () => {
       try {
-        const nextTracks = await getReleaseGroupTracks(releaseMbid, {
+        const context = {
           artistMbid,
           artistName,
           albumTitle: release.title,
           releaseType: release["primary-type"] || "",
           releaseDate: release["first-release-date"] || "",
           deezerAlbumId: release._deezerAlbumId || "",
-        });
+        };
+
+        const nextTracks = libraryInfo?.libraryAlbumId
+          ? await getLibraryTracks(
+              libraryInfo.libraryAlbumId,
+              releaseMbid,
+              context,
+            )
+          : await getReleaseGroupTracks(releaseMbid, context);
+
         if (!cancelled) {
           setTracks(Array.isArray(nextTracks) ? nextTracks : []);
         }
@@ -307,7 +317,7 @@ function ReleasePage() {
     return () => {
       cancelled = true;
     };
-  }, [artistMbid, artistName, release, releaseMbid, showError]);
+  }, [artistMbid, artistName, release, releaseMbid, libraryInfo?.libraryAlbumId, isComplete, showError]);
 
   const loadSharedPlaylists = useCallback(async () => {
     setPlaylistModalLoading(true);
