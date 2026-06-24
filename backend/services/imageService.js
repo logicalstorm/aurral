@@ -419,11 +419,7 @@ export const getArtistImage = async (
           (a) => a.id !== resolvedMbid && a.images?.length > 0 && a.name === artistName,
         );
         if (siblings.length > 0) {
-          siblings.sort((a, b) =>
-            b.images.length - a.images.length ||
-            (b.score ?? 0) - (a.score ?? 0) ||
-            (b.genres?.length ?? 0) - (a.genres?.length ?? 0),
-          );
+          siblings.sort((a, b) => b.images.length - a.images.length);
           const sibling = siblings[0];
           dbOps.setArtistOverride(mbid, { musicbrainzId: sibling.id });
           const siblingResult = await getArtistImage(sibling.id, {
