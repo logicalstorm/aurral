@@ -41,3 +41,12 @@ aurral-search/*
 desktop/node_modules/
 desktop/src-tauri/target/
 .cursor/
+.agents/
+AGENTS.md
+CLAUDE.md
+skills-lock.json
+docs/agents/
+docs/adr/
+CONTEXT.md
+CONTEXT-MAP.md
+.scratch/

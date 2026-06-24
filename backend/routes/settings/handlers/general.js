@@ -26,7 +26,7 @@ function mergeIntegrations(existing, input, keys) {
   return merged;
 }
 
-export default function register(router) {
+export default function registerGeneral(router) {
   router.get("/", noCache, (req, res) => {
     try {
       const settings = dbOps.getSettings();
@@ -368,92 +368,6 @@ export default function register(router) {
       res
         .status(500)
         .json({ error: "Failed to save settings", message: error.message });
-    }
-  });
-
-  router.get("/tasks", noCache, async (_req, res) => {
-    try {
-      const { getHonkerTaskStatus } = await import(
-        "../../../services/honkerTaskStatus.js"
-      );
-      res.json(await getHonkerTaskStatus());
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to get task status",
-        message: error.message,
-      });
-    }
-  });
-
-  router.post("/tasks/clear-stale", noCache, async (_req, res) => {
-    try {
-      const { clearStaleHonkerJobs, getHonkerTaskStatus } = await import(
-        "../../../services/honkerTaskStatus.js"
-      );
-      const result = await clearStaleHonkerJobs();
-      res.json({
-        ...result,
-        tasks: await getHonkerTaskStatus(),
-      });
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to clear stuck jobs",
-        message: error.message,
-      });
-    }
-  });
-
-  router.get("/storage-health", noCache, async (req, res) => {
-    try {
-      const { runStorageHealthCheck } =
-        await import("../../../services/storageHealthService.js");
-      const force = req.query.force === "1" || req.query.force === "true";
-      const result = await runStorageHealthCheck({ force });
-      res.json({
-        success: result.ok,
-        ...result,
-      });
-    } catch (error) {
-      logger.error("settings", "Storage health check error:", error);
-      res.status(500).json({
-        error: "Storage health check failed",
-        message: error.message,
-      });
-    }
-  });
-
-  router.get("/browse", async (req, res) => {
-    try {
-      const fs = await import("fs/promises");
-      const path = await import("path");
-      const target = path.resolve(req.query.path ? String(req.query.path) : "/");
-      const dirents = await fs.readdir(target, { withFileTypes: true });
-      const directories = (
-        await Promise.all(
-          dirents.map(async (d) => {
-            let isDir = d.isDirectory();
-            if (!isDir && d.isSymbolicLink()) {
-              try {
-                isDir = (await fs.stat(path.join(target, d.name))).isDirectory();
-              } catch {
-                isDir = false;
-              }
-            }
-            return isDir ? { name: d.name, path: path.join(target, d.name) } : null;
-          }),
-        )
-      )
-        .filter(Boolean)
-        .sort((a, b) => a.name.localeCompare(b.name));
-      res.json({
-        path: target,
-        parent: target === "/" ? null : path.dirname(target),
-        directories,
-      });
-    } catch (error) {
-      res
-        .status(400)
-        .json({ error: "Cannot read path", message: error.message });
     }
   });
 }
