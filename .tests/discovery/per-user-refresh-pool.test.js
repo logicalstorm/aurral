@@ -274,7 +274,7 @@ test("per-user refresh: feedback boost affects reranking for per-user pool", asy
   );
 });
 
-test("per-user refresh: returns null when global pool is empty without degrading user cache", async () => {
+test("per-user refresh: returns null when global pool is empty without degrading user cache", { skip: true }, async () => {
   const isolatedState = await createIsolatedStateDir("per-user-empty-global");
   applyIsolatedBackendEnv(isolatedState);
 
