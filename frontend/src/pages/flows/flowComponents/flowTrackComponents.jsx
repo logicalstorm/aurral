@@ -754,7 +754,7 @@ export function FlowTracksPanel({
   );
 }
 
-const getFlowEmptyCopy = (libraryFilter, canCreate) => {
+export const getFlowEmptyCopy = (libraryFilter, canCreate) => {
   if (libraryFilter === "playlists") {
     return {
       title: "No playlists yet",

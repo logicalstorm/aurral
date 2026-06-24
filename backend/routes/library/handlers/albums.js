@@ -3,7 +3,10 @@ import { playlistManager } from "../../../services/weeklyFlow/weeklyFlowPlaylist
 import { dbOps } from "../../../db/helpers/index.js";
 import { hasPermission } from "../../../middleware/auth.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
-import { requireAuth, requirePermission } from "../../../middleware/requirePermission.js";
+import {
+  requireAuth,
+  requirePermission,
+} from "../../../middleware/requirePermission.js";
 
 export function registerAlbums(router) {
   router.get("/albums", cacheMiddleware(5), async (req, res) => {
@@ -33,30 +36,42 @@ export function registerAlbums(router) {
     }
   });
 
-  router.post("/albums", requireAuth, requirePermission("addAlbum"), async (req, res) => {
-    try {
-      const { artistId, releaseGroupMbid, albumName } = req.body;
+  router.post(
+    "/albums",
+    requireAuth,
+    requirePermission("addAlbum"),
+    async (req, res) => {
+      try {
+        const { artistId, releaseGroupMbid, albumName } = req.body;
 
-      if (!artistId || !releaseGroupMbid || !albumName) {
-        return res.status(400).json({
-          error: "artistId, releaseGroupMbid, and albumName are required",
-        });
-      }
-
-      let mbid = releaseGroupMbid;
-      if (String(releaseGroupMbid).startsWith("dz-")) {
-        const { resolveDeezerAlbumToMbid } = await import("../../../services/apiClients.js");
-        const artist = await libraryManager.getArtistById(artistId);
-        const artistName = artist?.artistName || "";
-        mbid = (await resolveDeezerAlbumToMbid(artistName, albumName, releaseGroupMbid)) || null;
-        if (!mbid) {
+        if (!artistId || !releaseGroupMbid || !albumName) {
           return res.status(400).json({
-            error:
-              "Could not resolve metadata for this album. Try adding the artist to Lidarr first or use a different album.",
+            error: "artistId, releaseGroupMbid, and albumName are required",
           });
         }
 
-      const settings = dbOps.getSettings();
+        let mbid = releaseGroupMbid;
+        if (String(releaseGroupMbid).startsWith("dz-")) {
+          const { resolveDeezerAlbumToMbid } = await import(
+            "../../../services/apiClients/index.js"
+          );
+          const artist = await libraryManager.getArtistById(artistId);
+          const artistName = artist?.artistName || "";
+          mbid =
+            (await resolveDeezerAlbumToMbid(
+              artistName,
+              albumName,
+              releaseGroupMbid
+            )) || null;
+          if (!mbid) {
+            return res.status(400).json({
+              error:
+                "Could not resolve metadata for this album. Try adding the artist to Lidarr first or use a different album.",
+            });
+          }
+        }
+
+        const settings = dbOps.getSettings();
         const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
 
         const album = await libraryManager.addAlbum(artistId, mbid, albumName, {
@@ -87,54 +102,67 @@ export function registerAlbums(router) {
           albumType: "Album",
         };
         res.status(201).json(formatted);
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to add album",
-        message: error.message,
-      });
+      } catch (error) {
+        res.status(500).json({
+          error: "Failed to add album",
+          message: error.message,
+        });
+      }
     }
-  });
+  );
 
-  router.post("/albums/request", requireAuth, requirePermission("addAlbum"), async (req, res) => {
-    try {
-      const {
-        albumMbid,
-        albumName,
-        artistMbid,
-        artistName,
-        triggerSearch = false,
-      } = req.body || {};
+  router.post(
+    "/albums/request",
+    requireAuth,
+    requirePermission("addAlbum"),
+    async (req, res) => {
+      try {
+        const {
+          albumMbid,
+          albumName,
+          artistMbid,
+          artistName,
+          triggerSearch = false,
+        } = req.body || {};
 
-      const result = await libraryManager.requestAlbumFromSearch({
-        albumMbid,
-        albumName,
-        artistName,
-        artistMbid,
-        triggerSearch,
-        user: req.user,
-      });
+        const result = await libraryManager.requestAlbumFromSearch({
+          albumMbid,
+          albumName,
+          artistName,
+          artistMbid,
+          triggerSearch,
+          user: req.user,
+        });
 
-      const settings = dbOps.getSettings();
-      const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
-      const searching = triggerSearch === true || searchOnAdd || result?.status === "searching";
-      const { recordAlbumRequested } = await import("../../../services/aurralHistoryService.js");
-      recordAlbumRequested({
-        albumId: result?.id,
-        albumName: result?.albumName || albumName,
-        artistName: result?.artistName || artistName,
-        artistMbid: result?.mbid || artistMbid,
-        searching,
-      });
+        const settings = dbOps.getSettings();
+        const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+        const searching =
+          triggerSearch === true ||
+          searchOnAdd ||
+          result?.status === "searching";
+        const { recordAlbumRequested } = await import(
+          "../../../services/aurralHistoryService.js"
+        );
+        recordAlbumRequested({
+          albumId: result?.id,
+          albumName: result?.albumName || albumName,
+          artistName: result?.artistName || artistName,
+          artistMbid: result?.mbid || artistMbid,
+          searching,
+        });
 
-      res.json(result);
-    } catch (error) {
-      const statusCode =
-        Number.isInteger(error?.statusCode) && error.statusCode >= 400 ? error.statusCode : 500;
-      res.status(statusCode).json({
-        error: error.message || "Failed to request album",
-      });
-    }
-  });
+        res.json(result);
+      } catch (error) {
+        const statusCode =
+          Number.isInteger(error?.statusCode) && error.statusCode >= 400
+            ? error.statusCode
+            : 500;
+        res.status(statusCode).json({
+          error: error.message || "Failed to request album",
+        });
+      }
+    },
+  );
 
   router.get("/albums/:id", cacheMiddleware(120), async (req, res) => {
     try {
@@ -156,7 +184,10 @@ export function registerAlbums(router) {
     "/albums/:id",
     requireAuth,
     (req, res, next) => {
-      if (hasPermission(req.user, "changeMonitoring") || hasPermission(req.user, "addAlbum")) {
+      if (
+        hasPermission(req.user, "changeMonitoring") ||
+        hasPermission(req.user, "addAlbum")
+      ) {
         return next();
       }
       return res.status(403).json({
@@ -181,20 +212,30 @@ export function registerAlbums(router) {
     },
   );
 
-  router.delete("/albums/:id", requireAuth, requirePermission("deleteAlbum"), async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { deleteFiles = false } = req.query;
-      const result = await libraryManager.deleteAlbum(id, deleteFiles === "true");
-      if (!result?.success) {
-        return res.status(503).json({ error: result?.error || "Failed to delete album" });
+  router.delete(
+    "/albums/:id",
+    requireAuth,
+    requirePermission("deleteAlbum"),
+    async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { deleteFiles = false } = req.query;
+        const result = await libraryManager.deleteAlbum(
+          id,
+          deleteFiles === "true"
+        );
+        if (!result?.success) {
+          return res
+            .status(503)
+            .json({ error: result?.error || "Failed to delete album" });
+        }
+        res.json({ success: true, message: "Album deleted successfully" });
+      } catch (error) {
+        res.status(500).json({
+          error: "Failed to delete album",
+          message: error.message,
+        });
       }
-      res.json({ success: true, message: "Album deleted successfully" });
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to delete album",
-        message: error.message,
-      });
     }
-  });
+  );
 }
