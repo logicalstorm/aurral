@@ -426,8 +426,28 @@ export function registerDownloads(router) {
     "/downloads/album",
     requireAuth,
     requirePermission("addAlbum"),
-    async (req, res) => {      try {
-        artist = await libraryManager.ensureArtistMonitored(artist);
+    async (req, res) => {
+      try {
+        const { albumId } = req.body;
+
+        if (!albumId) {
+          return res.status(400).json({ error: "albumId is required" });
+        }
+
+        const { lidarrClient } = await import("../../../services/lidarrClient.js");
+        if (!lidarrClient || !lidarrClient.isConfigured()) {
+          return res.status(400).json({ error: "Lidarr is not configured" });
+        }
+
+        const album = await libraryManager.getAlbumById(albumId);
+        if (!album) {
+          return res.status(404).json({ error: "Album not found" });
+        }
+
+        const artist = album.artistId ? await libraryManager.getArtistById(album.artistId) : null;
+        if (artist) {
+          await libraryManager.ensureArtistMonitored(artist);
+        }
         if (!album.monitored) {
           await libraryManager.updateAlbum(albumId, { monitored: true });
         }

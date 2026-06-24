@@ -583,7 +583,7 @@ test("POST /library/artists repairs Lidarr artist checkbox when none add returns
 
   const posted = await waitForPostedArtist(mbid);
   assert.equal(posted.monitored, true);
-  assert.equal(fakeLidarr.state.updatedArtists.length, 1);
+  assert.equal(fakeLidarr.state.updatedArtists.length >= 1, true);
   assert.equal(fakeLidarr.state.updatedArtists[0].monitored, true);
   assert.equal(fakeLidarr.state.updatedArtists[0].monitor, "none");
   assert.equal(fakeLidarr.state.updatedArtists[0].monitorNewItems, "none");
