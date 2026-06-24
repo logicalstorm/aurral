@@ -75,6 +75,10 @@ export function rankArtistCandidates(query, candidates = []) {
       return rightDisambiguation - leftDisambiguation;
     }
 
+    const leftImageCount = Array.isArray(left?.images) ? left.images.length : 0;
+    const rightImageCount = Array.isArray(right?.images) ? right.images.length : 0;
+    if (leftImageCount !== rightImageCount) return rightImageCount - leftImageCount;
+
     return leftName.localeCompare(rightName);
   });
 }

@@ -1,6 +1,6 @@
 import { dbOps } from "../db/helpers/index.js";
 import { warmImageProxy } from "./imageProxyService.js";
-import { getArtistByMbid, listArtistAlbums } from "./providers/brainzmashProvider.js";
+import { getArtistByMbid, listArtistAlbums, searchArtists } from "./providers/brainzmashProvider.js";
 import { fetchReleaseGroupCoverUrl } from "./releaseGroupCoverService.js";
 
 const MAX_NEGATIVE_CACHE = 1000;
@@ -307,10 +307,12 @@ export const getArtistImage = async (
   }
 
   const fetchPromise = (async () => {
+    let metadataArtist = null;
+    let resolvedMbid = mbid;
     try {
       const override = dbOps.getArtistOverride(mbid);
-      const resolvedMbid = override?.musicbrainzId || mbid;
-      const metadataArtist = await getArtistByMbid(resolvedMbid).catch(() => null);
+      resolvedMbid = override?.musicbrainzId || mbid;
+      metadataArtist = await getArtistByMbid(resolvedMbid).catch(() => null);
       const directArtistImages = sortArtistImages(metadataArtist?.images);
       const directArtistImage = directArtistImages[0] || null;
 
@@ -407,6 +409,34 @@ export const getArtistImage = async (
     } catch (e) {
       console.warn(`Failed to fetch image for ${mbid}:`, e.message);
       return { url: null, images: [], transientError: true };
+    }
+
+    const artistName = metadataArtist?.name;
+    if (artistName) {
+      try {
+        const searchResults = await searchArtists(artistName, { limit: 20 });
+        const siblings = searchResults.items.filter(
+          (a) => a.id !== resolvedMbid && a.images?.length > 0 && a.name === artistName,
+        );
+        if (siblings.length > 0) {
+          siblings.sort((a, b) =>
+            b.images.length - a.images.length ||
+            (b.score ?? 0) - (a.score ?? 0) ||
+            (b.genres?.length ?? 0) - (a.genres?.length ?? 0),
+          );
+          const sibling = siblings[0];
+          dbOps.setArtistOverride(mbid, { musicbrainzId: sibling.id });
+          const siblingResult = await getArtistImage(sibling.id, {
+            forceRefresh: false,
+            artistName: null,
+          });
+          if (siblingResult?.url) {
+            negativeImageCache.delete(mbid);
+            dbOps.setImage(mbid, siblingResult.url);
+            return siblingResult;
+          }
+        }
+      } catch {}
     }
 
     addToNegativeCache(mbid);
