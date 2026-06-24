@@ -15,7 +15,7 @@ const normalizeImportedTrackList = (value) => {
   return dedupeSharedTracks(value);
 };
 
-export default function register(router) {
+export function registerSharedPlaylists(router) {
   router.post("/shared-playlists", async (req, res) => {
     try {
       const {

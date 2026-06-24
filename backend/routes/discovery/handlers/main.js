@@ -12,7 +12,7 @@ import {
 } from "./utils.js";
 import { getUserDiscovery } from "../../../services/discovery/userDiscovery.js";
 
-export function registerMainRoutes(router) {
+export function registerMain(router) {
   router.get("/", requireAuth, async (req, res) => {
     const limit = Math.max(parseInt(req.query.limit, 10) || 50, 1);
     const { body, cacheStrategy } = await getUserDiscovery(req.user.id, limit);

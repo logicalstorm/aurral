@@ -7,7 +7,7 @@ import {
 } from "../../../middleware/requirePermission.js";
 import { logger } from "../../../services/logger.js";
 
-export default function registerArtists(router) {
+export function registerArtists(router) {
   router.get("/artists", cacheMiddleware(120), async (req, res) => {
     try {
       const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 250, 1), 1000);

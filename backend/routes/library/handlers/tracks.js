@@ -72,7 +72,7 @@ const streamAudioFile = async (req, res, filePath) => {
   fs.createReadStream(filePath, { start, end }).pipe(res);
 };
 
-export default function registerTracks(router) {
+export function registerTracks(router) {
   router.get("/playback-queue", cacheMiddleware(120), async (req, res) => {
     try {
       const tracks = await libraryManager.getPlaybackQueue();

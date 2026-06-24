@@ -1,6 +1,6 @@
 import { getDiscoveryFeedback, addDiscoveryFeedback, removeDiscoveryFeedback, resetDiscoveryFeedback } from "../../../services/discovery/index.js";
 
-export function registerFeedbackRoutes(router) {
+export function registerFeedback(router) {
   router.get("/feedback", requireAuth, (req, res) => {
     res.json({
       feedback: getDiscoveryFeedback(req.user?.id || "global"),

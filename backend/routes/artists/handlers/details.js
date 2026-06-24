@@ -13,7 +13,7 @@ import { requireAuth } from "../../../middleware/requirePermission.js";
 import { buildArtistRequestKey, pendingArtistRequests } from "../utils.js";
 import { getArtistByMbid } from "../../../services/providers/brainzmashProvider.js";
 
-export default function registerDetails(router) {
+export function registerDetails(router) {
   const toLegacyRelations = (metadataArtist) =>
     Array.isArray(metadataArtist?.links)
       ? metadataArtist.links

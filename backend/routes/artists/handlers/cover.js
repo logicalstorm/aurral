@@ -5,7 +5,7 @@ import { pendingCoverRequests, fetchCoverInBackground } from "../utils.js";
 import { getArtistImage } from "../../../services/imageService.js";
 import { warmImageProxy } from "../../../services/imageProxyService.js";
 
-export default function registerCover(router) {
+export function registerCover(router) {
   router.get("/:mbid/cover", async (req, res) => {
     const { mbid } = req.params;
     const { refresh = false, artistName: queryArtistName } = req.query;

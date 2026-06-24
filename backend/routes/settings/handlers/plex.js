@@ -6,7 +6,7 @@ function getPlexConfig() {
   return dbOps.getSettings()?.integrations?.plex || {};
 }
 
-export default function register(router) {
+export function registerPlex(router) {
   router.post("/plex/auth/pin", async (req, res) => {
     try {
       const { PlexClient } = await import("../../../services/plex.js");

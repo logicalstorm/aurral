@@ -6,7 +6,7 @@ import {
 import { dbOps } from "../../../db/helpers/index.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 
-export default function registerPreview(router) {
+export function registerPreview(router) {
   router.get("/:mbid/preview", cacheMiddleware(60), async (req, res) => {
     try {
       const { mbid } = req.params;

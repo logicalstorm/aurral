@@ -11,7 +11,7 @@ import {
 import { enqueueDiscoveryRefresh } from "../../../services/discovery/refreshScheduler.js";
 import { pendingTagRequests, pendingTagSuggestRequest } from "./utils.js";
 
-export function registerAdminRoutes(router) {
+export function registerAdmin(router) {
   router.post("/refresh", requireAuth, requireAdmin, (req, res) => {
     const result = enqueueDiscoveryRefresh({
       reason: "manual",

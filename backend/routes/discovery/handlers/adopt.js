@@ -1,7 +1,7 @@
 import { requireAuth, requirePermission } from "../../../middleware/requirePermission.js";
 import { SLSKD_NOT_CONFIGURED_MESSAGE, handleDiscoverAdoptError } from "./utils.js";
 
-export function registerAdoptRoutes(router) {
+export function registerAdopt(router) {
   router.post(
     "/playlists/adopt",
     requireAuth,

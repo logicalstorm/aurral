@@ -9,7 +9,7 @@ import {
   applyCommunityGuide,
 } from "../../../services/lidarrSettingsService.js";
 
-export default function register(router) {
+export function registerLidarr(router) {
   router.get("/lidarr/profiles", async (req, res) => {
     try {
       const { lidarrClient } = await import("../../../services/lidarrClient.js");

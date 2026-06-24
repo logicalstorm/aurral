@@ -12,7 +12,7 @@ import {
 import { logger } from "../../../services/logger.js";
 import { buildArtistKeySet, pendingTagRequests, fetchLastfmTopTagNames } from "./utils.js";
 
-export function registerTagRoutes(router) {
+export function registerTags(router) {
   router.get("/tags", async (req, res) => {
     try {
       const { q = "", limit = 10 } = req.query;

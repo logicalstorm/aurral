@@ -20,7 +20,7 @@ import {
   getAccessibleSharedPlaylist,
 } from "./utils.js";
 
-export default function register(router) {
+export function registerJobs(router) {
   router.get("/status", noCache, (req, res) => {
     const includeJobs =
       req.query.includeJobs === "1" || req.query.includeJobs === "true";

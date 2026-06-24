@@ -23,7 +23,7 @@ import {
 } from "../../../services/releaseGroupCoverService.js";
 import { getArtistByMbid } from "../../../services/providers/brainzmashProvider.js";
 
-export default function registerStream(router) {
+export function registerStream(router) {
   router.get("/:mbid/stream", noCache, async (req, res) => {
     try {
       const { mbid } = req.params;

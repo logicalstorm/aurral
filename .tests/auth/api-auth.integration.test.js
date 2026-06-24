@@ -103,7 +103,7 @@ test("invalid bearer sessions return SESSION_INVALID without triggering browser 
 test("weekly flow worker settings reject concurrency above 3 and accept 3", async () => {
   const settingsToken = await loginAsAdmin();
   const rejectResponse = await fetch(
-    buildApiUrl(server.port, "/api/weekly-flow/worker/settings"),
+    buildApiUrl(server.port, "/api/playlists/worker/settings"),
     {
       method: "PUT",
       headers: {
@@ -119,7 +119,7 @@ test("weekly flow worker settings reject concurrency above 3 and accept 3", asyn
   assert.match(rejectPayload.error, /between 1 and 3/);
 
   const acceptResponse = await fetch(
-    buildApiUrl(server.port, "/api/weekly-flow/worker/settings"),
+    buildApiUrl(server.port, "/api/playlists/worker/settings"),
     {
       method: "PUT",
       headers: {
@@ -144,7 +144,7 @@ test("weekly flow worker settings default to concurrency 2", async () => {
   });
   const settingsToken = await loginAsAdmin();
   const response = await fetch(
-    buildApiUrl(server.port, "/api/weekly-flow/worker/settings"),
+    buildApiUrl(server.port, "/api/playlists/worker/settings"),
     {
       headers: {
         Authorization: `Bearer ${settingsToken}`,
@@ -159,26 +159,26 @@ test("weekly flow worker settings default to concurrency 2", async () => {
 
 test("weekly flow stream route reaches handler (not blocked by global auth)", async () => {
   const response = await fetch(
-    buildApiUrl(server.port, "/api/weekly-flow/stream/nonexistent-job"),
+    buildApiUrl(server.port, "/api/playlists/stream/nonexistent-job"),
   );
   assert.equal(response.status, 404);
 });
 
 test("weekly flow artwork serve route reaches handler (not blocked by global auth)", async () => {
   const response = await fetch(
-    buildApiUrl(server.port, "/api/weekly-flow/artwork/nonexistent-id"),
+    buildApiUrl(server.port, "/api/playlists/artwork/nonexistent-id"),
   );
   assert.equal(response.status, 404);
 });
 
 test("weekly flow authenticated-only routes reject unauthenticated requests", async () => {
   const routes = [
-    { path: "/api/weekly-flow/status", method: "GET" },
-    { path: "/api/weekly-flow/flows", method: "POST" },
-    { path: "/api/weekly-flow/jobs", method: "GET" },
-    { path: "/api/weekly-flow/worker/settings", method: "GET" },
-    { path: "/api/weekly-flow/worker/settings", method: "PUT" },
-    { path: "/api/weekly-flow/jobs/completed", method: "DELETE" },
+    { path: "/api/playlists/status", method: "GET" },
+    { path: "/api/playlists/flows", method: "POST" },
+    { path: "/api/playlists/jobs", method: "GET" },
+    { path: "/api/playlists/worker/settings", method: "GET" },
+    { path: "/api/playlists/worker/settings", method: "PUT" },
+    { path: "/api/playlists/jobs/completed", method: "DELETE" },
   ];
 
   for (const { path, method } of routes) {
@@ -193,9 +193,9 @@ test("weekly flow authenticated-only routes reject unauthenticated requests", as
   }
 
   const artifactRoutes = [
-    { path: "/api/weekly-flow/artwork/nonexistent-id", method: "PUT" },
-    { path: "/api/weekly-flow/artwork/nonexistent-id", method: "DELETE" },
-    { path: "/api/weekly-flow/artwork/nonexistent-id", method: "POST" },
+    { path: "/api/playlists/artwork/nonexistent-id", method: "PUT" },
+    { path: "/api/playlists/artwork/nonexistent-id", method: "DELETE" },
+    { path: "/api/playlists/artwork/nonexistent-id", method: "POST" },
   ];
 
   for (const { path, method } of artifactRoutes) {

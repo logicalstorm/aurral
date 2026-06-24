@@ -26,7 +26,7 @@ function mergeIntegrations(existing, input, keys) {
   return merged;
 }
 
-export default function registerGeneral(router) {
+export function registerGeneral(router) {
   router.get("/", noCache, (req, res) => {
     try {
       const settings = dbOps.getSettings();

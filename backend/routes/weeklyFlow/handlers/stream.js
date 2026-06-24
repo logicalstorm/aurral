@@ -13,7 +13,7 @@ import {
   canAccessPlaylistType,
 } from "./utils.js";
 
-export default function register(router) {
+export function registerStream(router) {
   router.get("/stream/:jobId", noCache, async (req, res) => {
     if (!verifyTokenAuth(req)) {
       return res

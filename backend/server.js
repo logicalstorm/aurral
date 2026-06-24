@@ -148,7 +148,10 @@ app.use("/api/requests", requestsRouter);
 app.use("/api/health", healthRouter);
 app.use("/api/filesystem", filesystemRouter);
 app.use("/api/playlists", weeklyFlowRouter);
-app.use("/api/weekly-flow", weeklyFlowRouter);
+app.use("/api/weekly-flow", (req, res) => {
+  const target = req.originalUrl.replace("/api/weekly-flow", "/api/playlists");
+  res.redirect(308, target);
+});
 app.use("/api/auth", authRouter);
 app.use("/api/image-proxy", imageProxyRouter);
 

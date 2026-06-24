@@ -15,7 +15,7 @@ import {
 } from "../../../services/listeningHistory.js";
 import { getNearbyShows } from "../../../services/nearbyShowsService.js";
 
-export function registerShowRoutes(router) {
+export function registerShows(router) {
   router.get("/nearby-shows", requireAuth, async (req, res) => {
     try {
       const apiKey = getTicketmasterApiKey();

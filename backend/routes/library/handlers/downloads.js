@@ -463,7 +463,7 @@ export const getAllDownloadStatuses = async () => {
   return allDownloadStatusesCache.pending;
 };
 
-export default function registerDownloads(router) {
+export function registerDownloads(router) {
   router.post(
     "/downloads/album",
     requireAuth,

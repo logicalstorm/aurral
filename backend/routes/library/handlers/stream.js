@@ -3,7 +3,7 @@ import { noCache } from "../../../middleware/cache.js";
 import { verifyTokenAuth } from "../../../middleware/auth.js";
 import { dbOps } from "../../../db/helpers/index.js";
 
-export default function registerStream(router) {
+export function registerStream(router) {
   router.get("/stream/:songId", noCache, async (req, res) => {
     if (!verifyTokenAuth(req)) {
       return res.status(401).json({ error: "Unauthorized" });

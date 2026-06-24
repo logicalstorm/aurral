@@ -5,7 +5,7 @@ import { fetchReleaseGroupCoverUrl } from "../../../services/imageService.js";
 import { libraryManager, getCachedArtists } from "../../../services/libraryManager.js";
 import { qualityManager } from "../../../services/qualityManager.js";
 
-export default function registerMisc(router) {
+export function registerMisc(router) {
   const normalizePercentOfTracks = (value) => {
     const raw = Number(value);
     if (!Number.isFinite(raw) || raw <= 0) return 0;

@@ -25,7 +25,7 @@ import {
   queueFlowDisableCleanup,
 } from "./utils.js";
 
-export default function register(router) {
+export function registerFlows(router) {
   router.post("/start/:flowId", async (req, res) => {
     try {
       const { flowId } = req.params;

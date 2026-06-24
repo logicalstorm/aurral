@@ -1,4 +1,4 @@
-export default function registerBrowse(router) {
+export function registerBrowse(router) {
   router.get("/browse", async (req, res) => {
     try {
       const fs = await import("fs/promises");

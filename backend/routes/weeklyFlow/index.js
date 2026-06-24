@@ -1,11 +1,11 @@
 import express from "express";
 import { requireAuth, requirePermission } from "../../middleware/requirePermission.js";
-import registerStream from "./handlers/stream.js";
-import registerArtworkServe from "./handlers/artworkServe.js";
-import registerArtworkManagement from "./handlers/artworkManagement.js";
-import registerFlows from "./handlers/flows.js";
-import registerSharedPlaylists from "./handlers/sharedPlaylists.js";
-import registerJobs from "./handlers/jobs.js";
+import { registerStream } from "./handlers/stream.js";
+import { registerArtworkServe } from "./handlers/artworkServe.js";
+import { registerArtworkManagement } from "./handlers/artworkManagement.js";
+import { registerFlows } from "./handlers/flows.js";
+import { registerSharedPlaylists } from "./handlers/sharedPlaylists.js";
+import { registerJobs } from "./handlers/jobs.js";
 
 const router = express.Router();
 

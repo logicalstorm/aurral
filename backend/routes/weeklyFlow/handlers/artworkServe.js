@@ -3,7 +3,7 @@ import { noCache } from "../../../middleware/cache.js";
 import { hasPermission, verifyTokenAuth } from "../../../middleware/auth.js";
 import { canAccessPlaylistType } from "./utils.js";
 
-export default function register(router) {
+export function registerArtworkServe(router) {
   router.get("/artwork/:playlistId", noCache, async (req, res) => {
     if (!verifyTokenAuth(req)) {
       return res

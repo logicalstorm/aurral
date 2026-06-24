@@ -8,7 +8,7 @@ import { dbOps } from "../../../db/helpers/index.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
 
-export default function registerSimilar(router) {
+export function registerSimilar(router) {
   router.get("/:mbid/similar", cacheMiddleware(300), async (req, res) => {
     try {
       const { mbid } = req.params;

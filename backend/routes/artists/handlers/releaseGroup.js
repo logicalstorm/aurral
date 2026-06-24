@@ -26,7 +26,7 @@ function extractDeezerArtistIdFromLinks(links = []) {
   return null;
 }
 
-export default function registerReleaseGroup(router) {
+export function registerReleaseGroup(router) {
   router.post("/release-groups/covers", async (req, res) => {
     try {
       const items = Array.isArray(req.body?.items) ? req.body.items : [];

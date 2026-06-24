@@ -8,7 +8,7 @@ import {
   requirePermission,
 } from "../../../middleware/requirePermission.js";
 
-export default function registerAlbums(router) {
+export function registerAlbums(router) {
   router.get("/albums", cacheMiddleware(5), async (req, res) => {
     try {
       const { artistId } = req.query;

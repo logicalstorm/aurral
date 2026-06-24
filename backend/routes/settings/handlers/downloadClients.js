@@ -1,6 +1,6 @@
 import { validateExternalUrl } from "../../../middleware/urlValidator.js";
 
-export default function register(router) {
+export function registerDownloadClients(router) {
   router.post("/slskd/test", async (req, res) => {
     try {
       const { slskdClient } = await import("../../../services/slskdClient.js");

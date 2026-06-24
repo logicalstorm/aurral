@@ -1,6 +1,6 @@
 import { noCache } from "../../../middleware/cache.js";
 
-export default function registerTasks(router) {
+export function registerTasks(router) {
   router.get("/tasks", noCache, async (_req, res) => {
     try {
       const { getHonkerTaskStatus } = await import(

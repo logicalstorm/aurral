@@ -2,7 +2,7 @@ import { requireAuth } from "../../../middleware/requirePermission.js";
 import { dbOps } from "../../../db/helpers/index.js";
 import { getDiscoveryMode, getLocalDiscoveryPreferences } from "../../../services/discovery/index.js";
 
-export function registerPreferenceRoutes(router) {
+export function registerPreferences(router) {
   router.get("/preferences", requireAuth, (req, res) => {
     const localDiscoveryPreferences = getLocalDiscoveryPreferences();
     res.json({

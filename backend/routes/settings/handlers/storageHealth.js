@@ -1,7 +1,7 @@
 import { noCache } from "../../../middleware/cache.js";
 import { logger } from "../../../services/logger.js";
 
-export default function registerStorageHealth(router) {
+export function registerStorageHealth(router) {
   router.get("/storage-health", noCache, async (req, res) => {
     try {
       const { runStorageHealthCheck } =
