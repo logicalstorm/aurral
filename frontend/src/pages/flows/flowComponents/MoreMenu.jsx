@@ -1,30 +1,5 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import {
-  Loader2,
-  Check,
-  Trash2,
-  Pencil,
-  FilePlus2,
-  Download,
-  Upload,
-  Play,
-  Pause,
-  Sparkles,
-  Plus,
-  Search,
-  ChevronDown,
-  MoreHorizontal,
-  Save,
-  X,
-} from "lucide-react";
-import { formatFlowLastRun } from "../flowStats";
-import { Link } from "react-router-dom";
-import PillToggle from "../../../components/PillToggle";
-import { useAudioQueue } from "../../../hooks/useAudioQueue";
-import { normalizeFlowTrack } from "../../../utils/audioQueue";
-import { getTagSuggestions, searchUnified } from "../../../utils/api";
-import { TAG_COLORS } from "../../ArtistDetails/constants";
-import { getTagColor } from "../../ArtistDetails/utils";
+import { useState, useEffect, useRef } from "react";
+import { MoreHorizontal } from "lucide-react";
 
 export function MoreMenu({ children, activeButtonClass = "btn-primary" }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -73,7 +48,7 @@ export function MoreMenu({ children, activeButtonClass = "btn-primary" }) {
   );
 }
 
-function getTrackStatusMeta(status) {
+export function getTrackStatusMeta(status) {
   switch (String(status || "").toLowerCase()) {
     case "done":
       return { label: "Downloaded", className: "flow-page__track-status-dot--done" };

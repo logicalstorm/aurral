@@ -19,7 +19,7 @@ const [{ db }, historyModule] = await Promise.all([
 
 const { upsertAurralHistory, getAurralHistoryRequests } = historyModule;
 const { downloadTracker } = await importFromRepo(
-  "../../backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
+  "backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
 );
 
 test.beforeEach(() => {

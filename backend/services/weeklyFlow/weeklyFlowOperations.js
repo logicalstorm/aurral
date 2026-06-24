@@ -7,8 +7,9 @@ import {
   recordFlowTracksGenerated,
   recordPlaylistTracksAdded,
 } from "../aurralHistoryService.js";
-import { PLAYLIST_LIBRARY_DIR, isPathInsideRoot } from "../playlistPaths.js";import {
-  buildSharedTrackIdentity,
+import { PLAYLIST_LIBRARY_DIR, isPathInsideRoot } from "../playlistPaths.js";
+import { remapLegacyWeeklyFlowPath } from "./weeklyFlowPaths.js";
+import {
   dedupeSharedTracks,
   filterMissingSharedTracks,
   flowPlaylistConfig,

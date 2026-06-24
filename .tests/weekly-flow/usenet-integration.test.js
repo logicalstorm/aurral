@@ -24,7 +24,7 @@ const [
   importFromRepo("backend/services/prowlarrClient.js"),
   importFromRepo("backend/services/nzbgetClient.js"),
   importFromRepo("backend/services/downloadSourceService.js"),
-  importFromRepo("../../backend/services/weeklyFlow/weeklyFlowUsenetMatcher.js"),
+  importFromRepo("backend/services/weeklyFlow/weeklyFlowUsenetMatcher.js"),
   importFromRepo("backend/db/helpers/index.js"),
   importFromRepo("backend/config/db-sqlite.js"),
 ]);

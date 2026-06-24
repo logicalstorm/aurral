@@ -9,13 +9,10 @@ import {
   getNearbyShows,
   getRecentlyAdded,
   getRecentReleases,
-  lookupArtistsInLibraryBatch,
-  readLibraryLookupCache,
   downloadAlbum,
   updateLibraryAlbum,
 } from "../utils/api";
 import { getArtistRecordId } from "../utils/artistTaste";
-import { getArtistFeedbackFlags } from "../utils/discoveryFeedback";
 import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
 import {
   readStoredNearbyLocation,
@@ -30,7 +27,6 @@ import {
   normalizeDiscoveryData,
   DISCOVER_NEARBY_MODE_KEY,
   DISCOVER_NEARBY_ZIP_KEY,
-  DISCOVER_PREVIEW_ITEM_LIMIT,
 } from "./discoverUtils";
 
 const getArtistId = (artist) => getArtistRecordId(artist);

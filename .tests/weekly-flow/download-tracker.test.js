@@ -14,7 +14,7 @@ applyIsolatedBackendEnv(isolatedState);
 
 const [{ db }, trackerModule] = await Promise.all([
   importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("../../backend/services/weeklyFlow/weeklyFlowDownloadTracker.js"),
+  importFromRepo("backend/services/weeklyFlow/weeklyFlowDownloadTracker.js"),
 ]);
 
 const { WeeklyFlowDownloadTracker } = trackerModule;

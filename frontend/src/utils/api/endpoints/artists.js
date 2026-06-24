@@ -6,10 +6,7 @@ import {
   getCoverCacheEntry,
   coverInflightRequests,
   coverResponseCache,
-  buildAuthenticatedApiUrl,
 } from "../core.js";
-
-const buildStreamUrl = (path) => buildAuthenticatedApiUrl(path);
 
 const COVER_CACHE_TTL_MS = 30 * 60 * 1000;
 const EMPTY_COVER_CACHE_TTL_MS = 60 * 1000;

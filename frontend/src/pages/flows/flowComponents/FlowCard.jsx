@@ -1,30 +1,12 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import {
-  Loader2,
-  Check,
-  Trash2,
-  Pencil,
-  FilePlus2,
-  Download,
-  Upload,
-  Play,
-  Pause,
-  Sparkles,
-  Plus,
-  Search,
-  ChevronDown,
-  MoreHorizontal,
-  Save,
-  X,
-} from "lucide-react";
+import { Loader2, Check, Pencil, FilePlus2, Download, Play, Trash2, X, ListMusic } from "lucide-react";
 import { formatFlowLastRun } from "../flowStats";
-import { Link } from "react-router-dom";
 import PillToggle from "../../../components/PillToggle";
-import { useAudioQueue } from "../../../hooks/useAudioQueue";
-import { normalizeFlowTrack } from "../../../utils/audioQueue";
-import { getTagSuggestions, searchUnified } from "../../../utils/api";
-import { TAG_COLORS } from "../../ArtistDetails/constants";
-import { getTagColor } from "../../ArtistDetails/utils";
+import FlipSaveButton from "../../../components/FlipSaveButton";
+import { MoreMenu } from "./MoreMenu";
+import { PlaylistArtworkThumb } from "./PlaylistArtworkThumb";
+import { FlowFormFields } from "./flowFormComponents";
+import { FlowTracksPanel } from "./flowTrackComponents";
+import { getFocusDraftValidation, SOURCE_MIX_OPTIONS } from "./MixSlider";
 
 export function FlowCard({
   flow,
@@ -174,8 +156,7 @@ export function FlowCard({
     ? `Owner: ${flow.ownerUsername}`
     : null;
 
-  const handleMobileTrackToggle = (event) => {
-    if (!shouldHandleMobileCardTap(event)) return;
+  const handleMobileTrackToggle = () => {
     onViewTracks?.();
   };
 

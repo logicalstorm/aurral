@@ -1,51 +1,6 @@
-import {
-  useEffect,
-  useRef,
-  useCallback,
-  useMemo,
-  useState,
-} from "react";
-import {
-  Loader2,
-  Check,
-  Clock,
-  Trash2,
-  Pencil,
-  FilePlus2,
-  ListMusic,
-  Sparkles,
-  Download,
-  Upload,
-  Play,
-  Pause,
-  Shuffle,
-  Plus,
-  Search,
-  ChevronDown,
-  MoreHorizontal,
-  Save,
-  X,
-  ArrowUp,
-  ArrowDown,
-} from "lucide-react";
-import {
-  getFlowTrackDisplayNumber,
-  sortFlowTracks,
-} from "../../../utils/flowTrackSort";
-import { formatFlowLastRun } from "../flowStats";
-import { Link } from "react-router-dom";
-import PillToggle from "../../../components/PillToggle";
-import FlipSaveButton from "../../../components/FlipSaveButton";
-import { useAudioQueue } from "../../../hooks/useAudioQueue";
-import { normalizeFlowTrack } from "../../../utils/audioQueue";
-import {
-  getTagSuggestions,
-  searchUnified,
-} from "../../../utils/api";
-import {
-  TrackPlaylistMenu,
-  TrackPlaylistSubmenu,
-} from "../../ArtistDetails/components/TrackPlaylistMenu";
+import { useEffect, useRef, useCallback, useMemo, useState } from "react";
+import { Loader2, Search } from "lucide-react";
+import { getTagSuggestions, searchUnified } from "../../../utils/api";
 import { TAG_COLORS } from "../../ArtistDetails/constants";
 import { getTagColor } from "../../ArtistDetails/utils";
 
@@ -56,14 +11,14 @@ const SOURCE_MIX_COLORS = {
   focus: TAG_COLORS[2],
 };
 
-const SOURCE_MIX_OPTIONS = [
+export const SOURCE_MIX_OPTIONS = [
   { key: "discover", label: "Discover" },
   { key: "mix", label: "Library" },
   { key: "trending", label: "Trending" },
   { key: "focus", label: "Focus" },
 ];
 
-const WEEKDAY_OPTIONS = [
+export const WEEKDAY_OPTIONS = [
   { id: 0, short: "Su", full: "Sunday" },
   { id: 1, short: "M", full: "Monday" },
   { id: 2, short: "T", full: "Tuesday" },
@@ -73,14 +28,14 @@ const WEEKDAY_OPTIONS = [
   { id: 6, short: "S", full: "Saturday" },
 ];
 
-const FLOW_WORKER_CONCURRENCY_OPTIONS = [1, 2, 3];
-const FLOW_WORKER_EXISTING_FILE_OPTIONS = [
+export const FLOW_WORKER_CONCURRENCY_OPTIONS = [1, 2, 3];
+export const FLOW_WORKER_EXISTING_FILE_OPTIONS = [
   { id: "download", label: "Download" },
   { id: "reuse", label: "Reuse existing files" },
 ];
 const FLOW_FOCUS_SUGGESTION_DEBOUNCE_MS = 250;
 const FLOW_FOCUS_SUGGESTION_LIMIT = 8;
-const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [
+export const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [
   { minutes: 15, label: "15 min" },
   { minutes: 30, label: "30 min" },
   { minutes: 60, label: "1 hour" },
@@ -88,7 +43,7 @@ const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [
   { minutes: 720, label: "12 hours" },
   { minutes: 1440, label: "1 day" },
 ];
-const SCHEDULE_HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => {
+export const SCHEDULE_HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => {
   const normalized = `${String(hour).padStart(2, "0")}:00`;
   const suffix = hour >= 12 ? "PM" : "AM";
   const hour12 = hour % 12 || 12;
@@ -389,7 +344,7 @@ function dedupeFocusSuggestions(entries, existingEntries = []) {
   return out;
 }
 
-async function fetchFlowTagSuggestions(query, existingEntries = []) {
+export async function fetchFlowTagSuggestions(query, existingEntries = []) {
   const data = await getTagSuggestions(query, FLOW_FOCUS_SUGGESTION_LIMIT);
   return dedupeFocusSuggestions(
     (Array.isArray(data?.tags) ? data.tags : []).map((tag) => ({
@@ -400,7 +355,7 @@ async function fetchFlowTagSuggestions(query, existingEntries = []) {
   );
 }
 
-async function fetchFlowArtistSuggestions(query, existingEntries = []) {
+export async function fetchFlowArtistSuggestions(query, existingEntries = []) {
   const data = await searchUnified(query, {
     mode: "suggest",
     limit: FLOW_FOCUS_SUGGESTION_LIMIT,
@@ -418,7 +373,7 @@ async function fetchFlowArtistSuggestions(query, existingEntries = []) {
   );
 }
 
-function getFocusDraftValidation(draft, normalizeMixPercent) {
+export function getFocusDraftValidation(draft, normalizeMixPercent) {
   const normalizedMix = normalizeMixPercent(draft?.mix);
   const focusEnabled = Number(normalizedMix.focus || 0) > 0;
   const hasFocusFilters =
@@ -434,7 +389,7 @@ function getFocusDraftValidation(draft, normalizeMixPercent) {
   };
 }
 
-function CommaTokenInput({
+export function CommaTokenInput({
   value,
   placeholder,
   onChange,

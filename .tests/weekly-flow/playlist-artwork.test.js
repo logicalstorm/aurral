@@ -19,8 +19,8 @@ const [{ db }, { dbOps }, { flowPlaylistConfig }, { WeeklyFlowPlaylistManager }]
   await Promise.all([
     importFromRepo("backend/config/db-sqlite.js"),
     importFromRepo("backend/db/helpers/index.js"),
-    importFromRepo("../../backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
-    importFromRepo("../../backend/services/weeklyFlow/weeklyFlowPlaylistManager.js"),
+    importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
+    importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistManager.js"),
   ]);
 
 test.beforeEach(() => {

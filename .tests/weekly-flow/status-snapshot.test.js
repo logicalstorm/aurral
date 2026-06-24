@@ -16,8 +16,8 @@ const [{ db }, { dbOps }, { flowPlaylistConfig }, snapshotModule] =
   await Promise.all([
     importFromRepo("backend/config/db-sqlite.js"),
     importFromRepo("backend/db/helpers/index.js"),
-    importFromRepo("../../backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
-    importFromRepo("../../backend/services/weeklyFlow/weeklyFlowStatusSnapshot.js"),
+    importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
+    importFromRepo("backend/services/weeklyFlow/weeklyFlowStatusSnapshot.js"),
   ]);
 
 const { getWeeklyFlowStatusSnapshot } = snapshotModule;
@@ -79,7 +79,7 @@ test("status snapshot includes empty manual playlists", () => {
 
 test("status snapshot trackIdentities includes pending download jobs", async () => {
   const { downloadTracker } = await importFromRepo(
-    "../../backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
+    "backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
   );
   const playlist = flowPlaylistConfig.createSharedPlaylist({
     name: "Pending Mix",

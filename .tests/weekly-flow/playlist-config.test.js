@@ -15,7 +15,7 @@ applyIsolatedBackendEnv(isolatedState);
 const [{ db }, { dbOps }, playlistConfigModule] = await Promise.all([
   importFromRepo("backend/config/db-sqlite.js"),
   importFromRepo("backend/db/helpers/index.js"),
-  importFromRepo("../../backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
+  importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
 ]);
 const { flowPlaylistConfig, tracksShareMembership } = playlistConfigModule;
 

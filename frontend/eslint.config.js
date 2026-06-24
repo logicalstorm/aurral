@@ -37,8 +37,12 @@ export default [
       "react-hooks/purity": "off",
       "react-hooks/refs": "off",
       "react-hooks/set-state-in-effect": "off",
-      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+      "react-refresh/only-export-components": "off",
       "no-empty": ["error", { allowEmptyCatch: true }],
+      "no-unused-vars": [
+        "error",
+        { caughtErrors: "none", argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
     },
   },
   eslintConfigPrettier,

@@ -45,8 +45,6 @@ import {
   ALBUM_SORT_OPTIONS,
   ALBUM_RELEASE_TABS,
   UNIFIED_FILTER_OPTIONS,
-  isAlbumCompilation,
-  isAlbumSingleOrEp,
   matchesAlbumReleaseTab,
   dedupeArtists,
   dedupeAlbums,

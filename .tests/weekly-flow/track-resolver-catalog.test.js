@@ -5,7 +5,7 @@ import {
   pickBestCatalogAlbum,
   pickBestCatalogArtist,
   pickBestCatalogTrack,
-} from "../../../../backend/services/weeklyFlow/weeklyFlowTrackResolver.js";
+} from "../../backend/services/weeklyFlow/weeklyFlowTrackResolver.js";
 
 test("pickBestCatalogArtist prefers exact name match", () => {
   const match = pickBestCatalogArtist(

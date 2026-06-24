@@ -34,7 +34,7 @@ export function hasV1MigrationMarkers(db, dbHelpers) {
   return false;
 }
 
-function getV2MigrationStatus(db, dbHelpers) {
+export function getV2MigrationStatus(db, dbHelpers) {
   const schemaVersion = getSchemaVersion(db);
   return {
     required: false,
