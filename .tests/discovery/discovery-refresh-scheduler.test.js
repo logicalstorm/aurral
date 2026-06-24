@@ -16,7 +16,7 @@ const {
   enqueueDiscoveryRefresh,
   markDiscoveryRefreshDequeued,
   scheduleNextDiscoveryRefresh,
-} = await importFromRepo("backend/services/discoveryRefreshScheduler.js");
+} = await importFromRepo("backend/services/discovery/refreshScheduler.js");
 const { getDiscoveryCache } = await importFromRepo("backend/services/discovery/index.js");
 
 let heldGlobalRefreshLock = null;
@@ -175,7 +175,7 @@ test("scheduleNextDiscoveryRefresh deduplicates existing future refresh", () => 
 test("pruneDuplicateScheduledDiscoveryRefreshes collapses stacked future refreshes", async () => {
   clearDiscoveryRefreshJobs();
   const { pruneDuplicateScheduledDiscoveryRefreshes } = await importFromRepo(
-    "backend/services/discoveryRefreshScheduler.js",
+    "backend/services/discovery/refreshScheduler.js",
   );
   const queue = honkerDbModule.getDiscoveryRefreshQueue();
   const runAt = Math.floor(Date.now() / 1000) + 3600;

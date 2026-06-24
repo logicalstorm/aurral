@@ -11,7 +11,7 @@ import {
   isDiscoveryRefreshConfigured,
   markDiscoveryRefreshDequeued,
   scheduleNextDiscoveryRefresh,
-} from "./discoveryRefreshScheduler.js";
+} from "./discovery/refreshScheduler.js";
 
 async function runDiscoveryRefresh(payload) {
   if (!(await isDiscoveryRefreshConfigured())) {

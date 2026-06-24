@@ -231,7 +231,7 @@ export function registerTagRoutes(router) {
 
     try {
       const { ensureDiscoverArtworkForPreset } =
-        await import("../../../services/discoverPlaylistArtworkService.js");
+        await import("../../../services/discovery/playlistArtworkBuilder.js");
       const artwork = await ensureDiscoverArtworkForPreset(req.params.presetId, {
         user: req.user,
       });

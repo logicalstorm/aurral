@@ -1,4 +1,4 @@
-import { libraryManager } from "./libraryManager.js";
+import { libraryManager } from "../libraryManager.js";
 
 const RECENT_RELEASE_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -35,7 +35,7 @@ function resolveDayMs(value) {
 }
 
 export async function getRecentMissingReleases(limit = 24, options = {}) {
-  const { lidarrClient } = await import("./lidarrClient.js");
+  const { lidarrClient } = await import("../lidarrClient.js");
   if (!lidarrClient.isConfigured()) {
     return [];
   }

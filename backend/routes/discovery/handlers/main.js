@@ -26,7 +26,7 @@ import {
   getListenHistoryProfile,
   hasListenHistoryProfile,
 } from "../../../services/listeningHistory.js";
-import { enqueueDiscoveryRefresh } from "../../../services/discoveryRefreshScheduler.js";
+import { enqueueDiscoveryRefresh } from "../../../services/discovery/refreshScheduler.js";
 import {
   buildArtistKeySet,
   isLibraryArtist,
@@ -206,7 +206,7 @@ export function registerMainRoutes(router) {
     }
 
     const { annotateDiscoverPlaylistsForUser } =
-      await import("../../../services/discoverPlaylistService.js");
+      await import("../../../services/discovery/playlistBuilder.js");
     const playlists = annotateDiscoverPlaylistsForUser(
       discoverPlaylists,
       req.user,

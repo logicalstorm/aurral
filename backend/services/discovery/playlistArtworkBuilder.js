@@ -1,13 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { isFixedDiscoverPlaylistPreset } from "../config/discoverPlaylistPresets.js";
+import { isFixedDiscoverPlaylistPreset } from "../../config/discoverPlaylistPresets.js";
 import {
   getArtworkContentTypeForExtension,
   getArtworkExtensionForStyle,
   getPlaylistArtworkStyle,
   writeGeneratedPlaylistArtwork,
-} from "./playlistArtworkGenerator.js";
-import { resolveAurralDataDir } from "../config/data-dir.js";
+} from "../playlistArtworkGenerator.js";
+import { resolveAurralDataDir } from "../../config/data-dir.js";
 
 const DATA_DIR = resolveAurralDataDir();
 const DISCOVER_ARTWORK_DIR = path.join(DATA_DIR, "discover-artwork");
@@ -156,10 +156,10 @@ export async function ensureDiscoverArtworkForPreset(presetId, { user } = {}) {
   const existing = await resolveDiscoverArtworkFile(presetId);
   if (existing) return existing;
 
-  const { getDiscoveryCache } = await import("./discovery/index.js");
-  const { getListenHistoryProfile } = await import("./listeningHistory.js");
+  const { getDiscoveryCache } = await import("./index.js");
+  const { getListenHistoryProfile } = await import("../listeningHistory.js");
   const { getCachedDiscoverPlaylist } =
-    await import("./discoverPlaylistService.js");
+    await import("./playlistBuilder.js");
 
   const profile = user ? getListenHistoryProfile(user) : null;
   const cache = getDiscoveryCache(profile);

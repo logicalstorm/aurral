@@ -22,7 +22,7 @@ export function registerAdoptRoutes(router) {
         }
 
         const { adoptDiscoverPresetAsFlow } =
-          await import("../../../services/discoverPlaylistAdoptService.js");
+          await import("../../../services/discovery/playlistAdopt.js");
         const result = await adoptDiscoverPresetAsFlow(req.user, presetId);
         res.json(result);
       } catch (error) {
@@ -55,7 +55,7 @@ export function registerAdoptRoutes(router) {
         }
 
         const { adoptDiscoverPresetAsPlaylist } =
-          await import("../../../services/discoverPlaylistAdoptService.js");
+          await import("../../../services/discovery/playlistAdopt.js");
         const result = await adoptDiscoverPresetAsPlaylist(req.user, presetId);
         res.json(result);
       } catch (error) {

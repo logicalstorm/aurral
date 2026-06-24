@@ -9,7 +9,7 @@ import {
   mergeRetainedRecommendationPool,
   mergeResolvedRecommendations,
   rerankRecommendations,
-} from "../../backend/services/discoveryRecommendations.js";
+} from "../../backend/services/discovery/recommendationPipeline.js";
 
 test("buildDiscoverySeedList prefers listening-history weight when the same artist exists in library and history", () => {
   const seeds = buildDiscoverySeedList({

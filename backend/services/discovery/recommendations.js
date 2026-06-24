@@ -19,7 +19,7 @@ import {
   finalizeRecommendationAccumulator,
   mergeResolvedRecommendations,
   rerankRecommendations,
-} from "../discoveryRecommendations.js";
+} from "./recommendationPipeline.js";
 import { hydrateRecommendationCandidateTags } from "./tasteProfile.js";
 
 export const buildRecommendationsFromSeeds = async ({

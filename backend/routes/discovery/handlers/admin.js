@@ -8,7 +8,7 @@ import {
   DISCOVERY_PROVIDER_LASTFM,
   getDiscoveryCapabilities,
 } from "../../../services/listenbrainzDiscoveryFallback.js";
-import { enqueueDiscoveryRefresh } from "../../../services/discoveryRefreshScheduler.js";
+import { enqueueDiscoveryRefresh } from "../../../services/discovery/refreshScheduler.js";
 import { pendingTagRequests, pendingTagSuggestRequest } from "./utils.js";
 
 export function registerAdminRoutes(router) {

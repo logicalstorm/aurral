@@ -2198,7 +2198,7 @@ export class WeeklyFlowPlaylistSource {
   async getReleaseRadarTracks(limit, options = {}) {
     if (limit <= 0) return [];
     const { getRecentMissingReleases } = await import(
-      "./recentReleasesService.js"
+      "./discovery/recentReleases.js"
     );
     const albums = await getRecentMissingReleases(limit, {
       artists: options?.libraryArtists,

@@ -70,7 +70,7 @@ test("tag inheritance: candidate with >= 3 seed tags inherits tags and skips art
 
 test("tag inheritance: inherited tags produce tagSource: inherited and keep existing scores stable", async () => {
   const { applyHydratedCandidateTags } = await importFromRepo(
-    "backend/services/discoveryRecommendations.js",
+    "backend/services/discovery/recommendationPipeline.js",
   );
 
   const profileTagWeights = new Map([
@@ -145,7 +145,7 @@ test("tag inheritance: candidate with lastfm tags preserves direct tagSource whe
 
 test("tag inheritance: multi-seed candidate merges tags from all contributing seeds", async () => {
   const { addRecommendationCandidate, finalizeRecommendationAccumulator } =
-    await importFromRepo("backend/services/discoveryRecommendations.js");
+    await importFromRepo("backend/services/discovery/recommendationPipeline.js");
 
   const accumulator = new Map();
   const profileTagWeights = new Map([
@@ -238,7 +238,7 @@ test("tag inheritance: tag inheritance reduces artist.getTopTags call count for 
     addRecommendationCandidate,
     finalizeRecommendationAccumulator,
     applyHydratedCandidateTags,
-  } = await importFromRepo("backend/services/discoveryRecommendations.js");
+  } = await importFromRepo("backend/services/discovery/recommendationPipeline.js");
 
   resetLastfmApiCallCount();
 
@@ -284,7 +284,7 @@ test("tag inheritance: tag inheritance reduces artist.getTopTags call count for 
 
 test("tag inheritance: ranking scores are equivalent between inherited and direct tags with same tag data", async () => {
   const { applyHydratedCandidateTags } = await importFromRepo(
-    "backend/services/discoveryRecommendations.js",
+    "backend/services/discovery/recommendationPipeline.js",
   );
 
   const profileTagWeights = new Map([

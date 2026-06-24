@@ -6,7 +6,7 @@ import { buildPlaylistArtworkWebpBuffer } from "./playlistArtwork.js";
 import {
   fetchImageBuffer,
   renderStylizedPhotoArtwork,
-} from "./stylizedPhotoArtwork.js";
+} from "./discovery/stylizedArtwork.js";
 
 export const PLAYLIST_ARTWORK_STYLES = ["aurral", "photo"];
 

@@ -17,7 +17,7 @@ const {
   getMaxFocusPlaylists,
 } = await importFromRepo("backend/services/discovery/index.js");
 const { resolveFocusSlotBudgets } = await importFromRepo(
-  "backend/services/discoverPlaylistService.js",
+  "backend/services/discovery/playlistBuilder.js",
 );
 
 test.after(async () => {

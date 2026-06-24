@@ -16,7 +16,7 @@ applyIsolatedBackendEnv(isolatedState);
 const {
   getDiscoverArtworkDirectory,
   pruneObsoleteDiscoverArtwork,
-} = await importFromRepo("backend/services/discoverPlaylistArtworkService.js");
+} = await importFromRepo("backend/services/discovery/playlistArtworkBuilder.js");
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);

@@ -21,7 +21,7 @@ import {
   filterRecommendationsForServe,
   mergeRetainedRecommendationPool,
   rerankRecommendations as rerankRecs,
-} from "../discoveryRecommendations.js";
+} from "./recommendationPipeline.js";
 import { hydrateArtistImages } from "../artistImageHydration.js";
 import {
   buildListenbrainzFallbackDiscovery,

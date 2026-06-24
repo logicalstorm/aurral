@@ -10,7 +10,7 @@ import {
 
 test("per-user refresh: rerankCachedRecommendations produces a personalized slice from the global pool", async () => {
   const { rerankRecommendations } = await importFromRepo(
-    "backend/services/discoveryRecommendations.js",
+    "backend/services/discovery/recommendationPipeline.js",
   );
   const { rerankCachedRecommendations } = await importFromRepo(
     "backend/services/discovery/index.js",
@@ -106,7 +106,7 @@ test("per-user refresh: user-specific feedback is isolated from global feedback"
 
 test("per-user refresh: mergeRetainedRecommendationPool preserves per-user retained pool across refreshes", async () => {
   const { mergeRetainedRecommendationPool, rerankRecommendations } =
-    await importFromRepo("backend/services/discoveryRecommendations.js");
+    await importFromRepo("backend/services/discovery/recommendationPipeline.js");
   const { rerankCachedRecommendations } = await importFromRepo(
     "backend/services/discovery/index.js",
   );
@@ -223,7 +223,7 @@ test("per-user refresh: addDiscoveryFeedback deduplicates feedback per user", as
 test("per-user refresh: feedback boost affects reranking for per-user pool", async () => {
   const {
     rerankRecommendations,
-  } = await importFromRepo("backend/services/discoveryRecommendations.js");
+  } = await importFromRepo("backend/services/discovery/recommendationPipeline.js");
 
   const recPool = [
     {

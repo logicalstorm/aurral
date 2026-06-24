@@ -264,7 +264,7 @@ async function pruneExpiredRuns() {
   } catch {}
   try {
     const { pruneDuplicateScheduledDiscoveryRefreshes } = await import(
-      "./discoveryRefreshScheduler.js"
+      "./discovery/refreshScheduler.js"
     );
     pruneDuplicateScheduledDiscoveryRefreshes();
   } catch {}

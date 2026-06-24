@@ -1,7 +1,7 @@
 import { dbOps } from "../../db/helpers/index.js";
 import { getLastfmApiKey } from "../apiClients/index.js";
 import { libraryManager } from "../libraryManager.js";
-import { buildExistingArtistKeySet } from "../discoveryRecommendations.js";
+import { buildExistingArtistKeySet } from "./recommendationPipeline.js";
 import { websocketService } from "../websocketService.js";
 import { withHonkerLock } from "../honkerDb.js";
 import {
@@ -89,7 +89,7 @@ export const runQueuedDiscoverPlaylistBuild = async (payload = {}) => {
           : [];
         const existingArtistKeys = buildExistingArtistKeySet(allLibraryArtists);
         const { generateDiscoverPlaylists } =
-          await import("../discoverPlaylistService.js");
+          await import("./playlistBuilder.js");
         const discoverPlaylists = await generateDiscoverPlaylists({
           listenHistoryProfile: payload?.listenHistoryProfile || null,
           discoveryCache: baseDiscoveryData,

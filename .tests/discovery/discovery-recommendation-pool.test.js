@@ -11,7 +11,7 @@ const isolatedState = await createIsolatedStateDir("discovery-recommendation-poo
 applyIsolatedBackendEnv(isolatedState);
 
 const { mergeRetainedRecommendationPool, filterRecommendationsForServe } =
-  await importFromRepo("backend/services/discoveryRecommendations.js");
+  await importFromRepo("backend/services/discovery/recommendationPipeline.js");
 const {
   getDiscoveryRecommendationsPerRefresh,
   getDiscoveryRecommendationPoolLimit,

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getRecentMissingReleases } from "../../backend/services/recentReleasesService.js";
+import { getRecentMissingReleases } from "../../backend/services/discovery/recentReleases.js";
 import { lidarrClient } from "../../backend/services/lidarrClient.js";
 
 const artist = {

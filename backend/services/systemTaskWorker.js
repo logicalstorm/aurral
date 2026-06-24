@@ -39,7 +39,7 @@ async function processSystemTask(payload = {}) {
     }
     case "discovery-refresh-check": {
       const { enqueueDiscoveryRefreshIfNeeded } = await import(
-        "./discoveryRefreshScheduler.js"
+        "./discovery/refreshScheduler.js"
       );
       await enqueueDiscoveryRefreshIfNeeded({ reason: "interval" });
       return;
@@ -51,7 +51,7 @@ async function processSystemTask(payload = {}) {
     }
     case "discovery-bootstrap": {
       const { bootstrapDiscoveryRefresh } = await import(
-        "./discoveryRefreshScheduler.js"
+        "./discovery/refreshScheduler.js"
       );
       await bootstrapDiscoveryRefresh();
       return;

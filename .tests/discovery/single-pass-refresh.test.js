@@ -15,7 +15,7 @@ test("single-pass refresh: buildRecommendationsFromSeeds includes candidate tag 
     finalizeRecommendationAccumulator,
     mergeResolvedRecommendations,
     rerankRecommendations,
-  } = await importFromRepo("backend/services/discoveryRecommendations.js");
+  } = await importFromRepo("backend/services/discovery/recommendationPipeline.js");
 
   const seeds = buildDiscoverySeedList({
     libraryArtists: [
@@ -90,7 +90,7 @@ test("single-pass refresh: buildRecommendationsFromSeeds includes candidate tag 
 
 test("single-pass refresh: applyHydratedCandidateTags recalculates score when candidate tags replace seed tags", async () => {
   const { applyHydratedCandidateTags } = await importFromRepo(
-    "backend/services/discoveryRecommendations.js",
+    "backend/services/discovery/recommendationPipeline.js",
   );
 
   const recommendation = {
@@ -129,7 +129,7 @@ test("single-pass refresh: applyHydratedCandidateTags recalculates score when ca
 
 test("single-pass refresh: mergeRetainedRecommendationPool handles fresh + retained correctly", async () => {
   const { mergeRetainedRecommendationPool, rerankRecommendations } =
-    await importFromRepo("backend/services/discoveryRecommendations.js");
+    await importFromRepo("backend/services/discovery/recommendationPipeline.js");
 
   const { rerankCachedRecommendations } = await importFromRepo(
     "backend/services/discovery/index.js",
@@ -236,7 +236,7 @@ test("single-pass refresh: getDiscoveryFlowsPerRefresh defaults and clamping", a
 
 test("single-pass refresh: resolveFocusSlotBudgets covers all slots", async () => {
   const { resolveFocusSlotBudgets } = await importFromRepo(
-    "backend/services/discoverPlaylistService.js",
+    "backend/services/discovery/playlistBuilder.js",
   );
 
   const budgets = resolveFocusSlotBudgets(6);

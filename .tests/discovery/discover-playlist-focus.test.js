@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { importFromRepo } from "../helpers/backendTestHarness.js";
 
 const { buildFocusedPlaylistCandidates } = await importFromRepo(
-  "backend/services/discoverPlaylistService.js",
+  "backend/services/discovery/playlistBuilder.js",
 );
 
 test("focus candidates include tag, artist, crossover, and listening history playlists", () => {

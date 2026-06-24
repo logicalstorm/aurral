@@ -20,7 +20,7 @@ import {
   finalizeRecommendationAccumulator,
   mergeResolvedRecommendations,
   rerankRecommendations,
-} from "../discoveryRecommendations.js";
+} from "./recommendationPipeline.js";
 
 export const fetchArtistTagNames = async (artist, lastfmHealth) => {
   const artistName = String(artist?.name || artist?.artistName || "").trim();

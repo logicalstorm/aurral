@@ -338,7 +338,7 @@ router.post("/complete", async (req, res) => {
     const hasLidarr = !!integrations?.lidarr?.apiKey;
     if (hasLastfm || hasLidarr) {
       const { enqueueDiscoveryRefresh } = await import(
-        "../services/discoveryRefreshScheduler.js"
+        "../services/discovery/refreshScheduler.js"
       );
       enqueueDiscoveryRefresh({ reason: "onboarding" });
     }

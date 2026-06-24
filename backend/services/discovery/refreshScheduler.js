@@ -1,17 +1,17 @@
-import { dbOps } from "../db/helpers/index.js";
-import { getLastfmApiKey } from "./apiClients/index.js";
-import { libraryManager } from "./libraryManager.js";
+import { dbOps } from "../../db/helpers/index.js";
+import { getLastfmApiKey } from "../apiClients/index.js";
+import { libraryManager } from "../libraryManager.js";
 import {
   enqueueDiscoveryRefreshJob,
   getHonkerDb,
   isHonkerLockHeld,
-} from "./honkerDb.js";
+} from "../honkerDb.js";
 import {
   clearDiscoveryUpdateProgress,
   getDiscoveryAutoRefreshHours,
   getDiscoveryCache,
   recordDiscoveryUpdateProgress,
-} from "./discovery/index.js";
+} from "./index.js";
 
 const DISCOVERY_GLOBAL_REFRESH_LOCK = "discovery-global-refresh";
 

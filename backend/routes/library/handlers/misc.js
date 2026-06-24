@@ -193,7 +193,7 @@ export default function registerMisc(router) {
   router.get("/recent-releases", async (req, res) => {
     try {
       const { getRecentMissingReleases } = await import(
-        "../../../services/recentReleasesService.js"
+        "../../../services/discovery/recentReleases.js"
       );
       const recentMissing = await getRecentMissingReleases(24);
 

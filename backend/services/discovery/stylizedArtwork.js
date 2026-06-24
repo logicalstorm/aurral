@@ -7,7 +7,7 @@ import sharp from "sharp";
   const cacheMem = Math.floor(Number(process.env.AURRAL_SHARP_CACHE_MEMORY_MB));
   sharp.cache({ memory: cacheMem >= 8 && cacheMem <= 256 ? cacheMem : 32, files: 20, items: 100 });
 })();
-import { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } from "../config/discoverPlaylistPresets.js";
+import { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } from "../../config/discoverPlaylistPresets.js";
 
 const ARTWORK_SIZE = 1200;
 const TITLE_PADDING_X = 72;

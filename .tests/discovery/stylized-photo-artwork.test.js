@@ -9,7 +9,7 @@ const {
   pickRandomPhotoArtworkPalette,
   pickSeededPhotoArtworkPalette,
   renderStylizedPhotoArtwork,
-} = await importFromRepo("backend/services/stylizedPhotoArtwork.js");
+} = await importFromRepo("backend/services/discovery/stylizedArtwork.js");
 const { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } = await importFromRepo(
   "backend/config/discoverPlaylistPresets.js",
 );

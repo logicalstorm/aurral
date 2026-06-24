@@ -1,12 +1,12 @@
-import { getLastfmApiKey } from "./apiClients/index.js";
-import { getDiscoveryCache, getMaxFocusPlaylists } from "./discovery/index.js";
-import { playlistSource } from "./weeklyFlowPlaylistSource.js";
-import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
+import { getLastfmApiKey } from "../apiClients/index.js";
+import { getDiscoveryCache, getMaxFocusPlaylists } from "./index.js";
+import { playlistSource } from "../weeklyFlowPlaylistSource.js";
+import { flowPlaylistConfig } from "../weeklyFlowPlaylistConfig.js";
 import {
   DISCOVER_PLAYLIST_PRESETS,
   RELEASE_RADAR_PRESET,
   getDiscoverPlaylistPreset,
-} from "../config/discoverPlaylistPresets.js";
+} from "../../config/discoverPlaylistPresets.js";
 
 const FOCUS_PLAYLIST_SIZE = 20;
 const PLAYLIST_BUILD_CONCURRENCY = Math.max(
@@ -551,7 +551,7 @@ export async function generateDiscoverPlaylists({
   onProgress?.({ completed: totalSteps, total: totalSteps });
 
   const { attachArtworkToDiscoverPlaylists } =
-    await import("./discoverPlaylistArtworkService.js");
+    await import("./playlistArtworkBuilder.js");
   return attachArtworkToDiscoverPlaylists(playlists);
 }
 
