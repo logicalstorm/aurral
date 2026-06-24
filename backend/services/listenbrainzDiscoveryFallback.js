@@ -6,7 +6,6 @@ import {
   musicbrainzGetCachedArtistMbidByName,
   musicbrainzResolveArtistMbidByName,
 } from "./apiClients/index.js";
-import { hydrateArtistImages } from "./artistImageHydration.js";
 import { getArtistGenres } from "./providers/brainzmashProvider.js";
 
 export const DISCOVERY_PROVIDER_LASTFM = "lastfm";
@@ -518,7 +517,7 @@ export const buildListenbrainzFallbackGenrePools = async ({
 
 const buildFallbackGenreSectionsFromPools = async (
   fallbackGenrePools,
-  { hydrate = true, sectionSize = 12 } = {},
+  { sectionSize = 12 } = {},
 ) => {
   const sections = [];
   for (const section of DEFAULT_DISCOVERY_GENRE_SECTIONS) {
@@ -526,13 +525,6 @@ const buildFallbackGenreSectionsFromPools = async (
       ? fallbackGenrePools[section.name].slice(0, sectionSize)
       : [];
     if (artists.length === 0) continue;
-    if (hydrate) {
-      await hydrateArtistImages(artists, {
-        limit: artists.length,
-        batchSize: 6,
-        delayMs: 25,
-      });
-    }
     sections.push({
       name: section.name,
       tags: [section.name],
@@ -544,20 +536,13 @@ const buildFallbackGenreSectionsFromPools = async (
 
 const buildGenreSection = async (
   genre,
-  { existingArtistKeys = new Set(), hydrate = true } = {},
+  { existingArtistKeys = new Set() } = {},
 ) => {
   const artists = (
     await Promise.all(genre.artists.map((artist) => normalizeCuratedArtist(artist, genre)))
   )
     .filter(Boolean)
     .filter((artist) => !isExistingArtist(artist, existingArtistKeys));
-  if (hydrate && artists.length > 0) {
-    await hydrateArtistImages(artists, {
-      limit: artists.length,
-      batchSize: 6,
-      delayMs: 25,
-    });
-  }
   if (artists.length === 0) return null;
   return {
     name: genre.name,
@@ -568,13 +553,11 @@ const buildGenreSection = async (
 
 export const buildDefaultGenreSections = async ({
   existingArtistKeys = new Set(),
-  hydrate = true,
 } = {}) => {
   const sections = [];
   for (const genre of DEFAULT_DISCOVERY_GENRE_SECTIONS) {
     const section = await buildGenreSection(genre, {
       existingArtistKeys,
-      hydrate,
     });
     if (section) sections.push(section);
   }
@@ -603,13 +586,6 @@ export const searchFallbackGenreArtists = async ({
     ? fallbackGenrePools[targetSectionName]
     : [];
   const pagedArtists = matchingArtists.slice(offset, offset + limit);
-  if (pagedArtists.length > 0) {
-    await hydrateArtistImages(pagedArtists, {
-      limit: pagedArtists.length,
-      batchSize: 8,
-      delayMs: 25,
-    });
-  }
   if (matchingArtists.length > 0) {
     return {
       artists: pagedArtists,
@@ -630,7 +606,6 @@ export const searchFallbackGenreArtists = async ({
   if (!section) return null;
   const resolved = await buildGenreSection(section, {
     existingArtistKeys,
-    hydrate: true,
   });
   const artists = Array.isArray(resolved?.artists) ? resolved.artists : [];
   return {
@@ -721,24 +696,16 @@ export const buildListenbrainzFallbackDiscovery = async ({
     if (globalTop.length >= 32) break;
   }
 
-  await hydrateArtistImages(globalTop, {
-    limit: globalTop.length,
-    batchSize: 8,
-    delayMs: 25,
-  });
-
   onProgress?.({
     phase: "building_genres",
     progress: 55,
     progressMessage: "Preparing fallback genre sections",
   });
   let fallbackGenres = await buildFallbackGenreSectionsFromPools(fallbackGenrePools, {
-    hydrate: true,
   });
   if (fallbackGenres.length === 0) {
     fallbackGenres = await buildDefaultGenreSections({
       existingArtistKeys,
-      hydrate: true,
     });
   }
   const topGenres = fallbackGenres.map((section) => section.name);

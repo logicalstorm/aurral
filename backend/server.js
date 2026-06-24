@@ -175,7 +175,7 @@ if (fs.existsSync(frontendDist)) {
 }
 
 app.use((err, req, res, next) => {
-  logger.error("system", "Express error:", err);
+  logger.error("system", "Express error:", err || "(no error object)");
   if (res.headersSent) return next(err);
   if (err?.type === "entity.too.large" || err?.status === 413) {
     return res.status(413).json({

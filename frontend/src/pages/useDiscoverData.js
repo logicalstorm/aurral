@@ -9,8 +9,6 @@ import {
   getNearbyShows,
   getRecentlyAdded,
   getRecentReleases,
-  getReleaseGroupCover,
-  getArtistCover,
   lookupArtistsInLibraryBatch,
   readLibraryLookupCache,
   downloadAlbum,
@@ -49,8 +47,6 @@ export function useDiscoverData() {
   const [recentReleases, setRecentReleases] = useState(
     () => readStoredRecentReleases(authUser?.id) || [],
   );
-  const [releaseCovers, setReleaseCovers] = useState({});
-  const [artistCovers, setArtistCovers] = useState({});
   const [pendingRecentReleaseIds, setPendingRecentReleaseIds] = useState({});
   const [error, setError] = useState(null);
   const [libraryLookup, setLibraryLookup] = useState({});
@@ -79,8 +75,6 @@ export function useDiscoverData() {
   const [appliedNearbyZip, setAppliedNearbyZip] = useState(
     initialNearbyLocation.zip,
   );
-  const requestedReleaseCoversRef = useRef(new Set());
-  const requestedArtistCoversRef = useRef(new Set());
   const lastDiscoveryWsMessageAtRef = useRef(0);
   const discoveryPollInFlightRef = useRef(false);
   const canAddArtist = hasPermission("addArtist");
@@ -493,74 +487,6 @@ export function useDiscoverData() {
     ticketmasterConfigured,
   ]);
 
-  useEffect(() => {
-    const ids = recentReleases
-      .filter((album) => !album.coverUrl)
-      .map((album) => album.mbid || album.foreignAlbumId)
-      .filter(Boolean);
-    const missing = ids.filter(
-      (id) => !releaseCovers[id] && !requestedReleaseCoversRef.current.has(id),
-    );
-    missing.forEach((id) => {
-      requestedReleaseCoversRef.current.add(id);
-      const release = recentReleases.find(
-        (album) => (album.mbid || album.foreignAlbumId) === id,
-      );
-      getReleaseGroupCover(id, {
-        artistName:
-          release?.artistName || release?.artist || release?.artistCredit || "",
-        albumTitle: release?.title || release?.albumName || "",
-      })
-        .then((data) => {
-          if (data?.images?.length > 0) {
-            const front =
-              data.images.find((img) => img.front) || data.images[0];
-            const url = front?.image;
-            if (url) {
-              setReleaseCovers((prev) => ({ ...prev, [id]: url }));
-            }
-          }
-        })
-        .catch(console.warn)
-        .finally(() => {
-          requestedReleaseCoversRef.current.delete(id);
-        });
-    });
-  }, [recentReleases, releaseCovers]);
-
-  useEffect(() => {
-    const missingArtistCovers = recentReleases.filter((album) => {
-      const artistId = album.artistMbid || album.foreignArtistId;
-      if (!artistId) return false;
-      if (album.coverUrl) return false;
-      const releaseId = album.mbid || album.foreignAlbumId;
-      if (releaseId && releaseCovers[releaseId]) return false;
-      if (artistCovers[artistId]) return false;
-      return !requestedArtistCoversRef.current.has(artistId);
-    });
-
-    missingArtistCovers.forEach((album) => {
-      const artistId = album.artistMbid || album.foreignArtistId;
-      if (!artistId) return;
-      requestedArtistCoversRef.current.add(artistId);
-      getArtistCover(artistId, album.artistName)
-        .then((data) => {
-          if (data?.images?.length > 0) {
-            const front =
-              data.images.find((img) => img.front) || data.images[0];
-            const url = front?.image;
-            if (url) {
-              setArtistCovers((prev) => ({ ...prev, [artistId]: url }));
-            }
-          }
-        })
-        .catch(console.warn)
-        .finally(() => {
-          requestedArtistCoversRef.current.delete(artistId);
-        });
-    });
-  }, [recentReleases, releaseCovers, artistCovers]);
-
   const getLibraryArtistImage = (artist) => {
     if (artist.images && artist.images.length > 0) {
       const posterImage = artist.images.find(
@@ -644,8 +570,6 @@ export function useDiscoverData() {
     data,
     recentlyAdded,
     recentReleases,
-    releaseCovers,
-    artistCovers,
     pendingRecentReleaseIds,
     error,
     libraryLookup,

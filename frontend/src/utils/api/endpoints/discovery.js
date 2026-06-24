@@ -1,7 +1,15 @@
 import { getData, postData, deleteData, buildAuthenticatedApiUrl } from "../core.js";
 
-export const getDiscovery = (cacheBust = false) => {
-  const params = cacheBust ? { _: Date.now() } : {};
+export const getDiscovery = (options = false) => {
+  const params = {};
+  if (typeof options === "boolean") {
+    if (options) params._ = Date.now();
+  } else if (options && typeof options === "object") {
+    const { offset, limit, cacheBust } = options;
+    if (cacheBust) params._ = Date.now();
+    if (typeof offset === "number") params.offset = offset;
+    if (typeof limit === "number") params.limit = limit;
+  }
   return getData("/discover", { params });
 };
 

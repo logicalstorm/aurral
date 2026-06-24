@@ -14,5 +14,8 @@ export default function createCache(defaultTtlSeconds = 300) {
     set(key, value, ttlSeconds = defaultTtlSeconds) {
       cache.set(key, { value, expires: Date.now() + ttlSeconds * 1000 });
     },
+    flushAll() {
+      cache.clear();
+    },
   };
 }

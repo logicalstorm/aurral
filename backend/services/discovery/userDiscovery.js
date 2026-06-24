@@ -13,8 +13,6 @@ import {
 import { getLastfmApiKey } from "../apiClients/index.js";
 import { libraryManager } from "../libraryManager.js";
 import { dbOps, userOps } from "../../db/helpers/index.js";
-import { hydrateArtistImages } from "../artistImageHydration.js";
-import { imagePrefetchService } from "../imagePrefetchService.js";
 import {
   DISCOVERY_PROVIDER_LASTFM,
   DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK,
@@ -36,7 +34,7 @@ import {
   getDiscoveryStaleMs,
 } from "../../routes/discovery/handlers/utils.js";
 
-export async function getUserDiscovery(userId, limit = 50) {
+export async function getUserDiscovery(userId, limit = 50, offset = 0) {
   const hasLastfmKey = !!getLastfmApiKey();
   const libraryArtists = await libraryManager.getAllArtists();
 
@@ -131,33 +129,6 @@ export async function getUserDiscovery(userId, limit = 50) {
   globalTop = globalTop.filter(
     (artist) => !isLibraryArtist(artist, existingArtistKeys),
   );
-  recommendations = await hydrateArtistImages(recommendations, {
-    limit: Math.min(recommendations.length, 36),
-    batchSize: 8,
-    delayMs: 10,
-  });
-  globalTop = await hydrateArtistImages(globalTop, {
-    limit: Math.min(globalTop.length, 36),
-    batchSize: 8,
-    delayMs: 10,
-  });
-  basedOn = await hydrateArtistImages(basedOn, {
-    limit: Math.min(basedOn.length, 24),
-    batchSize: 6,
-    delayMs: 10,
-  });
-  if (Array.isArray(fallbackGenres) && fallbackGenres.length > 0) {
-    for (const section of fallbackGenres) {
-      if (!Array.isArray(section?.artists) || section.artists.length === 0) {
-        continue;
-      }
-      section.artists = await hydrateArtistImages(section.artists, {
-        limit: Math.min(section.artists.length, 24),
-        batchSize: 6,
-        delayMs: 10,
-      });
-    }
-  }
 
   recommendations = serveCachedRecommendations({
     recommendations,
@@ -184,15 +155,6 @@ export async function getUserDiscovery(userId, limit = 50) {
     }
   }
 
-  if (recommendations.length > 0 || globalTop.length > 0) {
-    imagePrefetchService
-      .prefetchDiscoveryImages({
-        recommendations,
-        globalTop,
-      })
-      .catch((err) => { logger.discovery("warn", "Failed to prefetch discovery images", { error: err?.message || String(err) }); });
-  }
-
   const cacheStrategy =
     recommendations.length > 0 || globalTop.length > 0
       ? "fresh"
@@ -211,11 +173,15 @@ export async function getUserDiscovery(userId, limit = 50) {
     getDiscoveryPlaylistBuildStatus(effectiveCacheNamespace);
 
   const limitClamped = Math.max(limit, 1);
+  const offsetClamped = Math.max(offset, 0);
 
   return {
     cacheStrategy,
     body: {
-      recommendations: recommendations.slice(0, limitClamped),
+      recommendations: limit
+        ? recommendations.slice(offsetClamped, offsetClamped + limitClamped)
+        : recommendations,
+      recommendationCount: recommendations.length,
       globalTop,
       basedOn,
       topTags,

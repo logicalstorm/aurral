@@ -1,4 +1,4 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { Music } from "lucide-react";
 import ArtistImage from "../components/ArtistImage";
@@ -6,6 +6,7 @@ import AddAlbumButton from "../components/AddAlbumButton";
 import { ArtistContextMenu } from "../components/ArtistContextMenu";
 import SearchLibraryCheck from "../components/SearchLibraryCheck";
 import { getReleaseNavigationTarget } from "../utils/searchNavigation";
+import { getReleaseGroupCover, getArtistCover } from "../utils/api";
 
 const parseCalendarDate = (value) => {
   if (!value) return null;
@@ -209,8 +210,6 @@ ArtistCard.propTypes = {
 export const AlbumCard = memo(
   ({
     album,
-    releaseCovers,
-    artistCovers,
     onNavigate,
     canAddAlbum = false,
     isPending = false,
@@ -218,10 +217,38 @@ export const AlbumCard = memo(
   }) => {
     const releaseGroupMbid = album.mbid || album.foreignAlbumId;
     const artistMbid = album.artistMbid || album.foreignArtistId;
-    const coverId = releaseGroupMbid;
-    const releaseCover = coverId ? releaseCovers[coverId] : null;
-    const artistCover = artistMbid ? artistCovers[artistMbid] : null;
-    const coverUrl = album.coverUrl || releaseCover || artistCover;
+    const [fetchedCover, setFetchedCover] = useState(null);
+    const coverUrl = album.coverUrl || fetchedCover;
+
+    useEffect(() => {
+      if (album.coverUrl || fetchedCover) return;
+
+      const fetchCover = async () => {
+        if (releaseGroupMbid) {
+          try {
+            const data = await getReleaseGroupCover(releaseGroupMbid, {
+              artistName: album.artistName || "",
+              albumTitle: album.albumName || "",
+            });
+            if (data?.images?.length > 0) {
+              const front = data.images.find((img) => img.front) || data.images[0];
+              if (front?.image) { setFetchedCover(front.image); return; }
+            }
+          } catch {}
+        }
+        if (artistMbid) {
+          try {
+            const data = await getArtistCover(artistMbid, album.artistName);
+            if (data?.images?.length > 0) {
+              const front = data.images.find((img) => img.front) || data.images[0];
+              if (front?.image) setFetchedCover(front.image);
+            }
+          } catch {}
+        }
+      };
+
+      fetchCover();
+    }, [releaseGroupMbid, artistMbid, album.coverUrl, album.artistName, album.albumName, fetchedCover]);
     const albumArtistText = album.artistName || "Unknown Artist";
     const albumReleaseText = formatReleaseStatus(album.releaseDate);
     const isComplete = (album.statistics?.percentOfTracks || 0) > 0;
@@ -337,9 +364,7 @@ export const AlbumCard = memo(
       prevProps.canAddAlbum === nextProps.canAddAlbum &&
       prevProps.isPending === nextProps.isPending &&
       prevProps.onNavigate === nextProps.onNavigate &&
-      prevProps.onAlbumAction === nextProps.onAlbumAction &&
-      prevProps.releaseCovers === nextProps.releaseCovers &&
-      prevProps.artistCovers === nextProps.artistCovers
+      prevProps.onAlbumAction === nextProps.onAlbumAction
     );
   },
 );
@@ -357,8 +382,6 @@ AlbumCard.propTypes = {
     releaseDate: PropTypes.string,
     coverUrl: PropTypes.string,
   }).isRequired,
-  releaseCovers: PropTypes.object.isRequired,
-  artistCovers: PropTypes.object.isRequired,
   onNavigate: PropTypes.func.isRequired,
   canAddAlbum: PropTypes.bool,
   isPending: PropTypes.bool,

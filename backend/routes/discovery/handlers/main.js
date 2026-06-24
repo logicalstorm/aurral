@@ -14,8 +14,14 @@ import { getUserDiscovery } from "../../../services/discovery/userDiscovery.js";
 
 export function registerMain(router) {
   router.get("/", requireAuth, async (req, res) => {
-    const limit = Math.max(parseInt(req.query.limit, 10) || 50, 1);
-    const { body, cacheStrategy } = await getUserDiscovery(req.user.id, limit);
+    const hasExplicitLimit = typeof req.query.limit === "string" && req.query.limit.trim() !== "";
+    const limit = hasExplicitLimit
+      ? Math.max(1, Math.min(200, parseInt(req.query.limit, 10) || 0))
+      : 0;
+    const offset = hasExplicitLimit
+      ? Math.max(0, parseInt(req.query.offset, 10) || 0)
+      : 0;
+    const { body, cacheStrategy } = await getUserDiscovery(req.user.id, limit, offset);
 
     const cacheHeaders = {
       fresh: "private, max-age=120, stale-while-revalidate=300",

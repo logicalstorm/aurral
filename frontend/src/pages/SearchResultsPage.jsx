@@ -182,14 +182,23 @@ function SearchResultsPage() {
         setLoading(true);
         setError(null);
         try {
-          const data = await getDiscovery();
+          const isRecommended = normalizedType === "recommended";
+          const data = isRecommended
+            ? await getDiscovery({ offset: 0, limit: PAGE_SIZE })
+            : await getDiscovery();
           const list =
-            normalizedType === "recommended" ? data.recommendations || [] : data.globalTop || [];
-          setFullList(list);
-          setResults(list);
-          setVisibleCount(PAGE_SIZE);
-          setHasMore(list.length > PAGE_SIZE);
-          setSearchTotalCount(list.length);
+            isRecommended ? data.recommendations || [] : data.globalTop || [];
+          if (isRecommended) {
+            setResults(list);
+            setSearchTotalCount(data.recommendationCount ?? list.length);
+            setHasMore(list.length === PAGE_SIZE && (data.recommendationCount ?? 0) > PAGE_SIZE);
+          } else {
+            setFullList(list);
+            setResults(list);
+            setVisibleCount(PAGE_SIZE);
+            setHasMore(list.length > PAGE_SIZE);
+            setSearchTotalCount(list.length);
+          }
           const imagesMap = {};
           list.forEach((artist) => {
             const artistId = getArtistRecordId(artist);
@@ -779,7 +788,34 @@ function SearchResultsPage() {
   const loadMore = useCallback(async () => {
     if (loading || loadingMore || !hasMore) return;
 
-    if (normalizedType === "recommended" || normalizedType === "trending") {
+    if (normalizedType === "recommended") {
+      setLoadingMore(true);
+      try {
+        const data = await getDiscovery({ offset: results.length, limit: PAGE_SIZE });
+        const newItems = data.recommendations || [];
+        setResults((prev) => [...prev, ...newItems]);
+        setSearchTotalCount(data.recommendationCount ?? 0);
+        setHasMore(
+          newItems.length === PAGE_SIZE &&
+            results.length + newItems.length < (data.recommendationCount ?? 0),
+        );
+        const imagesMap = {};
+        newItems.forEach((artist) => {
+          const artistId = getArtistRecordId(artist);
+          if ((artist.image || artist.imageUrl) && artistId) {
+            imagesMap[artistId] = artist.image || artist.imageUrl;
+          }
+        });
+        setArtistImages((prev) => ({ ...prev, ...imagesMap }));
+      } catch (err) {
+        console.warn("Failed to load more recommendations:", err);
+      } finally {
+        setLoadingMore(false);
+      }
+      return;
+    }
+
+    if (normalizedType === "trending") {
       const next = visibleCount + PAGE_SIZE;
       setVisibleCount((count) =>
         Math.min(count + PAGE_SIZE, fullList?.length ?? count + PAGE_SIZE),
@@ -1223,20 +1259,24 @@ function SearchResultsPage() {
   }, [albumReleaseTab, isAlbumSearch, results]);
 
   const displayedResults =
-    normalizedType === "recommended" || normalizedType === "trending"
-      ? results.slice(0, visibleCount)
-      : isAlbumSearch
-        ? albumResultsForTab
-        : results;
+    normalizedType === "recommended"
+      ? results
+      : normalizedType === "trending"
+        ? results.slice(0, visibleCount)
+        : isAlbumSearch
+          ? albumResultsForTab
+          : results;
 
   const showContent =
     !loading && (query || normalizedType === "recommended" || normalizedType === "trending");
   const isEmpty = isUnifiedSearch ? unifiedView.isEmpty : displayedResults.length === 0;
   const showLoadMore =
     hasMore &&
-    (normalizedType === "recommended" || normalizedType === "trending"
-      ? results.length > PAGE_SIZE
-      : displayedResults.length >= PAGE_SIZE);
+    (normalizedType === "recommended"
+      ? true
+      : normalizedType === "trending"
+        ? results.length > PAGE_SIZE
+        : displayedResults.length >= PAGE_SIZE);
 
   useEffect(() => {
     if (!albumOptionsOpen) return undefined;
@@ -1275,7 +1315,7 @@ function SearchResultsPage() {
 
   const pageSubtitle =
     normalizedType === "recommended"
-      ? `${results.length} artist${results.length !== 1 ? "s" : ""} we think you'll like`
+      ? `${searchTotalCount || results.length} artist${searchTotalCount !== 1 ? "s" : ""} we think you'll like`
       : normalizedType === "trending"
         ? "Trending artists right now"
         : isUnifiedSearch && trimmedQuery

@@ -12,7 +12,6 @@ import {
   musicbrainzGetCachedArtistMbidByName,
   musicbrainzResolveArtistMbidByName,
 } from "./apiClients.js";
-import { hydrateArtistImages } from "./artistImageHydration.js";
 import { websocketService } from "./websocketService.js";
 import { libraryManager } from "./libraryManager.js";
 import {
@@ -1813,13 +1812,6 @@ export const updateDiscoveryCache = async (options = {}) => {
         feedback: getDiscoveryFeedback("global"),
       });
 
-      console.time("[Discovery] image hydration");
-      await hydrateArtistImages(recommendationsArray, {
-        limit: recommendationsArray.length,
-        batchSize: 6,
-        delayMs: 50,
-      });
-      console.timeEnd("[Discovery] image hydration");
     } else {
       console.warn("Last.fm API key required for similar artist discovery.");
     }
@@ -2075,12 +2067,6 @@ export const updateUserDiscoveryCache = async (listenHistoryProfile, options = {
       runStartedAt: recommendationRunStartedAt,
       discoveryMode: getDiscoveryMode(),
       feedback,
-    });
-
-    await hydrateArtistImages(recommendationsArray, {
-      limit: recommendationsArray.length,
-      batchSize: 6,
-      delayMs: 50,
     });
 
     const basedOnArtists = historyArtists.map((artist) => ({

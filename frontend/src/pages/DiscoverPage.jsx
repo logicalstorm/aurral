@@ -47,8 +47,6 @@ function DiscoverPage() {
     data,
     recentlyAdded,
     recentReleases,
-    releaseCovers,
-    artistCovers,
     pendingRecentReleaseIds,
     error,
     libraryLookup,
@@ -536,8 +534,6 @@ function DiscoverPage() {
               >
                 <AlbumCard
                   album={album}
-                  releaseCovers={releaseCovers}
-                  artistCovers={artistCovers}
                   onNavigate={navigate}
                   canAddAlbum={canAddAlbum}
                   isPending={!!pendingRecentReleaseIds[getRecentReleaseKey(album)]}

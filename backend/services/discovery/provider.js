@@ -22,7 +22,6 @@ import {
   mergeRetainedRecommendationPool,
   rerankRecommendations as rerankRecs,
 } from "./recommendationPipeline.js";
-import { hydrateArtistImages } from "../artistImageHydration.js";
 import {
   buildListenbrainzFallbackDiscovery,
   getDiscoveryCapabilities,
@@ -759,11 +758,6 @@ export const updateDiscoveryCache = async (options = {}) => {
         feedback: getDiscoveryFeedback("global"),
       });
 
-      await hydrateArtistImages(recommendationsArray, {
-        limit: recommendationsArray.length,
-        batchSize: 6,
-        delayMs: 50,
-      });
     } else {
       logger.warn('discovery', "Last.fm API key required for similar artist discovery.");
     }
@@ -1038,12 +1032,6 @@ export const updateUserDiscoveryCache = async (
       runStartedAt: recommendationRunStartedAt,
       discoveryMode: getDiscoveryMode(),
       feedback,
-    });
-
-    await hydrateArtistImages(recommendationsArray, {
-      limit: recommendationsArray.length,
-      batchSize: 6,
-      delayMs: 50,
     });
 
     const basedOnArtists = historyArtists
