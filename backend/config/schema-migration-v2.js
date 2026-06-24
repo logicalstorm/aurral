@@ -34,45 +34,13 @@ export function hasV1MigrationMarkers(db, dbHelpers) {
   return false;
 }
 
-export function buildV2MigrationPreview(db, dbHelpers) {
-  const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
-  const integrations = dbHelpers.parseJSON(
-    getSettingStmt.get("integrations")?.value,
-  );
-  const weeklyFlowJobCount = tableExists(db, "weekly_flow_jobs")
-    ? Number(
-        db.prepare("SELECT COUNT(*) AS count FROM weekly_flow_jobs").get()
-          ?.count || 0,
-      )
-    : 0;
-  const flows = dbHelpers.parseJSON(getSettingStmt.get("weeklyFlows")?.value);
-  const sharedPlaylists = dbHelpers.parseJSON(
-    getSettingStmt.get("sharedFlowPlaylists")?.value,
-  );
-  return {
-    flowCount: Array.isArray(flows) ? flows.length : 0,
-    sharedPlaylistCount: Array.isArray(sharedPlaylists)
-      ? sharedPlaylists.length
-      : 0,
-    weeklyFlowJobCount,
-    hasSoulseekIntegration: !!integrations?.soulseek,
-  };
-}
-
-export function getV2MigrationStatus(db, dbHelpers) {
+function getV2MigrationStatus(db, dbHelpers) {
   const schemaVersion = getSchemaVersion(db);
   return {
     required: false,
     schemaVersion,
     legacyDetected: hasV1MigrationMarkers(db, dbHelpers),
   };
-}
-
-export function runV2SchemaMaintenance(db, dbHelpers) {
-  finalizeV2SettingsKeys(db, dbHelpers);
-  migrateJobsTable(db);
-  ensureSlskdTransferHistoryTable(db);
-  return { schemaVersion: getSchemaVersion(db) };
 }
 
 export function initializeSchemaOnStartup(db, dbHelpers) {

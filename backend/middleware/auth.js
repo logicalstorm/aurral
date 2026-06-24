@@ -1,10 +1,15 @@
-import basicAuth from "express-basic-auth";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import os from "os";
 import { dbOps, userOps } from "../db/helpers/index.js";
 import { getDefaultListenHistoryProfile } from "../services/listeningHistory.js";
 import { getSessionByToken } from "../config/session-helpers.js";
+
+const safeCompare = (a, b) => {
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+};
 
 const DEFAULT_PROXY_HEADER = "x-forwarded-user";
 const STREAM_TOKEN_TTL_MS = 2 * 60 * 1000;
@@ -480,9 +485,9 @@ function legacyAuth(username, password) {
   const authUser = getAuthUser();
   const passwords = getAuthPassword();
   if (passwords.length === 0) return null;
-  const userMatches = basicAuth.safeCompare(username, authUser);
+  const userMatches = safeCompare(username, authUser);
   const passwordMatches = passwords.some((p) =>
-    basicAuth.safeCompare(password, p),
+    safeCompare(password, p),
   );
   if (!userMatches || !passwordMatches) return null;
   return {

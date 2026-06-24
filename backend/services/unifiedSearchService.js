@@ -1,4 +1,4 @@
-import NodeCache from "node-cache";
+import createCache from "./apiClients/simpleCache.js";
 import {
   getNormalizedText,
   scoreTextMatch,
@@ -14,11 +14,7 @@ import { getCachedArtists } from "./libraryManager.js";
 import { getDiscoveryCache } from "./discovery/index.js";
 import { compareSearchResults, getLocalMatchThreshold } from "./searchRanking.js";
 
-const unifiedSearchCache = new NodeCache({
-  stdTTL: 60,
-  checkperiod: 30,
-  maxKeys: 500,
-});
+const unifiedSearchCache = createCache(60);
 
 const SUGGEST_LIMIT = 5;
 const FULL_LIMIT = 20;
@@ -33,12 +29,7 @@ const CONTEXT_BOOST = {
   EXACT_TITLE_WITH_LIBRARY_ARTIST: 36,
 };
 
-const searchContextCache = new NodeCache({
-  stdTTL: SEARCH_CONTEXT_TTL_SECONDS,
-  checkperiod: 30,
-  maxKeys: 200,
-  useClones: false,
-});
+const searchContextCache = createCache(SEARCH_CONTEXT_TTL_SECONDS);
 
 const EMPTY_SEARCH_CONTEXT = {
   playlists: [],

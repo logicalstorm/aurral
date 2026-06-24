@@ -1,4 +1,4 @@
-import { isVerboseConsoleEnabled } from "../loadEnv.js";
+import { isVerboseConsoleEnabled } from "../config/constants.js";
 
 let verboseEnabled = isVerboseConsoleEnabled();
 

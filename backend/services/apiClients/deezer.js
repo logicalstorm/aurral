@@ -1,36 +1,15 @@
 import axios from "axios";
-import Bottleneck from "bottleneck";
-import NodeCache from "node-cache";
+import createCache from "./simpleCache.js";
 import { getMusicBrainzContact } from "./config.js";
 import { APP_NAME, APP_VERSION } from "../../config/constants.js";
 
-const deezerArtistCache = new NodeCache({
-  stdTTL: 3600,
-  checkperiod: 120,
-  maxKeys: 1000,
-});
+const deezerArtistCache = createCache(3600);
 
-const deezerBioCache = new NodeCache({
-  stdTTL: 3600,
-  checkperiod: 120,
-  maxKeys: 500,
-});
+const deezerBioCache = createCache(3600);
 
-const deezerAlbumCache = new NodeCache({
-  stdTTL: 3600,
-  checkperiod: 120,
-  maxKeys: 500,
-});
-const deezerAlbumTrackCache = new NodeCache({
-  stdTTL: 3600,
-  checkperiod: 120,
-  maxKeys: 1000,
-});
-const deezerPreviewMatchCache = new NodeCache({
-  stdTTL: 6 * 3600,
-  checkperiod: 600,
-  maxKeys: 2000,
-});
+const deezerAlbumCache = createCache(3600);
+const deezerAlbumTrackCache = createCache(3600);
+const deezerPreviewMatchCache = createCache(6 * 3600);
 
 export async function getDeezerArtist(artistName) {
   const normalizedName = artistName.toLowerCase().trim();

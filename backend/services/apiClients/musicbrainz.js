@@ -1,6 +1,6 @@
 import axios from "axios";
-import Bottleneck from "bottleneck";
-import NodeCache from "node-cache";
+import createRateLimiter from "./rateLimiter.js";
+import createCache from "./simpleCache.js";
 import { logger } from "../logger.js";
 import { dbOps } from "../../db/helpers/index.js";
 import {
@@ -20,17 +20,9 @@ import {
 import { selectBestAlbumImage } from "../imageService.js";
 import { getMusicBrainzContact } from "./config.js";
 
-const mbCache = new NodeCache({ stdTTL: 300, checkperiod: 60, maxKeys: 500 });
-const musicbrainzArtistNameCache = new NodeCache({
-  stdTTL: 3600,
-  checkperiod: 120,
-  maxKeys: 1000,
-});
-const musicbrainzReleaseGroupsCache = new NodeCache({
-  stdTTL: 300,
-  checkperiod: 120,
-  maxKeys: 500,
-});
+const mbCache = createCache(300);
+const musicbrainzArtistNameCache = createCache(3600);
+const musicbrainzReleaseGroupsCache = createCache(300);
 const PRIMARY_RELEASE_TYPES = ["Album", "EP", "Single"];
 const SECONDARY_RELEASE_TYPES = [
   "Live",
@@ -42,11 +34,7 @@ const SECONDARY_RELEASE_TYPES = [
   "Spokenword",
   "Other",
 ];
-const itunesAlbumArtCache = new NodeCache({
-  stdTTL: 24 * 60 * 60,
-  checkperiod: 10 * 60,
-  maxKeys: 2000,
-});
+const itunesAlbumArtCache = createCache(24 * 60 * 60);
 
 const shouldEmitThrottledLog = (logMap, key, throttleMs = 15000) => {
   const now = Date.now();
@@ -74,10 +62,7 @@ const requestMusicbrainz = async (
     ...(forceIpv4 ? { family: 4 } : {}),
   });
 
-const mbLimiter = new Bottleneck({
-  maxConcurrent: 1,
-  minTime: 1000,
-});
+const mbLimiter = createRateLimiter(1000);
 
 const musicbrainzRequestWithRetry = async (
   endpoint,

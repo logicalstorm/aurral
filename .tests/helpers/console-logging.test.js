@@ -1,9 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  isVerboseConsoleEnabled,
-} from "../../backend/loadEnv.js";
+import { isVerboseConsoleEnabled } from "../../backend/config/constants.js";
 
 test("verbose console mode accepts explicit truthy environment values", () => {
   assert.equal(isVerboseConsoleEnabled({ AURRAL_VERBOSE_LOGS: "true" }), true);

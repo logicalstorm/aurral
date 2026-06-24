@@ -1,23 +1,16 @@
 import axios from "axios";
-import Bottleneck from "bottleneck";
-import NodeCache from "node-cache";
+import createRateLimiter from "./apiClients/rateLimiter.js";
+import createCache from "./apiClients/simpleCache.js";
 import { validateExternalUrl } from "../middleware/urlValidator.js";
 
 const KOITO_TIMEOUT_MS = 8000;
 const KOITO_MAX_RETRIES = 2;
 const KOITO_DEFAULT_LIMIT = 100;
 
-const koitoCache = new NodeCache({
-  stdTTL: 300,
-  checkperiod: 60,
-  maxKeys: 500,
-});
+const koitoCache = createCache(300);
 const koitoInflightRequests = new Map();
 
-const koitoLimiter = new Bottleneck({
-  minTime: 250,
-  maxConcurrent: 2,
-});
+const koitoLimiter = createRateLimiter(250);
 
 const KOITO_PERIOD_BY_DISCOVERY_PERIOD = {
   "7day": "week",

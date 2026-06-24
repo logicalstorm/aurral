@@ -1,8 +1,6 @@
 import { UUID_REGEX } from "../../../config/constants.js";
 import { logger } from "../../../services/logger.js";
 import {
-  getLastfmApiKey,
-  lastfmRequest,
   musicbrainzGetArtistAppearsOnReleaseGroups,
   musicbrainzGetArtistReleaseGroups,
   musicbrainzGetArtistNameByMbid,
@@ -12,56 +10,9 @@ import { cacheMiddleware } from "../../../middleware/cache.js";
 import { requireAuth } from "../../../middleware/requirePermission.js";
 import { buildArtistRequestKey, pendingArtistRequests } from "../utils.js";
 import { getArtistByMbid } from "../../../services/providers/brainzmashProvider.js";
+import { toLegacyRelations, getArtistTagPayload, buildArtistBase } from "../shared/transform.js";
 
 export function registerDetails(router) {
-  const toLegacyRelations = (metadataArtist) =>
-    Array.isArray(metadataArtist?.links)
-      ? metadataArtist.links
-          .filter((link) => link?.target)
-          .map((link) => ({
-            type: link.type || "external",
-            url: { resource: link.target },
-          }))
-      : [];
-
-  const getLastfmTags = async (mbid, artistName = "") => {
-    if (!getLastfmApiKey()) return [];
-    let data = await lastfmRequest("artist.getTopTags", { mbid }).catch(() => null);
-    if (!data?.toptags?.tag && artistName) {
-      data = await lastfmRequest("artist.getTopTags", { artist: artistName }).catch(
-        () => null,
-      );
-    }
-    const tags = data?.toptags?.tag
-      ? Array.isArray(data.toptags.tag)
-        ? data.toptags.tag
-        : [data.toptags.tag]
-      : [];
-    return tags
-      .map((tag) => ({
-        name: String(tag?.name || "").trim(),
-        count: Number(tag?.count || 0),
-      }))
-      .filter((tag) => tag.name);
-  };
-
-  const getArtistTagPayload = async (mbid, artistName = "", metadataArtist = null) => {
-    const lastfmTags = await getLastfmTags(mbid, artistName);
-    if (lastfmTags.length > 0) {
-      return {
-        tags: lastfmTags,
-        genres: lastfmTags.map((tag) => tag.name),
-      };
-    }
-    const fallbackGenres = Array.isArray(metadataArtist?.genres)
-      ? metadataArtist.genres.filter(Boolean)
-      : [];
-    return {
-      tags: fallbackGenres.map((genre) => ({ name: genre, count: 0 })),
-      genres: fallbackGenres,
-    };
-  };
-
   const parseSelectedReleaseTypes = (value) =>
     typeof value === "string" && value.trim()
       ? value
@@ -251,26 +202,11 @@ export function registerDetails(router) {
               metadataArtist,
             );
         const payload = {
-          id: artistMbid,
-          name: metadataArtist?.name || lidarrArtist.artistName,
-          "sort-name":
-            metadataArtist?.sortName || metadataArtist?.name || lidarrArtist.artistName,
-          disambiguation: metadataArtist?.disambiguation || "",
-          "type-id": null,
-          type: metadataArtist?.type || null,
-          country: null,
-          "life-span": {
-            begin: null,
-            end: null,
-            ended: false,
-          },
+          ...buildArtistBase(metadataArtist?.name || lidarrArtist.artistName, artistMbid, metadataArtist),
           tags: tagPayload.tags,
           genres: tagPayload.genres,
-          links: Array.isArray(metadataArtist?.links) ? metadataArtist.links : [],
           "release-groups": releaseGroups,
           "appears-on-release-groups": appearsOnReleaseGroups,
-          relations: toLegacyRelations(metadataArtist),
-          rating: metadataArtist?.rating || null,
           "release-group-count": releaseGroups.length,
           "release-count": releaseGroups.length,
           _lidarrData: {
@@ -278,7 +214,6 @@ export function registerDetails(router) {
             monitored: lidarrArtist.monitored,
             statistics: lidarrArtist.statistics,
           },
-          ...(metadataArtist?.overview ? { bio: metadataArtist.overview } : {}),
         };
 
         res.setHeader("Content-Type", "application/json");
@@ -311,24 +246,13 @@ export function registerDetails(router) {
               { limit: appearsOnLimit },
             );
         return {
-          id: resolvedMbid,
-          name,
-          "sort-name": metadataArtist?.sortName || name,
-          disambiguation: metadataArtist?.disambiguation || "",
-          "type-id": null,
-          type: metadataArtist?.type || null,
-          country: null,
-          "life-span": { begin: null, end: null, ended: false },
+          ...buildArtistBase(name, resolvedMbid, metadataArtist),
           tags: tagPayload.tags,
           genres: tagPayload.genres,
-          links: Array.isArray(metadataArtist?.links) ? metadataArtist.links : [],
           "release-groups": releaseGroups,
           "appears-on-release-groups": appearsOnReleaseGroups,
-          relations: toLegacyRelations(metadataArtist),
-          rating: metadataArtist?.rating || null,
           "release-group-count": releaseGroups.length,
           "release-count": releaseGroups.length,
-          bio: metadataArtist?.overview || undefined,
         };
       })();
 

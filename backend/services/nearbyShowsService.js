@@ -1,24 +1,12 @@
 import axios from "axios";
-import NodeCache from "node-cache";
+import createCache from "./apiClients/simpleCache.js";
 import { getTicketmasterApiKey } from "./apiClients/index.js";
 
-const ticketmasterEventCache = new NodeCache({
-  stdTTL: 15 * 60,
-  checkperiod: 60,
-  maxKeys: 200,
-});
+const ticketmasterEventCache = createCache(15 * 60);
 
-const ipLocationCache = new NodeCache({
-  stdTTL: 30 * 60,
-  checkperiod: 120,
-  maxKeys: 500,
-});
+const ipLocationCache = createCache(30 * 60);
 
-const zipLocationCache = new NodeCache({
-  stdTTL: 24 * 60 * 60,
-  checkperiod: 10 * 60,
-  maxKeys: 1000,
-});
+const zipLocationCache = createCache(24 * 60 * 60);
 
 const DEFAULT_RADIUS_MILES = 250;
 const MAX_EVENT_RESULTS = 200;

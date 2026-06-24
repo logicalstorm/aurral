@@ -1,4 +1,4 @@
-import NodeCache from "node-cache";
+import createCache from "./apiClients/simpleCache.js";
 import { getDiscoveryCache } from "./discovery/index.js";
 import { getLastfmApiKey, lastfmRequest } from "./apiClients/index.js";
 import { buildImageProxyUrl } from "./imageProxyService.js";
@@ -28,11 +28,7 @@ const ALL_RELEASE_TYPES = new Set([
   ...PRIMARY_RELEASE_TYPES,
   ...SECONDARY_RELEASE_TYPES,
 ]);
-const albumLibraryLookupCache = new NodeCache({
-  stdTTL: 60,
-  checkperiod: 60,
-  maxKeys: 10,
-});
+const albumLibraryLookupCache = createCache(60);
 
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);

@@ -202,49 +202,6 @@ class WebSocketService {
     return sent;
   }
 
-  broadcastToAll(data) {
-    const message = JSON.stringify({
-      timestamp: Date.now(),
-      ...data,
-    });
-
-    let sent = 0;
-    for (const client of this.clients) {
-      if (client.ws.readyState === 1) {
-        client.ws.send(message);
-        sent++;
-      }
-    }
-
-    return sent;
-  }
-
-  emitDownloadProgress(downloadId, progress) {
-    this.broadcast('downloads', {
-      type: 'download_progress',
-      downloadId,
-      ...progress,
-    });
-  }
-
-  emitDownloadStateChange(downloadId, fromState, toState, metadata = {}) {
-    this.broadcast('downloads', {
-      type: 'download_state_change',
-      downloadId,
-      fromState,
-      toState,
-      ...metadata,
-    });
-  }
-
-  emitDownloadComplete(downloadId, result) {
-    this.broadcast('downloads', {
-      type: 'download_complete',
-      downloadId,
-      ...result,
-    });
-  }
-
   reconcileAuthState() {
     for (const client of this.clients) {
       if (client.authSource !== "local-network-bypass") {
@@ -259,41 +216,9 @@ class WebSocketService {
     }
   }
 
-  emitDownloadFailed(downloadId, error) {
-    this.broadcast('downloads', {
-      type: 'download_failed',
-      downloadId,
-      error: error?.message || String(error),
-    });
-  }
-
-  emitQueueUpdate(queueStatus) {
-    this.broadcast('queue', {
-      type: 'queue_update',
-      ...queueStatus,
-    });
-  }
-
-  emitLibraryUpdate(event, data) {
-    this.broadcast('library', {
-      type: 'library_update',
-      event,
-      ...data,
-    });
-  }
-
   emitDiscoveryUpdate(data) {
     this.broadcast('discovery', {
       type: 'discovery_update',
-      ...data,
-    });
-  }
-
-  emitNotification(level, message, data = {}) {
-    this.broadcast('notifications', {
-      type: 'notification',
-      level,
-      message,
       ...data,
     });
   }

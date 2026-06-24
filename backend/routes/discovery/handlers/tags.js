@@ -4,6 +4,7 @@ import { getLastfmApiKey, lastfmRequest } from "../../../services/apiClients/ind
 import { libraryManager } from "../../../services/libraryManager.js";
 import { getDiscoveryCache } from "../../../services/discovery/index.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
+import { extractLastfmImageUrl } from "../../artists/shared/transform.js";
 import {
   DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK,
   getFallbackTagNames,
@@ -102,20 +103,7 @@ export function registerTags(router) {
 
               recommendations = artists
                 .map((artist) => {
-                  let imageUrl = null;
-                  if (artist.image && Array.isArray(artist.image)) {
-                    const img =
-                      artist.image.find((i) => i.size === "extralarge") ||
-                      artist.image.find((i) => i.size === "large") ||
-                      artist.image.slice(-1)[0];
-                    if (
-                      img &&
-                      img["#text"] &&
-                      !img["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")
-                    ) {
-                      imageUrl = img["#text"];
-                    }
-                  }
+                  const imageUrl = extractLastfmImageUrl(artist.image);
 
                   return {
                     id: artist.mbid,

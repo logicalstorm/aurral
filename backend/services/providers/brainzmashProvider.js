@@ -1,5 +1,5 @@
 import axios from "axios";
-import NodeCache from "node-cache";
+import createCache from "../apiClients/simpleCache.js";
 import { dbOps } from "../../db/helpers/index.js";
 import {
   APP_NAME,
@@ -24,16 +24,8 @@ import {
 } from "./brainzmashMappers.js";
 import { selectBestAlbumImage } from "../imageService.js";
 
-const providerCache = new NodeCache({
-  stdTTL: 300,
-  checkperiod: 60,
-  maxKeys: 2000,
-});
-const releaseCache = new NodeCache({
-  stdTTL: 300,
-  checkperiod: 60,
-  maxKeys: 5000,
-});
+const providerCache = createCache(300);
+const releaseCache = createCache(300);
 
 const healthState = {
   configuredProvider: "brainzmash",

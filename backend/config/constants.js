@@ -1,5 +1,12 @@
 import { resolveAppVersion } from "../../lib/app-version.js";
 
+const TRUE_ENV_VALUES = new Set(["1", "true", "yes", "on", "verbose", "debug"]);
+
+export const isVerboseConsoleEnabled = (env = process.env) =>
+  TRUE_ENV_VALUES.has(
+    String(env.AURRAL_VERBOSE_LOGS || "").trim().toLowerCase(),
+  );
+
 export const GENRE_KEYWORDS = [
   "rock",
   "pop",

@@ -1,4 +1,3 @@
-import express from "express";
 import { registerAdmin } from "./handlers/admin.js";
 import { registerMain } from "./handlers/main.js";
 import { registerTags } from "./handlers/tags.js";
@@ -6,15 +5,14 @@ import { registerFeedback } from "./handlers/feedback.js";
 import { registerAdopt } from "./handlers/adopt.js";
 import { registerShows } from "./handlers/shows.js";
 import { registerPreferences } from "./handlers/preferences.js";
+import mountRoutes from "../shared/mountRoutes.js";
 
-const router = express.Router();
-
-registerAdmin(router);
-registerMain(router);
-registerTags(router);
-registerFeedback(router);
-registerAdopt(router);
-registerShows(router);
-registerPreferences(router);
-
-export default router;
+export default mountRoutes([
+  registerAdmin,
+  registerMain,
+  registerTags,
+  registerFeedback,
+  registerAdopt,
+  registerShows,
+  registerPreferences,
+]);

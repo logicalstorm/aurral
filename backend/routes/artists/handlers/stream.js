@@ -22,6 +22,7 @@ import {
   resolveReleaseGroupCoversBatch,
 } from "../../../services/releaseGroupCoverService.js";
 import { getArtistByMbid } from "../../../services/providers/brainzmashProvider.js";
+import { toLegacyRelations, getArtistTagPayload, buildArtistBase, extractLastfmImageUrl } from "../shared/transform.js";
 
 export function registerStream(router) {
   router.get("/:mbid/stream", noCache, async (req, res) => {
@@ -79,80 +80,14 @@ export function registerStream(router) {
         selectedReleaseTypes,
         appearsOnLimit,
       });
-      const toLegacyRelations = (metadataArtist) =>
-        Array.isArray(metadataArtist?.links)
-          ? metadataArtist.links
-              .filter((link) => link?.target)
-              .map((link) => ({
-                type: link.type || "external",
-                url: { resource: link.target },
-              }))
-          : [];
-      const getLastfmTags = async (artistMbid, artistName = "") => {
-        if (!getLastfmApiKey()) return [];
-        let data = await lastfmRequest("artist.getTopTags", { mbid: artistMbid }).catch(
-          () => null,
-        );
-        if (!data?.toptags?.tag && artistName) {
-          data = await lastfmRequest("artist.getTopTags", {
-            artist: artistName,
-          }).catch(() => null);
-        }
-        const tags = data?.toptags?.tag
-          ? Array.isArray(data.toptags.tag)
-            ? data.toptags.tag
-            : [data.toptags.tag]
-          : [];
-        return tags
-          .map((tag) => ({
-            name: String(tag?.name || "").trim(),
-            count: Number(tag?.count || 0),
-          }))
-          .filter((tag) => tag.name);
-      };
-      const getArtistTagPayload = async (
-        artistMbid,
-        artistName = "",
-        metadataArtist = null,
-      ) => {
-        const lastfmTags = await getLastfmTags(artistMbid, artistName);
-        if (lastfmTags.length > 0) {
-          return {
-            tags: lastfmTags,
-            genres: lastfmTags.map((tag) => tag.name),
-          };
-        }
-        const fallbackGenres = Array.isArray(metadataArtist?.genres)
-          ? metadataArtist.genres.filter(Boolean)
-          : [];
-        return {
-          tags: fallbackGenres.map((genre) => ({ name: genre, count: 0 })),
-          genres: fallbackGenres,
-        };
-      };
       const initialName = streamArtistName || "Unknown Artist";
-      const buildArtistBase = (name, metadataArtist = null) => ({
-        id: resolvedMbid,
-        name: metadataArtist?.name || name,
-        "sort-name": metadataArtist?.sortName || metadataArtist?.name || name,
-        disambiguation: metadataArtist?.disambiguation || "",
-        "type-id": null,
-        type: metadataArtist?.type || null,
-        country: null,
-        "life-span": { begin: null, end: null, ended: false },
-        genres: Array.isArray(metadataArtist?.genres) ? metadataArtist.genres : [],
-        links: Array.isArray(metadataArtist?.links) ? metadataArtist.links : [],
-        relations: toLegacyRelations(metadataArtist),
-        rating: metadataArtist?.rating || null,
-        ...(metadataArtist?.overview ? { bio: metadataArtist.overview } : {}),
-      });
       const sendArtist = (payload) => {
         if (!isClientConnected()) return;
         sendSSE(res, "artist", payload);
       };
 
       sendArtist({
-        ...buildArtistBase(initialName),
+        ...buildArtistBase(initialName, resolvedMbid),
         tags: [],
         genres: [],
       });
@@ -191,7 +126,7 @@ export function registerStream(router) {
                 metadataArtist,
               );
               sendArtist({
-                ...buildArtistBase(name, metadataArtist),
+                ...buildArtistBase(name, resolvedMbid, metadataArtist),
                 tags: tagPayload.tags,
                 genres: tagPayload.genres,
               });
@@ -225,7 +160,7 @@ export function registerStream(router) {
             const metadataArtist = await metadataArtistPromise;
 
             sendArtist({
-              ...buildArtistBase(lidarrArtist.artistName, metadataArtist),
+              ...buildArtistBase(lidarrArtist.artistName, resolvedMbid, metadataArtist),
               _lidarrData: {
                 id: lidarrArtist.id,
                 monitored: lidarrArtist.monitored,
@@ -309,7 +244,7 @@ export function registerStream(router) {
               12,
             );
             sendArtist({
-              ...buildArtistBase(name, metadataArtist),
+              ...buildArtistBase(name, resolvedMbid, metadataArtist),
               "release-groups": releaseGroupsWithCovers,
               "release-group-count": releaseGroupsWithCovers.length,
               "release-count": releaseGroupsWithCovers.length,
@@ -386,7 +321,7 @@ export function registerStream(router) {
               ctx.metadataArtist,
             );
             return {
-              ...buildArtistBase(ctx.name, ctx.metadataArtist),
+              ...buildArtistBase(ctx.name, resolvedMbid, ctx.metadataArtist),
               tags: tagPayload.tags,
               genres: tagPayload.genres,
               "release-groups": ctx.releaseGroups,
@@ -493,18 +428,7 @@ export function registerStream(router) {
 
                 const formattedArtists = artists
                   .map((a) => {
-                    let img = null;
-                    if (a.image && Array.isArray(a.image)) {
-                      const i =
-                        a.image.find((img) => img.size === "extralarge") ||
-                        a.image.find((img) => img.size === "large");
-                      if (
-                        i &&
-                        i["#text"] &&
-                        !i["#text"].includes("2a96cbd8b46e442fc41c2b86b821562f")
-                      )
-                        img = i["#text"];
-                    }
+                    const img = extractLastfmImageUrl(a.image);
                     return {
                       id: a.mbid,
                       name: a.name,

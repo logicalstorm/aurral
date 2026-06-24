@@ -1,4 +1,3 @@
-import "../loadEnv.js";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { dbOps, userOps } from "../db/helpers/index.js";

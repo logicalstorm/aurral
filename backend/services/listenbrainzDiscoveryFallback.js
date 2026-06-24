@@ -1,4 +1,4 @@
-import NodeCache from "node-cache";
+import createCache from "./apiClients/simpleCache.js";
 import { UUID_REGEX } from "../config/constants.js";
 import {
   getLastfmApiKey,
@@ -13,16 +13,8 @@ export const DISCOVERY_PROVIDER_LASTFM = "lastfm";
 export const DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK =
   "listenbrainz-fallback";
 
-const LISTENBRAINZ_SITEWIDE_POOL_CACHE = new NodeCache({
-  stdTTL: 6 * 60 * 60,
-  checkperiod: 15 * 60,
-  maxKeys: 8,
-});
-const LISTENBRAINZ_ENRICHED_POOL_CACHE = new NodeCache({
-  stdTTL: 6 * 60 * 60,
-  checkperiod: 15 * 60,
-  maxKeys: 8,
-});
+const LISTENBRAINZ_SITEWIDE_POOL_CACHE = createCache(6 * 60 * 60);
+const LISTENBRAINZ_ENRICHED_POOL_CACHE = createCache(6 * 60 * 60);
 const LISTENBRAINZ_SITEWIDE_POOL_LIMIT = 1000;
 const LISTENBRAINZ_SITEWIDE_PAGE_SIZE = 100;
 const LISTENBRAINZ_GENRE_ENRICH_CONCURRENCY = 8;

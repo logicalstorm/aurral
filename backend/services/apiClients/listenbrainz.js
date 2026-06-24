@@ -1,19 +1,12 @@
 import axios from "axios";
-import Bottleneck from "bottleneck";
-import NodeCache from "node-cache";
+import createRateLimiter from "./rateLimiter.js";
+import createCache from "./simpleCache.js";
 import { logger } from "../logger.js";
 import { LISTENBRAINZ_API } from "../../config/constants.js";
 
-const listenbrainzCache = new NodeCache({
-  stdTTL: 300,
-  checkperiod: 60,
-  maxKeys: 500,
-});
+const listenbrainzCache = createCache(300);
 
-const listenbrainzLimiter = new Bottleneck({
-  maxConcurrent: 4,
-  minTime: 250,
-});
+const listenbrainzLimiter = createRateLimiter(250);
 
 const LISTENBRAINZ_TIMEOUT_MS = 6000;
 const LISTENBRAINZ_MAX_RETRIES = 2;

@@ -1,20 +1,13 @@
 import axios from "axios";
-import Bottleneck from "bottleneck";
-import NodeCache from "node-cache";
+import createRateLimiter from "./rateLimiter.js";
+import createCache from "./simpleCache.js";
 import { logger } from "../logger.js";
 import { LASTFM_API } from "../../config/constants.js";
 import { getLastfmApiKey } from "./config.js";
 
-const lastfmCache = new NodeCache({
-  stdTTL: 300,
-  checkperiod: 60,
-  maxKeys: 5000,
-});
+const lastfmCache = createCache(300);
 
-const lastfmLimiter = new Bottleneck({
-  maxConcurrent: 5,
-  minTime: 200,
-});
+const lastfmLimiter = createRateLimiter(200);
 
 const LASTFM_TIMEOUT_MS = 6000;
 const LASTFM_MAX_RETRIES = 2;

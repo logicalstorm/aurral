@@ -1,5 +1,5 @@
 import axios from "axios";
-import NodeCache from "node-cache";
+import createCache from "./simpleCache.js";
 import {
   APP_NAME,
   APP_VERSION,
@@ -11,23 +11,11 @@ import { dbOps } from "../../db/helpers/index.js";
 import { normalizeTitle } from "./deezer.js";
 import { resolveAlbumByArtistAndTitle } from "../providers/brainzmashProvider.js";
 
-const wikiBioCache = new NodeCache({
-  stdTTL: 3600,
-  checkperiod: 120,
-  maxKeys: 1000,
-});
+const wikiBioCache = createCache(3600);
 
-const wikidataTitleCache = new NodeCache({
-  stdTTL: 3600,
-  checkperiod: 120,
-  maxKeys: 1000,
-});
+const wikidataTitleCache = createCache(3600);
 
-const youtubeVideoCache = new NodeCache({
-  stdTTL: 24 * 3600,
-  checkperiod: 600,
-  maxKeys: 2000,
-});
+const youtubeVideoCache = createCache(24 * 3600);
 
 async function wikidataGetWikipediaTitleByMbid(mbid) {
   if (!mbid) return null;

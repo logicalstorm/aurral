@@ -10,11 +10,11 @@
   ],
   "scripts": {
     "build": "npm run build --workspace frontend",
-    "start": "node backend/server.js",
+    "start": "node --env-file=backend/.env backend/server.js",
     "test": "node --test --test-concurrency=1 $(find .tests -name '*.test.js' -print)",
-    "dev": "concurrently --kill-others-on-fail \"npm run dev:backend\" \"npm run wait-and-dev:frontend\"",
-    "wait-and-dev:frontend": "wait-on -t 15000 http://localhost:3001/api/health && npm run dev --workspace frontend",
-    "dev:backend": "nodemon backend/server.js",
+    "dev": "npm run dev:backend & (npm run wait-and-dev:frontend) & wait",
+    "wait-and-dev:frontend": "while ! curl -s http://localhost:3001/api/health; do sleep 1; done && npm run dev --workspace frontend",
+    "dev:backend": "node --watch --env-file=backend/.env backend/server.js",
     "dev:frontend": "npm run dev --workspace frontend",
     "auth:reset-admin-password": "npm run auth:reset-admin-password --workspace backend",
     "docker:build": "docker build -t aurral .",
@@ -34,27 +34,5 @@
     "request"
   ],
   "author": "",
-  "license": "MIT",
-  "devDependencies": {
-    "concurrently": "^10.0.1",
-    "nodemon": "^3.1.14",
-    "typescript": "^6.0.3",
-    "wait-on": "^9.0.10"
-  },
-  "nodemonConfig": {
-    "watch": [
-      "backend",
-      "backend/server.js"
-    ],
-    "ext": "js,json",
-    "ignore": [
-      "node_modules",
-      "frontend",
-      "backend/data",
-      "*.log",
-      "frontend/dist"
-    ],
-    "delay": 2000,
-    "restartable": "rs"
-  }
+  "license": "MIT"
 }
