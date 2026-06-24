@@ -23,11 +23,11 @@ const [
   { WeeklyFlowPlaylistManager },
 ] = await Promise.all([
   importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/services/weeklyFlowDownloadTracker.js"),
-  importFromRepo("backend/services/weeklyFlowPlaylistConfig.js"),
+  importFromRepo("../../backend/services/weeklyFlow/weeklyFlowDownloadTracker.js"),
+  importFromRepo("../../backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
   importFromRepo("backend/services/playlistM3u.js"),
   importFromRepo("backend/services/playlistM3uPaths.js"),
-  importFromRepo("backend/services/weeklyFlowPlaylistManager.js"),
+  importFromRepo("../../backend/services/weeklyFlow/weeklyFlowPlaylistManager.js"),
 ]);
 
 const { downloadTracker } = trackerModule;

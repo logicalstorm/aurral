@@ -3,12 +3,12 @@ import path from "path";
 import {
   buildSharedTrackIdentity,
   flowPlaylistConfig,
-} from "./weeklyFlowPlaylistConfig.js";
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
+} from "./weeklyFlow/weeklyFlowPlaylistConfig.js";
+import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
 import {
   remapLegacyWeeklyFlowPath,
   resolveWeeklyFlowRoot,
-} from "./weeklyFlowPaths.js";
+} from "./weeklyFlow/weeklyFlowPaths.js";
 import { getM3uPathMode, normalizeM3uPathMode, resolveM3uTrackPath } from "./playlistM3uPaths.js";
 
 export function formatExtinf(durationSeconds, title, artist) {

@@ -1,4 +1,4 @@
-import { playlistManager } from "../../../services/weeklyFlowPlaylistManager.js";
+import { playlistManager } from "../../../services/weeklyFlow/weeklyFlowPlaylistManager.js";
 import { noCache } from "../../../middleware/cache.js";
 import { hasPermission, verifyTokenAuth } from "../../../middleware/auth.js";
 import { canAccessPlaylistType } from "./utils.js";

@@ -1,17 +1,17 @@
 import {
   lastfmRequest,
   musicbrainzResolveArtistMbidByName,
-} from "./apiClients/index.js";
+} from "../apiClients/index.js";
 import {
   isRemoteSearchConfigured,
   searchRemoteCatalog,
-} from "./aurralSearchClient.js";
+} from "../aurralSearchClient.js";
 import {
   getArtistByMbid,
   getAlbumByMbid,
   listArtistAlbums,
   resolveAlbumByArtistAndTitle,
-} from "./providers/brainzmashProvider.js";
+} from "../providers/brainzmashProvider.js";
 
 const CATALOG_RESOLVE_LIMIT = 8;
 const CATALOG_MIN_SCORE = 65;

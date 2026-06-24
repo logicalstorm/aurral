@@ -1,10 +1,10 @@
 import { randomUUID } from "crypto";
-import { downloadTracker } from "../../../services/weeklyFlowDownloadTracker.js";
+import { downloadTracker } from "../../../services/weeklyFlow/weeklyFlowDownloadTracker.js";
 import { slskdClient } from "../../../services/slskdClient.js";
 import {
   dedupeSharedTracks,
-} from "../../../services/weeklyFlowPlaylistConfig.js";
-import { weeklyFlowOperationQueue } from "../../../services/weeklyFlowOperationQueue.js";
+} from "../../../services/weeklyFlow/weeklyFlowPlaylistConfig.js";
+import { weeklyFlowOperationQueue } from "../../../services/weeklyFlow/weeklyFlowOperationQueue.js";
 import {
   SLSKD_NOT_CONFIGURED_MESSAGE,
   getAccessibleSharedPlaylist,

@@ -1,15 +1,15 @@
 import { randomUUID } from "crypto";
-import { db } from "../config/db-sqlite.js";
-import { enqueuePipelineJob } from "./honkerDb.js";
-import { isAnyDownloadSourceConfigured } from "./downloadSourceService.js";
-import { buildPlaylistDestination } from "./playlistPaths.js";
+import { db } from "../../config/db-sqlite.js";
+import { enqueuePipelineJob } from "../honkerDb.js";
+import { isAnyDownloadSourceConfigured } from "../downloadSourceService.js";
+import { buildPlaylistDestination } from "../playlistPaths.js";
 import {
   normalizePositiveInteger,
   normalizeStringList,
   parseStringListJson,
   sanitizePathPart,
   stringifyStringListJson,
-} from "./playlistDownloadUtils.js";
+} from "../playlistDownloadUtils.js";
 
 const JOBS_TABLE = "playlist_download_jobs";
 
@@ -954,7 +954,7 @@ export class WeeklyFlowDownloadTracker {
       count += 1;
     }
     if (failedJobs.length > 0) {
-      import("./aurralHistoryService.js")
+      import("../aurralHistoryService.js")
         .then(({ recordTrackJobFailed }) => {
           for (const job of failedJobs) {
             recordTrackJobFailed(job, job.error || error);

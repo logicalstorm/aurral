@@ -8,8 +8,8 @@ import {
   looksLikeExternalOnlyPath,
   resolveLocalPath,
 } from "./pathMappings.js";
-import { pathsShareDevice } from "./weeklyFlowFileReuse.js";
-import { resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
+import { pathsShareDevice } from "./weeklyFlow/weeklyFlowFileReuse.js";
+import { resolveWeeklyFlowRoot } from "./weeklyFlow/weeklyFlowPaths.js";
 
 function step(id, status, label, extra = {}) {
   return { id, status, label, ...extra };

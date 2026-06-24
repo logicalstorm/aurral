@@ -13,9 +13,9 @@ import { startSlskdOrchestratorWorker } from "./slskdOrchestratorWorker.js";
 import { startDiscoveryRefreshWorker } from "./discoveryRefreshWorker.js";
 import { startDiscoveryPlaylistBuildWorker } from "./discoveryPlaylistBuildWorker.js";
 import { startDiscoveryUserRefreshWorker } from "./discoveryUserRefreshWorker.js";
-import { startWeeklyFlowOperationWorker } from "./weeklyFlowOperationWorker.js";
-import { startWeeklyFlowPlaylistRetryWorker } from "./weeklyFlowPlaylistRetryWorker.js";
-import { startWeeklyFlowPlaylistReserveBuildWorker } from "./weeklyFlowPlaylistReserveBuildWorker.js";
+import { startWeeklyFlowOperationWorker } from "./weeklyFlow/weeklyFlowOperationWorker.js";
+import { startWeeklyFlowPlaylistRetryWorker } from "./weeklyFlow/weeklyFlowPlaylistRetryWorker.js";
+import { startWeeklyFlowPlaylistReserveBuildWorker } from "./weeklyFlow/weeklyFlowPlaylistReserveBuildWorker.js";
 import { startPlaylistMbidEnrichmentWorker } from "./playlistMbidEnrichmentWorker.js";
 import { registerHonkerShutdownHandler } from "./honkerWorkerRuntime.js";
 

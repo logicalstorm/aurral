@@ -132,7 +132,7 @@ export default function register(router) {
         });
       }
       const { playlistManager } = await import(
-        "../../../services/weeklyFlowPlaylistManager.js"
+        "../../../services/weeklyFlow/weeklyFlowPlaylistManager.js"
       );
       playlistManager.updateConfig(false);
       const result = await playlistManager.syncPlexNow();

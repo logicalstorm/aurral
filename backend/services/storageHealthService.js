@@ -22,9 +22,9 @@ import {
   getM3uPathMode,
   resolveM3uVisiblePath,
 } from "./playlistM3uPaths.js";
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
-import { pathsShareDevice } from "./weeklyFlowFileReuse.js";
-import { remapLegacyWeeklyFlowPath, resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
+import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
+import { pathsShareDevice } from "./weeklyFlow/weeklyFlowFileReuse.js";
+import { remapLegacyWeeklyFlowPath, resolveWeeklyFlowRoot } from "./weeklyFlow/weeklyFlowPaths.js";
 import {
   getFilesystemBrowseRoots,
   resolveEnvDownloadFolder,

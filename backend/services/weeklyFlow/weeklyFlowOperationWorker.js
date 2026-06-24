@@ -1,4 +1,4 @@
-import { getWeeklyFlowOperationQueue, getWorkerId } from "./honkerDb.js";
+import { getWeeklyFlowOperationQueue, getWorkerId } from "../honkerDb.js";
 import {
   processWeeklyFlowOperation,
 } from "./weeklyFlowOperations.js";
@@ -12,7 +12,7 @@ import {
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
   withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
+} from "../honkerWorkerRuntime.js";
 
 const WORKER_NAME = "weekly-flow-operation";
 

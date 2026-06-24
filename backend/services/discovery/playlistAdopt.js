@@ -11,9 +11,9 @@ import {
   getListenHistoryCacheNamespace,
   getListenHistoryProfile,
 } from "../listeningHistory.js";
-import { flowPlaylistConfig } from "../weeklyFlowPlaylistConfig.js";
-import { weeklyFlowOperationQueue } from "../weeklyFlowOperationQueue.js";
-import { playlistManager } from "../weeklyFlowPlaylistManager.js";
+import { flowPlaylistConfig } from ".../weeklyFlow/weeklyFlowPlaylistConfig.js";
+import { weeklyFlowOperationQueue } from ".../weeklyFlow/weeklyFlowOperationQueue.js";
+import { playlistManager } from ".../weeklyFlow/weeklyFlowPlaylistManager.js";
 
 const resolveDiscoverAdoptContext = (user, presetId) => {
   const reqUser = userOps.getUserById(user?.id);

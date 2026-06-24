@@ -1,4 +1,4 @@
-import { enqueueWeeklyFlowOperationJob, getHonkerQueueDepth } from "./honkerDb.js";
+import { enqueueWeeklyFlowOperationJob, getHonkerQueueDepth } from "../honkerDb.js";
 
 let workerRunning = false;
 let workerCurrentLabel = null;

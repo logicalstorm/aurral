@@ -2,12 +2,12 @@ import fs from "fs/promises";
 import path from "path";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { buildSharedTrackIdentity } from "./weeklyFlowPlaylistConfig.js";
-import { libraryManager } from "./libraryManager.js";
+import { libraryManager } from "../libraryManager.js";
 import {
   remapLegacyWeeklyFlowPath,
   resolveWeeklyFlowRoot,
 } from "./weeklyFlowPaths.js";
-import { getPathMappings, resolveLocalPath } from "./pathMappings.js";
+import { getPathMappings, resolveLocalPath } from "../pathMappings.js";
 
 export const EXISTING_FILE_MODES = new Set(["download", "reuse"]);
 const LEGACY_REUSE_MODES = new Set(["hardlink", "copy"]);
@@ -508,7 +508,7 @@ export async function reuseTrackForPlaylist(track, playlistType, options = {}) {
     `[WeeklyFlowReuse] Reused ${source.sourceType} track for ${playlistType}: ${track.artistName} - ${track.trackName}`,
   );
   if (!options.skipHistory && source.sourceType !== "lidarr") {
-    import("./aurralHistoryService.js")
+    import("../aurralHistoryService.js")
       .then(({ recordTrackReused }) =>
         recordTrackReused({
           track,

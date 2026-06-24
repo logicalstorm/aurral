@@ -16,7 +16,7 @@ const honkerDb = await importFromRepo("backend/services/honkerDb.js");
 const runtime = await importFromRepo("backend/services/honkerWorkerRuntime.js");
 const taskStatus = await importFromRepo("backend/services/honkerTaskStatus.js");
 const operationQueueModule = await importFromRepo(
-  "backend/services/weeklyFlowOperationQueue.js",
+  "../../backend/services/weeklyFlow/weeklyFlowOperationQueue.js",
 );
 
 const STALE_RUNNING_MS = 60 * 60 * 1000;

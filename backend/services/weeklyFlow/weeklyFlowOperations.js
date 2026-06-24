@@ -1,13 +1,13 @@
 import path from "path";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
-import { dbOps } from "../db/helpers/index.js";
+import { dbOps } from "../../db/helpers/index.js";
 import {
   recordFlowGenerationStarted,
   recordFlowTracksGenerated,
   recordPlaylistTracksAdded,
-} from "./aurralHistoryService.js";
-import { PLAYLIST_LIBRARY_DIR, isPathInsideRoot } from "./playlistPaths.js";
+} from "../aurralHistoryService.js";
+import { PLAYLIST_LIBRARY_DIR, isPathInsideRoot } from "../playlistPaths.js";
 import {
   remapLegacyWeeklyFlowPath,
 } from "./weeklyFlowPaths.js";
@@ -25,16 +25,16 @@ import {
 } from "./weeklyFlowFileReuse.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
-import { slskdClient } from "./slskdClient.js";
+import { slskdClient } from "../slskdClient.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
 import {
   restartWorkerIfPending,
   wakeDownloadWorker,
   withPlaylistMutation,
 } from "./weeklyFlowMutationGuards.js";
-import { withHonkerLock } from "./honkerDb.js";
+import { withHonkerLock } from "../honkerDb.js";
 import { getUnavailableFlowSourceError } from "./weeklyFlowValidation.js";
-import { schedulePlaylistMbidEnrichment } from "./playlistMbidEnrichmentService.js";
+import { schedulePlaylistMbidEnrichment } from "../playlistMbidEnrichmentService.js";
 
 const DEFAULT_LIMIT = 30;
 const OPERATION_TOKENS_KEY = "weeklyFlowOperationTokens";

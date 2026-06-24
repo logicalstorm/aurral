@@ -28,7 +28,7 @@ const [{ db }, { dbOps }, { runStorageHealthCheck }, { resolvePlaylistRoot }] =
 test.beforeEach(async () => {
   await resetDatabase(db);
   const { downloadTracker } = await importFromRepo(
-    "backend/services/weeklyFlowDownloadTracker.js",
+    "../../backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
   );
   downloadTracker.clearAll();
   const downloadFolder = process.env.DOWNLOAD_FOLDER;
@@ -65,7 +65,7 @@ test("runStorageHealthCheck passes when downloads folder is writable", async () 
 
 test("runStorageHealthCheck fails when completed playlist files are missing", async () => {
   const { downloadTracker } = await importFromRepo(
-    "backend/services/weeklyFlowDownloadTracker.js",
+    "../../backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
   );
   const playlistRoot = resolvePlaylistRoot();
   const missingPath = path.join(
@@ -91,7 +91,7 @@ test("runStorageHealthCheck fails when completed playlist files are missing", as
 
 test("runStorageHealthCheck passes when completed playlist files exist", async () => {
   const { downloadTracker } = await importFromRepo(
-    "backend/services/weeklyFlowDownloadTracker.js",
+    "../../backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
   );
   const playlistRoot = resolvePlaylistRoot();
   const trackPath = path.join(
@@ -118,7 +118,7 @@ test("runStorageHealthCheck passes when completed playlist files exist", async (
 
 test("runStorageHealthCheck warns when completed playlist files are empty", async () => {
   const { downloadTracker } = await importFromRepo(
-    "backend/services/weeklyFlowDownloadTracker.js",
+    "../../backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
   );
   const playlistRoot = resolvePlaylistRoot();
   const trackPath = path.join(

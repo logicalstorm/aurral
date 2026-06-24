@@ -16,7 +16,7 @@ const {
   resolveWeeklyFlowRoot,
   remapLegacyWeeklyFlowPath,
   resolveExistingWeeklyFlowTrackPath,
-} = await importFromRepo("backend/services/weeklyFlowPaths.js");
+} = await importFromRepo("../../backend/services/weeklyFlow/weeklyFlowPaths.js");
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);

@@ -13,7 +13,7 @@ import { createAuthMiddleware } from "./middleware/auth.js";
 import { logger } from "./services/logger.js";
 import { websocketService } from "./services/websocketService.js";
 import { getAllDownloadStatuses } from "./routes/library/handlers/downloads.js";
-import { getWeeklyFlowStatusSnapshot } from "./services/weeklyFlowStatusSnapshot.js";
+import { getWeeklyFlowStatusSnapshot } from "./services/weeklyFlow/weeklyFlowStatusSnapshot.js";
 
 import settingsRouter from "./routes/settings/index.js";
 import onboardingRouter from "./routes/onboarding.js";

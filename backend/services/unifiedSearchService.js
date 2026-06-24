@@ -9,7 +9,7 @@ import {
   isRemoteSearchConfigured,
   searchRemoteCatalog,
 } from "./aurralSearchClient.js";
-import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
+import { flowPlaylistConfig } from "./weeklyFlow/weeklyFlowPlaylistConfig.js";
 import { getCachedArtists } from "./libraryManager.js";
 import { getDiscoveryCache } from "./discovery/index.js";
 import { compareSearchResults, getLocalMatchThreshold } from "./searchRanking.js";

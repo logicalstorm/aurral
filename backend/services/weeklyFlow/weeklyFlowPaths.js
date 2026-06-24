@@ -9,4 +9,4 @@ export {
   migrateLegacyPaths,
   migrateLegacyPaths as migrateLegacyWeeklyFlowPaths,
   buildPlaylistDestination,
-} from "./playlistPaths.js";
+} from "../playlistPaths.js";

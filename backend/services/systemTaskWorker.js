@@ -20,7 +20,7 @@ async function processSystemTask(payload = {}) {
   const kind = String(payload?.kind || "").trim();
   switch (kind) {
     case "weekly-flow-refresh": {
-      const { runScheduledRefresh } = await import("./weeklyFlowScheduler.js");
+      const { runScheduledRefresh } = await import("./weeklyFlow/weeklyFlowScheduler.js");
       await runScheduledRefresh();
       return;
     }
@@ -28,12 +28,12 @@ async function processSystemTask(payload = {}) {
       cleanExpiredSessions();
       return;
     case "weekly-flow-reuse-repair": {
-      const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
+      const { weeklyFlowWorker } = await import("./weeklyFlow/weeklyFlowWorker.js");
       weeklyFlowWorker.scheduleReuseLinkRepair(false);
       return;
     }
     case "weekly-flow-startup-reuse-repair": {
-      const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
+      const { weeklyFlowWorker } = await import("./weeklyFlow/weeklyFlowWorker.js");
       weeklyFlowWorker.scheduleReuseLinkRepair(true);
       return;
     }
@@ -45,7 +45,7 @@ async function processSystemTask(payload = {}) {
       return;
     }
     case "weekly-flow-startup-check": {
-      const { startWorkerIfPending } = await import("./weeklyFlowScheduler.js");
+      const { startWorkerIfPending } = await import("./weeklyFlow/weeklyFlowScheduler.js");
       await startWorkerIfPending();
       return;
     }
@@ -62,9 +62,9 @@ async function processSystemTask(payload = {}) {
         trackerModule,
         { playlistManager },
       ] = await Promise.all([
-        import("./weeklyFlowPaths.js"),
-        import("./weeklyFlowDownloadTracker.js"),
-        import("./weeklyFlowPlaylistManager.js"),
+        import("./weeklyFlow/weeklyFlowPaths.js"),
+        import("./weeklyFlow/weeklyFlowDownloadTracker.js"),
+        import("./weeklyFlow/weeklyFlowPlaylistManager.js"),
       ]);
       const result = await migrateLegacyWeeklyFlowPaths(
         resolveWeeklyFlowRoot(),

@@ -1,7 +1,7 @@
 import { getLastfmApiKey } from "../apiClients/index.js";
 import { getDiscoveryCache, getMaxFocusPlaylists } from "./index.js";
-import { playlistSource } from "../weeklyFlowPlaylistSource.js";
-import { flowPlaylistConfig } from "../weeklyFlowPlaylistConfig.js";
+import { playlistSource } from ".../weeklyFlow/weeklyFlowPlaylistSource.js";
+import { flowPlaylistConfig } from ".../weeklyFlow/weeklyFlowPlaylistConfig.js";
 import {
   DISCOVER_PLAYLIST_PRESETS,
   RELEASE_RADAR_PRESET,

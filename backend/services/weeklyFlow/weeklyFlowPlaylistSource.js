@@ -1,5 +1,5 @@
-import { lastfmRequest, getLastfmApiKey } from "./apiClients/index.js";
-import { getDiscoveryCache } from "./discovery/index.js";
+import { lastfmRequest, getLastfmApiKey } from "../apiClients/index.js";
+import { getDiscoveryCache } from "../discovery/index.js";
 import { normalizeWeightMap } from "./weeklyFlowPlaylistConfig.js";
 
 const MBID_REGEX =
@@ -420,7 +420,7 @@ export class WeeklyFlowPlaylistSource {
     }
 
     const promise = (async () => {
-      const { libraryManager } = await import("./libraryManager.js");
+      const { libraryManager } = await import("../libraryManager.js");
       const artists = await libraryManager.getAllArtists();
       return this._buildArtistKeySet(artists);
     })();
@@ -1969,7 +1969,7 @@ export class WeeklyFlowPlaylistSource {
   }
 
   async getMixTracks(limit, options = {}) {
-    const { libraryManager } = await import("./libraryManager.js");
+    const { libraryManager } = await import("../libraryManager.js");
     const artists = Array.isArray(options?.libraryArtists)
       ? options.libraryArtists
       : await libraryManager.getAllArtists();
@@ -2058,7 +2058,7 @@ export class WeeklyFlowPlaylistSource {
     }
     const set = new Set();
     try {
-      const { lidarrClient } = await import("./lidarrClient.js");
+      const { lidarrClient } = await import("../lidarrClient.js");
       if (lidarrClient.isConfigured()) {
         const albums = await lidarrClient.request("/album");
         for (const album of Array.isArray(albums) ? albums : []) {
@@ -2121,7 +2121,7 @@ export class WeeklyFlowPlaylistSource {
   async _getMetadataAlbumTrackList(albumMbid) {
     const safeAlbumMbid = String(albumMbid || "").trim();
     if (!safeAlbumMbid) return [];
-    const { getAlbumTracksByAlbumMbid } = await import("./providers/brainzmashProvider.js");
+    const { getAlbumTracksByAlbumMbid } = await import("../providers/brainzmashProvider.js");
     return getAlbumTracksByAlbumMbid(safeAlbumMbid);
   }
 

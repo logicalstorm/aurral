@@ -2,14 +2,14 @@ import {
   enqueuePlaylistMbidEnrichmentJob,
   withHonkerLock,
 } from "./honkerDb.js";
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
-import { playlistManager } from "./weeklyFlowPlaylistManager.js";
-import { resolveWeeklyFlowTrackContext } from "./weeklyFlowTrackResolver.js";
+import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
+import { playlistManager } from "./weeklyFlow/weeklyFlowPlaylistManager.js";
+import { resolveWeeklyFlowTrackContext } from "./weeklyFlow/weeklyFlowTrackResolver.js";
 import {
   flowPlaylistConfig,
   normalizeSharedTrack,
   tracksShareMembership,
-} from "./weeklyFlowPlaylistConfig.js";
+} from "./weeklyFlow/weeklyFlowPlaylistConfig.js";
 
 const PLAYLIST_MBID_ENRICHMENT_DELAY_SECONDS = 20;
 

@@ -23,7 +23,7 @@ const [
     validateDownloadedTrack,
   },
 ] = await Promise.all([
-  importFromRepo("backend/services/weeklyFlowSoulseekMatcher.js"),
+  importFromRepo("../../backend/services/weeklyFlow/weeklyFlowSoulseekMatcher.js"),
 ]);
 
 test("bypassBannedArtistTerm replaces the first character of each artist word", () => {

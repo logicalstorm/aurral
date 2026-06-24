@@ -180,7 +180,7 @@ const weeklyFlowOperation = registerQueue({
   name: "weekly-flow-operation",
   visibilityTimeoutS: 3600,
   maxAttempts: 3,
-  workerModule: "./weeklyFlowOperationWorker.js",
+  workerModule: "./weeklyFlow/weeklyFlowOperationWorker.js",
   workerStartFn: "startWeeklyFlowOperationWorker",
 });
 
@@ -191,7 +191,7 @@ const playlistRetry = registerQueue({
   name: "playlist-retry",
   visibilityTimeoutS: 1800,
   maxAttempts: 5,
-  workerModule: "./weeklyFlowPlaylistRetryWorker.js",
+  workerModule: "./weeklyFlow/weeklyFlowPlaylistRetryWorker.js",
   workerStartFn: "startWeeklyFlowPlaylistRetryWorker",
 });
 
@@ -202,7 +202,7 @@ const playlistReserveBuild = registerQueue({
   name: "playlist-reserve-build",
   visibilityTimeoutS: 1800,
   maxAttempts: 4,
-  workerModule: "./weeklyFlowPlaylistReserveBuildWorker.js",
+  workerModule: "./weeklyFlow/weeklyFlowPlaylistReserveBuildWorker.js",
   workerStartFn: "startWeeklyFlowPlaylistReserveBuildWorker",
 });
 

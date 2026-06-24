@@ -1,15 +1,15 @@
-import { downloadTracker } from "../../../services/weeklyFlowDownloadTracker.js";
-import { weeklyFlowWorker } from "../../../services/weeklyFlowWorker.js";
+import { downloadTracker } from "../../../services/weeklyFlow/weeklyFlowDownloadTracker.js";
+import { weeklyFlowWorker } from "../../../services/weeklyFlow/weeklyFlowWorker.js";
 import { startSlskdOrchestratorWorker } from "../../../services/slskdOrchestratorWorker.js";
-import { playlistManager } from "../../../services/weeklyFlowPlaylistManager.js";
+import { playlistManager } from "../../../services/weeklyFlow/weeklyFlowPlaylistManager.js";
 import {
   flowPlaylistConfig,
-} from "../../../services/weeklyFlowPlaylistConfig.js";
-import { weeklyFlowOperationQueue } from "../../../services/weeklyFlowOperationQueue.js";
+} from "../../../services/weeklyFlow/weeklyFlowPlaylistConfig.js";
+import { weeklyFlowOperationQueue } from "../../../services/weeklyFlow/weeklyFlowOperationQueue.js";
 import {
   reconcileSharedPlaylistJobs,
-} from "../../../services/weeklyFlowOperations.js";
-import { getWeeklyFlowStatusSnapshot } from "../../../services/weeklyFlowStatusSnapshot.js";
+} from "../../../services/weeklyFlow/weeklyFlowOperations.js";
+import { getWeeklyFlowStatusSnapshot } from "../../../services/weeklyFlow/weeklyFlowStatusSnapshot.js";
 import { noCache } from "../../../middleware/cache.js";
 import { requireAdmin } from "../../../middleware/requirePermission.js";
 import {

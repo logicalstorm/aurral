@@ -4,21 +4,21 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { playlistSource } from "./weeklyFlowPlaylistSource.js";
-import { dbOps, userOps } from "../db/helpers/index.js";
+import { dbOps, userOps } from "../../db/helpers/index.js";
 import { resolveWeeklyFlowTrackContext } from "./weeklyFlowTrackResolver.js";
-import { getListenHistoryProfile } from "./listeningHistory.js";
+import { getListenHistoryProfile } from "../listeningHistory.js";
 import {
   normalizeExistingFileMode,
   repairReusableTrackLinks,
   reuseTrackForPlaylist,
 } from "./weeklyFlowFileReuse.js";
 import { resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
-import { startSlskdOrchestratorWorker } from "./slskdOrchestratorWorker.js";
-import { enqueuePlaylistRetryJob, withHonkerLock } from "./honkerDb.js";
+import { startSlskdOrchestratorWorker } from "../slskdOrchestratorWorker.js";
+import { enqueuePlaylistRetryJob, withHonkerLock } from "../honkerDb.js";
 import {
   getDownloadSourceNotConfiguredMessage,
   isAnyDownloadSourceConfigured,
-} from "./downloadSourceService.js";
+} from "../downloadSourceService.js";
 
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
@@ -968,7 +968,7 @@ export class WeeklyFlowWorker {
                 err.message,
               ),
             );
-            import("./slskdClient.js")
+            import("../slskdClient.js")
               .then(({ slskdClient, isSlskdCleanupAfterRunsEnabled }) => {
                 if (!isSlskdCleanupAfterRunsEnabled()) return null;
                 const globalStats = downloadTracker.getStats();

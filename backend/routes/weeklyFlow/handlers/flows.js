@@ -1,20 +1,20 @@
 import fsp from "fs/promises";
-import { downloadTracker } from "../../../services/weeklyFlowDownloadTracker.js";
+import { downloadTracker } from "../../../services/weeklyFlow/weeklyFlowDownloadTracker.js";
 import { slskdClient } from "../../../services/slskdClient.js";
-import { playlistManager } from "../../../services/weeklyFlowPlaylistManager.js";
+import { playlistManager } from "../../../services/weeklyFlow/weeklyFlowPlaylistManager.js";
 import {
   buildSharedTrackIdentity,
   flowPlaylistConfig,
-} from "../../../services/weeklyFlowPlaylistConfig.js";
-import { weeklyFlowOperationQueue } from "../../../services/weeklyFlowOperationQueue.js";
+} from "../../../services/weeklyFlow/weeklyFlowPlaylistConfig.js";
+import { weeklyFlowOperationQueue } from "../../../services/weeklyFlow/weeklyFlowOperationQueue.js";
 import {
   remapLegacyWeeklyFlowPath,
-} from "../../../services/weeklyFlowPaths.js";
-import { weeklyFlowWorker } from "../../../services/weeklyFlowWorker.js";
+} from "../../../services/weeklyFlow/weeklyFlowPaths.js";
+import { weeklyFlowWorker } from "../../../services/weeklyFlow/weeklyFlowWorker.js";
 import { schedulePlaylistMbidEnrichment } from "../../../services/playlistMbidEnrichmentService.js";
 import {
   getUnavailableFlowSourceError,
-} from "../../../services/weeklyFlowValidation.js";
+} from "../../../services/weeklyFlow/weeklyFlowValidation.js";
 import {
   DEFAULT_LIMIT,
   SLSKD_NOT_CONFIGURED_MESSAGE,

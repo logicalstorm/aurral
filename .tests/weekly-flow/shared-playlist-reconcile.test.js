@@ -16,8 +16,8 @@ const [{ db }, { dbOps }, { flowPlaylistConfig }, operationsModule] =
   await Promise.all([
     importFromRepo("backend/config/db-sqlite.js"),
     importFromRepo("backend/db/helpers/index.js"),
-    importFromRepo("backend/services/weeklyFlowPlaylistConfig.js"),
-    importFromRepo("backend/services/weeklyFlowOperations.js"),
+    importFromRepo("../../backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
+    importFromRepo("../../backend/services/weeklyFlow/weeklyFlowOperations.js"),
   ]);
 
 const { reconcileSharedPlaylistJobs } = operationsModule;
@@ -38,7 +38,7 @@ test.after(async () => {
 
 test("reconcileSharedPlaylistJobs removes duplicate jobs and syncs track count", async () => {
   const { downloadTracker } = await importFromRepo(
-    "backend/services/weeklyFlowDownloadTracker.js",
+    "../../backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
   );
   const playlist = flowPlaylistConfig.createSharedPlaylist({
     name: "Dupes",

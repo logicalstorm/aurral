@@ -1,18 +1,18 @@
 import path from "path";
 import fs from "fs/promises";
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
+import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
 import { prowlarrClient } from "./prowlarrClient.js";
 import { nzbgetClient } from "./nzbgetClient.js";
 import { logger } from "./logger.js";
 import {
   buildFlowSearchTiers,
   validateDownloadedTrack,
-} from "./weeklyFlowSoulseekMatcher.js";
+} from "./weeklyFlow/weeklyFlowSoulseekMatcher.js";
 import {
   isAudioFile,
   rankUsenetReleases,
   selectRankedUsenetCandidates,
-} from "./weeklyFlowUsenetMatcher.js";
+} from "./weeklyFlow/weeklyFlowUsenetMatcher.js";
 import { resolvePlaylistRoot } from "./playlistPaths.js";
 import { getPathMappings, resolveLocalPath } from "./pathMappings.js";
 import {

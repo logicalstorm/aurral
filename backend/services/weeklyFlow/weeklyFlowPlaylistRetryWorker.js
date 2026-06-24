@@ -1,4 +1,4 @@
-import { getPlaylistRetryQueue, getWorkerId, withHonkerLock } from "./honkerDb.js";
+import { getPlaylistRetryQueue, getWorkerId, withHonkerLock } from "../honkerDb.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
 import {
   createIdleAbortController,
@@ -7,7 +7,7 @@ import {
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
   withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
+} from "../honkerWorkerRuntime.js";
 
 const WORKER_NAME = "playlist-retry";
 

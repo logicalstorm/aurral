@@ -15,7 +15,7 @@ import {
   syncM3uPathMappings,
   syncM3uPathMode,
 } from "../../services/playlistM3uPaths.js";
-import { normalizeExistingFileMode } from "../../services/weeklyFlowFileReuse.js";
+import { normalizeExistingFileMode } from "../../services/weeklyFlow/weeklyFlowFileReuse.js";
 
 const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
 const upsertSettingStmt = db.prepare(

@@ -1,13 +1,13 @@
 import fs from "fs";
 import fsp from "fs/promises";
 import path from "path";
-import { downloadTracker } from "../../../services/weeklyFlowDownloadTracker.js";
-import { weeklyFlowWorker } from "../../../services/weeklyFlowWorker.js";
+import { downloadTracker } from "../../../services/weeklyFlow/weeklyFlowDownloadTracker.js";
+import { weeklyFlowWorker } from "../../../services/weeklyFlow/weeklyFlowWorker.js";
 import { noCache } from "../../../middleware/cache.js";
 import { hasPermission, verifyTokenAuth } from "../../../middleware/auth.js";
 import {
   resolveExistingWeeklyFlowTrackPath,
-} from "../../../services/weeklyFlowPaths.js";
+} from "../../../services/weeklyFlow/weeklyFlowPaths.js";
 import {
   AUDIO_CONTENT_TYPES,
   canAccessPlaylistType,

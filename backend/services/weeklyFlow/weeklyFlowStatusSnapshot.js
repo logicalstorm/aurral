@@ -6,9 +6,9 @@ import {
 } from "./weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
 import { getWeeklyFlowOperationWorkerStatus } from "./weeklyFlowOperationWorker.js";
-import { slskdClient } from "./slskdClient.js";
-import { userOps } from "../db/helpers/index.js";
-import { getFlowCapabilities } from "./listenbrainzDiscoveryFallback.js";
+import { slskdClient } from "../slskdClient.js";
+import { userOps } from "../../db/helpers/index.js";
+import { getFlowCapabilities } from "../listenbrainzDiscoveryFallback.js";
 
 function formatNextRunMessage(flows) {
   const nextRunAt = (Array.isArray(flows) ? flows : [])

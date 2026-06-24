@@ -1,5 +1,5 @@
 import express from "express";
-import { playlistManager } from "../../../services/weeklyFlowPlaylistManager.js";
+import { playlistManager } from "../../../services/weeklyFlow/weeklyFlowPlaylistManager.js";
 import { canAccessPlaylistType } from "./utils.js";
 
 const artworkUploadParser = express.raw({

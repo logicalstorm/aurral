@@ -4,13 +4,13 @@ import { db } from "../config/db-sqlite.js";
 import { isSlskdCleanupAfterRunsEnabled, slskdClient } from "./slskdClient.js";
 import { logger } from "./logger.js";
 import { enqueuePipelineJob } from "./honkerDb.js";
-import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
+import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
 import {
   buildFlowSearchTiers,
   rankFlowSearchResults,
   selectRankedMatchAttempts,
   validateDownloadedTrack,
-} from "./weeklyFlowSoulseekMatcher.js";
+} from "./weeklyFlow/weeklyFlowSoulseekMatcher.js";
 import { resolvePlaylistRoot } from "./playlistPaths.js";
 import { getPathMappings, resolveLocalPath } from "./pathMappings.js";
 import {
@@ -293,7 +293,7 @@ async function failJob(job, message) {
     recordTrackJobFailed(job, message);
   } catch {}
   try {
-    const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
+    const { weeklyFlowWorker } = await import("./weeklyFlow/weeklyFlowWorker.js");
     weeklyFlowWorker.wake(0);
     await weeklyFlowWorker.checkPlaylistComplete(
       job.playlistId || job.playlistType,

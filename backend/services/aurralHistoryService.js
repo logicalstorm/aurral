@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { dbOps } from "../db/helpers/index.js";
-import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
+import { flowPlaylistConfig } from "./weeklyFlow/weeklyFlowPlaylistConfig.js";
 
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const STALE_TRACK_JOB_MS = 15 * 60 * 1000;
@@ -316,7 +316,7 @@ const buildHistoryJobFromEntry = (entry) => ({
 });
 
 export const syncTrackDownloadHistory = async () => {
-  const { downloadTracker } = await import("./weeklyFlowDownloadTracker.js");
+  const { downloadTracker } = await import("./weeklyFlow/weeklyFlowDownloadTracker.js");
   const cutoff = Date.now() - MAX_AGE_MS;
   const pendingEntries = dbOps
     .getAurralHistory({ since: cutoff, limit: 300 })

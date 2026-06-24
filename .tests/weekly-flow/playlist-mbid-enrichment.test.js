@@ -21,8 +21,8 @@ const [
 ] = await Promise.all([
   importFromRepo("backend/config/db-sqlite.js"),
   importFromRepo("backend/db/helpers/index.js"),
-  importFromRepo("backend/services/weeklyFlowPlaylistConfig.js"),
-  importFromRepo("backend/services/weeklyFlowDownloadTracker.js"),
+  importFromRepo("../../backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
+  importFromRepo("../../backend/services/weeklyFlow/weeklyFlowDownloadTracker.js"),
   importFromRepo("backend/services/playlistMbidEnrichmentService.js"),
 ]);
 

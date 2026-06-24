@@ -51,10 +51,10 @@ export async function finalizePipelineJobSuccess({
     .catch(() => {});
 
   const playlistType = job.playlistId || job.playlistType;
-  const { playlistManager } = await import("./weeklyFlowPlaylistManager.js");
+  const { playlistManager } = await import("./weeklyFlow/weeklyFlowPlaylistManager.js");
   await playlistManager.refreshPlaylist(playlistType);
   playlistManager.scheduleScanLibrary();
-  const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
+  const { weeklyFlowWorker } = await import("./weeklyFlow/weeklyFlowWorker.js");
   weeklyFlowWorker.wake(0);
   await weeklyFlowWorker.checkPlaylistComplete(playlistType);
   return null;

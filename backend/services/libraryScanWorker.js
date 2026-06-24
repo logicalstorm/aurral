@@ -86,7 +86,7 @@ async function runLoop() {
       clearScheduledLibraryScan(job.id);
       try {
         await withJobHeartbeat(job, queue, async () => {
-          const { playlistManager } = await import("./weeklyFlowPlaylistManager.js");
+          const { playlistManager } = await import("./weeklyFlow/weeklyFlowPlaylistManager.js");
           await playlistManager.scanLibrary();
         });
         job.ack();

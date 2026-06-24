@@ -1,23 +1,23 @@
 import path from "path";
 import fs from "fs/promises";
 import crypto from "crypto";
-import { dbOps } from "../db/helpers/index.js";
-import { NavidromeClient } from "./navidrome.js";
-import { PlexClient } from "./plex.js";
+import { dbOps } from "../../db/helpers/index.js";
+import { NavidromeClient } from "../navidrome.js";
+import { PlexClient } from "../plex.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
-import { writePlaylistArtworkWebpFromBuffer } from "./playlistArtwork.js";
+import { writePlaylistArtworkWebpFromBuffer } from "../playlistArtwork.js";
 import {
   getArtworkExtensionForStyle,
   getPlaylistArtworkStyle,
   writeGeneratedPlaylistArtwork,
-} from "./playlistArtworkGenerator.js";
+} from "../playlistArtworkGenerator.js";
 import {
   PLAYLIST_LIBRARY_DIR,
   resolvePlaylistRoot,
-} from "./playlistPaths.js";
-import { buildM3uContent, collectPlaylistM3uEntries } from "./playlistM3u.js";
-import { scheduleLibraryScan } from "./libraryScanWorker.js";
+} from "../playlistPaths.js";
+import { buildM3uContent, collectPlaylistM3uEntries } from "../playlistM3u.js";
+import { scheduleLibraryScan } from "../libraryScanWorker.js";
 
 const ARTWORK_FILE_EXTENSIONS = [".webp", ".jpg", ".png"];
 const ARTWORK_SUPPRESS_SUFFIX = ".no-artwork";

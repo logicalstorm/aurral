@@ -1,7 +1,7 @@
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
-import { slskdClient } from "./slskdClient.js";
+import { slskdClient } from "../slskdClient.js";
 import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
 import {
   createWeeklyFlowOperationToken,

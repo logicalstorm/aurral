@@ -1,6 +1,6 @@
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
-import { withHonkerLock } from "./honkerDb.js";
+import { withHonkerLock } from "../honkerDb.js";
 
 const normalizePlaylistTypes = (playlistTypes) => [
   ...new Set(
