@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useMemo } from "react";
 import {
   AUTH_INVALID_EVENT,
   clearAuthStorage,
@@ -169,7 +169,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{
+      value={useMemo(() => ({
         isAuthenticated,
         isLoading,
         user,
@@ -179,7 +179,7 @@ export const AuthProvider = ({ children }) => {
         onboardingRequired,
         refreshAuth: checkAuthStatus,
         hasPermission,
-      }}
+      }), [isAuthenticated, isLoading, user, login, logout, authRequired, onboardingRequired, checkAuthStatus, hasPermission])}
     >
       {children}
     </AuthContext.Provider>

@@ -1,11 +1,10 @@
 import axios from "axios";
 import Bottleneck from "bottleneck";
 import NodeCache from "node-cache";
+import { logger } from "./logger.js";
 import { dbOps } from "../config/db-helpers.js";
 import {
   MUSICBRAINZ_API,
-  AURRAL_MUSICBRAINZ_API,
-  OFFICIAL_COVER_ART_ARCHIVE_API,
   LASTFM_API,
   LISTENBRAINZ_API,
   APP_NAME,
@@ -66,32 +65,6 @@ const itunesAlbumArtCache = new NodeCache({
   maxKeys: 2000,
 });
 
-const METADATA_PROVIDER_HEALTH_CONFIG = {
-  failureThreshold: 3,
-  recoverySuccessThreshold: 2,
-  healthyProbeIntervalMs: 60 * 1000,
-  unhealthyProbeIntervalMs: 5 * 60 * 1000,
-  probeTimeoutMs: 3000,
-};
-
-const createProviderHealthState = () => ({
-  failoverActive: false,
-  consecutiveFailures: 0,
-  consecutiveSuccesses: 0,
-  lastCheckedAt: null,
-  lastSuccessAt: null,
-  lastFailureAt: null,
-  lastFailureReason: "",
-  lastTransitionAt: null,
-  probeInFlight: null,
-});
-
-const metadataProviderHealth = {
-  musicbrainz: createProviderHealthState(),
-};
-
-let metadataProviderProbeTimer = null;
-
 export const getLastfmApiKey = () => {
   const settings = dbOps.getSettings();
   return settings.integrations?.lastfm?.apiKey || process.env.LASTFM_API_KEY;
@@ -115,185 +88,6 @@ export const getMusicBrainzContact = () => {
   );
 };
 
-const normalizeMusicbrainzApiBaseUrl = (value) => {
-  const raw = String(value || "").trim();
-  if (!raw) return MUSICBRAINZ_API;
-
-  let parsed;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    return MUSICBRAINZ_API;
-  }
-
-  const trimmedPath = parsed.pathname.replace(/\/+$/, "");
-  parsed.pathname = trimmedPath.endsWith("/ws/2")
-    ? trimmedPath
-    : `${trimmedPath || ""}/ws/2`;
-
-  return parsed.toString().replace(/\/+$/, "");
-};
-
-const nowIso = () => new Date().toISOString();
-
-const getMetadataProviderSelection = (serviceKey) => {
-  const settings = dbOps.getSettings();
-  if (serviceKey === "musicbrainz") {
-    const provider =
-      settings.integrations?.musicbrainz?.provider || "aurralHosted";
-    if (provider === "official") {
-      return {
-        mode: "manual",
-        provider,
-        activeProvider: "official",
-        activeBaseUrl: MUSICBRAINZ_API,
-      };
-    }
-    if (provider === "custom") {
-      return {
-        mode: "manual",
-        provider,
-        activeProvider: "custom",
-        activeBaseUrl: normalizeMusicbrainzApiBaseUrl(
-          settings.integrations?.musicbrainz?.customUrl,
-        ),
-      };
-    }
-    const state = metadataProviderHealth.musicbrainz;
-    return {
-      mode: "auto",
-      provider,
-      activeProvider: state.failoverActive ? "official" : "aurralHosted",
-      activeBaseUrl: state.failoverActive
-        ? MUSICBRAINZ_API
-        : AURRAL_MUSICBRAINZ_API,
-    };
-  }
-};
-
-const markMetadataProviderProbeResult = (
-  serviceKey,
-  { success, reason = "" },
-) => {
-  const state = metadataProviderHealth[serviceKey];
-  if (!state) return;
-
-  state.lastCheckedAt = nowIso();
-
-  if (success) {
-    state.consecutiveFailures = 0;
-    state.consecutiveSuccesses += 1;
-    state.lastSuccessAt = state.lastCheckedAt;
-    state.lastFailureReason = "";
-
-    if (
-      state.failoverActive &&
-      state.consecutiveSuccesses >=
-        METADATA_PROVIDER_HEALTH_CONFIG.recoverySuccessThreshold
-    ) {
-      state.failoverActive = false;
-      state.lastTransitionAt = state.lastCheckedAt;
-      console.warn(
-        `${serviceKey} hosted endpoint recovered; switching back to hosted`,
-      );
-    }
-    return;
-  }
-
-  state.consecutiveSuccesses = 0;
-  state.consecutiveFailures += 1;
-  state.lastFailureAt = state.lastCheckedAt;
-  state.lastFailureReason = String(reason || "").trim();
-
-  if (
-    !state.failoverActive &&
-    state.consecutiveFailures >=
-      METADATA_PROVIDER_HEALTH_CONFIG.failureThreshold
-  ) {
-    state.failoverActive = true;
-    state.lastTransitionAt = state.lastCheckedAt;
-    console.warn(
-      `${serviceKey} hosted endpoint failed ${state.consecutiveFailures} health checks; switching to official`,
-    );
-  }
-};
-
-const probeMusicbrainzHostedHealth = async () => {
-  const selection = getMetadataProviderSelection("musicbrainz");
-  if (selection.provider !== "aurralHosted") return null;
-
-  const state = metadataProviderHealth.musicbrainz;
-  if (state.probeInFlight) return state.probeInFlight;
-
-  const contact =
-    (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
-  const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
-
-  state.probeInFlight = axios
-    .get(`${AURRAL_MUSICBRAINZ_API}/artist`, {
-      params: {
-        fmt: "json",
-        query: 'artist:"radiohead"',
-        limit: 1,
-      },
-      headers: { "User-Agent": userAgent },
-      timeout: METADATA_PROVIDER_HEALTH_CONFIG.probeTimeoutMs,
-    })
-    .then(() => {
-      markMetadataProviderProbeResult("musicbrainz", { success: true });
-      return true;
-    })
-    .catch((error) => {
-      const status = error?.response?.status;
-      const reason = status ? `HTTP ${status}` : error?.code || error?.message;
-      markMetadataProviderProbeResult("musicbrainz", {
-        success: false,
-        reason,
-      });
-      return false;
-    })
-    .finally(() => {
-      state.probeInFlight = null;
-    });
-
-  return state.probeInFlight;
-};
-
-const runMetadataProviderHealthProbes = () =>
-  Promise.allSettled([probeMusicbrainzHostedHealth()]);
-
-const getMetadataProviderProbeIntervalMs = () => {
-  const states = Object.values(metadataProviderHealth);
-  return states.some((state) => state.failoverActive)
-    ? METADATA_PROVIDER_HEALTH_CONFIG.unhealthyProbeIntervalMs
-    : METADATA_PROVIDER_HEALTH_CONFIG.healthyProbeIntervalMs;
-};
-
-const ensureMetadataProviderProbeLoop = () => {
-  if (metadataProviderProbeTimer) return;
-
-  const tick = async () => {
-    await runMetadataProviderHealthProbes();
-    clearInterval(metadataProviderProbeTimer);
-    metadataProviderProbeTimer = setInterval(
-      tick,
-      getMetadataProviderProbeIntervalMs(),
-    );
-    metadataProviderProbeTimer.unref?.();
-  };
-
-  metadataProviderProbeTimer = setInterval(
-    tick,
-    getMetadataProviderProbeIntervalMs(),
-  );
-  metadataProviderProbeTimer.unref?.();
-  queueMicrotask(() => {
-    tick().catch(() => {});
-  });
-};
-
-const getMusicbrainzProvider = () => "brainzmash";
-
 export const getMusicbrainzApiBaseUrl = () => {
   return getMetadataBaseUrl();
 };
@@ -302,31 +96,11 @@ export const getMusicbrainzApiBaseUrls = () => {
   return [getMusicbrainzApiBaseUrl()];
 };
 
-export const getCoverArtArchiveApiBaseUrl = () => {
-  return OFFICIAL_COVER_ART_ARCHIVE_API;
-};
-
-export const getCoverArtArchiveApiBaseUrls = () => {
-  return [getCoverArtArchiveApiBaseUrl()];
-};
-
 export const getMetadataProviderHealthSnapshot = () => {
   return getBrainzmashHealthSnapshot();
 };
 
-export const __setMetadataProviderHealthStateForTests = (
-  serviceKey,
-  patch = {},
-) => {
-  if (!metadataProviderHealth[serviceKey]) return;
-  Object.assign(
-    metadataProviderHealth[serviceKey],
-    createProviderHealthState(),
-    patch,
-  );
-};
-
-// Legacy MusicBrainz probing is intentionally disabled on the BrainzMash-native path.
+export const __setMetadataProviderHealthStateForTests = () => {};
 
 const requestMusicbrainz = async (
   baseUrl,
@@ -345,22 +119,6 @@ const mbLimiter = new Bottleneck({
   maxConcurrent: 1,
   minTime: 1000,
 });
-
-const configureMusicbrainzLimiter = async () => {
-  const { activeProvider } = getMetadataProviderSelection("musicbrainz");
-  if (activeProvider === "official") {
-    await mbLimiter.updateSettings({
-      maxConcurrent: 1,
-      minTime: 1000,
-    });
-    return;
-  }
-
-  await mbLimiter.updateSettings({
-    maxConcurrent: 20,
-    minTime: 0,
-  });
-};
 
 const lastfmLimiter = new Bottleneck({
   maxConcurrent: 5,
@@ -392,9 +150,6 @@ const LASTFM_MAX_RETRIES = 2;
 const LISTENBRAINZ_TIMEOUT_MS = 6000;
 const LISTENBRAINZ_MAX_RETRIES = 2;
 
-const getProviderRequestCacheKey = (prefix, endpointOrPath, params = {}) =>
-  `${prefix}:${endpointOrPath}:${JSON.stringify(params)}`;
-
 const shouldEmitThrottledLog = (logMap, key, throttleMs = 15000) => {
   const now = Date.now();
   const last = logMap.get(key) || 0;
@@ -409,7 +164,7 @@ const musicbrainzRequestWithRetry = async (
   retryCount = 0,
   forceIpv4 = false,
 ) => {
-  const cacheKey = getProviderRequestCacheKey("mb", endpoint, params);
+  const cacheKey = `mb:${endpoint}:${JSON.stringify(params)}`;
   const cached = mbCache.get(cacheKey);
   if (cached) return cached;
 
@@ -444,10 +199,6 @@ const musicbrainzRequestWithRetry = async (
   const contact =
     (getMusicBrainzContact() || "").trim() || "https://github.com/aurral";
   const userAgent = `${APP_NAME}/${APP_VERSION} ( ${contact} )`;
-  const shouldTryFallbackBaseUrl = (error) =>
-    isConnectionError(error) ||
-    (error.response &&
-      [429, 500, 502, 503, 504].includes(error.response.status));
 
   const baseUrl = getMusicbrainzApiBaseUrl();
   let error;
@@ -465,14 +216,6 @@ const musicbrainzRequestWithRetry = async (
     return responseData;
   } catch (requestError) {
     error = requestError;
-    if (
-      getMusicbrainzProvider() === "aurralHosted" &&
-      getMetadataProviderSelection("musicbrainz").activeProvider ===
-        "aurralHosted" &&
-      shouldTryFallbackBaseUrl(requestError)
-    ) {
-      probeMusicbrainzHostedHealth().catch(() => {});
-    }
   }
 
   const connectionError = isConnectionError(error);
@@ -489,7 +232,8 @@ const musicbrainzRequestWithRetry = async (
       : error.code || error.message;
     const logKey = `${errorType}:retry:${retryCount + 1}`;
     if (shouldEmitThrottledLog(musicbrainzRetryLogAt, logKey, 5000)) {
-      console.warn(
+      logger.warn(
+        "api",
         `MusicBrainz error (${errorType}), retrying in ${delay}ms... (attempt ${
           retryCount + 1
         }/${MAX_RETRIES})`,
@@ -505,7 +249,7 @@ const musicbrainzRequestWithRetry = async (
   }
 
   if (error.response && error.response.status === 404) {
-    console.warn(`MusicBrainz 404 Not Found for ${endpoint}`);
+    logger.warn("api", `MusicBrainz 404 Not Found for ${endpoint}`);
     throw error;
   }
 
@@ -513,13 +257,13 @@ const musicbrainzRequestWithRetry = async (
   if (status === 502 || status === 503 || status === 504) {
     if (!musicbrainzLast503Log || Date.now() - musicbrainzLast503Log > 15000) {
       musicbrainzLast503Log = Date.now();
-      console.warn(`MusicBrainz ${status} (suppressing further logs for 15s)`);
+      logger.warn("api", `MusicBrainz ${status} (suppressing further logs for 15s)`);
     }
   } else {
     const errorType = status ? `HTTP ${status}` : error.code || error.message;
     const logKey = `${errorType}:final`;
     if (shouldEmitThrottledLog(musicbrainzErrorLogAt, logKey)) {
-      console.error("MusicBrainz API error:", error.message);
+      logger.error("api", "MusicBrainz API error:", error.message);
     }
   }
   throw error;
@@ -533,12 +277,6 @@ const normalizeItunesArtworkUrl = (url) =>
     .trim()
     .replace(/\/100x100([a-z]+)(?=[/?#]|$)/i, "/600x600$1")
     .replace(/\/\d+x\d+([a-z]+)(?=[/?#]|$)/i, "/600x600$1");
-
-export async function fetchItunesAlbumArt(artistName, albumName) {
-  const _artist = artistName;
-  const _album = albumName;
-  return null;
-}
 
 export async function fetchCoverArtArchiveReleaseGroup(releaseGroupMbid) {
   if (!releaseGroupMbid) return null;
@@ -601,7 +339,7 @@ export const lastfmRequest = lastfmLimiter.wrap(
         const last = lastfmErrorLogAt.get(key) || 0;
         if (now - last < 15000) return;
         lastfmErrorLogAt.set(key, now);
-        console.error(message, details);
+        logger.error("api", message, details);
       };
       let lastError = null;
       for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
@@ -684,7 +422,7 @@ export const listenbrainzRequest = listenbrainzLimiter.wrap(
         const last = listenbrainzErrorLogAt.get(key) || 0;
         if (now - last < 15000) return;
         listenbrainzErrorLogAt.set(key, now);
-        console.error(message, details);
+        logger.error("api", message, details);
       };
 
       let lastError = null;
@@ -968,56 +706,12 @@ export async function wikipediaGetArtistBioByMbid(mbid) {
   return wikipediaGetBioByTitle(title);
 }
 
-async function resolveFirstNonEmpty(promises) {
-  const pending = Array.isArray(promises) ? promises.length : 0;
-  if (pending === 0) return null;
-
-  return new Promise((resolve) => {
-    let remaining = pending;
-    let settled = false;
-
-    const finishIfDone = () => {
-      remaining -= 1;
-      if (!settled && remaining <= 0) {
-        settled = true;
-        resolve(null);
-      }
-    };
-
-    promises.forEach((promise) => {
-      Promise.resolve(promise)
-        .then((value) => {
-          if (settled) return;
-          if (typeof value === "string" && value.trim()) {
-            settled = true;
-            resolve(value.trim());
-            return;
-          }
-          finishIfDone();
-        })
-        .catch(() => {
-          if (settled) return;
-          finishIfDone();
-        });
-    });
-  });
-}
-
 /**
  * Strip basic HTML tags and decode entities from a string (e.g. Last.fm bio).
  */
 function stripHtml(html) {
   if (typeof html !== "string") return "";
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .trim();
+  return html.replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -1048,10 +742,10 @@ export async function lastfmGetArtistBio(mbid) {
  */
 export async function getArtistBio(_artistName, mbid) {
   if (!mbid) return null;
-  return resolveFirstNonEmpty([
+  return Promise.any([
     wikipediaGetArtistBioByMbid(mbid),
     lastfmGetArtistBio(mbid),
-  ]);
+  ]).catch(() => null);
 }
 
 export async function deezerSearchArtist(artistName) {
@@ -2005,11 +1699,6 @@ export async function youtubeFindTopSongVideo(artistName, trackTitle) {
   }
 }
 
-function toLastfmResultList(value) {
-  if (!value) return [];
-  return Array.isArray(value) ? value : [value];
-}
-
 export async function lastfmSearchArtists(query, { limit = 5 } = {}) {
   const trimmed = String(query || "").trim();
   if (!trimmed || !getLastfmApiKey()) return [];
@@ -2017,7 +1706,8 @@ export async function lastfmSearchArtists(query, { limit = 5 } = {}) {
     artist: trimmed,
     limit: Math.min(30, Math.max(1, limit)),
   });
-  return toLastfmResultList(data?.results?.artistmatches?.artist);
+  const results = data?.results?.artistmatches?.artist;
+  return results ? [].concat(results) : [];
 }
 
 export async function lastfmSearchAlbums(query, { limit = 5 } = {}) {
@@ -2027,7 +1717,8 @@ export async function lastfmSearchAlbums(query, { limit = 5 } = {}) {
     album: trimmed,
     limit: Math.min(30, Math.max(1, limit)),
   });
-  return toLastfmResultList(data?.results?.albummatches?.album);
+  const results = data?.results?.albummatches?.album;
+  return results ? [].concat(results) : [];
 }
 
 export async function lastfmSearchTracks(query, { limit = 5 } = {}) {
@@ -2037,7 +1728,8 @@ export async function lastfmSearchTracks(query, { limit = 5 } = {}) {
     track: trimmed,
     limit: Math.min(30, Math.max(1, limit)),
   });
-  return toLastfmResultList(data?.results?.trackmatches?.track);
+  const results = data?.results?.trackmatches?.track;
+  return results ? [].concat(results) : [];
 }
 
 export async function searchMusicbrainzRecordings(query, { limit = 5 } = {}) {

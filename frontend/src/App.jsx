@@ -5,7 +5,6 @@ import {
   Navigate,
 } from "react-router-dom";
 import { useState, useEffect, Suspense, lazy, useRef } from "react";
-import PropTypes from "prop-types";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
@@ -13,11 +12,11 @@ import { getBootstrapStatus } from "./utils/api";
 import { getAppBasePath } from "./utils/basePath.js";
 import { DISCOVERY_MANUAL_REFRESH_KEY } from "./utils/discoverRecentNavigation.js";
 import { AudioPlayerProvider } from "react-use-audio-player";
-import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { DiscoverRecentProvider } from "./contexts/DiscoverRecentProvider";
 import { AudioQueueProvider } from "./contexts/AudioQueueProvider";
+import { AlertTriangle, XCircle } from "lucide-react";
 import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
 import { useWebSocketChannel } from "./hooks/useWebSocket";
@@ -81,15 +80,6 @@ const PermissionRoute = ({ children, permission }) => {
     return <Navigate to="/" replace />;
   }
   return children;
-};
-
-PermissionRoute.propTypes = {
-  children: PropTypes.node.isRequired,
-  permission: PropTypes.string,
-};
-
-ProtectedRoute.propTypes = {
-  children: PropTypes.node.isRequired,
 };
 
 function AppContent() {
@@ -177,27 +167,14 @@ function AppContent() {
     >
       <DiscoverRecentProvider>
         <ProtectedRoute>
-          <Layout
-            isHealthy={isHealthy}
-            rootFolderConfigured={rootFolderConfigured}
-          >
+          <Layout>
           <UpdateBanner
             currentVersion={appVersion}
             visible={!user || user.role === "admin"}
           />
           {isHealthy === false && (
             <div className="app-status-banner app-status-banner--error">
-              <svg
-                className="app-status-banner__icon app-status-banner__icon--error"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
+              <XCircle className="app-status-banner__icon app-status-banner__icon--error" />
               <p className="app-status-banner__text app-status-banner__text--error">
                 Unable to connect to the backend API. Please check your
                 configuration.
@@ -207,17 +184,7 @@ function AppContent() {
 
           {isHealthy && !rootFolderConfigured && (
             <div className="app-status-banner app-status-banner--warning">
-              <svg
-                className="app-status-banner__icon app-status-banner__icon--warning"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
+              <AlertTriangle className="app-status-banner__icon app-status-banner__icon--warning" />
               <p className="app-status-banner__text app-status-banner__text--warning">
                 Root folder is not configured. Please configure your music
                 library root folder in settings.
@@ -281,9 +248,14 @@ function AppContent() {
 }
 
 function App() {
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove("light");
+    root.classList.add("dark");
+  }, []);
+
   return (
-    <ThemeProvider>
-      <ToastProvider>
+    <ToastProvider>
         <AuthProvider>
           <AudioPlayerProvider>
             <AudioQueueProvider>
@@ -293,7 +265,6 @@ function App() {
           </AudioPlayerProvider>
         </AuthProvider>
       </ToastProvider>
-    </ThemeProvider>
   );
 }
 

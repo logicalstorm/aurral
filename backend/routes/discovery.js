@@ -1,4 +1,5 @@
 import express from "express";
+import { logger } from "../services/logger.js";
 import {
   getDiscoveryCache,
   getDiscoveryUpdateStatus,
@@ -50,7 +51,7 @@ import {
   getFallbackTagNames,
   searchFallbackGenreArtists,
 } from "../services/listenbrainzDiscoveryFallback.js";
-import { requestDiscoveryRefresh } from "../services/discoveryRefreshScheduler.js";
+import { enqueueDiscoveryRefresh } from "../services/discoveryRefreshScheduler.js";
 
 const router = express.Router();
 const SLSKD_NOT_CONFIGURED_MESSAGE =
@@ -136,7 +137,7 @@ const isLibraryArtist = (artist, existingArtistKeys) => {
 };
 
 router.post("/refresh", requireAuth, requireAdmin, (req, res) => {
-  const result = requestDiscoveryRefresh({
+  const result = enqueueDiscoveryRefresh({
     reason: "manual",
     force: true,
   });
@@ -222,10 +223,7 @@ router.get("/", requireAuth, async (req, res) => {
       requestUserDiscoveryRefresh(listenHistoryProfile, {
         feedbackUserId: req.user?.id || null,
       }).catch((err) => {
-        console.error(
-          `[Discover] On-demand refresh for ${listenHistoryProfile.listenHistoryProvider}:${listenHistoryProfile.listenHistoryUsername} failed:`,
-          err.message,
-        );
+        logger.discovery("error", `On-demand refresh for ${listenHistoryProfile.listenHistoryProvider}:${listenHistoryProfile.listenHistoryUsername} failed`, { error: err.message });
       });
     }
   }
@@ -260,7 +258,7 @@ router.get("/", requireAuth, async (req, res) => {
     isUpdating = false;
   } else if (!hasData && !hasCompletedRefresh && !isUpdating) {
     lastDiscoveryRevalidateAt = Date.now();
-    const lazyRefresh = requestDiscoveryRefresh({ reason: "lazy" });
+    const lazyRefresh = enqueueDiscoveryRefresh({ reason: "lazy" });
     if (lazyRefresh.enqueued) {
       isUpdating = true;
     }
@@ -345,7 +343,7 @@ router.get("/", requireAuth, async (req, res) => {
     Date.now() - lastDiscoveryRevalidateAt > DISCOVERY_REVALIDATE_COOLDOWN_MS
   ) {
     lastDiscoveryRevalidateAt = Date.now();
-    const staleRefresh = requestDiscoveryRefresh({ reason: "stale" });
+    const staleRefresh = enqueueDiscoveryRefresh({ reason: "stale" });
     if (staleRefresh.enqueued) {
       isUpdating = true;
     }
@@ -357,7 +355,7 @@ router.get("/", requireAuth, async (req, res) => {
         recommendations,
         globalTop,
       })
-      .catch(() => {});
+      .catch((err) => { logger.discovery("warn", "Failed to prefetch discovery images", { error: err?.message || String(err) }); });
   }
 
   if (recommendations.length > 0 || globalTop.length > 0) {
@@ -381,8 +379,10 @@ router.get("/", requireAuth, async (req, res) => {
   const playlistBuildStatus =
     getDiscoveryPlaylistBuildStatus(effectiveCacheNamespace);
 
+  const recommendationsLimit = Math.max(parseInt(req.query.limit, 10) || 50, 1);
+
   res.json({
-    recommendations,
+    recommendations: recommendations.slice(0, recommendationsLimit),
     globalTop,
     basedOn,
     topTags,
@@ -671,7 +671,7 @@ router.get("/by-tag", async (req, res) => {
               .filter((a) => a.id);
           }
         } catch (err) {
-          console.error("Last.fm tag search failed:", err.message);
+          logger.discovery("error", "Last.fm tag search failed", { error: err.message });
         }
       } else {
         const fallbackResult = await searchFallbackGenreArtists({

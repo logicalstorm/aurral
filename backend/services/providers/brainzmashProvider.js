@@ -5,7 +5,6 @@ import {
   APP_NAME,
   APP_VERSION,
   DEFAULT_METADATA_BASE_URL,
-  LEGACY_METADATA_BASE_URL,
   MUSICBRAINZ_API,
 } from "../../config/constants.js";
 import {
@@ -72,11 +71,7 @@ export function getMetadataBaseUrl() {
     parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
     parsed.search = "";
     parsed.hash = "";
-    const normalized = parsed.toString().replace(/\/+$/, "");
-    if (normalized === LEGACY_METADATA_BASE_URL) {
-      return DEFAULT_METADATA_BASE_URL;
-    }
-    return normalized;
+    return parsed.toString().replace(/\/+$/, "");
   } catch {
     return DEFAULT_METADATA_BASE_URL;
   }
@@ -159,7 +154,7 @@ function storeAlbumReleaseMappings(album) {
   for (const release of album?.releases || []) {
     releaseCache.set(
       release.id,
-      JSON.parse(JSON.stringify({ albumId: album.id, release })),
+      structuredClone({ albumId: album.id, release }),
     );
   }
 }

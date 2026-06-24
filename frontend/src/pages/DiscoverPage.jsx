@@ -155,7 +155,9 @@ const writeStoredRecentlyAdded = (value, userId) => {
       getDiscoverRecentlyAddedStorageKey(userId),
       JSON.stringify(value),
     );
-  } catch {}
+  } catch {
+    console.warn("Failed to write discover recently-added");
+  }
 };
 
 const readStoredRecentReleases = (userId) => {
@@ -180,7 +182,9 @@ const writeStoredRecentReleases = (value, userId) => {
       getDiscoverRecentReleasesStorageKey(userId),
       JSON.stringify(value),
     );
-  } catch {}
+  } catch {
+    console.warn("Failed to write discover recent-releases");
+  }
 };
 
 const normalizeNearbyShowsData = (value) => {
@@ -218,8 +222,9 @@ const writeStoredNearbyShows = (value, userId, locationMode, zip) => {
       getDiscoverNearbyShowsStorageKey(userId, locationMode, zip),
       JSON.stringify(normalized),
     );
-  } catch {}
-};
+  } catch {
+    console.warn("Failed to write discover nearby-shows");
+  }
 
 const stripDiscoverPlaylistAdoptionFields = (playlists) =>
   (Array.isArray(playlists) ? playlists : []).map((playlist) => {
@@ -317,8 +322,9 @@ const writeStoredDiscoveryData = (value, userId) => {
         ),
       }),
     );
-  } catch {}
-};
+  } catch {
+    console.warn("Failed to write discover discovery-data");
+  }
 
 const normalizeDiscoverLayout = (value) => {
   if (!Array.isArray(value)) return null;
@@ -377,8 +383,11 @@ const writeStoredDiscoverLayout = (layout, userId) => {
       getDiscoverLayoutStorageKey(userId),
       JSON.stringify(layout),
     );
-  } catch {}
+  } catch {
+    console.warn("Failed to write discover layout");
+  }
 };
+
 
 function DiscoverPage() {
   useDocumentTitle("Discover");
@@ -461,6 +470,17 @@ function DiscoverPage() {
     [authUser?.id],
   );
 
+  const fetchAndApplyDiscovery = useCallback(
+    (cacheBust = false) =>
+      getDiscovery(cacheBust)
+        .then((discoveryData) => {
+          applyDiscoveryData(discoveryData);
+          setError(null);
+        })
+        .catch(logPollWarning),
+    [applyDiscoveryData],
+  );
+
   const { isConnected: isDiscoverySocketConnected } = useWebSocketChannel(
     "discovery",
     (msg) => {
@@ -513,12 +533,7 @@ function DiscoverPage() {
             stale: false,
           }),
         );
-        getDiscovery(true)
-          .then((discoveryData) => {
-            applyDiscoveryData(discoveryData);
-            setError(null);
-          })
-          .catch(() => {});
+        fetchAndApplyDiscovery(true);
         return;
       }
 
@@ -640,12 +655,7 @@ function DiscoverPage() {
             }),
           );
         }
-        getDiscovery(true)
-          .then((discoveryData) => {
-            applyDiscoveryData(discoveryData);
-            setError(null);
-          })
-          .catch(() => {});
+        fetchAndApplyDiscovery(true);
       }
     },
   );
@@ -653,14 +663,7 @@ function DiscoverPage() {
   useEffect(() => {
     if (!isDiscoverySocketConnected) return;
     if (!data?.isUpdating && !data?.isEnriching && !data?.stale) return;
-    getDiscovery()
-      .then((discoveryData) => {
-        const normalizedData = normalizeDiscoveryData(discoveryData);
-        setData(normalizedData);
-        writeStoredDiscoveryData(normalizedData, authUser?.id);
-        setError(null);
-      })
-      .catch(() => {});
+    fetchAndApplyDiscovery();
   }, [
     authUser?.id,
     isDiscoverySocketConnected,
@@ -672,14 +675,7 @@ function DiscoverPage() {
   useEffect(() => {
     if (!isDiscoverySocketConnected) return;
     if (!data?.playlistsUpdating) return;
-    getDiscovery(true)
-      .then((discoveryData) => {
-        const normalizedData = normalizeDiscoveryData(discoveryData);
-        setData(normalizedData);
-        writeStoredDiscoveryData(normalizedData, authUser?.id);
-        setError(null);
-      })
-      .catch(() => {});
+    fetchAndApplyDiscovery(true);
   }, [authUser?.id, isDiscoverySocketConnected, data?.playlistsUpdating]);
 
   useEffect(() => {
@@ -690,14 +686,7 @@ function DiscoverPage() {
     const pollDiscovery = () => {
       if (discoveryPollInFlightRef.current) return;
       discoveryPollInFlightRef.current = true;
-      getDiscovery(true)
-        .then((next) => {
-          const normalizedData = normalizeDiscoveryData(next);
-          setData(normalizedData);
-          writeStoredDiscoveryData(normalizedData, authUser?.id);
-          setError(null);
-        })
-        .catch(() => {})
+      fetchAndApplyDiscovery(true)
         .finally(() => {
           discoveryPollInFlightRef.current = false;
         });
@@ -716,14 +705,7 @@ function DiscoverPage() {
     if (!data?.stale || data?.isUpdating || data?.isEnriching) return;
     if (isDiscoverySocketConnected) return;
     const id = setTimeout(() => {
-      getDiscovery(true)
-        .then((next) => {
-          const normalizedData = normalizeDiscoveryData(next);
-          setData(normalizedData);
-          writeStoredDiscoveryData(normalizedData, authUser?.id);
-          setError(null);
-        })
-        .catch(() => {});
+      fetchAndApplyDiscovery(true);
     }, 15000);
     return () => clearTimeout(id);
   }, [
@@ -775,14 +757,18 @@ function DiscoverPage() {
         setRecentlyAdded(items);
         writeStoredRecentlyAdded(items, authUser?.id);
       })
-      .catch(() => {});
+      .catch((err) => {
+        showError(err?.message || "Failed to load recently added");
+      });
 
     getRecentReleases()
       .then((items) => {
         setRecentReleases(items);
         writeStoredRecentReleases(items, authUser?.id);
       })
-      .catch(() => {});
+      .catch((err) => {
+        showError(err?.message || "Failed to load recent releases");
+      });
   }, [authUser?.id]);
 
   useEffect(() => {
@@ -906,7 +892,7 @@ function DiscoverPage() {
             }
           }
         })
-        .catch(() => {})
+        .catch(logPollWarning)
         .finally(() => {
           requestedReleaseCoversRef.current.delete(id);
         });
@@ -939,7 +925,7 @@ function DiscoverPage() {
             }
           }
         })
-        .catch(() => {})
+        .catch(logPollWarning)
         .finally(() => {
           requestedArtistCoversRef.current.delete(artistId);
         });
@@ -1286,7 +1272,9 @@ function DiscoverPage() {
         if (!cancelled && lookup) {
           setLibraryLookup((prev) => ({ ...prev, ...lookup }));
         }
-      } catch {}
+      } catch {
+        console.warn("Failed to lookup artists in library");
+      }
     };
     fetchLookup();
     return () => {
@@ -1301,7 +1289,9 @@ function DiscoverPage() {
   };
 
   const handleDiscoverSave = () => {
-    saveDiscoverLayout(draftSections).catch(() => {});
+    saveDiscoverLayout(draftSections).catch((err) => {
+      showError(err?.message || "Failed to save layout");
+    });
   };
 
   const handleDiscoverReset = () => {
@@ -1992,81 +1982,25 @@ function DiscoverPage() {
                         >
                           {heroBasedOn[0].name}
                         </button>
-                      ) : heroBasedOn.length === 4 ? (
-                        <>
-                          <button
-                            onClick={() =>
-                              navigateToBasedOnArtist(heroBasedOn[0])
-                            }
-                            className="artist-discover-hero__artist-tag"
-                          >
-                            {heroBasedOn[0].name}
-                          </button>
-                          <button
-                            onClick={() =>
-                              navigateToBasedOnArtist(heroBasedOn[1])
-                            }
-                            className="artist-discover-hero__artist-tag"
-                          >
-                            {heroBasedOn[1].name}
-                          </button>
-                          <button
-                            onClick={() =>
-                              navigateToBasedOnArtist(heroBasedOn[2])
-                            }
-                            className="artist-discover-hero__artist-tag"
-                          >
-                            {heroBasedOn[2].name}
-                          </button>
-                          <button
-                            onClick={() =>
-                              navigateToBasedOnArtist(heroBasedOn[3])
-                            }
-                            className="artist-discover-hero__artist-tag"
-                          >
-                            {heroBasedOn[3].name}
-                          </button>
-                        </>
                       ) : (
                         <>
-                          <button
-                            onClick={() =>
-                              navigateToBasedOnArtist(heroBasedOn[0])
-                            }
-                            className="artist-discover-hero__artist-tag"
-                          >
-                            {heroBasedOn[0].name}
-                          </button>
-                          <button
-                            onClick={() =>
-                              navigateToBasedOnArtist(heroBasedOn[1])
-                            }
-                            className="artist-discover-hero__artist-tag"
-                          >
-                            {heroBasedOn[1].name}
-                          </button>
-                          <button
-                            onClick={() =>
-                              navigateToBasedOnArtist(heroBasedOn[2])
-                            }
-                            className="artist-discover-hero__artist-tag"
-                          >
-                            {heroBasedOn[2].name}
-                          </button>
-                          <button
-                            onClick={() =>
-                              navigateToBasedOnArtist(heroBasedOn[3])
-                            }
-                            className="artist-discover-hero__artist-tag"
-                          >
-                            {heroBasedOn[3].name}
-                          </button>
-                          <button
-                            onClick={() => setShowFullBasedOnList(true)}
-                            className="artist-discover-hero__view-toggle-badge"
-                          >
-                            +{heroBasedOn.length - 4} more
-                          </button>
+                          {heroBasedOn.slice(0, 4).map((artist, index) => (
+                            <button
+                              key={index}
+                              onClick={() => navigateToBasedOnArtist(artist)}
+                              className="artist-discover-hero__artist-tag"
+                            >
+                              {artist.name}
+                            </button>
+                          ))}
+                          {heroBasedOn.length > 4 && (
+                            <button
+                              onClick={() => setShowFullBasedOnList(true)}
+                              className="artist-discover-hero__view-toggle-badge"
+                            >
+                              +{heroBasedOn.length - 4} more
+                            </button>
+                          )}
                         </>
                       )}
                     </div>

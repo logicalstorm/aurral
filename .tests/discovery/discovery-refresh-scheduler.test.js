@@ -15,7 +15,6 @@ const {
   discoveryNeedsRefresh,
   enqueueDiscoveryRefresh,
   markDiscoveryRefreshDequeued,
-  requestDiscoveryRefresh,
   scheduleNextDiscoveryRefresh,
 } = await importFromRepo("backend/services/discoveryRefreshScheduler.js");
 const { getDiscoveryCache } = await importFromRepo("backend/services/discoveryService.js");
@@ -107,10 +106,10 @@ test("enqueueDiscoveryRefresh deduplicates active refresh requests", () => {
   assert.equal(result.reason, "updating");
 });
 
-test("requestDiscoveryRefresh returns a plain result object", () => {
+test("enqueueDiscoveryRefresh returns a plain result object", () => {
   const cache = getDiscoveryCache();
   cache.isUpdating = false;
-  const result = requestDiscoveryRefresh({ reason: "manual", force: true });
+  const result = enqueueDiscoveryRefresh({ reason: "manual", force: true });
   assert.equal(typeof result?.enqueued, "boolean");
   assert.equal(result?.then, undefined);
 });

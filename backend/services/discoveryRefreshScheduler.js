@@ -4,10 +4,7 @@ import { libraryManager } from "./libraryManager.js";
 import {
   enqueueDiscoveryRefreshJob,
   getHonkerDb,
-  isDiscoveryRefreshQueueLocked,
   isHonkerLockHeld,
-  tryAcquireDiscoveryRefreshQueueLock,
-  releaseDiscoveryRefreshQueueLock,
 } from "./honkerDb.js";
 import {
   clearDiscoveryUpdateProgress,
@@ -17,6 +14,8 @@ import {
 } from "./discoveryService.js";
 
 const DISCOVERY_GLOBAL_REFRESH_LOCK = "discovery-global-refresh";
+
+let discoveryRefreshQueued = false;
 
 function parseQueuedPayload(payload) {
   try {
@@ -95,11 +94,11 @@ export function pruneDuplicateScheduledDiscoveryRefreshes() {
 }
 
 export function isDiscoveryRefreshPending() {
-  return isDiscoveryRefreshQueueLocked();
+  return discoveryRefreshQueued;
 }
 
 export function markDiscoveryRefreshDequeued() {
-  releaseDiscoveryRefreshQueueLock();
+  discoveryRefreshQueued = false;
 }
 
 export async function isDiscoveryRefreshConfigured() {
@@ -151,12 +150,10 @@ export function enqueueDiscoveryRefresh(options = {}) {
       }
       return { enqueued: false, reason: "updating" };
     }
-    if (!force && isDiscoveryRefreshQueueLocked()) {
+    if (!force && discoveryRefreshQueued) {
       return { enqueued: false, reason: "queued" };
     }
-    if (!tryAcquireDiscoveryRefreshQueueLock()) {
-      return { enqueued: false, reason: "queued" };
-    }
+    discoveryRefreshQueued = true;
     if (!cache.isUpdating) {
       cache.isUpdating = true;
       emitDiscoveryQueued(reason);
@@ -181,7 +178,7 @@ export function enqueueDiscoveryRefresh(options = {}) {
     );
   } catch (error) {
     if (!scheduleOnly) {
-      releaseDiscoveryRefreshQueueLock();
+      discoveryRefreshQueued = false;
       cache.isUpdating = false;
     }
     throw error;
@@ -221,7 +218,7 @@ export async function bootstrapDiscoveryRefresh() {
   const cache = getDiscoveryCache();
   if (
     !isHonkerLockHeld("discovery-global-refresh") &&
-    !isDiscoveryRefreshQueueLocked()
+    !discoveryRefreshQueued
   ) {
     cache.isUpdating = false;
     clearDiscoveryUpdateProgress();
@@ -281,10 +278,3 @@ export async function bootstrapDiscoveryRefresh() {
   }
 }
 
-export function requestDiscoveryRefresh(options = {}) {
-  return enqueueDiscoveryRefresh({
-    ...options,
-    reason: options.reason || "manual",
-    force: options.force === true,
-  });
-}

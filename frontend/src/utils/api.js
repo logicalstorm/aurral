@@ -123,21 +123,12 @@ const fetchCoverWithMemo = async (key, requestFactory, { bypassCache = false } =
     }
   }
 
-  if (coverInflightRequests.has(key)) {
-    return coverInflightRequests.get(key);
-  }
-
-  const request = requestFactory()
-    .then((response) => {
+  return fetchInflightOnce(coverInflightRequests, key, () =>
+    requestFactory().then((response) => {
       setCoverCacheEntry(key, response);
       return response;
-    })
-    .finally(() => {
-      coverInflightRequests.delete(key);
-    });
-
-  coverInflightRequests.set(key, request);
-  return request;
+    }),
+  );
 };
 
 const fetchInflightOnce = async (store, key, requestFactory) => {
@@ -203,11 +194,6 @@ api.interceptors.response.use(
   (error) => {
     const status = error?.response?.status;
     const code = error?.response?.data?.code;
-    const serverMessage =
-      error?.response?.data?.message || error?.response?.data?.error;
-    if (serverMessage) {
-      error.message = String(serverMessage);
-    }
     if (status === 401 && code === "SESSION_INVALID") {
       clearAuthStorage();
       if (typeof window !== "undefined") {
@@ -220,7 +206,10 @@ api.interceptors.response.use(
 
 export const checkHealth = () => getData("/health");
 
-export const getBootstrapStatus = () => getData("/health/bootstrap");
+const bootstrapInflight = new Map();
+
+export const getBootstrapStatus = () =>
+  fetchInflightOnce(bootstrapInflight, "bootstrap", () => getData("/health/bootstrap"));
 
 export const browseFilesystem = (pathValue) =>
   getData("/filesystem/browse", {
@@ -831,6 +820,8 @@ export const testGotifyConnection = (url, token) =>
 export const applyLidarrCommunityGuide = () =>
   postData("/settings/lidarr/apply-community-guide");
 
+const flowStatusInflight = new Map();
+
 export const getFlowStatus = async ({
   includeJobs = false,
   flowId,
@@ -847,7 +838,10 @@ export const getFlowStatus = async ({
   if (jobsLimit != null) {
     params.jobsLimit = jobsLimit;
   }
-  return getData("/playlists/status", { params, signal });
+  const key = `flowStatus:${JSON.stringify(params)}`;
+  return fetchInflightOnce(flowStatusInflight, key, () =>
+    getData("/playlists/status", { params, signal }),
+  );
 };
 
 export const getFlowJobs = (flowId, limit = null, options = {}) => {

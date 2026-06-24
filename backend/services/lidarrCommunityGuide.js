@@ -1,3 +1,5 @@
+import { normalizeTypeName, getTypeName } from "./typeUtils.js";
+
 export async function applyLidarrCommunityGuide(lidarrClient) {
   const results = {
     qualityDefinitions: [],
@@ -150,7 +152,7 @@ export async function applyLidarrCommunityGuide(lidarrClient) {
     };
 
     const buildCustomFormatPayloadVariants = (format) => {
-      const base = JSON.parse(JSON.stringify(format));
+      const base = structuredClone(format);
       const variants = [base];
 
       const withFieldArray = {
@@ -304,21 +306,6 @@ export async function applyLidarrCommunityGuide(lidarrClient) {
       "Compilation",
     ];
 
-    const normalizeTypeName = (value) =>
-      String(value || "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
-
-    const getTypeName = (item) => {
-      if (!item) return "";
-      if (typeof item === "string") return item;
-      if (typeof item.name === "string") return item.name;
-      if (typeof item.value === "string") return item.value;
-      if (typeof item.albumType?.name === "string")
-        return item.albumType.name;
-      return "";
-    };
-
     const applyTypeSelection = (available, desired) => {
       if (!Array.isArray(available) || available.length === 0) {
         return desired.map((name) => ({ name, allowed: true }));
@@ -395,7 +382,7 @@ export async function applyLidarrCommunityGuide(lidarrClient) {
     }
 
     const selectedQualityNames = ["MP3-320", "FLAC"];
-    const baseItems = JSON.parse(JSON.stringify(baseProfile.items || []));
+    const baseItems = structuredClone(baseProfile.items || []);
     const qualityItemMap = new Map();
 
     const collectQualityItems = (items) => {

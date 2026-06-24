@@ -2,7 +2,6 @@ import fs from "fs";
 import path from "path";
 import honker from "@russellthehippo/honker-node";
 import { resolveAurralDataDir } from "../config/data-dir.js";
-import { scheduleHonkerComponentRestart } from "./honkerWorkerRuntime.js";
 
 function resolveHonkerDbPath() {
   return process.env.AURRAL_DB_PATH
@@ -12,17 +11,6 @@ function resolveHonkerDbPath() {
 
 let honkerDb = null;
 let openedHonkerDbPath = null;
-let pipelineQueue = null;
-let discoveryRefreshQueue = null;
-let discoveryPlaylistBuildQueue = null;
-let discoveryUserRefreshQueue = null;
-let weeklyFlowOperationQueue = null;
-let playlistRetryQueue = null;
-let playlistReserveBuildQueue = null;
-let playlistMbidEnrichmentQueue = null;
-let systemTaskQueue = null;
-let libraryScanQueue = null;
-let imagePrefetchQueue = null;
 let notificationOutbox = null;
 let honkerSchedulerStarted = false;
 let honkerSchedulerAbort = null;
@@ -88,337 +76,182 @@ export function getHonkerDb() {
   return honkerDb;
 }
 
-export function getPipelineQueue() {
-  if (!pipelineQueue) {
-    pipelineQueue = getHonkerDb().queue("slskd-pipeline", {
-      visibilityTimeoutS: 1200,
-      maxAttempts: 5,
-    });
+function resolveEnqueueRunAt(options) {
+  if (options.runAt != null) return Math.floor(Number(options.runAt) / 1000);
+  if (options.delaySeconds != null) return Math.floor(Date.now() / 1000) + Number(options.delaySeconds);
+  return null;
+}
+
+function createHonkerQueue({
+  name,
+  visibilityTimeoutS,
+  maxAttempts,
+  workerModule,
+  workerStartFn,
+  defaultPriorityFn = (payload, options) => Number(options.priority || 0),
+  skipInTest = false,
+}) {
+  let queue = null;
+
+  function getQueue() {
+    if (!queue) {
+      queue = getHonkerDb().queue(name, { visibilityTimeoutS, maxAttempts });
+    }
+    return queue;
   }
-  return pipelineQueue;
-}
 
-export function enqueuePipelineJob(payload, options = {}) {
-  const queue = getPipelineQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const priority =
-    options.priority != null
-      ? Number(options.priority)
-      : getPipelinePriorityForPhase(payload?.phase);
-  const jobId = queue.enqueue(payload, {
-    priority,
-    runAt,
-  });
-  import("./slskdOrchestratorWorker.js")
-    .then(({ startSlskdOrchestratorWorker }) => startSlskdOrchestratorWorker())
-    .catch(() => {});
-  return jobId;
-}
-
-export function getDiscoveryRefreshQueue() {
-  if (!discoveryRefreshQueue) {
-    discoveryRefreshQueue = getHonkerDb().queue("discovery-refresh", {
-      visibilityTimeoutS: 3600,
-      maxAttempts: 4,
-    });
+  function enqueueJob(payload, options = {}) {
+    const q = getQueue();
+    const runAt = resolveEnqueueRunAt(options);
+    const priority = defaultPriorityFn(payload, options);
+    const jobId = q.enqueue(payload, { priority, runAt });
+    if (!(skipInTest && process.env.NODE_ENV === "test")) {
+      import(workerModule)
+        .then((mod) => mod[workerStartFn]())
+        .catch((err) => { console.warn(err); });
+    }
+    return jobId;
   }
-  return discoveryRefreshQueue;
-}
 
-export function enqueueDiscoveryRefreshJob(payload, options = {}) {
-  const queue = getDiscoveryRefreshQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
-    runAt,
-  });
-  if (process.env.NODE_ENV !== "test") {
-    import("./discoveryRefreshWorker.js")
-      .then(({ startDiscoveryRefreshWorker }) => startDiscoveryRefreshWorker())
-      .catch(() => {});
+  function reset() {
+    queue = null;
   }
-  return jobId;
+
+  return { getQueue, enqueueJob, reset };
 }
 
-export function getDiscoveryPlaylistBuildQueue() {
-  if (!discoveryPlaylistBuildQueue) {
-    discoveryPlaylistBuildQueue = getHonkerDb().queue(
-      "discovery-playlist-build",
-      {
-        visibilityTimeoutS: 3600,
-        maxAttempts: 4,
-      },
-    );
-  }
-  return discoveryPlaylistBuildQueue;
+const queueByName = new Map();
+const allQueues = [];
+
+function registerQueue(config) {
+  const { getQueue, enqueueJob, reset } = createHonkerQueue(config);
+  queueByName.set(config.name, { getQueue, enqueueJob });
+  allQueues.push(reset);
+  return { getQueue, enqueueJob };
 }
 
-export function enqueueDiscoveryPlaylistBuildJob(payload, options = {}) {
-  const queue = getDiscoveryPlaylistBuildQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
-    runAt,
-  });
-  import("./discoveryPlaylistBuildWorker.js")
-    .then(({ startDiscoveryPlaylistBuildWorker }) =>
-      startDiscoveryPlaylistBuildWorker(),
-    )
-    .catch(() => {});
-  return jobId;
-}
+const pipeline = registerQueue({
+  name: "slskd-pipeline",
+  visibilityTimeoutS: 1200,
+  maxAttempts: 5,
+  workerModule: "./slskdOrchestratorWorker.js",
+  workerStartFn: "startSlskdOrchestratorWorker",
+  defaultPriorityFn: (payload) => getPipelinePriorityForPhase(payload?.phase),
+});
 
-export function getDiscoveryUserRefreshQueue() {
-  if (!discoveryUserRefreshQueue) {
-    discoveryUserRefreshQueue = getHonkerDb().queue("discovery-user-refresh", {
-      visibilityTimeoutS: 3600,
-      maxAttempts: 4,
-    });
-  }
-  return discoveryUserRefreshQueue;
-}
+export const getPipelineQueue = pipeline.getQueue;
+export const enqueuePipelineJob = pipeline.enqueueJob;
 
-export function enqueueDiscoveryUserRefreshJob(payload, options = {}) {
-  const queue = getDiscoveryUserRefreshQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
-    runAt,
-  });
-  import("./discoveryUserRefreshWorker.js")
-    .then(({ startDiscoveryUserRefreshWorker }) =>
-      startDiscoveryUserRefreshWorker(),
-    )
-    .catch(() => {});
-  return jobId;
-}
+const discoveryRefresh = registerQueue({
+  name: "discovery-refresh",
+  visibilityTimeoutS: 3600,
+  maxAttempts: 4,
+  workerModule: "./discoveryRefreshWorker.js",
+  workerStartFn: "startDiscoveryRefreshWorker",
+  skipInTest: true,
+});
 
-export function getWeeklyFlowOperationQueue() {
-  if (!weeklyFlowOperationQueue) {
-    weeklyFlowOperationQueue = getHonkerDb().queue("weekly-flow-operation", {
-      visibilityTimeoutS: 3600,
-      maxAttempts: 3,
-    });
-  }
-  return weeklyFlowOperationQueue;
-}
+export const getDiscoveryRefreshQueue = discoveryRefresh.getQueue;
+export const enqueueDiscoveryRefreshJob = discoveryRefresh.enqueueJob;
 
-export function enqueueWeeklyFlowOperationJob(payload, options = {}) {
-  const queue = getWeeklyFlowOperationQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
-    runAt,
-  });
-  import("./weeklyFlowOperationWorker.js")
-    .then(({ startWeeklyFlowOperationWorker }) =>
-      startWeeklyFlowOperationWorker(),
-    )
-    .catch(() => {});
-  return jobId;
-}
+const discoveryPlaylistBuild = registerQueue({
+  name: "discovery-playlist-build",
+  visibilityTimeoutS: 3600,
+  maxAttempts: 4,
+  workerModule: "./discoveryPlaylistBuildWorker.js",
+  workerStartFn: "startDiscoveryPlaylistBuildWorker",
+});
 
-export function getPlaylistRetryQueue() {
-  if (!playlistRetryQueue) {
-    playlistRetryQueue = getHonkerDb().queue("playlist-retry", {
-      visibilityTimeoutS: 1800,
-      maxAttempts: 5,
-    });
-  }
-  return playlistRetryQueue;
-}
+export const getDiscoveryPlaylistBuildQueue = discoveryPlaylistBuild.getQueue;
+export const enqueueDiscoveryPlaylistBuildJob = discoveryPlaylistBuild.enqueueJob;
 
-export function enqueuePlaylistRetryJob(payload, options = {}) {
-  const queue = getPlaylistRetryQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
-    runAt,
-  });
-  import("./weeklyFlowPlaylistRetryWorker.js")
-    .then(({ startWeeklyFlowPlaylistRetryWorker }) =>
-      startWeeklyFlowPlaylistRetryWorker(),
-    )
-    .catch(() => {});
-  return jobId;
-}
+const discoveryUserRefresh = registerQueue({
+  name: "discovery-user-refresh",
+  visibilityTimeoutS: 3600,
+  maxAttempts: 4,
+  workerModule: "./discoveryUserRefreshWorker.js",
+  workerStartFn: "startDiscoveryUserRefreshWorker",
+});
 
-export function getPlaylistReserveBuildQueue() {
-  if (!playlistReserveBuildQueue) {
-    playlistReserveBuildQueue = getHonkerDb().queue("playlist-reserve-build", {
-      visibilityTimeoutS: 1800,
-      maxAttempts: 4,
-    });
-  }
-  return playlistReserveBuildQueue;
-}
+export const getDiscoveryUserRefreshQueue = discoveryUserRefresh.getQueue;
+export const enqueueDiscoveryUserRefreshJob = discoveryUserRefresh.enqueueJob;
 
-export function enqueuePlaylistReserveBuildJob(payload, options = {}) {
-  const queue = getPlaylistReserveBuildQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
-    runAt,
-  });
-  import("./weeklyFlowPlaylistReserveBuildWorker.js")
-    .then(({ startWeeklyFlowPlaylistReserveBuildWorker }) =>
-      startWeeklyFlowPlaylistReserveBuildWorker(),
-    )
-    .catch(() => {});
-  return jobId;
-}
+const weeklyFlowOperation = registerQueue({
+  name: "weekly-flow-operation",
+  visibilityTimeoutS: 3600,
+  maxAttempts: 3,
+  workerModule: "./weeklyFlowOperationWorker.js",
+  workerStartFn: "startWeeklyFlowOperationWorker",
+});
 
-export function getPlaylistMbidEnrichmentQueue() {
-  if (!playlistMbidEnrichmentQueue) {
-    playlistMbidEnrichmentQueue = getHonkerDb().queue(
-      "playlist-mbid-enrichment",
-      {
-        visibilityTimeoutS: 3600,
-        maxAttempts: 4,
-      },
-    );
-  }
-  return playlistMbidEnrichmentQueue;
-}
+export const getWeeklyFlowOperationQueue = weeklyFlowOperation.getQueue;
+export const enqueueWeeklyFlowOperationJob = weeklyFlowOperation.enqueueJob;
 
-export function enqueuePlaylistMbidEnrichmentJob(payload = {}, options = {}) {
-  const queue = getPlaylistMbidEnrichmentQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
-    runAt,
-  });
-  import("./playlistMbidEnrichmentWorker.js")
-    .then(({ startPlaylistMbidEnrichmentWorker }) =>
-      startPlaylistMbidEnrichmentWorker(),
-    )
-    .catch(() => {});
-  return jobId;
-}
+const playlistRetry = registerQueue({
+  name: "playlist-retry",
+  visibilityTimeoutS: 1800,
+  maxAttempts: 5,
+  workerModule: "./weeklyFlowPlaylistRetryWorker.js",
+  workerStartFn: "startWeeklyFlowPlaylistRetryWorker",
+});
 
-export function getSystemTaskQueue() {
-  if (!systemTaskQueue) {
-    systemTaskQueue = getHonkerDb().queue("system-task", {
-      visibilityTimeoutS: 3600,
-      maxAttempts: 3,
-    });
-  }
-  return systemTaskQueue;
-}
+export const getPlaylistRetryQueue = playlistRetry.getQueue;
+export const enqueuePlaylistRetryJob = playlistRetry.enqueueJob;
 
-export function enqueueSystemTaskJob(payload, options = {}) {
-  const queue = getSystemTaskQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
-    runAt,
-  });
-  import("./systemTaskWorker.js")
-    .then(({ startSystemTaskWorker }) => startSystemTaskWorker())
-    .catch(() => {});
-  return jobId;
-}
+const playlistReserveBuild = registerQueue({
+  name: "playlist-reserve-build",
+  visibilityTimeoutS: 1800,
+  maxAttempts: 4,
+  workerModule: "./weeklyFlowPlaylistReserveBuildWorker.js",
+  workerStartFn: "startWeeklyFlowPlaylistReserveBuildWorker",
+});
 
-export function getLibraryScanQueue() {
-  if (!libraryScanQueue) {
-    libraryScanQueue = getHonkerDb().queue("library-scan", {
-      visibilityTimeoutS: 600,
-      maxAttempts: 3,
-    });
-  }
-  return libraryScanQueue;
-}
+export const getPlaylistReserveBuildQueue = playlistReserveBuild.getQueue;
+export const enqueuePlaylistReserveBuildJob = playlistReserveBuild.enqueueJob;
 
-export function enqueueLibraryScanJob(payload = {}, options = {}) {
-  const queue = getLibraryScanQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
-    runAt,
-  });
-  import("./libraryScanWorker.js")
-    .then(({ startLibraryScanWorker }) => startLibraryScanWorker())
-    .catch(() => {});
-  return jobId;
-}
+const playlistMbidEnrichment = registerQueue({
+  name: "playlist-mbid-enrichment",
+  visibilityTimeoutS: 3600,
+  maxAttempts: 4,
+  workerModule: "./playlistMbidEnrichmentWorker.js",
+  workerStartFn: "startPlaylistMbidEnrichmentWorker",
+});
 
-export function getImagePrefetchQueue() {
-  if (!imagePrefetchQueue) {
-    imagePrefetchQueue = getHonkerDb().queue("image-prefetch", {
-      visibilityTimeoutS: 600,
-      maxAttempts: 4,
-    });
-  }
-  return imagePrefetchQueue;
-}
+export const getPlaylistMbidEnrichmentQueue = playlistMbidEnrichment.getQueue;
+export const enqueuePlaylistMbidEnrichmentJob = playlistMbidEnrichment.enqueueJob;
 
-export function enqueueImagePrefetchJob(payload, options = {}) {
-  const queue = getImagePrefetchQueue();
-  const runAt =
-    options.runAt != null
-      ? Math.floor(Number(options.runAt) / 1000)
-      : options.delaySeconds != null
-        ? Math.floor(Date.now() / 1000) + Number(options.delaySeconds)
-        : null;
-  const jobId = queue.enqueue(payload, {
-    priority: Number(options.priority || 0),
-    runAt,
-  });
-  import("./imagePrefetchWorker.js")
-    .then(({ startImagePrefetchWorker }) => startImagePrefetchWorker())
-    .catch(() => {});
-  return jobId;
-}
+const systemTask = registerQueue({
+  name: "system-task",
+  visibilityTimeoutS: 3600,
+  maxAttempts: 3,
+  workerModule: "./systemTaskWorker.js",
+  workerStartFn: "startSystemTaskWorker",
+});
+
+export const getSystemTaskQueue = systemTask.getQueue;
+export const enqueueSystemTaskJob = systemTask.enqueueJob;
+
+const libraryScan = registerQueue({
+  name: "library-scan",
+  visibilityTimeoutS: 600,
+  maxAttempts: 3,
+  workerModule: "./libraryScanWorker.js",
+  workerStartFn: "startLibraryScanWorker",
+});
+
+export const getLibraryScanQueue = libraryScan.getQueue;
+export const enqueueLibraryScanJob = libraryScan.enqueueJob;
+
+const imagePrefetch = registerQueue({
+  name: "image-prefetch",
+  visibilityTimeoutS: 600,
+  maxAttempts: 4,
+  workerModule: "./imagePrefetchWorker.js",
+  workerStartFn: "startImagePrefetchWorker",
+});
+
+export const getImagePrefetchQueue = imagePrefetch.getQueue;
+export const enqueueImagePrefetchJob = imagePrefetch.enqueueJob;
 
 export function getNotificationOutbox() {
   if (!notificationOutbox) {
@@ -449,7 +282,7 @@ export function enqueueNotification(payload) {
     .then(({ startNotificationOutboxWorker }) =>
       startNotificationOutboxWorker(),
     )
-    .catch(() => {});
+    .catch((err) => { console.warn(err); });
   return jobId;
 }
 
@@ -494,10 +327,11 @@ export function startHonkerScheduler() {
   getHonkerDb()
     .scheduler()
     .run(WORKER_ID, abort.signal)
-    .catch((error) => {
+    .catch(async (error) => {
       console.error("[honkerScheduler] loop error:", error);
       honkerSchedulerStarted = false;
       honkerSchedulerAbort = null;
+      const { scheduleHonkerComponentRestart } = await import("./honkerWorkerRuntime.js");
       scheduleHonkerComponentRestart("scheduler", startHonkerScheduler);
     });
 }
@@ -524,17 +358,10 @@ export function closeHonkerDb() {
   }
   honkerDb = null;
   openedHonkerDbPath = null;
-  pipelineQueue = null;
-  discoveryRefreshQueue = null;
-  discoveryPlaylistBuildQueue = null;
-  discoveryUserRefreshQueue = null;
-  weeklyFlowOperationQueue = null;
-  playlistRetryQueue = null;
-  playlistReserveBuildQueue = null;
-  playlistMbidEnrichmentQueue = null;
-  systemTaskQueue = null;
-  libraryScanQueue = null;
-  imagePrefetchQueue = null;
+  for (const reset of allQueues) {
+    reset();
+  }
+  queueByName.clear();
   notificationOutbox = null;
 }
 
@@ -700,34 +527,10 @@ export function sweepAllHonkerQueues() {
 }
 
 export function getHonkerQueueByName(queueName) {
-  switch (queueName) {
-    case "slskd-pipeline":
-      return getPipelineQueue();
-    case "discovery-refresh":
-      return getDiscoveryRefreshQueue();
-    case "discovery-playlist-build":
-      return getDiscoveryPlaylistBuildQueue();
-    case "discovery-user-refresh":
-      return getDiscoveryUserRefreshQueue();
-    case "weekly-flow-operation":
-      return getWeeklyFlowOperationQueue();
-    case "playlist-retry":
-      return getPlaylistRetryQueue();
-    case "playlist-reserve-build":
-      return getPlaylistReserveBuildQueue();
-    case "playlist-mbid-enrichment":
-      return getPlaylistMbidEnrichmentQueue();
-    case "system-task":
-      return getSystemTaskQueue();
-    case "library-scan":
-      return getLibraryScanQueue();
-    case "image-prefetch":
-      return getImagePrefetchQueue();
-    case "_outbox:notifications":
-      return getNotificationOutbox().queue;
-    default:
-      return null;
+  if (queueName === "_outbox:notifications") {
+    return getNotificationOutbox().queue;
   }
+  return queueByName.get(queueName)?.getQueue() ?? null;
 }
 
 export function getHonkerQueueNextClaimAt(queueName) {

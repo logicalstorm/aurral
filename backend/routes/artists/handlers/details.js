@@ -1,4 +1,5 @@
 import { UUID_REGEX } from "../../../config/constants.js";
+import { logger } from "../../../services/logger.js";
 import {
   getLastfmApiKey,
   lastfmRequest,
@@ -171,7 +172,7 @@ export default function registerDetails(router) {
       });
 
       if (!UUID_REGEX.test(mbid)) {
-        console.log(`[Artists Route] Invalid MBID format: ${mbid}`);
+        logger.api("warn", "Invalid MBID format", { mbid });
         return res.status(400).json({
           error: "Invalid MBID format",
           message: `"${mbid}" is not a valid MusicBrainz ID. MBIDs must be UUIDs.`,
@@ -179,9 +180,7 @@ export default function registerDetails(router) {
       }
 
       if (pendingArtistRequests.has(requestKey)) {
-        console.log(
-          `[Artists Route] Request for ${requestKey} already in progress, waiting...`,
-        );
+        logger.api("info", "Request already in progress, waiting", { requestKey });
         try {
           const data = await pendingArtistRequests.get(requestKey);
           res.setHeader("Content-Type", "application/json");
@@ -194,7 +193,7 @@ export default function registerDetails(router) {
         }
       }
 
-      console.log(`[Artists Route] Fetching artist details for MBID: ${mbid}`);
+      logger.api("info", "Fetching artist details", { mbid });
 
       const { lidarrClient } =
         await import("../../../services/lidarrClient.js");
@@ -212,9 +211,7 @@ export default function registerDetails(router) {
         try {
           lidarrArtist = await lidarrClient.getArtistByMbid(mbid);
           if (lidarrArtist) {
-            console.log(
-              `[Artists Route] Found artist in Lidarr: ${lidarrArtist.artistName}`,
-            );
+            logger.api("info", "Found artist in Lidarr", { artistName: lidarrArtist.artistName });
             const libraryArtist = await libraryManager.getArtist(mbid);
             if (libraryArtist) {
               lidarrAlbums = await libraryManager.getAlbums(
@@ -224,9 +221,7 @@ export default function registerDetails(router) {
             }
           }
         } catch (error) {
-          console.warn(
-            `[Artists Route] Failed to fetch from Lidarr: ${error.message}`,
-          );
+          logger.api("warn", "Failed to fetch from Lidarr", { mbid, error: error.message });
         }
       }
 
@@ -369,11 +364,8 @@ export default function registerDetails(router) {
         pendingArtistRequests.delete(requestKey);
       }
     } catch (error) {
-      console.error(
-        `[Artists Route] Unexpected error in artist details route:`,
-        error.message,
-      );
-      console.error(`[Artists Route] Error stack:`, error.stack);
+      logger.api("error", "Unexpected error in artist details route", { error: error.message });
+      logger.api("error", "Error stack", { stack: error.stack });
       res.status(500).json({
         error: "Failed to fetch artist details",
         message: error.message,

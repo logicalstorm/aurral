@@ -3,10 +3,12 @@ import path from "path";
 import { dbOps, userOps } from "../config/db-helpers.js";
 import { dbHelpers } from "../config/db-sqlite.js";
 import { hasPermission } from "../middleware/auth.js";
+import { normalizeTypeName, getTypeName } from "./typeUtils.js";
 import {
   musicbrainzRequest,
   musicbrainzGetArtistReleaseGroups,
 } from "./apiClients.js";
+import { logger } from "./logger.js";
 
 const LIDARR_RETRY_MS = 60000;
 const FULL_LIST_FALLBACK_COOLDOWN_MS = 6 * 60 * 60 * 1000;
@@ -121,7 +123,7 @@ function scheduleLidarrRetry() {
     .then(({ enqueueSystemTaskJob }) => {
       enqueueSystemTaskJob({ kind: "lidarr-retry" }, { delaySeconds: 60 });
     })
-    .catch(() => {});
+    .catch((err) => { logger.warn('library', err); });
 }
 
 export function getCachedArtistCount() {
@@ -294,7 +296,7 @@ export class LibraryManager {
           options.metadataProfileId ||
           lidarrSettings.integrations?.lidarr?.metadataProfileId,
       });
-      console.log(`[LibraryManager] Added artist "${artistName}" to Lidarr`);
+      logger.info('library', `[LibraryManager] Added artist "${artistName}" to Lidarr`);
       const mappedArtist = this.mapLidarrArtist(lidarrArtist);
       upsertCachedArtist(mappedArtist);
       import("./aurralHistoryService.js")
@@ -304,7 +306,7 @@ export class LibraryManager {
             artistMbid: mappedArtist.mbid || mbid,
           }),
         )
-        .catch(() => {});
+        .catch((err) => { logger.warn('library', err); });
       return mappedArtist;
     } catch (error) {
       if (isArtistAlreadyAddedError(error)) {
@@ -315,9 +317,7 @@ export class LibraryManager {
           }
         } catch {}
       }
-      console.error(
-        `[LibraryManager] Failed to add artist to Lidarr: ${error.message}`,
-      );
+      logger.error('library', `[LibraryManager] Failed to add artist to Lidarr: ${error.message}`);
       return { error: error.message };
     }
   }
@@ -536,10 +536,7 @@ export class LibraryManager {
               });
             }
           } catch (err) {
-            console.error(
-              `Failed to monitor/search album ${album.albumName}:`,
-              err.message,
-            );
+            logger.error('library', `Failed to monitor/search album ${album.albumName}: ${err.message}`);
           }
         }),
       );
@@ -602,19 +599,6 @@ export class LibraryManager {
                 )
               : null;
             if (profile?.primaryAlbumTypes) {
-              const normalizeTypeName = (value) =>
-                String(value || "")
-                  .toLowerCase()
-                  .replace(/[^a-z0-9]/g, "");
-              const getTypeName = (item) => {
-                if (!item) return "";
-                if (typeof item === "string") return item;
-                if (typeof item.name === "string") return item.name;
-                if (typeof item.value === "string") return item.value;
-                if (typeof item.albumType?.name === "string")
-                  return item.albumType.name;
-                return "";
-              };
               const allowed = new Set();
               for (const item of profile.primaryAlbumTypes) {
                 const name = getTypeName(item);
@@ -634,10 +618,6 @@ export class LibraryManager {
 
       let releaseGroups = await musicbrainzGetArtistReleaseGroups(mbid);
       if (allowedPrimaryTypes) {
-        const normalizeTypeName = (value) =>
-          String(value || "")
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, "");
         releaseGroups = releaseGroups.filter((rg) =>
           allowedPrimaryTypes.has(normalizeTypeName(rg["primary-type"])),
         );
@@ -650,14 +630,11 @@ export class LibraryManager {
           triggerSearch: false,
         });
         if (result?.error) {
-          console.error(`Failed to add album ${rg.title}:`, result.error);
+          logger.error('library', `Failed to add album ${rg.title}: ${result.error}`);
         }
       }
     } catch (error) {
-      console.error(
-        `Failed to fetch albums for artist ${mbid}:`,
-        error.message,
-      );
+      logger.error('library', `Failed to fetch albums for artist ${mbid}: ${error.message}`);
     }
   }
 
@@ -692,10 +669,7 @@ export class LibraryManager {
                     );
                   } catch (err) {
                     if (!err.message.includes("already exists")) {
-                      console.error(
-                        `Failed to add track ${recording.title}:`,
-                        err.message,
-                      );
+                      logger.error('library', `Failed to add track ${recording.title}: ${err.message}`);
                     }
                   }
                 }
@@ -705,10 +679,7 @@ export class LibraryManager {
         }
       }
     } catch (error) {
-      console.error(
-        `Failed to fetch tracks for album ${releaseGroupMbid}:`,
-        error.message,
-      );
+      logger.error('library', `Failed to fetch tracks for album ${releaseGroupMbid}: ${error.message}`);
     }
   }
 
@@ -799,9 +770,7 @@ export class LibraryManager {
           normalizedAlbumId,
           options,
         ).catch((error) => {
-          console.error(
-            `[LibraryManager] Failed to stabilize requested album monitoring: ${error.message}`,
-          );
+          logger.error('library', `[LibraryManager] Failed to stabilize requested album monitoring: ${error.message}`);
         });
       }, delayMs);
       timeout.unref?.();
@@ -835,11 +804,7 @@ export class LibraryManager {
         scheduleLidarrRetry();
         if (wasHealthy) {
           const msg = (error && error.message) || String(error);
-          console.warn(
-            "[LibraryManager] Lidarr unavailable:",
-            msg,
-            "- using cached artists (if any). Retrying every 60s.",
-          );
+          logger.warn('library', `[LibraryManager] Lidarr unavailable: ${msg} - using cached artists (if any). Retrying every 60s.`);
         }
         return _cachedArtists;
       }
@@ -982,9 +947,7 @@ export class LibraryManager {
           updates.monitorOption || lidarrArtist.monitor || "none";
         const normalizedMonitorOption = monitorOption || "none";
         await lidarr.updateArtistMonitoring(lidarrArtist.id, monitorOption);
-        console.log(
-          `[LibraryManager] Updated Lidarr monitoring for "${lidarrArtist.artistName}" to "${monitorOption}"`,
-        );
+        logger.info('library', `[LibraryManager] Updated Lidarr monitoring for "${lidarrArtist.artistName}" to "${monitorOption}"`);
         const updated = await lidarr.getArtist(lidarrArtist.id);
         const mapped = this.mapLidarrArtist(updated);
         mapped.monitorOption = normalizedMonitorOption;
@@ -996,9 +959,7 @@ export class LibraryManager {
       }
       return this.mapLidarrArtist(lidarrArtist);
     } catch (error) {
-      console.error(
-        `[LibraryManager] Failed to update artist in Lidarr: ${error.message}`,
-      );
+      logger.error('library', `[LibraryManager] Failed to update artist in Lidarr: ${error.message}`);
       return { error: error.message };
     }
   }
@@ -1014,14 +975,10 @@ export class LibraryManager {
         return { success: false, error: "Artist not found in Lidarr" };
       await lidarr.deleteArtist(lidarrArtist.id, deleteFiles);
       removeCachedArtistByMbid(mbid);
-      console.log(
-        `[LibraryManager] Deleted artist "${lidarrArtist.artistName}" from Lidarr`,
-      );
+      logger.info('library', `[LibraryManager] Deleted artist "${lidarrArtist.artistName}" from Lidarr`);
       return { success: true };
     } catch (error) {
-      console.error(
-        `[LibraryManager] Failed to delete artist from Lidarr: ${error.message}`,
-      );
+      logger.error('library', `[LibraryManager] Failed to delete artist from Lidarr: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
@@ -1175,9 +1132,7 @@ export class LibraryManager {
       const updatedArtist = await lidarr.getArtist(artistId);
       return this.mapLidarrAlbum(lidarrAlbum, updatedArtist);
     } catch (error) {
-      console.error(
-        `[LibraryManager] Failed to add album to Lidarr: ${error.message}`,
-      );
+      logger.error('library', `[LibraryManager] Failed to add album to Lidarr: ${error.message}`);
       return { error: error.message };
     }
   }
@@ -1334,9 +1289,7 @@ export class LibraryManager {
         : [];
       return artistAlbums.map((a) => this.mapLidarrAlbum(a, resolvedArtist));
     } catch (error) {
-      console.error(
-        `[LibraryManager] Failed to fetch albums from Lidarr: ${error.message}`,
-      );
+      logger.error('library', `[LibraryManager] Failed to fetch albums from Lidarr: ${error.message}`);
       return [];
     }
   }
@@ -1439,9 +1392,7 @@ export class LibraryManager {
           await new Promise((r) => setTimeout(r, delayMs));
           continue;
         }
-        console.error(
-          `[LibraryManager] Failed to update album in Lidarr: ${error.message}`,
-        );
+        logger.error('library', `[LibraryManager] Failed to update album in Lidarr: ${error.message}`);
         return { error: error.message };
       }
     }
@@ -1457,9 +1408,7 @@ export class LibraryManager {
       await lidarr.deleteAlbum(id, deleteFiles);
       return { success: true };
     } catch (error) {
-      console.error(
-        `[LibraryManager] Failed to delete album from Lidarr: ${error.message}`,
-      );
+      logger.error('library', `[LibraryManager] Failed to delete album from Lidarr: ${error.message}`);
       return { success: false, error: error.message };
     }
   }
@@ -1605,9 +1554,7 @@ export class LibraryManager {
       if (error.message && error.message.includes("404")) {
         return [];
       }
-      console.error(
-        `[LibraryManager] Failed to fetch tracks from Lidarr: ${error.message}`,
-      );
+      logger.error('library', `[LibraryManager] Failed to fetch tracks from Lidarr: ${error.message}`);
       return [];
     }
   }
@@ -1653,9 +1600,7 @@ export class LibraryManager {
       }
       return queue;
     } catch (error) {
-      console.error(
-        `[LibraryManager] Failed to build playback queue: ${error.message}`,
-      );
+      logger.error('library', `[LibraryManager] Failed to build playback queue: ${error.message}`);
       return _playbackQueueCache?.tracks || [];
     }
   }

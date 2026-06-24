@@ -220,7 +220,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       ]);
       const updatedSettings = normalizeSettings(savedSettings);
       setSettingsState(updatedSettings);
-      setOriginalSettings(JSON.parse(JSON.stringify(updatedSettings)));
+      setOriginalSettings(structuredClone(updatedSettings));
       setHasUnsavedChanges(false);
       setTimeout(() => {
         comparisonEnabledRef.current = true;
@@ -292,7 +292,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
         const savedSettings = await updateAppSettings(toSave);
         const normalizedSettings = normalizeSettings(savedSettings);
         setSettingsState(normalizedSettings);
-        setOriginalSettings(JSON.parse(JSON.stringify(normalizedSettings)));
+        setOriginalSettings(structuredClone(normalizedSettings));
         setHasUnsavedChanges(false);
         showSuccess("Settings saved successfully!");
         await refreshHealth();

@@ -21,56 +21,18 @@ import {
   joinUnderRoot,
   sanitizePathPart,
 } from "./playlistDownloadUtils.js";
+import {
+  getPayloadCandidate,
+  hasNextCandidate,
+  buildNextCandidatePayload,
+  mergeSearchResults,
+  finalizePipelineJobSuccess,
+} from "./pipelineHelpers.js";
 
 const MIN_USENET_CANDIDATES = 2;
 const MAX_DOWNLOAD_CANDIDATES = 5;
 const POLL_DELAY_SECONDS = 5;
 const MAX_POLL_ATTEMPTS = 720;
-
-function getPayloadCandidate(payload) {
-  const candidateIndex = Number(payload?.candidateIndex || 0);
-  return (
-    payload?.candidate ||
-    (Array.isArray(payload?.candidates)
-      ? payload.candidates[candidateIndex]
-      : null)
-  );
-}
-
-function hasNextCandidate(payload) {
-  return (
-    Number(payload?.candidateIndex || 0) + 1 <
-    (Array.isArray(payload?.candidates) ? payload.candidates.length : 0)
-  );
-}
-
-function buildNextCandidatePayload(payload) {
-  return {
-    ...payload,
-    phase: "download",
-    candidate: null,
-    candidateIndex: Number(payload?.candidateIndex || 0) + 1,
-    pollAttempts: 0,
-    nzbId: null,
-    history: null,
-  };
-}
-
-function mergeSearchResults(aggregated, seen, releases) {
-  for (const release of releases) {
-    const key = [
-      release.guid,
-      release.downloadUrl,
-      release.indexerId,
-      release.title,
-    ]
-      .map((entry) => String(entry || "").trim().toLowerCase())
-      .join("\0");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    aggregated.push(release);
-  }
-}
 
 function hasEnoughCandidates(aggregated, resolvedTrack) {
   return (
@@ -194,7 +156,7 @@ async function handleUsenetSearch(payload, helpers) {
   });
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobSearching }) => recordTrackJobSearching(job))
-    .catch(() => {});
+    .catch((err) => { console.warn(err); });
 
   const resolvedTrack = buildResolvedTrack(job, payload.track);
   const searchTiers = buildFlowSearchTiers(resolvedTrack);
@@ -209,7 +171,11 @@ async function handleUsenetSearch(payload, helpers) {
       queries.push(query);
       try {
         const releases = await prowlarrClient.search(query);
-        mergeSearchResults(aggregated, seen, releases);
+        mergeSearchResults(aggregated, seen, releases, (release) =>
+          [release.guid, release.downloadUrl, release.indexerId, release.title]
+            .map((entry) => String(entry || "").trim().toLowerCase())
+            .join("\0"),
+        );
       } catch (error) {
         lastError = error?.message || String(error);
         logger.slskd("warn", "Prowlarr search failed", {
@@ -267,7 +233,7 @@ async function handleUsenetDownload(payload, helpers) {
   }
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobDownloading }) => recordTrackJobDownloading(job))
-    .catch(() => {});
+    .catch((err) => { console.warn(err); });
   let appended;
   try {
     appended = await nzbgetClient.appendUrl({
@@ -283,7 +249,7 @@ async function handleUsenetDownload(payload, helpers) {
       releaseTitle: release.title,
       error: message,
     });
-    if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload);
+    if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload, { nzbId: null, history: null });
     return helpers.failOrTryNextSource(payload, job, message);
   }
   downloadTracker.updateDownloadMetadata(job.id, {
@@ -314,7 +280,7 @@ async function handleUsenetPoll(payload, helpers) {
   if (job.status === "failed" || job.status === "done") return null;
   const pollAttempts = Number(payload.pollAttempts || 0) + 1;
   if (pollAttempts > MAX_POLL_ATTEMPTS) {
-    if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload);
+    if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload, { nzbId: null, history: null });
     return helpers.failOrTryNextSource(payload, job, "NZBGet polling timed out");
   }
   const historyItem = await nzbgetClient.getHistoryItem(payload.nzbId);
@@ -329,7 +295,7 @@ async function handleUsenetPoll(payload, helpers) {
       };
     }
     if (state === "failed") {
-      if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload);
+      if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload, { nzbId: null, history: null });
       return helpers.failOrTryNextSource(
         payload,
         job,
@@ -367,13 +333,13 @@ async function handleUsenetFinalize(payload, helpers) {
     const reason =
       found.validation?.reason ||
       "NZBGet completed, but no matching audio file was found";
-    if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload);
+    if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload, { nzbId: null, history: null });
     return helpers.failOrTryNextSource(payload, job, reason);
   }
 
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobMoving }) => recordTrackJobMoving(job))
-    .catch(() => {});
+    .catch((err) => { console.warn(err); });
   const playlistRoot = resolvePlaylistRoot();
   const destination = String(payload.destination || "").trim();
   const ext = path.extname(found.filePath).toLowerCase();
@@ -384,22 +350,12 @@ async function handleUsenetFinalize(payload, helpers) {
     found.filePath,
     finalPath,
   );
-  downloadTracker.setDone(
-    job.id,
+  return finalizePipelineJobSuccess({
+    downloadTracker,
+    job,
     committedFinalPath,
-    candidate?.resolvedAlbumName || job.albumName,
-  );
-  import("./aurralHistoryService.js")
-    .then(({ recordTrackJobCompleted }) => recordTrackJobCompleted(job))
-    .catch(() => {});
-  const playlistType = job.playlistId || job.playlistType;
-  const { playlistManager } = await import("./weeklyFlowPlaylistManager.js");
-  await playlistManager.refreshPlaylist(playlistType);
-  playlistManager.scheduleScanLibrary();
-  const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
-  weeklyFlowWorker.wake(0);
-  await weeklyFlowWorker.checkPlaylistComplete(playlistType);
-  return null;
+    album: candidate?.resolvedAlbumName || job.albumName,
+  });
 }
 
 export async function processUsenetPipelinePayload(payload, helpers = {}) {

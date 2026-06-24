@@ -4,7 +4,6 @@ import {
   useMemo,
   useState,
 } from "react";
-import PropTypes from "prop-types";
 import { useLocation } from "react-router-dom";
 import { DiscoverRecentContext } from "./discoverRecentContext";
 import {
@@ -72,19 +71,6 @@ function DiscoverFlowLocationSync({
 
   return null;
 }
-
-DiscoverFlowLocationSync.propTypes = {
-  recentPages: PropTypes.arrayOf(
-    PropTypes.shape({
-      id: PropTypes.string.isRequired,
-      path: PropTypes.string.isRequired,
-      label: PropTypes.string.isRequired,
-    }),
-  ).isRequired,
-  discoverFlowActive: PropTypes.bool.isRequired,
-  setDiscoverFlowActive: PropTypes.func.isRequired,
-  addRecentPage: PropTypes.func.isRequired,
-};
 
 export function DiscoverRecentProvider({ children }) {
   const location = useLocation();
@@ -210,7 +196,3 @@ export function DiscoverRecentProvider({ children }) {
     </DiscoverRecentContext.Provider>
   );
 }
-
-DiscoverRecentProvider.propTypes = {
-  children: PropTypes.node.isRequired,
-};

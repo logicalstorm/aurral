@@ -249,21 +249,6 @@ test("task status collapses duplicate scheduled discovery refresh jobs", async (
   assert.equal(worker?.scheduled, 1);
 });
 
-test("discovery enrichment uses user-facing description", async () => {
-  const queue = honkerDb.getDiscoveryRecommendationEnrichmentQueue();
-  queue.enqueue({ discoveryRunId: "1781824554740 H4di59hk" });
-
-  const status = await taskStatus.getHonkerTaskStatus();
-  const entry = status.queue.find(
-    (row) => row.queue === "discovery-recommendation-enrichment",
-  );
-  assert.match(
-    entry?.description || "",
-    /Finishes scoring and ranking for the current discovery refresh/,
-  );
-  assert.match(entry?.payloadSummary || "", /Run: 1781824554740 H4di59hk/);
-});
-
 test("task status groups duplicate completed system task runs", async () => {
   const queue = honkerDb.getSystemTaskQueue();
   for (let index = 0; index < 2; index += 1) {

@@ -1,9 +1,9 @@
 import express from "express";
+import { logger } from "../services/logger.js";
 import { dbOps } from "../config/db-helpers.js";
 import {
   DEFAULT_METADATA_BASE_URL,
   DEFAULT_SEARCH_URL,
-  LEGACY_METADATA_BASE_URL,
   defaultData,
 } from "../config/constants.js";
 import { reconcileLocalNetworkBypassSetting } from "../middleware/auth.js";
@@ -22,9 +22,14 @@ const router = express.Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
-function normalizeMetadataBaseUrl(baseUrl) {
-  const trimmed = String(baseUrl || "").trim().replace(/\/+$/, "");
-  return trimmed === LEGACY_METADATA_BASE_URL ? DEFAULT_METADATA_BASE_URL : trimmed;
+function mergeIntegrations(existing, input, keys) {
+  const merged = { ...existing, ...input };
+  for (const key of keys) {
+    merged[key] = input[key]
+      ? { ...(existing[key] || {}), ...input[key] }
+      : existing[key];
+  }
+  return merged;
 }
 
 router.get("/", noCache, (req, res) => {
@@ -51,19 +56,16 @@ router.get("/", noCache, (req, res) => {
       const legacyMusicbrainz = dbOps.getSettings()?.integrations?.musicbrainz || {};
       settings.integrations.metadata = {
         provider: "brainzmash",
-        baseUrl: normalizeMetadataBaseUrl(
-          String(legacyMusicbrainz.customUrl || "").trim().replace(/\/ws\/2\/?$/, "") ||
+        baseUrl: String(legacyMusicbrainz.customUrl || "").trim().replace(/\/ws\/2\/?$/, "") ||
             DEFAULT_METADATA_BASE_URL,
-        ),
         userAgentSuffix: "",
         enableNarrowFallbacks: true,
       };
     } else {
       settings.integrations.metadata = {
         ...settings.integrations.metadata,
-        baseUrl: normalizeMetadataBaseUrl(
-          settings.integrations.metadata.baseUrl || DEFAULT_METADATA_BASE_URL,
-        ),
+        baseUrl: String(settings.integrations.metadata.baseUrl || "").trim().replace(/\/+$/, "") ||
+            DEFAULT_METADATA_BASE_URL,
       };
     }
     settings.security = {
@@ -78,7 +80,7 @@ router.get("/", noCache, (req, res) => {
         settings.downloadFolderPath || resolvePlaylistRoot(),
     });
   } catch (error) {
-    console.error("Settings GET error:", error);
+    logger.error("settings", "Settings GET error:", error);
     res
       .status(500)
       .json({ error: "Failed to fetch settings", message: error.message });
@@ -228,7 +230,7 @@ router.post("/", async (req, res) => {
           error: `Invalid metadata base URL: ${baseUrlValidation.error}`,
         });
       }
-      nextMetadata.baseUrl = normalizeMetadataBaseUrl(baseUrlValidation.url);
+      nextMetadata.baseUrl = String(baseUrlValidation.url || "").trim().replace(/\/+$/, "");
       nextMetadata.userAgentSuffix =
         typeof nextMetadata.userAgentSuffix === "string"
           ? nextMetadata.userAgentSuffix.trim()
@@ -358,104 +360,22 @@ router.post("/", async (req, res) => {
       );
     }
 
+    const INTEGRATION_KEYS = ["lidarr", "navidrome", "slskd", "prowlarr", "nzbget", "lastfm", "ticketmaster", "metadata", "search", "general", "gotify", "webhookEvents"];
     let mergedIntegrations =
       currentSettings.integrations || defaultData.settings.integrations || {};
     if (integrations) {
-      mergedIntegrations = {
-        ...mergedIntegrations,
-        ...integrations,
-        lidarr: integrations.lidarr
-          ? {
-              ...(mergedIntegrations.lidarr || {}),
-              ...integrations.lidarr,
-            }
-          : mergedIntegrations.lidarr,
-        navidrome: integrations.navidrome
-          ? {
-              ...(mergedIntegrations.navidrome || {}),
-              ...integrations.navidrome,
-            }
-          : mergedIntegrations.navidrome,
-        plex: integrations.plex
-          ? {
-              ...(mergedIntegrations.plex || {}),
-              ...integrations.plex,
-              // Never let a blank token/clientId from the client wipe the
-              // stored credentials (the UI doesn't always carry them).
-              token:
-                integrations.plex.token ||
-                mergedIntegrations.plex?.token ||
-                "",
-              clientId:
-                integrations.plex.clientId ||
-                mergedIntegrations.plex?.clientId ||
-                "",
-            }
-          : mergedIntegrations.plex,
-        slskd: integrations.slskd
-          ? {
-              ...(mergedIntegrations.slskd || {}),
-              ...integrations.slskd,
-            }
-          : mergedIntegrations.slskd,
-        prowlarr: integrations.prowlarr
-          ? {
-              ...(mergedIntegrations.prowlarr || {}),
-              ...integrations.prowlarr,
-            }
-          : mergedIntegrations.prowlarr,
-        nzbget: integrations.nzbget
-          ? {
-              ...(mergedIntegrations.nzbget || {}),
-              ...integrations.nzbget,
-            }
-          : mergedIntegrations.nzbget,
-        lastfm: integrations.lastfm
-          ? {
-              ...(mergedIntegrations.lastfm || {}),
-              ...integrations.lastfm,
-            }
-          : mergedIntegrations.lastfm,
-        ticketmaster: integrations.ticketmaster
-          ? {
-              ...(mergedIntegrations.ticketmaster || {}),
-              ...integrations.ticketmaster,
-            }
-          : mergedIntegrations.ticketmaster,
-        metadata: integrations.metadata
-          ? {
-              ...(mergedIntegrations.metadata || {}),
-              ...integrations.metadata,
-            }
-          : mergedIntegrations.metadata,
-        search: integrations.search
-          ? {
-              ...(mergedIntegrations.search || {}),
-              ...integrations.search,
-            }
-          : mergedIntegrations.search,
-        general: integrations.general
-          ? {
-              ...(mergedIntegrations.general || {}),
-              ...integrations.general,
-            }
-          : mergedIntegrations.general,
-        gotify: integrations.gotify
-          ? {
-              ...(mergedIntegrations.gotify || {}),
-              ...integrations.gotify,
-            }
-          : mergedIntegrations.gotify,
-        webhooks: integrations.webhooks !== undefined
-          ? integrations.webhooks
-          : mergedIntegrations.webhooks,
-        webhookEvents: integrations.webhookEvents
-          ? {
-              ...(mergedIntegrations.webhookEvents || {}),
-              ...integrations.webhookEvents,
-            }
-          : mergedIntegrations.webhookEvents,
-      };
+      mergedIntegrations = mergeIntegrations(mergedIntegrations, integrations, INTEGRATION_KEYS);
+      mergedIntegrations.plex = integrations.plex
+        ? {
+            ...(mergedIntegrations.plex || {}),
+            ...integrations.plex,
+            token: integrations.plex.token || mergedIntegrations.plex?.token || "",
+            clientId: integrations.plex.clientId || mergedIntegrations.plex?.clientId || "",
+          }
+        : mergedIntegrations.plex;
+      mergedIntegrations.webhooks = integrations.webhooks !== undefined
+        ? integrations.webhooks
+        : mergedIntegrations.webhooks;
     }
 
     if (mergedIntegrations?.coverArtArchive) {
@@ -535,7 +455,7 @@ router.post("/", async (req, res) => {
     }
     res.json(reconciled);
   } catch (error) {
-    console.error("Settings POST error:", error);
+    logger.error("settings", "Settings POST error:", error);
     res
       .status(500)
       .json({ error: "Failed to save settings", message: error.message });
@@ -611,52 +531,21 @@ router.post("/tasks/clear-stale", noCache, async (_req, res) => {
 router.get("/lidarr/profiles", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
+    const { resolveLidarrTestCredentials, validateLidarrTestCredentials, withTemporaryLidarrClient } =
+      await import("../services/lidarrTestSession.js");
 
-    const testUrl = req.query.url;
-    const testApiKey = req.query.apiKey;
-
-    let url, apiKey;
-    if (testUrl && testApiKey) {
-      url = testUrl.trim();
-      apiKey = testApiKey.trim();
-    } else {
-      lidarrClient.updateConfig();
-      const config = lidarrClient.getConfig();
-      url = config.url;
-      apiKey = config.apiKey;
+    const { url, apiKey } = resolveLidarrTestCredentials(req.query, lidarrClient);
+    const validation = validateLidarrTestCredentials(url, apiKey);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error });
     }
 
-    if (!url || !apiKey) {
-      return res.status(400).json({
-        error: "Lidarr not configured",
-        message: "Please configure Lidarr URL and API key in settings first",
-      });
-    }
-    const urlValidation = validateExternalUrl(url);
-    if (!urlValidation.valid) {
-      return res.status(400).json({ error: urlValidation.error });
-    }
-    url = urlValidation.url;
-
-    const originalConfig = { ...lidarrClient.config };
-    const originalApiPath = lidarrClient.apiPath;
-
-    lidarrClient.config = {
-      url: url.replace(/\/+$/, ""),
-      apiKey: apiKey.trim(),
-    };
-    lidarrClient.apiPath = "/api/v1";
-
-    try {
-      const profiles = await lidarrClient.getQualityProfiles(true);
-      res.json(profiles);
-    } finally {
-      lidarrClient.config = originalConfig;
-      lidarrClient.apiPath = originalApiPath;
-      lidarrClient.updateConfig();
-    }
+    const profiles = await withTemporaryLidarrClient(validation.url, apiKey, (client) =>
+      client.getQualityProfiles(true),
+    );
+    res.json(profiles);
   } catch (error) {
-    console.error("[Settings] Failed to fetch Lidarr profiles:", error);
+    logger.error("settings", "Failed to fetch Lidarr profiles:", error);
     res.status(500).json({
       error: "Failed to fetch Lidarr quality profiles",
       message: error.message,
@@ -668,55 +557,21 @@ router.get("/lidarr/profiles", async (req, res) => {
 router.get("/lidarr/metadata-profiles", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
+    const { resolveLidarrTestCredentials, validateLidarrTestCredentials, withTemporaryLidarrClient } =
+      await import("../services/lidarrTestSession.js");
 
-    const testUrl = req.query.url;
-    const testApiKey = req.query.apiKey;
-
-    let url, apiKey;
-    if (testUrl && testApiKey) {
-      url = testUrl.trim();
-      apiKey = testApiKey.trim();
-    } else {
-      lidarrClient.updateConfig();
-      const config = lidarrClient.getConfig();
-      url = config.url;
-      apiKey = config.apiKey;
+    const { url, apiKey } = resolveLidarrTestCredentials(req.query, lidarrClient);
+    const validation = validateLidarrTestCredentials(url, apiKey);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error });
     }
 
-    if (!url || !apiKey) {
-      return res.status(400).json({
-        error: "Lidarr not configured",
-        message: "Please configure Lidarr URL and API key in settings first",
-      });
-    }
-    const urlValidation = validateExternalUrl(url);
-    if (!urlValidation.valid) {
-      return res.status(400).json({ error: urlValidation.error });
-    }
-    url = urlValidation.url;
-
-    const originalConfig = { ...lidarrClient.config };
-    const originalApiPath = lidarrClient.apiPath;
-
-    lidarrClient.config = {
-      url: url.replace(/\/+$/, ""),
-      apiKey: apiKey.trim(),
-    };
-    lidarrClient.apiPath = "/api/v1";
-
-    try {
-      const profiles = await lidarrClient.getMetadataProfiles(true);
-      res.json(profiles);
-    } finally {
-      lidarrClient.config = originalConfig;
-      lidarrClient.apiPath = originalApiPath;
-      lidarrClient.updateConfig();
-    }
-  } catch (error) {
-    console.error(
-      "[Settings] Failed to fetch Lidarr metadata profiles:",
-      error,
+    const profiles = await withTemporaryLidarrClient(validation.url, apiKey, (client) =>
+      client.getMetadataProfiles(true),
     );
+    res.json(profiles);
+  } catch (error) {
+    logger.error("settings", "Failed to fetch Lidarr metadata profiles:", error);
     res.status(500).json({
       error: "Failed to fetch Lidarr metadata profiles",
       message: error.message,
@@ -728,52 +583,21 @@ router.get("/lidarr/metadata-profiles", async (req, res) => {
 router.get("/lidarr/tags", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
+    const { resolveLidarrTestCredentials, validateLidarrTestCredentials, withTemporaryLidarrClient } =
+      await import("../services/lidarrTestSession.js");
 
-    const testUrl = req.query.url;
-    const testApiKey = req.query.apiKey;
-
-    let url, apiKey;
-    if (testUrl && testApiKey) {
-      url = testUrl.trim();
-      apiKey = testApiKey.trim();
-    } else {
-      lidarrClient.updateConfig();
-      const config = lidarrClient.getConfig();
-      url = config.url;
-      apiKey = config.apiKey;
+    const { url, apiKey } = resolveLidarrTestCredentials(req.query, lidarrClient);
+    const validation = validateLidarrTestCredentials(url, apiKey);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error });
     }
 
-    if (!url || !apiKey) {
-      return res.status(400).json({
-        error: "Lidarr not configured",
-        message: "Please configure Lidarr URL and API key in settings first",
-      });
-    }
-    const urlValidation = validateExternalUrl(url);
-    if (!urlValidation.valid) {
-      return res.status(400).json({ error: urlValidation.error });
-    }
-    url = urlValidation.url;
-
-    const originalConfig = { ...lidarrClient.config };
-    const originalApiPath = lidarrClient.apiPath;
-
-    lidarrClient.config = {
-      url: url.replace(/\/+$/, ""),
-      apiKey: apiKey.trim(),
-    };
-    lidarrClient.apiPath = "/api/v1";
-
-    try {
-      const tags = await lidarrClient.getTags(true);
-      res.json(tags);
-    } finally {
-      lidarrClient.config = originalConfig;
-      lidarrClient.apiPath = originalApiPath;
-      lidarrClient.updateConfig();
-    }
+    const tags = await withTemporaryLidarrClient(validation.url, apiKey, (client) =>
+      client.getTags(true),
+    );
+    res.json(tags);
   } catch (error) {
-    console.error("[Settings] Failed to fetch Lidarr tags:", error);
+    logger.error("settings", "Failed to fetch Lidarr tags:", error);
     res.status(500).json({
       error: "Failed to fetch Lidarr tags",
       message: error.message,
@@ -793,7 +617,7 @@ router.get("/storage-health", noCache, async (req, res) => {
       ...result,
     });
   } catch (error) {
-    console.error("[Settings] Storage health check error:", error);
+    logger.error("settings", "Storage health check error:", error);
     res.status(500).json({
       error: "Storage health check failed",
       message: error.message,
@@ -827,7 +651,7 @@ router.get("/lidarr/test-library-access", async (req, res) => {
       sample: result.sample,
     });
   } catch (error) {
-    console.error("[Settings] Lidarr library access test error:", error);
+    logger.error("settings", "Lidarr library access test error:", error);
     res.status(500).json({
       error: "Library access check failed",
       message: error.message,
@@ -838,78 +662,49 @@ router.get("/lidarr/test-library-access", async (req, res) => {
 router.get("/lidarr/test", async (req, res) => {
   try {
     const { lidarrClient } = await import("../services/lidarrClient.js");
+    const { resolveLidarrTestCredentials, validateLidarrTestCredentials, withTemporaryLidarrClient } =
+      await import("../services/lidarrTestSession.js");
 
-    const testUrl = req.query.url;
-    const testApiKey = req.query.apiKey;
+    const { url, apiKey, usingProvided } = resolveLidarrTestCredentials(req.query, lidarrClient);
 
-    let url, apiKey;
-    if (testUrl && testApiKey) {
-      url = testUrl.trim();
-      apiKey = testApiKey.trim();
-    } else {
-      lidarrClient.updateConfig();
-      const config = lidarrClient.getConfig();
-      url = config.url;
-      apiKey = config.apiKey;
-    }
-
-    console.log("[Settings] Testing Lidarr connection...", {
-      url: url,
+    logger.info("settings", "Testing Lidarr connection...", {
+      url,
       hasApiKey: !!apiKey,
       apiKeyLength: apiKey?.length || 0,
-      usingProvided: !!(testUrl && testApiKey),
+      usingProvided,
     });
 
-    if (!url || !apiKey) {
-      return res
-        .status(400)
-        .json({ error: "Lidarr URL and API key are required" });
+    const validation = validateLidarrTestCredentials(url, apiKey);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error });
     }
-    const urlValidation = validateExternalUrl(url);
-    if (!urlValidation.valid) {
-      return res.status(400).json({ error: urlValidation.error });
-    }
-    url = urlValidation.url;
 
-    const originalConfig = { ...lidarrClient.config };
-    const originalApiPath = lidarrClient.apiPath;
+    const result = await withTemporaryLidarrClient(validation.url, apiKey, (client) =>
+      client.testConnection(true),
+    );
+    logger.info("settings", "Lidarr test result:", result);
 
-    lidarrClient.config = {
-      url: url.replace(/\/+$/, ""),
-      apiKey: apiKey.trim(),
-    };
-    lidarrClient.apiPath = "/api/v1";
-
-    try {
-      const result = await lidarrClient.testConnection(true);
-      console.log("[Settings] Lidarr test result:", result);
-
-      if (result.connected) {
-        res.json({
-          success: true,
-          message: "Connection successful",
-          version: result.version,
-          instanceName: result.instanceName,
-          apiPath: result.apiPath,
-        });
-      } else {
-        res.status(400).json({
-          error: "Connection failed",
-          message: result.error,
-          details: result.details,
-          url: result.url,
-          fullUrl: result.fullUrl,
-          statusCode: result.statusCode,
-          apiPath: result.apiPath,
-        });
-      }
-    } finally {
-      lidarrClient.config = originalConfig;
-      lidarrClient.apiPath = originalApiPath;
-      lidarrClient.updateConfig();
+    if (result.connected) {
+      res.json({
+        success: true,
+        message: "Connection successful",
+        version: result.version,
+        instanceName: result.instanceName,
+        apiPath: result.apiPath,
+      });
+    } else {
+      res.status(400).json({
+        error: "Connection failed",
+        message: result.error,
+        details: result.details,
+        url: result.url,
+        fullUrl: result.fullUrl,
+        statusCode: result.statusCode,
+        apiPath: result.apiPath,
+      });
     }
   } catch (error) {
-    console.error("[Settings] Lidarr test error:", error);
+    logger.error("settings", "Lidarr test error:", error);
     res.status(500).json({
       error: "Connection failed",
       message: error.message,
@@ -992,7 +787,7 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
         results,
       });
     } catch (error) {
-      console.error("[Settings] Failed to apply community guide:", error);
+      logger.error("settings", "Failed to apply community guide:", error);
       res.status(500).json({
         error: "Failed to apply community guide settings",
         message: error.message,
@@ -1001,7 +796,7 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("[Settings] Error applying community guide:", error);
+    logger.error("settings", "Error applying community guide:", error);
     res.status(500).json({
       error: "Failed to apply community guide settings",
       message: error.message,
@@ -1073,7 +868,7 @@ router.post("/plex/auth/pin", async (req, res) => {
       authUrl: PlexClient.buildAuthUrl(clientId, code, forwardUrl),
     });
   } catch (error) {
-    console.error("[Settings] Plex PIN generation failed:", error.message);
+    logger.error("settings", "Plex PIN generation failed:", error.message);
     res.status(500).json({
       error: "Failed to start Plex authentication",
       message: error.message,
@@ -1096,7 +891,7 @@ router.post("/plex/auth/check", async (req, res) => {
     if (!token) return res.json({ pending: true });
     res.json({ token });
   } catch (error) {
-    console.error("[Settings] Plex PIN check failed:", error.message);
+    logger.error("settings", "Plex PIN check failed:", error.message);
     res.status(500).json({
       error: "Failed to check Plex authentication",
       message: error.message,
@@ -1120,8 +915,9 @@ router.post("/plex/resources", async (req, res) => {
     res.json({ servers, total });
   } catch (error) {
     const status = error.response?.status;
-    console.error(
-      "[Settings] Plex resources failed:",
+    logger.error(
+      "settings",
+      "Plex resources failed:",
       status ? `${status} ${JSON.stringify(error.response?.data)}` : error.message,
     );
     res.status(status === 401 ? 401 : 500).json({
@@ -1181,7 +977,7 @@ router.post("/plex/sync", async (req, res) => {
     const result = await playlistManager.syncPlexNow();
     res.json({ success: true, ...result });
   } catch (error) {
-    console.error("[Settings] Plex sync failed:", error.message);
+    logger.error("settings", "Plex sync failed:", error.message);
     res.status(500).json({
       error: "Plex sync failed",
       message: error.response?.data || error.message,

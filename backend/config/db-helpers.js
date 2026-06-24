@@ -4,7 +4,6 @@ import { decryptIntegrations, encryptIntegrations } from "./encryption.js";
 import {
   DEFAULT_LISTEN_HISTORY_PROVIDER,
   getListenHistoryProfile,
-  hasListenHistoryProfile,
   normalizeListenHistoryProvider,
   normalizeListenHistoryUsername,
   normalizeListenHistoryUrl,
@@ -23,6 +22,7 @@ import {
   syncM3uPathMappings,
   syncM3uPathMode,
 } from "../services/playlistM3uPaths.js";
+import { normalizeExistingFileMode } from "../services/weeklyFlowFileReuse.js";
 
 const getSettingStmt = db.prepare("SELECT value FROM settings WHERE key = ?");
 const upsertSettingStmt = db.prepare(
@@ -106,7 +106,6 @@ const getImageStmt = db.prepare("SELECT * FROM images_cache WHERE mbid = ?");
 const upsertImageStmt = db.prepare(
   "INSERT OR REPLACE INTO images_cache (mbid, image_url, cache_age, created_at) VALUES (?, ?, ?, ?)"
 );
-const getAllImagesStmt = db.prepare("SELECT * FROM images_cache");
 const countImagesStmt = db.prepare("SELECT COUNT(*) as count FROM images_cache");
 const deleteImageStmt = db.prepare("DELETE FROM images_cache WHERE mbid = ?");
 const clearImagesStmt = db.prepare("DELETE FROM images_cache");
@@ -200,19 +199,6 @@ const DEFAULT_PERMISSIONS = {
   changeMonitoring: false,
   deleteArtist: false,
   deleteAlbum: false,
-};
-
-const normalizeExistingFileMode = (value) => {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (normalized === "download") return "download";
-  if (
-    normalized === "reuse" ||
-    normalized === "hardlink" ||
-    normalized === "copy"
-  ) {
-    return "reuse";
-  }
-  return "reuse";
 };
 
 export const userOps = {
@@ -423,11 +409,6 @@ export const userOps = {
       ...getListenHistoryProfile(r),
     }));
   },
-  getAllLastfmUsers() {
-    return userOps
-      .getAllListeningHistoryUsers()
-      .filter((user) => hasListenHistoryProfile(user) && user.lastfmUsername);
-  },
 };
 
 function getOrCreateEncryptionKey() {
@@ -442,7 +423,7 @@ function getOrCreateEncryptionKey() {
 
 let settingsCache = null;
 let settingsCacheTime = 0;
-const SETTINGS_CACHE_TTL = 5000;
+const SETTINGS_CACHE_TTL = 60000;
 
 export const dbOps = {
   getJSONSetting(key) {
@@ -909,15 +890,6 @@ export const dbOps = {
 
   setImage(mbid, imageUrl) {
     upsertImageStmt.run(mbid, imageUrl, Date.now(), new Date().toISOString());
-  },
-
-  getAllImages() {
-    const rows = getAllImagesStmt.all();
-    const images = {};
-    for (const row of rows) {
-      images[row.mbid] = row.image_url;
-    }
-    return images;
   },
 
   countImages() {

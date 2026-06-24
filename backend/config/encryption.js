@@ -73,7 +73,7 @@ function setAt(obj, path, value) {
 
 export function decryptIntegrations(integrations, key) {
   if (!integrations || typeof integrations !== "object") return integrations;
-  const out = JSON.parse(JSON.stringify(integrations));
+  const out = structuredClone(integrations);
   for (const path of SENSITIVE_PATHS) {
     const v = getAt(out, path);
     if (v != null && typeof v === "string")
@@ -84,7 +84,7 @@ export function decryptIntegrations(integrations, key) {
 
 export function encryptIntegrations(integrations, key) {
   if (!integrations || typeof integrations !== "object") return integrations;
-  const out = JSON.parse(JSON.stringify(integrations));
+  const out = structuredClone(integrations);
   for (const path of SENSITIVE_PATHS) {
     const v = getAt(out, path);
     if (v != null && typeof v === "string")

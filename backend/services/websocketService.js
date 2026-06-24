@@ -1,5 +1,6 @@
 import { WebSocketServer } from 'ws';
 import { dbOps, userOps } from "../config/db-helpers.js";
+import { logger } from "./logger.js";
 import {
   getAuthPassword,
   isProxyAuthEnabled,
@@ -35,7 +36,7 @@ class WebSocketService {
       this.handleConnection(ws, req);
     });
 
-    console.log('[WebSocket] Server initialized on /ws');
+    logger.system("info", "WebSocket server initialized on /ws");
     return this;
   }
 
@@ -81,7 +82,7 @@ class WebSocketService {
     };
 
     this.clients.add(client);
-    console.log(`[WebSocket] Client connected: ${clientId} (total: ${this.clients.size})`);
+    logger.system("info", "Client connected", { clientId, totalClients: this.clients.size });
 
     ws.on('message', (message) => {
       this.handleMessage(client, message);
@@ -89,11 +90,11 @@ class WebSocketService {
 
     ws.on('close', () => {
       this.clients.delete(client);
-      console.log(`[WebSocket] Client disconnected: ${clientId} (total: ${this.clients.size})`);
+      logger.system("info", "Client disconnected", { clientId, totalClients: this.clients.size });
     });
 
     ws.on('error', (error) => {
-      console.error(`[WebSocket] Client error ${clientId}:`, error.message);
+      logger.system("error", "Client error", { clientId, error: error.message });
       this.clients.delete(client);
     });
 
@@ -119,10 +120,10 @@ class WebSocketService {
           this.send(client, { type: 'pong', timestamp: Date.now() });
           break;
         default:
-          console.log(`[WebSocket] Unknown message type: ${message.type}`);
+          logger.system("warn", "Unknown WebSocket message type", { messageType: message.type });
       }
     } catch (error) {
-      console.error('[WebSocket] Failed to parse message:', error.message);
+      logger.system("error", "Failed to parse WebSocket message", { error: error.message });
     }
   }
 

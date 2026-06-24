@@ -10,6 +10,7 @@ import { createServer } from "http";
 import { fileURLToPath } from "url";
 
 import { createAuthMiddleware } from "./middleware/auth.js";
+import { logger } from "./services/logger.js";
 import { websocketService } from "./services/websocketService.js";
 import { getAllDownloadStatuses } from "./routes/library/handlers/downloads.js";
 import { getWeeklyFlowStatusSnapshot } from "./services/weeklyFlowStatusSnapshot.js";
@@ -38,11 +39,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 process.on("uncaughtException", (error) => {
-  console.error("Uncaught Exception:", error);
+  logger.error("system", "Uncaught Exception:", error);
 });
 
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled Rejection:", reason);
+  logger.error("system", "Unhandled Rejection:", reason);
 });
 
 const app = express();
@@ -173,7 +174,7 @@ if (fs.existsSync(frontendDist)) {
 }
 
 app.use((err, req, res, next) => {
-  console.error(err);
+  logger.error("system", "Express error:", err);
   if (res.headersSent) return next(err);
   if (err?.type === "entity.too.large" || err?.status === 413) {
     return res.status(413).json({
@@ -210,7 +211,7 @@ const broadcastDownloadStatuses = async () => {
       });
     }
   } catch (error) {
-    console.warn("Failed to broadcast download statuses:", error.message);
+    logger.warn("system", "Failed to broadcast download statuses:", { message: error.message });
   } finally {
     downloadStatusBroadcastInFlight = false;
   }
@@ -268,7 +269,7 @@ const broadcastWeeklyFlowStatus = async () => {
     );
     websocketService.broadcastPerClient("playlists", buildPayload("playlists"));
   } catch (error) {
-    console.warn("Failed to broadcast weekly flow status:", error.message);
+    logger.warn("system", "Failed to broadcast weekly flow status:", { message: error.message });
   } finally {
     weeklyFlowStatusBroadcastInFlight = false;
   }
@@ -276,21 +277,20 @@ const broadcastWeeklyFlowStatus = async () => {
 
 const broadcastIntervals = [];
 
-broadcastDownloadStatuses();
-broadcastIntervals.push(
-  setInterval(broadcastDownloadStatuses, DOWNLOAD_STATUS_INTERVAL_MS),
-);
-broadcastWeeklyFlowStatus();
-broadcastIntervals.push(
-  setInterval(broadcastWeeklyFlowStatus, WEEKLY_FLOW_STATUS_INTERVAL_MS),
-);
+const scheduleBroadcast = (fn, intervalMs) => {
+  fn();
+  broadcastIntervals.push(setInterval(fn, intervalMs));
+};
+
+scheduleBroadcast(broadcastDownloadStatuses, DOWNLOAD_STATUS_INTERVAL_MS);
+scheduleBroadcast(broadcastWeeklyFlowStatus, WEEKLY_FLOW_STATUS_INTERVAL_MS);
 
 let shuttingDown = false;
 
 const gracefulShutdown = async (signal) => {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`Received ${signal}, shutting down...`);
+  logger.info("system", `Received ${signal}, shutting down...`);
   for (const interval of broadcastIntervals) {
     clearInterval(interval);
   }
@@ -313,18 +313,19 @@ process.once("SIGINT", () => {
 });
 
 httpServer.listen(PORT, "0.0.0.0", async () => {
-  console.log(`Server running on port ${PORT}`);
+  logger.info("system", `Server running on port ${PORT}`);
   bootstrapHonkerSchedules();
-  initializeAppRuntime({ logger: console });
+  initializeAppRuntime({ logger });
 });
 
 httpServer.on("error", (error) => {
   if (error.code === "EADDRINUSE") {
-    console.error(
+    logger.error(
+      "system",
       `Port ${PORT} is already in use. Please stop the other process or use a different port.`,
     );
     process.exit(1);
   } else {
-    console.error("Server error:", error);
+    logger.error("system", "Server error:", error);
   }
 });

@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import PropTypes from "prop-types";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import { useAudioPlayerContext } from "react-use-audio-player";
 import { useSharedVolume } from "../hooks/useSharedVolume";
 import {
@@ -24,6 +17,81 @@ function shuffleIds(ids) {
   return shuffled;
 }
 
+function buildPlaybackOrder(tracks, shuffle) {
+  const indices = tracks.map((_, index) => index);
+  return shuffle ? shuffleIds(indices) : indices;
+}
+
+function queueReducer(state, action) {
+  switch (action.type) {
+    case "PLAY_QUEUE": {
+      const { tracks, startIndex, shuffle, updateShufflePreference, source } = action;
+      const normalized = (Array.isArray(tracks) ? tracks : [])
+        .map((track) => normalizeQueueTrack(track))
+        .filter((track) => track.src);
+      if (normalized.length === 0) return state;
+      const order = buildPlaybackOrder(normalized, shuffle);
+      const boundedStart = Math.max(0, Math.min(startIndex, order.length - 1));
+      return {
+        ...state,
+        queue: normalized,
+        playbackOrder: order,
+        source: source ?? null,
+        currentIndex: boundedStart,
+        queueRevision: state.queueRevision + 1,
+        isShuffleEnabled: updateShufflePreference ? shuffle : state.isShuffleEnabled,
+      };
+    }
+    case "SET_CURRENT_INDEX":
+      return { ...state, currentIndex: action.index };
+    case "SET_QUEUE_REVISION":
+      return { ...state, queueRevision: state.queueRevision + 1 };
+    case "SET_SHUFFLE": {
+      if (state.queue.length === 0 || state.currentIndex < 0) {
+        return { ...state, isShuffleEnabled: action.enabled };
+      }
+      const currentQueueIndex = state.playbackOrder[state.currentIndex];
+      const order = buildPlaybackOrder(state.queue, action.enabled);
+      const nextPlaybackIndex = currentQueueIndex != null
+        ? order.findIndex((idx) => idx === currentQueueIndex)
+        : -1;
+      return {
+        ...state,
+        isShuffleEnabled: action.enabled,
+        playbackOrder: order,
+        currentIndex: nextPlaybackIndex >= 0 ? nextPlaybackIndex : state.currentIndex,
+      };
+    }
+    case "TOGGLE_REPEAT": {
+      const modes = ["off", "all", "one"];
+      const nextMode = modes[(modes.indexOf(state.repeatMode) + 1) % modes.length];
+      return { ...state, repeatMode: nextMode };
+    }
+    case "CLEAR_QUEUE":
+      return {
+        queue: [],
+        currentIndex: -1,
+        source: null,
+        isShuffleEnabled: false,
+        playbackOrder: [],
+        repeatMode: "off",
+        queueRevision: 0,
+      };
+    default:
+      return state;
+  }
+}
+
+const initialQueueState = {
+  queue: [],
+  currentIndex: -1,
+  source: null,
+  isShuffleEnabled: false,
+  playbackOrder: [],
+  repeatMode: "off",
+  queueRevision: 0,
+};
+
 export function AudioQueueProvider({ children }) {
   const player = useAudioPlayerContext();
   const playerRef = useRef(player);
@@ -33,71 +101,28 @@ export function AudioQueueProvider({ children }) {
   const sharedVolumeRef = useRef(sharedVolume);
   sharedVolumeRef.current = sharedVolume;
 
-  const [queue, setQueue] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(-1);
-  const [source, setSource] = useState(null);
-  const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
-  const [playbackOrder, setPlaybackOrder] = useState([]);
-  const queueRef = useRef([]);
-  const currentIndexRef = useRef(-1);
-  const playbackOrderRef = useRef([]);
-  const isShuffleRef = useRef(false);
-  const [repeatMode, setRepeatMode] = useState("off");
-  const repeatModeRef = useRef("off");
+  const [state, dispatch] = useReducer(queueReducer, initialQueueState);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const loadedSignatureRef = useRef(null);
-  const [queueRevision, setQueueRevision] = useState(0);
-  const queueRevisionRef = useRef(0);
-
-  useEffect(() => {
-    queueRef.current = queue;
-  }, [queue]);
-
-  useEffect(() => {
-    currentIndexRef.current = currentIndex;
-  }, [currentIndex]);
-
-  useEffect(() => {
-    playbackOrderRef.current = playbackOrder;
-  }, [playbackOrder]);
-
-  useEffect(() => {
-    isShuffleRef.current = isShuffleEnabled;
-  }, [isShuffleEnabled]);
-
-  useEffect(() => {
-    queueRevisionRef.current = queueRevision;
-  }, [queueRevision]);
-
-  useEffect(() => {
-    repeatModeRef.current = repeatMode;
-  }, [repeatMode]);
 
   const getTrackAt = useCallback((playbackIndex) => {
-    const order = playbackOrderRef.current;
-    const queueIndex = order[playbackIndex];
+    const s = stateRef.current;
+    const queueIndex = s.playbackOrder[playbackIndex];
     if (queueIndex == null) return null;
-    return queueRef.current[queueIndex] ?? null;
+    return s.queue[queueIndex] ?? null;
   }, []);
 
-  const advanceRef = useRef(() => {});
-  const loadTrackAtIndexRef = useRef(() => {});
-
   const loadTrackAtIndex = useCallback((playbackIndex, formatAttemptIndex = 0) => {
-    const order = playbackOrderRef.current;
-    const queueIndex = order[playbackIndex];
-    const track =
-      queueIndex == null ? null : queueRef.current[queueIndex] ?? null;
-    if (!track?.src) {
-      advanceRef.current({ fromUserSkip: true });
-      return;
-    }
+    const s = stateRef.current;
+    const queueIndex = s.playbackOrder[playbackIndex];
+    const track = queueIndex == null ? null : s.queue[queueIndex] ?? null;
+    if (!track?.src) return;
     const formatAttempts = getFormatLoadAttempts(track);
     const formatKey = formatAttempts[formatAttemptIndex];
-    if (!formatKey) {
-      advanceRef.current({ fromUserSkip: true });
-      return;
-    }
-    const signature = `${queueRevisionRef.current}:${queueIndex}:${track.src}:${formatKey}`;
+    if (!formatKey) return;
+    const signature = `${s.queueRevision}:${queueIndex}:${track.src}:${formatKey}`;
     if (loadedSignatureRef.current === signature) return;
     loadedSignatureRef.current = signature;
 
@@ -109,63 +134,45 @@ export function AudioQueueProvider({ children }) {
       format: getHowlerFormat(formatKey),
       onloaderror: () => {
         loadedSignatureRef.current = null;
-        loadTrackAtIndexRef.current(playbackIndex, formatAttemptIndex + 1);
+        loadTrackAtIndex(playbackIndex, formatAttemptIndex + 1);
       },
       onend: () => {
-        advanceRef.current();
+        const cur = stateRef.current;
+        if (cur.currentIndex < 0) return;
+
+        if (cur.repeatMode === "one") {
+          loadedSignatureRef.current = null;
+          loadTrackAtIndex(cur.currentIndex);
+          return;
+        }
+
+        const nextIndex = cur.currentIndex + 1;
+        if (nextIndex < cur.playbackOrder.length) {
+          dispatch({ type: "SET_CURRENT_INDEX", index: nextIndex });
+          return;
+        }
+
+        if (cur.repeatMode === "all" && cur.playbackOrder.length > 0) {
+          loadedSignatureRef.current = null;
+          dispatch({ type: "SET_CURRENT_INDEX", index: 0 });
+          dispatch({ type: "SET_QUEUE_REVISION" });
+          return;
+        }
+
+        loadedSignatureRef.current = null;
+        dispatch({ type: "CLEAR_QUEUE" });
+        playerRef.current.stop();
       },
     });
   }, []);
 
   useEffect(() => {
-    loadTrackAtIndexRef.current = loadTrackAtIndex;
-  }, [loadTrackAtIndex]);
-
-  const advance = useCallback(({ fromUserSkip = false } = {}) => {
-    const currentPlaybackIndex = currentIndexRef.current;
-    if (currentPlaybackIndex < 0) return;
-
-    if (repeatModeRef.current === "one" && !fromUserSkip) {
-      loadedSignatureRef.current = null;
-      loadTrackAtIndexRef.current(currentPlaybackIndex);
-      return;
-    }
-
-    const nextIndex = currentPlaybackIndex + 1;
-    if (nextIndex < playbackOrderRef.current.length) {
-      setCurrentIndex(nextIndex);
-      return;
-    }
-
-    if (
-      repeatModeRef.current === "all" &&
-      playbackOrderRef.current.length > 0
-    ) {
-      loadedSignatureRef.current = null;
-      setCurrentIndex(0);
-      setQueueRevision((revision) => revision + 1);
-      return;
-    }
-
-    loadedSignatureRef.current = null;
-    setCurrentIndex(-1);
-    setQueue([]);
-    setPlaybackOrder([]);
-    setSource(null);
-    playerRef.current.stop();
-  }, []);
-
-  useEffect(() => {
-    advanceRef.current = advance;
-  }, [advance]);
-
-  useEffect(() => {
-    if (currentIndex < 0) {
+    if (state.currentIndex < 0) {
       loadedSignatureRef.current = null;
       return;
     }
-    loadTrackAtIndex(currentIndex);
-  }, [currentIndex, queueRevision, loadTrackAtIndex]);
+    loadTrackAtIndex(state.currentIndex);
+  }, [state.currentIndex, state.queueRevision, loadTrackAtIndex]);
 
   useEffect(() => {
     const activePlayer = playerRef.current;
@@ -177,118 +184,69 @@ export function AudioQueueProvider({ children }) {
     activePlayer.unmute();
   }, [sharedVolume]);
 
-  const buildPlaybackOrder = useCallback((tracks, shuffle) => {
-    const indices = tracks.map((_, index) => index);
-    return shuffle ? shuffleIds(indices) : indices;
+  const setShuffleEnabled = useCallback((enabled) => {
+    dispatch({ type: "SET_SHUFFLE", enabled });
   }, []);
-
-  const setShuffleEnabled = useCallback(
-    (enabled) => {
-      setIsShuffleEnabled(enabled);
-      isShuffleRef.current = enabled;
-      if (queueRef.current.length === 0 || currentIndexRef.current < 0) {
-        return;
-      }
-      const currentPlaybackIndex = currentIndexRef.current;
-      const currentQueueIndex = playbackOrderRef.current[currentPlaybackIndex];
-      const order = buildPlaybackOrder(queueRef.current, enabled);
-      playbackOrderRef.current = order;
-      setPlaybackOrder(order);
-      if (currentQueueIndex == null) return;
-      const nextPlaybackIndex = order.findIndex(
-        (index) => index === currentQueueIndex,
-      );
-      if (nextPlaybackIndex >= 0 && nextPlaybackIndex !== currentPlaybackIndex) {
-        currentIndexRef.current = nextPlaybackIndex;
-        setCurrentIndex(nextPlaybackIndex);
-      }
-    },
-    [buildPlaybackOrder],
-  );
 
   const toggleShuffle = useCallback(() => {
-    setShuffleEnabled(!isShuffleRef.current);
-  }, [setShuffleEnabled]);
-
-  const toggleRepeat = useCallback(() => {
-    setRepeatMode((mode) => {
-      if (mode === "off") return "all";
-      if (mode === "all") return "one";
-      return "off";
-    });
+    dispatch({ type: "SET_SHUFFLE", enabled: !stateRef.current.isShuffleEnabled });
   }, []);
 
-  const playQueue = useCallback(
-    (
-      tracks,
-      {
-        startIndex = 0,
-        startTrackId = null,
-        source: nextSource = null,
-        shuffle = false,
-        updateShufflePreference = true,
-      } = {},
-    ) => {
-      const normalized = (Array.isArray(tracks) ? tracks : [])
-        .map((track) => normalizeQueueTrack(track))
-        .filter((track) => track.src);
-      if (normalized.length === 0) return false;
+  const toggleRepeat = useCallback(() => {
+    dispatch({ type: "TOGGLE_REPEAT" });
+  }, []);
 
-      const order = buildPlaybackOrder(normalized, shuffle);
-      let boundedStart = Math.max(0, Math.min(startIndex, order.length - 1));
-      if (startTrackId != null) {
-        const queueIndex = normalized.findIndex(
-          (track) => String(track.id) === String(startTrackId),
-        );
-        if (queueIndex >= 0) {
-          const playbackIndex = order.findIndex((index) => index === queueIndex);
-          if (playbackIndex >= 0) {
-            boundedStart = playbackIndex;
-          }
-        }
+  const playQueue = useCallback((
+    tracks,
+    { startIndex = 0, startTrackId = null, source: nextSource = null, shuffle = false, updateShufflePreference = true } = {},
+  ) => {
+    const normalized = (Array.isArray(tracks) ? tracks : [])
+      .map((track) => normalizeQueueTrack(track))
+      .filter((track) => track.src);
+    if (normalized.length === 0) return false;
+    const order = buildPlaybackOrder(normalized, shuffle);
+    let boundedStart = Math.max(0, Math.min(startIndex, order.length - 1));
+    if (startTrackId != null) {
+      const queueIndex = normalized.findIndex(
+        (track) => String(track.id) === String(startTrackId),
+      );
+      if (queueIndex >= 0) {
+        const playbackIndex = order.findIndex((index) => index === queueIndex);
+        if (playbackIndex >= 0) boundedStart = playbackIndex;
       }
+    }
+    dispatch({
+      type: "PLAY_QUEUE",
+      tracks: normalized,
+      startIndex: boundedStart,
+      shuffle,
+      updateShufflePreference,
+      source: nextSource,
+    });
+    return true;
+  }, []);
 
-      loadedSignatureRef.current = null;
-      queueRef.current = normalized;
-      playbackOrderRef.current = order;
-      if (updateShufflePreference) {
-        isShuffleRef.current = shuffle;
-        setIsShuffleEnabled(shuffle);
-      }
-      setQueue(normalized);
-      setPlaybackOrder(order);
-      setSource(nextSource);
-      setCurrentIndex(boundedStart);
-      setQueueRevision((revision) => revision + 1);
-      return true;
-    },
-    [buildPlaybackOrder],
-  );
-
-  const playTrack = useCallback(
-    (track, options = {}) => {
-      const normalized = normalizeQueueTrack(track);
-      if (!normalized.src) return false;
-      const contextTracks = (
-        Array.isArray(options.queue) && options.queue.length > 0
-          ? options.queue
-          : [track]
-      )
-        .map((entry) => normalizeQueueTrack(entry))
-        .filter((entry) => entry.src);
-      if (contextTracks.length === 0) return false;
-      return playQueue(contextTracks, {
-        startTrackId: normalized.id,
-        source: options.source ?? null,
-        shuffle: options.shuffle ?? isShuffleRef.current,
-        updateShufflePreference: options.updateShufflePreference ?? false,
-      });
-    },
-    [playQueue],
-  );
+  const playTrack = useCallback((track, options = {}) => {
+    const normalized = normalizeQueueTrack(track);
+    if (!normalized.src) return false;
+    const contextTracks = (
+      Array.isArray(options.queue) && options.queue.length > 0
+        ? options.queue
+        : [track]
+    )
+      .map((entry) => normalizeQueueTrack(entry))
+      .filter((entry) => entry.src);
+    if (contextTracks.length === 0) return false;
+    return playQueue(contextTracks, {
+      startTrackId: normalized.id,
+      source: options.source ?? null,
+      shuffle: options.shuffle ?? stateRef.current.isShuffleEnabled,
+      updateShufflePreference: options.updateShufflePreference ?? false,
+    });
+  }, [playQueue]);
 
   const togglePlayPause = useCallback(() => {
-    if (queueRef.current.length === 0) return;
+    if (stateRef.current.queue.length === 0) return;
     const activePlayer = playerRef.current;
     if (activePlayer.isPlaying) {
       activePlayer.pause();
@@ -298,92 +256,95 @@ export function AudioQueueProvider({ children }) {
       activePlayer.play();
       return;
     }
-    if (currentIndexRef.current >= 0) {
+    if (stateRef.current.currentIndex >= 0) {
       loadedSignatureRef.current = null;
-      loadTrackAtIndex(currentIndexRef.current);
+      loadTrackAtIndex(stateRef.current.currentIndex);
     }
   }, [loadTrackAtIndex]);
 
   const playNext = useCallback(() => {
-    if (queueRef.current.length === 0) return;
-    if (currentIndexRef.current < 0) {
-      const order = buildPlaybackOrder(
-        queueRef.current,
-        isShuffleRef.current,
-      );
-      loadedSignatureRef.current = null;
-      playbackOrderRef.current = order;
-      setPlaybackOrder(order);
-      setCurrentIndex(0);
-      setQueueRevision((revision) => revision + 1);
+    const s = stateRef.current;
+    if (s.queue.length === 0) return;
+    if (s.currentIndex < 0) {
+      dispatch({
+        type: "PLAY_QUEUE",
+        tracks: s.queue,
+        startIndex: 0,
+        shuffle: s.isShuffleEnabled,
+        updateShufflePreference: false,
+        source: s.source,
+      });
       return;
     }
-    advance({ fromUserSkip: true });
-  }, [advance, buildPlaybackOrder]);
+    const nextIndex = s.currentIndex + 1;
+    if (nextIndex < s.playbackOrder.length) {
+      dispatch({ type: "SET_CURRENT_INDEX", index: nextIndex });
+      return;
+    }
+    if (s.repeatMode === "all" && s.playbackOrder.length > 0) {
+      loadedSignatureRef.current = null;
+      dispatch({ type: "SET_CURRENT_INDEX", index: 0 });
+      dispatch({ type: "SET_QUEUE_REVISION" });
+      return;
+    }
+    loadedSignatureRef.current = null;
+    dispatch({ type: "CLEAR_QUEUE" });
+    playerRef.current.stop();
+  }, []);
 
   const playPrevious = useCallback(() => {
-    if (queueRef.current.length === 0) return;
-    if (currentIndexRef.current < 0) {
-      const order = buildPlaybackOrder(
-        queueRef.current,
-        isShuffleRef.current,
-      );
-      loadedSignatureRef.current = null;
-      playbackOrderRef.current = order;
-      setPlaybackOrder(order);
-      setCurrentIndex(0);
-      setQueueRevision((revision) => revision + 1);
+    const s = stateRef.current;
+    if (s.queue.length === 0) return;
+    if (s.currentIndex < 0) {
+      dispatch({
+        type: "PLAY_QUEUE",
+        tracks: s.queue,
+        startIndex: 0,
+        shuffle: s.isShuffleEnabled,
+        updateShufflePreference: false,
+        source: s.source,
+      });
       return;
     }
-    const prevIndex = currentIndexRef.current - 1;
+    const prevIndex = s.currentIndex - 1;
     if (prevIndex >= 0) {
       loadedSignatureRef.current = null;
-      setCurrentIndex(prevIndex);
+      dispatch({ type: "SET_CURRENT_INDEX", index: prevIndex });
       return;
     }
     const position = playerRef.current.getPosition();
     if (position > 3) {
       playerRef.current.seek(0);
     }
-  }, [buildPlaybackOrder]);
+  }, []);
 
   const clearQueue = useCallback(() => {
     loadedSignatureRef.current = null;
-    setQueue([]);
-    setPlaybackOrder([]);
-    setCurrentIndex(-1);
-    setSource(null);
-    setIsShuffleEnabled(false);
-    isShuffleRef.current = false;
-    setRepeatMode("off");
-    repeatModeRef.current = "off";
+    dispatch({ type: "CLEAR_QUEUE" });
     playerRef.current.stop();
     playerRef.current.cleanup();
   }, []);
 
-  const currentTrack =
-    currentIndex >= 0 ? getTrackAt(currentIndex) : null;
+  const currentTrack = state.currentIndex >= 0 ? getTrackAt(state.currentIndex) : null;
 
-  const isActive = queue.length > 0 && currentIndex >= 0;
+  const isActive = state.queue.length > 0 && state.currentIndex >= 0;
 
   const matchesSource = useCallback(
     (candidate) => {
-      if (!candidate || !source) return false;
-      if (candidate.type && candidate.type !== source.type) return false;
-      if (candidate.id != null && String(candidate.id) !== String(source.id)) {
-        return false;
-      }
+      if (!candidate || !state.source) return false;
+      if (candidate.type && candidate.type !== state.source.type) return false;
+      if (candidate.id != null && String(candidate.id) !== String(state.source.id)) return false;
       return true;
     },
-    [source],
+    [state.source],
   );
 
   const value = useMemo(
     () => ({
-      queue,
+      queue: state.queue,
       currentTrack,
-      currentIndex,
-      source,
+      currentIndex: state.currentIndex,
+      source: state.source,
       isActive,
       isPlaying: player.isPlaying,
       isLoading: player.isLoading,
@@ -393,9 +354,9 @@ export function AudioQueueProvider({ children }) {
       seek: player.seek,
       volume: sharedVolume,
       setVolume: setSharedVolume,
-      isShuffleEnabled,
+      isShuffleEnabled: state.isShuffleEnabled,
       setShuffleEnabled,
-      repeatMode,
+      repeatMode: state.repeatMode,
       toggleRepeat,
       playQueue,
       playTrack,
@@ -408,10 +369,8 @@ export function AudioQueueProvider({ children }) {
     }),
     [
       clearQueue,
-      currentIndex,
       currentTrack,
       isActive,
-      isShuffleEnabled,
       matchesSource,
       playNext,
       playPrevious,
@@ -423,12 +382,14 @@ export function AudioQueueProvider({ children }) {
       player.isPaused,
       player.isPlaying,
       player.seek,
-      queue,
-      repeatMode,
       setSharedVolume,
       setShuffleEnabled,
       sharedVolume,
-      source,
+      state.queue,
+      state.currentIndex,
+      state.source,
+      state.isShuffleEnabled,
+      state.repeatMode,
       togglePlayPause,
       toggleRepeat,
       toggleShuffle,
@@ -441,7 +402,3 @@ export function AudioQueueProvider({ children }) {
     </AudioQueueContext.Provider>
   );
 }
-
-AudioQueueProvider.propTypes = {
-  children: PropTypes.node.isRequired,
-};

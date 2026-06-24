@@ -4,6 +4,7 @@ import {
   useState,
   useCallback,
   useRef,
+  useMemo,
 } from "react";
 import { ToastContainer } from "../components/Toast";
 
@@ -35,10 +36,16 @@ export function ToastProvider({ children }) {
     return addToast(message, "info", duration);
   }, [addToast]);
 
+  const value = useMemo(() => ({
+    addToast,
+    removeToast,
+    showSuccess,
+    showError,
+    showInfo,
+  }), [addToast, removeToast, showSuccess, showError, showInfo]);
+
   return (
-    <ToastContext.Provider
-      value={{ addToast, removeToast, showSuccess, showError, showInfo }}
-    >
+    <ToastContext.Provider value={value}>
       {children}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </ToastContext.Provider>

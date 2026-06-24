@@ -4,7 +4,6 @@ import { dbOps, userOps } from "../config/db-helpers.js";
 import { getDefaultListenHistoryProfile } from "../services/listeningHistory.js";
 import {
   DEFAULT_METADATA_BASE_URL,
-  LEGACY_METADATA_BASE_URL,
   defaultData,
 } from "../config/constants.js";
 import { validateExternalUrl } from "../middleware/urlValidator.js";
@@ -15,11 +14,6 @@ import {
 } from "../services/downloadFolderConfig.js";
 
 const router = express.Router();
-
-function normalizeMetadataBaseUrl(baseUrl) {
-  const trimmed = String(baseUrl || "").trim().replace(/\/+$/, "");
-  return trimmed === LEGACY_METADATA_BASE_URL ? DEFAULT_METADATA_BASE_URL : trimmed;
-}
 
 router.use((req, res, next) => {
   const settings = dbOps.getSettings();
@@ -301,12 +295,11 @@ router.post("/complete", async (req, res) => {
           ? {
               ...(current.integrations?.metadata || {}),
               provider: "brainzmash",
-              baseUrl: normalizeMetadataBaseUrl(
+              baseUrl:
                 metadata.baseUrl != null
                   ? String(metadata.baseUrl).trim().replace(/\/+$/, "")
                   : current.integrations?.metadata?.baseUrl ||
                     DEFAULT_METADATA_BASE_URL,
-              ),
               userAgentSuffix:
                 metadata.userAgentSuffix != null
                   ? String(metadata.userAgentSuffix).trim()
@@ -411,10 +404,10 @@ router.post("/complete", async (req, res) => {
       integrations?.lastfm?.apiKey && integrations?.lastfm?.username;
     const hasLidarr = !!integrations?.lidarr?.apiKey;
     if (hasLastfm || hasLidarr) {
-      const { requestDiscoveryRefresh } = await import(
+      const { enqueueDiscoveryRefresh } = await import(
         "../services/discoveryRefreshScheduler.js"
       );
-      requestDiscoveryRefresh({ reason: "onboarding" });
+      enqueueDiscoveryRefresh({ reason: "onboarding" });
     }
 
     res.json({ success: true });

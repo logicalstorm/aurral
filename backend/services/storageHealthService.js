@@ -206,9 +206,9 @@ async function runDirectoryWriteProbe(dirPath) {
     const handle = await fs.open(probeFile, "wx");
     try {
       await handle.writeFile(contents, "utf8");
-      await handle.sync().catch(() => {});
+      await handle.sync().catch((err) => { console.warn(err); });
     } finally {
-      await handle.close().catch(() => {});
+      await handle.close().catch((err) => { console.warn(err); });
     }
     const readBack = await fs.readFile(probeFile, "utf8");
     if (readBack !== contents) {
@@ -227,7 +227,7 @@ async function runDirectoryWriteProbe(dirPath) {
       detail: `${probeDir}: ${formatProbeError(error)}`,
     };
   } finally {
-    await fs.rm(probeDir, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(probeDir, { recursive: true, force: true }).catch((err) => { console.warn(err); });
   }
 }
 
