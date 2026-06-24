@@ -1,4 +1,4 @@
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { warmImageProxy } from "./imageProxyService.js";
 import { getArtistByMbid, listArtistAlbums } from "./providers/brainzmashProvider.js";
 import { fetchReleaseGroupCoverUrl } from "./releaseGroupCoverService.js";

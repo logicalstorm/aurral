@@ -1,5 +1,5 @@
-import { getLastfmApiKey } from "./apiClients.js";
-import { getDiscoveryCache, getMaxFocusPlaylists } from "./discoveryService.js";
+import { getLastfmApiKey } from "./apiClients/index.js";
+import { getDiscoveryCache, getMaxFocusPlaylists } from "./discovery/index.js";
 import { playlistSource } from "./weeklyFlowPlaylistSource.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import {

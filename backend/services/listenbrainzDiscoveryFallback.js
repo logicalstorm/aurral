@@ -5,7 +5,7 @@ import {
   listenbrainzRequest,
   musicbrainzGetCachedArtistMbidByName,
   musicbrainzResolveArtistMbidByName,
-} from "./apiClients.js";
+} from "./apiClients/index.js";
 import { hydrateArtistImages } from "./artistImageHydration.js";
 import { getArtistGenres } from "./providers/brainzmashProvider.js";
 

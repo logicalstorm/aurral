@@ -5,7 +5,7 @@ import {
   compareReleaseVersions,
   parseReleaseVersion,
   selectLatestReleaseForChannel,
-} from "../../frontend/src/utils/releaseVersion.js";
+} from "../../lib/release-version.js";
 
 test("parseReleaseVersion identifies stable and test channels", () => {
   assert.deepEqual(parseReleaseVersion("v1.50.0"), {

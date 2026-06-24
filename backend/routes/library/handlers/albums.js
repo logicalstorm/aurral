@@ -1,6 +1,6 @@
 import { libraryManager } from "../../../services/libraryManager.js";
 import { playlistManager } from "../../../services/weeklyFlowPlaylistManager.js";
-import { dbOps } from "../../../config/db-helpers.js";
+import { dbOps } from "../../../db/helpers/index.js";
 import { hasPermission } from "../../../middleware/auth.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 import {
@@ -53,7 +53,7 @@ export default function registerAlbums(router) {
         let mbid = releaseGroupMbid;
         if (String(releaseGroupMbid).startsWith("dz-")) {
           const { resolveDeezerAlbumToMbid } = await import(
-            "../../../services/apiClients.js"
+            "../../../services/apiClients/index.js"
           );
           const artist = await libraryManager.getArtistById(artistId);
           const artistName = artist?.artistName || "";

@@ -5,6 +5,7 @@ import {
   requireAuth,
   requirePermission,
 } from "../../../middleware/requirePermission.js";
+import { logger } from "../../../services/logger.js";
 
 export default function registerArtists(router) {
   router.get("/artists", cacheMiddleware(120), async (req, res) => {
@@ -142,10 +143,7 @@ export default function registerArtists(router) {
             preparedAddOptions,
           );
           if (artist?.error) {
-            console.error(
-              `[Library] Failed to add artist ${artistName}:`,
-              artist.error,
-            );
+            logger.error("library", `Failed to add artist ${artistName}:`, { message: artist.error });
             return;
           }
         })();

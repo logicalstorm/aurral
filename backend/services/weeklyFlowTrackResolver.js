@@ -1,7 +1,7 @@
 import {
   lastfmRequest,
   musicbrainzResolveArtistMbidByName,
-} from "./apiClients.js";
+} from "./apiClients/index.js";
 import {
   isRemoteSearchConfigured,
   searchRemoteCatalog,

@@ -1,5 +1,5 @@
-import { dbOps } from "../config/db-helpers.js";
-import { getLastfmApiKey } from "./apiClients.js";
+import { dbOps } from "../db/helpers/index.js";
+import { getLastfmApiKey } from "./apiClients/index.js";
 import { libraryManager } from "./libraryManager.js";
 import {
   enqueueDiscoveryRefreshJob,
@@ -11,7 +11,7 @@ import {
   getDiscoveryAutoRefreshHours,
   getDiscoveryCache,
   recordDiscoveryUpdateProgress,
-} from "./discoveryService.js";
+} from "./discovery/index.js";
 
 const DISCOVERY_GLOBAL_REFRESH_LOCK = "discovery-global-refresh";
 

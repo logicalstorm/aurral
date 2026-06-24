@@ -1,9 +1,9 @@
 import express from "express";
 import bcrypt from "bcrypt";
-import { userOps, dbOps } from "../config/db-helpers.js";
+import { userOps, dbOps } from "../db/helpers/index.js";
 import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
 import { reconcileLocalNetworkBypassSetting } from "../middleware/auth.js";
-import { requirePasswordStrength } from "../middleware/validation.js";
+import { requirePasswordStrength } from "../middleware/auth.js";
 import { deleteSessionsByUserId } from "../config/session-helpers.js";
 import { websocketService } from "../services/websocketService.js";
 import {

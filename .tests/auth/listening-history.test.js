@@ -15,7 +15,7 @@ applyIsolatedBackendEnv(isolatedState);
 const [{ db }, { userOps }, listeningHistoryModule, bcryptModule] =
   await Promise.all([
     importFromRepo("backend/config/db-sqlite.js"),
-    importFromRepo("backend/config/db-helpers.js"),
+    importFromRepo("backend/db/helpers/index.js"),
     importFromRepo("backend/services/listeningHistory.js"),
     import("bcrypt"),
   ]);

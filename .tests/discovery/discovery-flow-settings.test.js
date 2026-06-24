@@ -10,12 +10,12 @@ import {
 const isolatedState = await createIsolatedStateDir("discovery-flow-settings");
 applyIsolatedBackendEnv(isolatedState);
 
-const { dbOps } = await importFromRepo("backend/config/db-helpers.js");
+const { dbOps } = await importFromRepo("backend/db/helpers/index.js");
 const {
   getDiscoveryRecommendationsPerRefresh,
   getDiscoveryFlowsPerRefresh,
   getMaxFocusPlaylists,
-} = await importFromRepo("backend/services/discoveryService.js");
+} = await importFromRepo("backend/services/discovery/index.js");
 const { resolveFocusSlotBudgets } = await importFromRepo(
   "backend/services/discoverPlaylistService.js",
 );

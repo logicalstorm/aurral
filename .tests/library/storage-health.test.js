@@ -20,7 +20,7 @@ const previousPathMappings = process.env.PATH_MAPPINGS;
 const [{ db }, { dbOps }, { runStorageHealthCheck }, { resolvePlaylistRoot }] =
   await Promise.all([
     importFromRepo("backend/config/db-sqlite.js"),
-    importFromRepo("backend/config/db-helpers.js"),
+    importFromRepo("backend/db/helpers/index.js"),
     importFromRepo("backend/services/storageHealthService.js"),
     importFromRepo("backend/services/playlistPaths.js"),
   ]);

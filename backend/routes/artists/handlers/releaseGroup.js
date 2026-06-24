@@ -1,17 +1,18 @@
 import { UUID_REGEX } from "../../../config/constants.js";
-import { dbOps } from "../../../config/db-helpers.js";
+import { dbOps } from "../../../db/helpers/index.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 import {
   fetchReleaseGroupCoverUrl,
   resolveReleaseGroupCoversBatch,
 } from "../../../services/releaseGroupCoverService.js";
-import { enrichTracksWithDeezerPreviews } from "../../../services/apiClients.js";
+import { enrichTracksWithDeezerPreviews } from "../../../services/apiClients/index.js";
 import {
   getArtistByMbid,
   getAlbumByMbid,
   getAlbumTracksByAlbumMbid,
 } from "../../../services/providers/brainzmashProvider.js";
 import { toLegacyReleaseGroupSummary } from "../../../services/providers/brainzmashMappers.js";
+import { logger } from "../../../services/logger.js";
 
 function extractDeezerArtistIdFromLinks(links = []) {
   if (!Array.isArray(links)) return null;
@@ -46,10 +47,7 @@ export default function registerReleaseGroup(router) {
       }
       return res.json({ covers });
     } catch (error) {
-      console.error(
-        "Error in release-groups covers batch route:",
-        error.message,
-      );
+      logger.error("releaseGroup", "Error in release-groups covers batch route:", { message: error.message });
       res.set("Cache-Control", "public, max-age=60");
       return res.json({ covers: {} });
     }
@@ -82,10 +80,7 @@ export default function registerReleaseGroup(router) {
           coverUrl: coverImage,
         });
       } catch (error) {
-        console.error(
-          `Error in release-group details route for ${req.params.mbid}:`,
-          error.message,
-        );
+        logger.error("releaseGroup", `Error in release-group details route for ${req.params.mbid}:`, { message: error.message });
         res.status(404).json({
           error: "Release not found",
           message: error.message,
@@ -139,10 +134,7 @@ export default function registerReleaseGroup(router) {
       );
       res.json({ images: [], notFound: false, transientError: true });
     } catch (error) {
-      console.error(
-        `Error in release-group cover route for ${req.params.mbid}:`,
-        error.message,
-      );
+      logger.error("releaseGroup", `Error in release-group cover route for ${req.params.mbid}:`, { message: error.message });
       res.set("Cache-Control", "public, max-age=60");
       res.json({ images: [], notFound: false, transientError: true });
     }
@@ -225,7 +217,7 @@ export default function registerReleaseGroup(router) {
           })),
         );
       } catch (error) {
-        console.error("Error fetching release group tracks:", error);
+        logger.error("releaseGroup", "Error fetching release group tracks:", { message: error.message });
         res.status(500).json({
           error: "Failed to fetch tracks",
           message: error.message,

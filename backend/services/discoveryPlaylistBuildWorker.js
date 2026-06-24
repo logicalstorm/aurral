@@ -3,7 +3,7 @@ import { getDiscoveryPlaylistBuildQueue } from "./honkerDb.js";
 import {
   emitDiscoverPlaylistBuildFailure,
   runQueuedDiscoverPlaylistBuild,
-} from "./discoveryService.js";
+} from "./discovery/index.js";
 
 const {
   start: startDiscoveryPlaylistBuildWorker,

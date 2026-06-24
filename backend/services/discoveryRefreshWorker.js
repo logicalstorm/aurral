@@ -5,7 +5,7 @@ import {
   getDiscoveryCache,
   recordDiscoveryUpdateProgress,
   updateDiscoveryCache,
-} from "./discoveryService.js";
+} from "./discovery/index.js";
 import {
   discoveryNeedsRefresh,
   isDiscoveryRefreshConfigured,

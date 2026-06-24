@@ -1,5 +1,5 @@
 import express from "express";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { noCache } from "../middleware/cache.js";
 import { resolveRequestUser } from "../middleware/auth.js";
 import {

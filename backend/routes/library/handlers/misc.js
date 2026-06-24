@@ -1,5 +1,5 @@
 import { UUID_REGEX } from "../../../config/constants.js";
-import { dbOps } from "../../../config/db-helpers.js";
+import { dbOps } from "../../../db/helpers/index.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
 import { fetchReleaseGroupCoverUrl } from "../../../services/imageService.js";
 import { libraryManager, getCachedArtists } from "../../../services/libraryManager.js";

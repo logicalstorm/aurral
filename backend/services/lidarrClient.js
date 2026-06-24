@@ -1,7 +1,7 @@
 import axios from "axios";
 import http from "http";
 import https from "https";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { logger } from "./logger.js";
 
 const CIRCUIT_COOLDOWN_MS = 60000;

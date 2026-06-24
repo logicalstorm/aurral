@@ -16,7 +16,7 @@ applyIsolatedBackendEnv(isolatedState);
 
 const [{ db }, { dbOps }] = await Promise.all([
   importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/config/db-helpers.js"),
+  importFromRepo("backend/db/helpers/index.js"),
 ]);
 
 test.after(async () => {
@@ -35,7 +35,7 @@ test("getDiscoveryCache preserves lastUpdated after an empty completed refresh",
   });
 
   const moduleUrl = pathToFileURL(
-    path.join(process.cwd(), "backend/services/discoveryService.js"),
+    path.join(process.cwd(), "backend/services/discovery/index.js"),
   ).href;
   const { getDiscoveryCache } = await import(`${moduleUrl}?t=${Date.now()}`);
   const cache = getDiscoveryCache();

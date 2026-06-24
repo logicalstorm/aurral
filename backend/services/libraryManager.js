@@ -1,13 +1,26 @@
 import fs from "fs/promises";
 import path from "path";
-import { dbOps, userOps } from "../config/db-helpers.js";
+import { dbOps, userOps } from "../db/helpers/index.js";
 import { dbHelpers } from "../config/db-sqlite.js";
 import { hasPermission } from "../middleware/auth.js";
-import { normalizeTypeName, getTypeName } from "./typeUtils.js";
+const normalizeTypeName = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+const getTypeName = (item) => {
+  if (!item) return "";
+  if (typeof item === "string") return item;
+  if (typeof item.name === "string") return item.name;
+  if (typeof item.value === "string") return item.value;
+  if (typeof item.albumType?.name === "string")
+    return item.albumType.name;
+  return "";
+};
 import {
   musicbrainzRequest,
   musicbrainzGetArtistReleaseGroups,
-} from "./apiClients.js";
+} from "./apiClients/index.js";
 import { logger } from "./logger.js";
 
 const LIDARR_RETRY_MS = 60000;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
 import {
   Loader,
@@ -7,28 +7,9 @@ import {
   Clock,
   LayoutTemplate,
 } from "lucide-react";
-import {
-  addArtistToLibrary,
-  getBootstrapStatus,
-  getDiscovery,
-  getNearbyShows,
-  getMyDiscoverLayout,
-  getRecentlyAdded,
-  getRecentReleases,
-  getReleaseGroupCover,
-  getArtistCover,
-  lookupArtistsInLibraryBatch,
-  readLibraryLookupCache,
-  updateMyDiscoverLayout,
-  downloadAlbum,
-  updateLibraryAlbum,
-} from "../utils/api";
-import { useWebSocketChannel } from "../hooks/useWebSocket";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuth } from "../contexts/AuthContext";
 import { getArtistFeedbackFlags } from "../utils/discoveryFeedback";
-import { omitKey } from "../utils/object";
-import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
 import { getArtistRecordId } from "../utils/artistTaste";
 import NearbyLocationControl from "../components/NearbyLocationControl";
 import ShowCard from "../components/ShowCard";
@@ -39,409 +20,58 @@ import { DiscoverLayoutModal } from "./DiscoverLayoutModal";
 import { DiscoverPlaylistSection } from "./DiscoverPlaylistSection";
 import { AlbumCard, ArtistCard, ViewAllCard } from "./DiscoverCards";
 import { useDiscoverLayoutState } from "./useDiscoverLayoutState";
+import {
+  getTagColor,
+  DEFAULT_DISCOVER_SECTIONS,
+  getFallbackGenreSectionId,
+  getFallbackGenreFromSectionId,
+  DISCOVER_NEARBY_MODE_KEY,
+  DISCOVER_NEARBY_ZIP_KEY,
+  DISCOVER_PREVIEW_ITEM_LIMIT,
+  normalizeDiscoverLayout,
+  readStoredDiscoverLayout,
+  writeStoredDiscoverLayout,
+} from "./discoverUtils";
+import { useDiscoverData } from "./useDiscoverData";
+import { readLibraryLookupCache, lookupArtistsInLibraryBatch, getMyDiscoverLayout, updateMyDiscoverLayout } from "../utils/api";
 
-const TAG_COLORS = [
-  "#845336",
-  "#57553c",
-  "#a17e3e",
-  "#43454f",
-  "#604848",
-  "#5c6652",
-  "#a18b62",
-  "#8c4f4a",
-  "#898471",
-  "#c8b491",
-  "#65788f",
-  "#755e4a",
-  "#718062",
-  "#bc9d66",
-];
-
-const getTagColor = (name) => {
-  if (!name) return "#211f27";
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
-};
-
-const DISCOVER_LAYOUT_KEY = "discoverLayout";
-const DISCOVERY_CACHE_KEY = "discoverData";
-const DISCOVER_RECENTLY_ADDED_KEY = "discoverRecentlyAdded";
-const DISCOVER_RECENT_RELEASES_KEY = "discoverRecentReleases";
-const DISCOVER_NEARBY_SHOWS_KEY = "discoverNearbyShows";
-
-const DEFAULT_DISCOVER_SECTIONS = [
-  { id: "recentlyAdded", label: "Recently Added", enabled: true },
-  { id: "playlists", label: "Playlists for you", enabled: true },
-  { id: "recommendedShows", label: "Shows Near You", enabled: true },
-  { id: "recentReleases", label: "Recent Releases", enabled: true },
-  { id: "recommended", label: "Recommended for You", enabled: true },
-  { id: "globalTop", label: "Global Trending", enabled: true },
-  { id: "genreSections", label: "Because You Like", enabled: true },
-];
-
-const FALLBACK_GENRE_SECTION_PREFIX = "fallbackGenre:";
-
-const getFallbackGenreSectionId = (genre) =>
-  `${FALLBACK_GENRE_SECTION_PREFIX}${String(genre || "").trim()}`;
-
-const getFallbackGenreFromSectionId = (id) =>
-  String(id || "").startsWith(FALLBACK_GENRE_SECTION_PREFIX)
-    ? String(id).slice(FALLBACK_GENRE_SECTION_PREFIX.length)
-    : null;
-
-const DISCOVER_NEARBY_MODE_KEY = "discoverNearbyMode";
-const DISCOVER_NEARBY_ZIP_KEY = "discoverNearbyZip";
-const DISCOVER_PREVIEW_ITEM_LIMIT = 12;
 const getArtistId = (artist) => getArtistRecordId(artist);
-const getDiscoverLayoutStorageKey = (userId) =>
-  userId ? `${DISCOVER_LAYOUT_KEY}:${userId}` : DISCOVER_LAYOUT_KEY;
-
-const getDiscoveryCacheStorageKey = (userId) =>
-  userId ? `${DISCOVERY_CACHE_KEY}:${userId}` : DISCOVERY_CACHE_KEY;
-
-const getDiscoverRecentlyAddedStorageKey = (userId) =>
-  userId
-    ? `${DISCOVER_RECENTLY_ADDED_KEY}:${userId}`
-    : DISCOVER_RECENTLY_ADDED_KEY;
-
-const getDiscoverRecentReleasesStorageKey = (userId) =>
-  userId
-    ? `${DISCOVER_RECENT_RELEASES_KEY}:${userId}`
-    : DISCOVER_RECENT_RELEASES_KEY;
-
-const getDiscoverNearbyShowsStorageKey = (userId, locationMode, zip) => {
-  const base = userId
-    ? `${DISCOVER_NEARBY_SHOWS_KEY}:${userId}`
-    : DISCOVER_NEARBY_SHOWS_KEY;
-  const locationKey =
-    locationMode === "zip" ? `zip:${String(zip || "").trim()}` : "ip";
-  return `${base}:${locationKey}`;
-};
-
-const readStoredNearbyLocation = () => {
-  try {
-    const storedMode = localStorage.getItem(DISCOVER_NEARBY_MODE_KEY);
-    const storedZip = localStorage.getItem(DISCOVER_NEARBY_ZIP_KEY) || "";
-    const mode =
-      storedMode === "zip" || storedMode === "ip" ? storedMode : "ip";
-    return { mode, zip: storedZip };
-  } catch {
-    return { mode: "ip", zip: "" };
-  }
-};
-
-const readStoredRecentlyAdded = (userId) => {
-  try {
-    const primaryKey = getDiscoverRecentlyAddedStorageKey(userId);
-    const primary = JSON.parse(localStorage.getItem(primaryKey) || "null");
-    if (Array.isArray(primary)) return primary;
-    if (primaryKey === DISCOVER_RECENTLY_ADDED_KEY) return null;
-    const fallback = JSON.parse(
-      localStorage.getItem(DISCOVER_RECENTLY_ADDED_KEY) || "null",
-    );
-    return Array.isArray(fallback) ? fallback : null;
-  } catch {
-    return null;
-  }
-};
-
-const writeStoredRecentlyAdded = (value, userId) => {
-  if (!Array.isArray(value)) return;
-  try {
-    localStorage.setItem(
-      getDiscoverRecentlyAddedStorageKey(userId),
-      JSON.stringify(value),
-    );
-  } catch {
-    console.warn("Failed to write discover recently-added");
-  }
-};
-
-const readStoredRecentReleases = (userId) => {
-  try {
-    const primaryKey = getDiscoverRecentReleasesStorageKey(userId);
-    const primary = JSON.parse(localStorage.getItem(primaryKey) || "null");
-    if (Array.isArray(primary)) return primary;
-    if (primaryKey === DISCOVER_RECENT_RELEASES_KEY) return null;
-    const fallback = JSON.parse(
-      localStorage.getItem(DISCOVER_RECENT_RELEASES_KEY) || "null",
-    );
-    return Array.isArray(fallback) ? fallback : null;
-  } catch {
-    return null;
-  }
-};
-
-const writeStoredRecentReleases = (value, userId) => {
-  if (!Array.isArray(value)) return;
-  try {
-    localStorage.setItem(
-      getDiscoverRecentReleasesStorageKey(userId),
-      JSON.stringify(value),
-    );
-  } catch {
-    console.warn("Failed to write discover recent-releases");
-  }
-};
-
-const normalizeNearbyShowsData = (value) => {
-  if (!value || typeof value !== "object") return null;
-  if (!Array.isArray(value.shows)) return null;
-  return value;
-};
-
-const readStoredNearbyShows = (userId, locationMode, zip) => {
-  try {
-    const primaryKey = getDiscoverNearbyShowsStorageKey(
-      userId,
-      locationMode,
-      zip,
-    );
-    const primary = normalizeNearbyShowsData(
-      JSON.parse(localStorage.getItem(primaryKey) || "null"),
-    );
-    if (primary) return primary;
-    if (!userId) return null;
-    const legacyKey = getDiscoverNearbyShowsStorageKey(null, locationMode, zip);
-    return normalizeNearbyShowsData(
-      JSON.parse(localStorage.getItem(legacyKey) || "null"),
-    );
-  } catch {
-    return null;
-  }
-};
-
-const writeStoredNearbyShows = (value, userId, locationMode, zip) => {
-  const normalized = normalizeNearbyShowsData(value);
-  if (!normalized) return;
-  try {
-    localStorage.setItem(
-      getDiscoverNearbyShowsStorageKey(userId, locationMode, zip),
-      JSON.stringify(normalized),
-    );
-  } catch {
-    console.warn("Failed to write discover nearby-shows");
-  }
-};
-
-const stripDiscoverPlaylistAdoptionFields = (playlists) =>
-  (Array.isArray(playlists) ? playlists : []).map((playlist) => {
-    const rest = { ...playlist };
-    delete rest.adoptedFlowId;
-    delete rest.adoptedPlaylistId;
-    return rest;
-  });
-
-const normalizeDiscoveryData = (value) => {
-  if (!value || typeof value !== "object") return null;
-  return {
-    recommendations: Array.isArray(value.recommendations)
-      ? value.recommendations
-      : [],
-    globalTop: Array.isArray(value.globalTop) ? value.globalTop : [],
-    basedOn: Array.isArray(value.basedOn) ? value.basedOn : [],
-    topTags: Array.isArray(value.topTags) ? value.topTags : [],
-    topGenres: Array.isArray(value.topGenres) ? value.topGenres : [],
-    fallbackGenres: Array.isArray(value.fallbackGenres)
-      ? value.fallbackGenres
-      : [],
-    discoverPlaylists: Array.isArray(value.discoverPlaylists)
-      ? value.discoverPlaylists
-      : [],
-    provider: value.provider || "lastfm",
-    capabilities:
-      value.capabilities && typeof value.capabilities === "object"
-        ? value.capabilities
-        : null,
-    lastUpdated: value.lastUpdated || null,
-    isUpdating: !!value.isUpdating,
-    updatePhase: value.updatePhase || null,
-    updateProgress:
-      typeof value.updateProgress === "number" ? value.updateProgress : null,
-    updateProgressMessage: value.updateProgressMessage || null,
-    playlistsUpdating: !!value.playlistsUpdating,
-    playlistsUpdateMessage: value.playlistsUpdateMessage || null,
-    recommendationQuality:
-      value.recommendationQuality === "initial" ||
-      value.recommendationQuality === "enriching" ||
-      value.recommendationQuality === "enriched"
-        ? value.recommendationQuality
-        : null,
-    isEnriching: value.isEnriching === true,
-    discoveryRunId: value.discoveryRunId || null,
-    enrichmentStartedAt: value.enrichmentStartedAt || null,
-    enrichmentCompletedAt: value.enrichmentCompletedAt || null,
-    enrichmentProgressMessage: value.enrichmentProgressMessage || null,
-    stale: !!value.stale,
-    discoveryMode:
-      value.discoveryMode === "safer" || value.discoveryMode === "deeper"
-        ? value.discoveryMode
-        : "balanced",
-    configured: typeof value.configured === "boolean" ? value.configured : true,
-  };
-};
-
-const readStoredDiscoveryData = (userId) => {
-  const fromStorage = (raw) => {
-    const normalized = normalizeDiscoveryData(raw);
-    if (!normalized) return null;
-    return {
-      ...normalized,
-      discoverPlaylists: stripDiscoverPlaylistAdoptionFields(
-        normalized.discoverPlaylists,
-      ),
-    };
-  };
-  try {
-    const primaryKey = getDiscoveryCacheStorageKey(userId);
-    const primary = fromStorage(
-      JSON.parse(localStorage.getItem(primaryKey) || "null"),
-    );
-    if (primary) return primary;
-    if (primaryKey === DISCOVERY_CACHE_KEY) return null;
-    return fromStorage(
-      JSON.parse(localStorage.getItem(DISCOVERY_CACHE_KEY) || "null"),
-    );
-  } catch {
-    return null;
-  }
-};
-
-const writeStoredDiscoveryData = (value, userId) => {
-  const normalized = normalizeDiscoveryData(value);
-  if (!normalized) return;
-  try {
-    localStorage.setItem(
-      getDiscoveryCacheStorageKey(userId),
-      JSON.stringify({
-        ...normalized,
-        discoverPlaylists: stripDiscoverPlaylistAdoptionFields(
-          normalized.discoverPlaylists,
-        ),
-      }),
-    );
-  } catch {
-    console.warn("Failed to write discover discovery-data");
-  }
-};
-
-const normalizeDiscoverLayout = (value) => {
-  if (!Array.isArray(value)) return null;
-  const defaultsById = new Map(
-    DEFAULT_DISCOVER_SECTIONS.map((item) => [item.id, item]),
-  );
-  const seenDynamicIds = new Set();
-  const normalized = [];
-  value.forEach((item) => {
-    const id = String(item?.id || "").trim();
-    if (!id) return;
-    const enabled =
-      typeof item?.enabled === "boolean" ? item.enabled : undefined;
-    const fallbackGenre = getFallbackGenreFromSectionId(id);
-    if (fallbackGenre) {
-      if (seenDynamicIds.has(id)) return;
-      seenDynamicIds.add(id);
-      normalized.push({
-        id,
-        label: `Top ${fallbackGenre} Artists`,
-        enabled: enabled ?? true,
-      });
-      return;
-    }
-    if (!defaultsById.has(id)) return;
-    const base = defaultsById.get(id);
-    normalized.push({
-      ...base,
-      enabled: enabled ?? base.enabled,
-    });
-    defaultsById.delete(id);
-  });
-  defaultsById.forEach((item) => normalized.push({ ...item }));
-  return normalized;
-};
-
-const readStoredDiscoverLayout = (userId) => {
-  try {
-    const primaryKey = getDiscoverLayoutStorageKey(userId);
-    const primary = normalizeDiscoverLayout(
-      JSON.parse(localStorage.getItem(primaryKey) || "null"),
-    );
-    if (primary) return primary;
-    if (primaryKey === DISCOVER_LAYOUT_KEY) return null;
-    return normalizeDiscoverLayout(
-      JSON.parse(localStorage.getItem(DISCOVER_LAYOUT_KEY) || "null"),
-    );
-  } catch {
-    return null;
-  }
-};
-
-const writeStoredDiscoverLayout = (layout, userId) => {
-  try {
-    localStorage.setItem(
-      getDiscoverLayoutStorageKey(userId),
-      JSON.stringify(layout),
-    );
-  } catch {
-    console.warn("Failed to write discover layout");
-  }
-};
-
 
 function DiscoverPage() {
   useDocumentTitle("Discover");
   const { user: authUser, hasPermission } = useAuth();
-  const initialNearbyLocation = useMemo(() => readStoredNearbyLocation(), []);
-  const [data, setData] = useState(() => readStoredDiscoveryData(authUser?.id));
-  const [recentlyAdded, setRecentlyAdded] = useState(
-    () => readStoredRecentlyAdded(authUser?.id) || [],
-  );
-  const [recentReleases, setRecentReleases] = useState(
-    () => readStoredRecentReleases(authUser?.id) || [],
-  );
-  const [releaseCovers, setReleaseCovers] = useState({});
-  const [artistCovers, setArtistCovers] = useState({});
-  const [pendingRecentReleaseIds, setPendingRecentReleaseIds] = useState({});
-  const [error, setError] = useState(null);
-  const [libraryLookup, setLibraryLookup] = useState({});
-  const { lookup: artistFeedbackLookup, submitFeedback } =
-    useArtistTasteFeedback();
-  const [nearbyShowsData, setNearbyShowsData] = useState(() =>
-    readStoredNearbyShows(
-      authUser?.id,
-      initialNearbyLocation.mode,
-      initialNearbyLocation.zip,
-    ),
-  );
-  const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
-  const [nearbyShowsLoading, setNearbyShowsLoading] = useState(
-    () =>
-      !readStoredNearbyShows(
-        authUser?.id,
-        initialNearbyLocation.mode,
-        initialNearbyLocation.zip,
-      ),
-  );
-  const [nearbyShowsError, setNearbyShowsError] = useState(null);
-  const [nearbyLocationMode, setNearbyLocationMode] = useState(
-    initialNearbyLocation.mode,
-  );
-  const [appliedNearbyZip, setAppliedNearbyZip] = useState(
-    initialNearbyLocation.zip,
-  );
-  const [showFullBasedOnList, setShowFullBasedOnList] = useState(false);
-  const requestedReleaseCoversRef = useRef(new Set());
-  const requestedArtistCoversRef = useRef(new Set());
-  const lastDiscoveryWsMessageAtRef = useRef(0);
-  const discoveryPollInFlightRef = useRef(false);
   const navigate = useDiscoverNavigation();
   const { showSuccess, showError } = useToast();
-  const canAddArtist = hasPermission("addArtist");
-  const canAddAlbum = hasPermission("addAlbum");
   const canAdoptPlaylist = hasPermission("accessFlow");
+
+  const {
+    data,
+    recentlyAdded,
+    recentReleases,
+    releaseCovers,
+    artistCovers,
+    pendingRecentReleaseIds,
+    error,
+    libraryLookup,
+    setLibraryLookup,
+    artistFeedbackLookup,
+    nearbyShowsData,
+    ticketmasterConfigured,
+    nearbyShowsLoading,
+    nearbyShowsError,
+    nearbyLocationMode,
+    setNearbyLocationMode,
+    appliedNearbyZip,
+    setAppliedNearbyZip,
+    canAddArtist,
+    canAddAlbum,
+    getLibraryArtistImage,
+    getRecentReleaseKey,
+    handleAddArtistToLibrary,
+    handleRecentReleaseAlbumAction,
+    handleDiscoveryFeedback,
+  } = useDiscoverData();
+
   const {
     discoverSections,
     draftSections,
@@ -461,492 +91,6 @@ function DiscoverPage() {
     showSuccess,
     showError,
   });
-
-  const applyDiscoveryData = useCallback(
-    (nextValue) => {
-      const normalizedData = normalizeDiscoveryData(nextValue);
-      if (!normalizedData) return;
-      setData(normalizedData);
-      writeStoredDiscoveryData(normalizedData, authUser?.id);
-    },
-    [authUser?.id],
-  );
-
-  const fetchAndApplyDiscovery = useCallback(
-    (cacheBust = false) =>
-      getDiscovery(cacheBust)
-        .then((discoveryData) => {
-          applyDiscoveryData(discoveryData);
-          setError(null);
-        })
-        .catch(console.warn),
-    [applyDiscoveryData],
-  );
-
-  const { isConnected: isDiscoverySocketConnected } = useWebSocketChannel(
-    "discovery",
-    (msg) => {
-      if (msg.type !== "discovery_update") return;
-
-      if (msg.phase === "error") {
-        setData((prev) =>
-          normalizeDiscoveryData({
-            ...(prev || {}),
-            isUpdating: false,
-            updatePhase: "error",
-            updateProgress: null,
-            updateProgressMessage:
-              msg.progressMessage || "Discovery refresh failed",
-          }),
-        );
-        return;
-      }
-
-      if (msg.playlistsUpdating || msg.phase === "playlists_building") {
-        lastDiscoveryWsMessageAtRef.current = Date.now();
-        setData((prev) =>
-          normalizeDiscoveryData({
-            ...(prev || {}),
-            playlistsUpdating: true,
-            playlistsUpdateMessage:
-              msg.playlistsUpdateMessage ||
-              msg.progressMessage ||
-              "Updating recommended playlists...",
-            isUpdating: false,
-            configured: true,
-            stale: false,
-          }),
-        );
-        return;
-      }
-
-      if (msg.phase === "playlists_completed") {
-        lastDiscoveryWsMessageAtRef.current = Date.now();
-        setData((prev) =>
-          normalizeDiscoveryData({
-            ...(prev || {}),
-            discoverPlaylists: Array.isArray(msg.discoverPlaylists)
-              ? msg.discoverPlaylists
-              : prev?.discoverPlaylists || [],
-            playlistsUpdating: false,
-            playlistsUpdateMessage: null,
-            lastUpdated: msg.lastUpdated || prev?.lastUpdated || null,
-            configured: true,
-            stale: false,
-          }),
-        );
-        fetchAndApplyDiscovery(true);
-        return;
-      }
-
-      if (msg.phase === "playlists_error") {
-        setData((prev) =>
-          normalizeDiscoveryData({
-            ...(prev || {}),
-            playlistsUpdating: false,
-            playlistsUpdateMessage: null,
-          }),
-        );
-        return;
-      }
-
-      if (msg.isUpdating) {
-        lastDiscoveryWsMessageAtRef.current = Date.now();
-        setData((prev) =>
-          normalizeDiscoveryData({
-            ...(prev || {}),
-            isUpdating: true,
-            updatePhase: msg.phase || prev?.updatePhase || null,
-            updateProgress:
-              typeof msg.progress === "number"
-                ? msg.progress
-                : prev?.updateProgress ?? null,
-            updateProgressMessage:
-              msg.progressMessage || prev?.updateProgressMessage || null,
-            provider: msg.provider || prev?.provider || "lastfm",
-            capabilities: msg.capabilities || prev?.capabilities || null,
-            configured: true,
-            stale: false,
-          }),
-        );
-        return;
-      }
-
-      if (msg.phase === "completed" || Array.isArray(msg.recommendations)) {
-        lastDiscoveryWsMessageAtRef.current = Date.now();
-        if (Array.isArray(msg.recommendations)) {
-          setData((prev) => {
-            const normalized = normalizeDiscoveryData({
-              recommendations: msg.recommendations || [],
-              globalTop: msg.globalTop || [],
-              basedOn: msg.basedOn || [],
-              topTags: msg.topTags || [],
-              topGenres: msg.topGenres || [],
-              fallbackGenres: msg.fallbackGenres || [],
-              discoverPlaylists: msg.discoverPlaylists || [],
-              provider: msg.provider || "lastfm",
-              capabilities: msg.capabilities || null,
-              lastUpdated: msg.lastUpdated || null,
-              isUpdating: false,
-              updatePhase: null,
-              updateProgress: null,
-              updateProgressMessage: null,
-              playlistsUpdating:
-                typeof msg.playlistsUpdating === "boolean"
-                  ? msg.playlistsUpdating
-                  : prev?.playlistsUpdating,
-              playlistsUpdateMessage:
-                msg.playlistsUpdateMessage ??
-                prev?.playlistsUpdateMessage ??
-                null,
-              recommendationQuality:
-                msg.recommendationQuality || prev?.recommendationQuality || null,
-              isEnriching:
-                typeof msg.isEnriching === "boolean"
-                  ? msg.isEnriching
-                  : prev?.isEnriching === true,
-              discoveryRunId: msg.discoveryRunId || prev?.discoveryRunId || null,
-              enrichmentStartedAt:
-                msg.enrichmentStartedAt || prev?.enrichmentStartedAt || null,
-              enrichmentCompletedAt:
-                msg.enrichmentCompletedAt || prev?.enrichmentCompletedAt || null,
-              enrichmentProgressMessage:
-                msg.enrichmentProgressMessage ??
-                prev?.enrichmentProgressMessage ??
-                null,
-              stale: false,
-              discoveryMode:
-                msg.discoveryMode === "safer" || msg.discoveryMode === "deeper"
-                  ? msg.discoveryMode
-                  : "balanced",
-              configured: true,
-            });
-            writeStoredDiscoveryData(normalized, authUser?.id);
-            return normalized;
-          });
-        } else {
-          setData((prev) =>
-            normalizeDiscoveryData({
-              ...(prev || {}),
-              isUpdating: false,
-              updatePhase: null,
-              updateProgress: null,
-              updateProgressMessage: null,
-              playlistsUpdating:
-                typeof msg.playlistsUpdating === "boolean"
-                  ? msg.playlistsUpdating
-                  : prev?.playlistsUpdating,
-              playlistsUpdateMessage:
-                msg.playlistsUpdateMessage ?? prev?.playlistsUpdateMessage ?? null,
-              recommendationQuality:
-                msg.recommendationQuality || prev?.recommendationQuality || null,
-              isEnriching:
-                typeof msg.isEnriching === "boolean"
-                  ? msg.isEnriching
-                  : prev?.isEnriching === true,
-              discoveryRunId: msg.discoveryRunId || prev?.discoveryRunId || null,
-              enrichmentStartedAt:
-                msg.enrichmentStartedAt || prev?.enrichmentStartedAt || null,
-              enrichmentCompletedAt:
-                msg.enrichmentCompletedAt || prev?.enrichmentCompletedAt || null,
-              enrichmentProgressMessage:
-                msg.enrichmentProgressMessage ??
-                prev?.enrichmentProgressMessage ??
-                null,
-              stale: false,
-            }),
-          );
-        }
-        fetchAndApplyDiscovery(true);
-      }
-    },
-  );
-
-  useEffect(() => {
-    if (!isDiscoverySocketConnected) return;
-    if (!data?.isUpdating && !data?.isEnriching && !data?.stale) return;
-    fetchAndApplyDiscovery();
-  }, [
-    authUser?.id,
-    isDiscoverySocketConnected,
-    data?.isUpdating,
-    data?.isEnriching,
-    data?.stale,
-    fetchAndApplyDiscovery,
-  ]);
-
-  useEffect(() => {
-    if (!isDiscoverySocketConnected) return;
-    if (!data?.playlistsUpdating) return;
-    fetchAndApplyDiscovery(true);
-  }, [authUser?.id, isDiscoverySocketConnected, data?.playlistsUpdating, fetchAndApplyDiscovery]);
-
-  useEffect(() => {
-    if (!data?.isUpdating && !data?.isEnriching) return;
-    const hasRecentWsUpdate =
-      Date.now() - lastDiscoveryWsMessageAtRef.current < 20000;
-    if (isDiscoverySocketConnected && hasRecentWsUpdate) return;
-    const pollDiscovery = () => {
-      if (discoveryPollInFlightRef.current) return;
-      discoveryPollInFlightRef.current = true;
-      fetchAndApplyDiscovery(true)
-        .finally(() => {
-          discoveryPollInFlightRef.current = false;
-        });
-    };
-    pollDiscovery();
-    const id = setInterval(pollDiscovery, 10000);
-    return () => clearInterval(id);
-  }, [
-    authUser?.id,
-    data?.isUpdating,
-    data?.isEnriching,
-    isDiscoverySocketConnected,
-    fetchAndApplyDiscovery,
-  ]);
-
-  useEffect(() => {
-    if (!data?.stale || data?.isUpdating || data?.isEnriching) return;
-    if (isDiscoverySocketConnected) return;
-    const id = setTimeout(() => {
-      fetchAndApplyDiscovery(true);
-    }, 15000);
-    return () => clearTimeout(id);
-  }, [
-    authUser?.id,
-    data?.stale,
-    data?.isUpdating,
-    data?.isEnriching,
-    isDiscoverySocketConnected,
-    fetchAndApplyDiscovery,
-  ]);
-
-  useEffect(() => {
-    if (!data) return;
-    if (data.isUpdating && !data.stale) {
-      lastDiscoveryWsMessageAtRef.current = 0;
-    }
-  }, [data, data?.isUpdating, data?.stale]);
-
-  useEffect(() => {
-    getDiscovery()
-      .then((discoveryData) => {
-        const normalizedData = normalizeDiscoveryData(discoveryData);
-        setData(normalizedData);
-        writeStoredDiscoveryData(normalizedData, authUser?.id);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(
-          err.response?.data?.message || "Failed to load discovery data",
-        );
-        setData({
-          recommendations: [],
-          globalTop: [],
-          basedOn: [],
-          topTags: [],
-          topGenres: [],
-          fallbackGenres: [],
-          provider: "lastfm",
-          capabilities: null,
-          lastUpdated: null,
-          isUpdating: false,
-          stale: false,
-          discoveryMode: "balanced",
-          configured: false,
-        });
-      });
-
-    getRecentlyAdded()
-      .then((items) => {
-        setRecentlyAdded(items);
-        writeStoredRecentlyAdded(items, authUser?.id);
-      })
-      .catch((err) => {
-        showError(err?.message || "Failed to load recently added");
-      });
-
-    getRecentReleases()
-      .then((items) => {
-        setRecentReleases(items);
-        writeStoredRecentReleases(items, authUser?.id);
-      })
-      .catch((err) => {
-        showError(err?.message || "Failed to load recent releases");
-      });
-  }, [authUser?.id, showError]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadBootstrapStatus = async () => {
-      try {
-        const bootstrap = await getBootstrapStatus();
-        if (!cancelled) {
-          setTicketmasterConfigured(!!bootstrap.ticketmasterConfigured);
-        }
-      } catch {
-        if (!cancelled) {
-          setTicketmasterConfigured(true);
-        }
-      }
-    };
-    loadBootstrapStatus();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    try {
-      const storedMode = localStorage.getItem(DISCOVER_NEARBY_MODE_KEY);
-      const storedZip = localStorage.getItem(DISCOVER_NEARBY_ZIP_KEY) || "";
-      if (storedMode === "zip" || storedMode === "ip") {
-        setNearbyLocationMode(storedMode);
-      }
-      setAppliedNearbyZip(storedZip);
-    } catch {}
-  }, [authUser?.id]);
-
-  useEffect(() => {
-    if (!ticketmasterConfigured) {
-      setNearbyShowsData(null);
-      setNearbyShowsError(null);
-      setNearbyShowsLoading(false);
-      return;
-    }
-    const shouldUseZip = nearbyLocationMode === "zip";
-    if (shouldUseZip && !appliedNearbyZip.trim()) {
-      setNearbyShowsData(null);
-      setNearbyShowsError(null);
-      setNearbyShowsLoading(false);
-      return;
-    }
-    const locationMode = shouldUseZip ? "zip" : "ip";
-    const locationZip = shouldUseZip ? appliedNearbyZip : "";
-    const cachedNearbyShows = readStoredNearbyShows(
-      authUser?.id,
-      locationMode,
-      locationZip,
-    );
-    if (cachedNearbyShows) {
-      setNearbyShowsData(cachedNearbyShows);
-    }
-    let cancelled = false;
-    setNearbyShowsLoading(!cachedNearbyShows);
-    setNearbyShowsError(null);
-    getNearbyShows(locationZip)
-      .then((response) => {
-        if (cancelled) return;
-        setNearbyShowsData(response);
-        writeStoredNearbyShows(
-          response,
-          authUser?.id,
-          locationMode,
-          locationZip,
-        );
-        setNearbyShowsError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        if (!cachedNearbyShows) {
-          setNearbyShowsError(
-            err.response?.data?.message || "Failed to load nearby shows",
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setNearbyShowsLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    authUser?.id,
-    nearbyLocationMode,
-    appliedNearbyZip,
-    ticketmasterConfigured,
-  ]);
-
-  useEffect(() => {
-    const ids = recentReleases
-      .filter((album) => !album.coverUrl)
-      .map((album) => album.mbid || album.foreignAlbumId)
-      .filter(Boolean);
-    const missing = ids.filter(
-      (id) => !releaseCovers[id] && !requestedReleaseCoversRef.current.has(id),
-    );
-    missing.forEach((id) => {
-      requestedReleaseCoversRef.current.add(id);
-      const release = recentReleases.find(
-        (album) => (album.mbid || album.foreignAlbumId) === id,
-      );
-      getReleaseGroupCover(id, {
-        artistName:
-          release?.artistName || release?.artist || release?.artistCredit || "",
-        albumTitle: release?.title || release?.albumName || "",
-      })
-        .then((data) => {
-          if (data?.images?.length > 0) {
-            const front =
-              data.images.find((img) => img.front) || data.images[0];
-            const url = front?.image;
-            if (url) {
-              setReleaseCovers((prev) => ({ ...prev, [id]: url }));
-            }
-          }
-        })
-        .catch(console.warn)
-        .finally(() => {
-          requestedReleaseCoversRef.current.delete(id);
-        });
-    });
-  }, [recentReleases, releaseCovers]);
-
-  useEffect(() => {
-    const missingArtistCovers = recentReleases.filter((album) => {
-      const artistId = album.artistMbid || album.foreignArtistId;
-      if (!artistId) return false;
-      if (album.coverUrl) return false;
-      const releaseId = album.mbid || album.foreignAlbumId;
-      if (releaseId && releaseCovers[releaseId]) return false;
-      if (artistCovers[artistId]) return false;
-      return !requestedArtistCoversRef.current.has(artistId);
-    });
-
-    missingArtistCovers.forEach((album) => {
-      const artistId = album.artistMbid || album.foreignArtistId;
-      if (!artistId) return;
-      requestedArtistCoversRef.current.add(artistId);
-      getArtistCover(artistId, album.artistName)
-        .then((data) => {
-          if (data?.images?.length > 0) {
-            const front =
-              data.images.find((img) => img.front) || data.images[0];
-            const url = front?.image;
-            if (url) {
-              setArtistCovers((prev) => ({ ...prev, [artistId]: url }));
-            }
-          }
-        })
-        .catch(console.warn)
-        .finally(() => {
-          requestedArtistCoversRef.current.delete(artistId);
-        });
-    });
-  }, [recentReleases, releaseCovers, artistCovers]);
-
-  const getLibraryArtistImage = (artist) => {
-    if (artist.images && artist.images.length > 0) {
-      const posterImage = artist.images.find(
-        (img) => img.coverType === "poster" || img.coverType === "fanart",
-      );
-      const image = posterImage || artist.images[0];
-      return image?.remoteUrl || image?.url || null;
-    }
-    return null;
-  };
 
   const genreSections = useMemo(() => {
     if (Array.isArray(data?.fallbackGenres) && data.fallbackGenres.length > 0) {
@@ -1307,73 +451,6 @@ function DiscoverPage() {
     );
   };
 
-  const handleAddArtistToLibrary = useCallback(
-    async (artist) => {
-      const artistId = getArtistId(artist);
-      if (!artist?.name || !artistId) return false;
-      try {
-        await addArtistToLibrary({
-          foreignArtistId: artistId,
-          artistName: artist.name,
-        });
-        setLibraryLookup((prev) => ({
-          ...prev,
-          [artistId]: true,
-        }));
-        showSuccess(`Adding ${artist.name}...`);
-        return true;
-      } catch (err) {
-        showError(
-          err.response?.data?.message ||
-            err.response?.data?.error ||
-            err.message ||
-            "Failed to add artist to library",
-        );
-        return false;
-      }
-    },
-    [showError, showSuccess],
-  );
-
-  const getRecentReleaseKey = useCallback(
-    (album) => album.mbid || album.foreignAlbumId || album.id,
-    [],
-  );
-
-  const handleRecentReleaseAlbumAction = useCallback(
-    async (album) => {
-      const albumKey = getRecentReleaseKey(album);
-      if (!album?.id || !album?.artistId || !albumKey) return;
-      setPendingRecentReleaseIds((prev) => ({ ...prev, [albumKey]: true }));
-      try {
-        await updateLibraryAlbum(album.id, {
-          ...album,
-          monitored: true,
-        });
-        await downloadAlbum(album.artistId, album.id, {
-          artistMbid: album.artistMbid || album.foreignArtistId,
-          artistName: album.artistName,
-        });
-        showSuccess(`Searching for ${album.albumName || "album"}`);
-      } catch (err) {
-        showError(
-          err.response?.data?.message ||
-            err.response?.data?.error ||
-            err.message ||
-            "Failed to request album",
-        );
-      } finally {
-        setPendingRecentReleaseIds((prev) => omitKey(prev, albumKey));
-      }
-    },
-    [getRecentReleaseKey, showError, showSuccess],
-  );
-
-  const handleDiscoveryFeedback = useCallback(
-    (artist, action, options = {}) => submitFeedback(artist, action, options),
-    [submitFeedback],
-  );
-
   const renderSection = (id) => {
     const fallbackGenre = getFallbackGenreFromSectionId(id);
     if (fallbackGenre) {
@@ -1548,17 +625,6 @@ function DiscoverPage() {
           </DiscoverRail>
         );
       }
-
-      const recommendedStatusTitle = isUpdating
-        ? "Building your recommendations"
-        : "Not enough listening data yet";
-      const recommendedStatusMessage = isUpdating
-        ? updateProgressMessage ||
-          "Scanning your library and Last.fm history. The first setup can take up to 10 minutes."
-        : provider === "lastfm"
-          ? "Add artists to your library or keep scrobbling on Last.fm. Recommendations improve as Aurral learns your taste."
-          : "Add artists to your library or connect Last.fm in Settings to unlock personalized recommendations.";
-
       return (
         <section key="recommended" className="artist-discover-section">
           <h2 className="artist-section-title--discover discover-recommended-status__title">
@@ -1583,10 +649,17 @@ function DiscoverPage() {
               </div>
             )}
             <h3 className="discover-recommended-status__heading">
-              {recommendedStatusTitle}
+              {isUpdating
+                ? "Building your recommendations"
+                : "Not enough listening data yet"}
             </h3>
             <p className="discover-recommended-status__message">
-              {recommendedStatusMessage}
+              {isUpdating
+                ? updateProgressMessage ||
+                  "Scanning your library and Last.fm history. The first setup can take up to 10 minutes."
+                : provider === "lastfm"
+                  ? "Add artists to your library or keep scrobbling on Last.fm. Recommendations improve as Aurral learns your taste."
+                  : "Add artists to your library or connect Last.fm in Settings to unlock personalized recommendations."}
             </p>
             {!isUpdating ? (
               <div className="discover-recommended-status__actions">
@@ -1840,6 +913,8 @@ function DiscoverPage() {
 
     return null;
   };
+
+  const [showFullBasedOnList, setShowFullBasedOnList] = useState(false);
 
   if (data === null && !error) {
     return (

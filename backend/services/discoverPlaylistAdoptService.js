@@ -1,12 +1,12 @@
-import { userOps } from "../config/db-helpers.js";
+import { userOps } from "../db/helpers/index.js";
 import { randomUUID } from "crypto";
-import { getLastfmApiKey } from "./apiClients.js";
+import { getLastfmApiKey } from "./apiClients/index.js";
 import {
   buildFlowPayloadFromPreset,
   getCachedDiscoverPlaylist,
   serializeTrack,
 } from "./discoverPlaylistService.js";
-import { getDiscoveryCache } from "./discoveryService.js";
+import { getDiscoveryCache } from "./discovery/index.js";
 import {
   getListenHistoryCacheNamespace,
   getListenHistoryProfile,

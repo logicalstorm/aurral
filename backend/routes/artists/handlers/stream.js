@@ -5,8 +5,8 @@ import {
   musicbrainzGetArtistAppearsOnReleaseGroups,
   musicbrainzGetArtistReleaseGroups,
   musicbrainzGetArtistNameByMbid,
-} from "../../../services/apiClients.js";
-import { dbOps } from "../../../config/db-helpers.js";
+} from "../../../services/apiClients/index.js";
+import { dbOps } from "../../../db/helpers/index.js";
 import { noCache } from "../../../middleware/cache.js";
 import { verifyTokenAuth } from "../../../middleware/auth.js";
 import {
@@ -14,6 +14,7 @@ import {
   sendSSE,
   pendingArtistRequests,
 } from "../utils.js";
+import { logger } from "../../../services/logger.js";
 import { getArtistImage } from "../../../services/imageService.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
 import {
@@ -220,9 +221,7 @@ export default function registerStream(router) {
             }
             if (!isClientConnected()) return;
 
-            console.log(
-              `[Artists Stream] Found artist in Lidarr: ${lidarrArtist.artistName}`,
-            );
+            logger.info("stream", `Found artist in Lidarr: ${lidarrArtist.artistName}`);
             const metadataArtist = await metadataArtistPromise;
 
             sendArtist({
@@ -272,17 +271,13 @@ export default function registerStream(router) {
               })),
             });
           } catch (error) {
-            console.warn(
-              `[Artists Stream] Failed to fetch from Lidarr: ${error.message}`,
-            );
+            logger.warn("stream", `Failed to fetch from Lidarr: ${error.message}`);
           }
         })();
         tasks.push(libraryTask);
 
         if (pendingPromise) {
-          console.log(
-            `[Artists Stream] Request for ${requestKey} already in progress, waiting...`,
-          );
+          logger.info("stream", `Request for ${requestKey} already in progress, waiting...`);
           pendingPromise
             .then((data) => {
               if (data) sendArtist(data);
@@ -545,10 +540,7 @@ export default function registerStream(router) {
             }, 100);
           });
       } catch (error) {
-        console.error(
-          `[Artists Stream] Error for artist ${mbid}:`,
-          error.message,
-        );
+        logger.error("stream", `Error for artist ${mbid}:`, { message: error.message });
         sendSSE(res, "error", {
           error: "Failed to fetch artist details",
           message: error.response?.data?.error || error.message,
@@ -556,7 +548,7 @@ export default function registerStream(router) {
         res.end();
       }
     } catch (error) {
-      console.error(`[Artists Stream] Unexpected error:`, error.message);
+      logger.error("stream", `Unexpected error:`, { message: error.message });
       res.status(500).json({
         error: "Failed to stream artist details",
         message: error.message,

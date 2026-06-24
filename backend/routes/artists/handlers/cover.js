@@ -1,6 +1,6 @@
 import { UUID_REGEX } from "../../../config/constants.js";
 import { logger } from "../../../services/logger.js";
-import { dbOps } from "../../../config/db-helpers.js";
+import { dbOps } from "../../../db/helpers/index.js";
 import { pendingCoverRequests, fetchCoverInBackground } from "../utils.js";
 import { getArtistImage } from "../../../services/imageService.js";
 import { warmImageProxy } from "../../../services/imageProxyService.js";

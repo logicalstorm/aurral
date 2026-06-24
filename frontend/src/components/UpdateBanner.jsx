@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   normalizeReleaseVersion,
   selectLatestReleaseForChannel,
-} from "../utils/releaseVersion";
+} from "../../../lib/release-version";
 
 const UpdateBanner = ({ currentVersion, visible = true }) => {
   const [updateInfo, setUpdateInfo] = useState(null);

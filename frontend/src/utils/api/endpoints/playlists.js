@@ -1,0 +1,132 @@
+import {
+  getData,
+  postData,
+  putData,
+  deleteData,
+  fetchInflightOnce,
+  buildAuthenticatedApiUrl,
+  flowStatusInflight,
+} from "../core.js";
+
+export const getFlowTrackStreamUrl = (jobId) =>
+  buildAuthenticatedApiUrl(`/playlists/stream/${encodeURIComponent(jobId)}`);
+
+export const getFlowArtworkUrl = (playlistId, version) =>
+  buildAuthenticatedApiUrl(
+    `/playlists/artwork/${encodeURIComponent(playlistId)}`,
+    { v: version },
+  );
+
+export const uploadFlowArtwork = (playlistId, file) =>
+  putData(
+    `/playlists/artwork/${encodeURIComponent(playlistId)}`,
+    file,
+    {
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+      },
+    },
+  );
+
+export const deleteFlowArtwork = (playlistId) =>
+  deleteData(
+    `/playlists/artwork/${encodeURIComponent(playlistId)}`,
+  );
+
+export const generateFlowArtwork = (playlistId) =>
+  postData(
+    `/playlists/artwork/${encodeURIComponent(playlistId)}/generate`,
+  );
+
+export const getFlowStatus = async ({
+  includeJobs = false,
+  flowId,
+  jobsLimit,
+  signal,
+} = {}) => {
+  const params = {};
+  if (includeJobs) {
+    params.includeJobs = "1";
+  }
+  if (flowId) {
+    params.flowId = flowId;
+  }
+  if (jobsLimit != null) {
+    params.jobsLimit = jobsLimit;
+  }
+  const key = `flowStatus:${JSON.stringify(params)}`;
+  return fetchInflightOnce(flowStatusInflight, key, () =>
+    getData("/playlists/status", { params, signal }),
+  );
+};
+
+export const getFlowJobs = (flowId, limit = null, options = {}) => {
+  const params = { ...(options.params || {}) };
+  const parsedLimit = Number(limit);
+  if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
+    params.limit = Math.floor(parsedLimit);
+  }
+  return getData(`/playlists/jobs/${flowId}`, {
+    ...options,
+    params,
+  });
+};
+
+export const createFlow = (payload) => postData("/playlists/flows", payload);
+
+export const updateFlow = (flowId, payload) =>
+  putData(`/playlists/flows/${flowId}`, payload);
+
+export const deleteFlow = (flowId) => deleteData(`/playlists/flows/${flowId}`);
+
+export const convertFlowToStaticPlaylist = (flowId, payload = {}) =>
+  postData(
+    `/playlists/flows/${flowId}/static-playlist`,
+    payload,
+  );
+
+export const createSharedPlaylist = (payload) =>
+  postData("/playlists/shared-playlists", payload);
+
+export const setFlowEnabled = (flowId, enabled) =>
+  putData(`/playlists/flows/${flowId}/enabled`, {
+    enabled,
+  });
+
+export const importSharedPlaylist = (payload) =>
+  postData(
+    "/playlists/shared-playlists/import",
+    payload,
+  );
+
+export const updateSharedPlaylist = (playlistId, payload) =>
+  putData(
+    `/playlists/shared-playlists/${playlistId}`,
+    payload,
+  );
+
+export const addSharedPlaylistTracks = (playlistId, payload) =>
+  postData(
+    `/playlists/shared-playlists/${playlistId}/tracks`,
+    payload,
+  );
+
+export const deleteSharedPlaylist = (playlistId) =>
+  deleteData(
+    `/playlists/shared-playlists/${playlistId}`,
+  );
+
+export const deleteSharedPlaylistTrack = (playlistId, jobId) =>
+  deleteData(
+    `/playlists/shared-playlists/${playlistId}/tracks/${jobId}`,
+  );
+
+export const reSearchSharedPlaylistTrack = (playlistId, jobId) =>
+  postData(
+    `/playlists/shared-playlists/${playlistId}/tracks/${jobId}/research`,
+  );
+
+export const startFlowPlaylist = (flowId, limit = 30) =>
+  postData(`/playlists/start/${flowId}`, {
+    limit,
+  });

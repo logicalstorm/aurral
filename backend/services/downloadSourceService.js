@@ -1,4 +1,4 @@
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { slskdClient } from "./slskdClient.js";
 import { prowlarrClient } from "./prowlarrClient.js";
 import { nzbgetClient } from "./nzbgetClient.js";

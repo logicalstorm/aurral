@@ -1,8 +1,8 @@
 import createHonkerWorker from "./honkerWorkerFactory.js";
 import { getDiscoveryUserRefreshQueue } from "./honkerDb.js";
-import { updateUserDiscoveryCache } from "./discoveryService.js";
+import { updateUserDiscoveryCache } from "./discovery/index.js";
 import { getListenHistoryCacheNamespace } from "./listeningHistory.js";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 
 function wasRefreshedSince(profile, requestedAt) {
   const cacheNamespace = getListenHistoryCacheNamespace(profile);

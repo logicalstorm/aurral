@@ -1,5 +1,5 @@
 import axios from "axios";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 
 let connectionCache = { checkedAt: 0, result: null };
 

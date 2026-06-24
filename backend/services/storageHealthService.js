@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import fs from "fs/promises";
 import path from "path";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { lidarrClient } from "./lidarrClient.js";
 import { slskdClient } from "./slskdClient.js";
 import { nzbgetClient } from "./nzbgetClient.js";

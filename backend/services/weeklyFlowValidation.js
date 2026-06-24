@@ -1,4 +1,4 @@
-import { getLastfmApiKey } from "./apiClients.js";
+import { getLastfmApiKey } from "./apiClients/index.js";
 
 export function normalizeFlowMixForValidation(mix, recipe) {
   const source =

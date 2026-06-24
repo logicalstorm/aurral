@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 
 const LEGACY_TYPES = ["discover", "mix", "trending"];

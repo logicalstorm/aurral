@@ -4,7 +4,7 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { playlistSource } from "./weeklyFlowPlaylistSource.js";
-import { dbOps, userOps } from "../config/db-helpers.js";
+import { dbOps, userOps } from "../db/helpers/index.js";
 import { resolveWeeklyFlowTrackContext } from "./weeklyFlowTrackResolver.js";
 import { getListenHistoryProfile } from "./listeningHistory.js";
 import {

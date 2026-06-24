@@ -156,7 +156,7 @@ export async function ensureDiscoverArtworkForPreset(presetId, { user } = {}) {
   const existing = await resolveDiscoverArtworkFile(presetId);
   if (existing) return existing;
 
-  const { getDiscoveryCache } = await import("./discoveryService.js");
+  const { getDiscoveryCache } = await import("./discovery/index.js");
   const { getListenHistoryProfile } = await import("./listeningHistory.js");
   const { getCachedDiscoverPlaylist } =
     await import("./discoverPlaylistService.js");

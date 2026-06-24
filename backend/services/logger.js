@@ -1,4 +1,9 @@
+import { isVerboseConsoleEnabled } from "../loadEnv.js";
+
+let verboseEnabled = isVerboseConsoleEnabled();
+
 function log(level, category, message, data = {}) {
+  if (level === "debug" && !verboseEnabled) return;
   const line = `[${level}] [${category}] ${message}`;
   const keys = Object.keys(data).length;
   if (level === "error") {

@@ -1,5 +1,5 @@
 import { libraryManager } from "../../../services/libraryManager.js";
-import { dbOps } from "../../../config/db-helpers.js";
+import { dbOps } from "../../../db/helpers/index.js";
 import { noCache } from "../../../middleware/cache.js";
 import {
   requireAuth,
@@ -10,6 +10,7 @@ import {
   parseLidarrSearchContext,
   resolveAlbumSearchOutcome,
 } from "../../../services/albumSearchState.js";
+import { logger } from "../../../services/logger.js";
 
 const STALE_GRABBED_MS = 15 * 60 * 1000;
 const DOWNLOAD_STATUS_CACHE_MS = 5000;
@@ -209,7 +210,7 @@ export const getDownloadStatusesForAlbumIds = async (albumIdArrayInput) => {
         }
       }
     } catch (error) {
-      console.warn("Failed to fetch Lidarr status:", error.message);
+      logger.warn("downloads", "Failed to fetch Lidarr status:", { message: error.message });
     }
   }
 
@@ -423,7 +424,7 @@ const computeAllDownloadStatuses = async () => {
         }
       }
     } catch (error) {
-      console.warn("Failed to fetch Lidarr status:", error.message);
+      logger.warn("downloads", "Failed to fetch Lidarr status:", { message: error.message });
     }
   }
 
@@ -565,17 +566,14 @@ export default function registerDownloads(router) {
               : "Album added to library",
           });
         } catch (error) {
-          console.error(
-            `Failed to trigger album search ${albumId}:`,
-            error.message,
-          );
+          logger.error("downloads", `Failed to trigger album search ${albumId}:`, { message: error.message });
           res.status(500).json({
             error: "Failed to trigger album search",
             message: error.message,
           });
         }
       } catch (error) {
-        console.error("Error initiating album download:", error);
+        logger.error("downloads", "Error initiating album download:", { message: error.message });
         res.status(500).json({
           error: "Failed to initiate album download",
           message: error.message,
@@ -649,10 +647,7 @@ export default function registerDownloads(router) {
           message: "Album search triggered",
         });
       } catch (error) {
-        console.error(
-          `Failed to trigger album search ${req.body?.albumId}:`,
-          error.message,
-        );
+        logger.error("downloads", `Failed to trigger album search ${req.body?.albumId}:`, { message: error.message });
         res.status(500).json({
           error: "Failed to trigger album search",
           message: error.message,

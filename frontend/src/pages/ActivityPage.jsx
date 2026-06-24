@@ -9,7 +9,6 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { getRequests, triggerAlbumSearch, checkHealth } from "../utils/api";
-import { omitKey } from "../utils/object";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { TAG_COLORS } from "./ArtistDetails/constants";
 import { PageSectionMobileNav } from "../components/PageSectionMobileNav";
@@ -455,7 +454,7 @@ function ActivityPage() {
     } catch {
       setError("Failed to trigger album search.");
     } finally {
-      setReSearchingAlbumIds((prev) => omitKey(prev, albumId));
+      setReSearchingAlbumIds(({ [albumId]: _, ...prev }) => prev);
     }
   };
 

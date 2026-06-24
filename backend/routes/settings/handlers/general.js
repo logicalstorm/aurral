@@ -1,0 +1,459 @@
+import { dbOps } from "../../../db/helpers/index.js";
+import {
+  DEFAULT_METADATA_BASE_URL,
+  DEFAULT_SEARCH_URL,
+  defaultData,
+} from "../../../config/constants.js";
+import { reconcileLocalNetworkBypassSetting } from "../../../middleware/auth.js";
+import { noCache } from "../../../middleware/cache.js";
+import { validateExternalUrl } from "../../../middleware/urlValidator.js";
+import { websocketService } from "../../../services/websocketService.js";
+import { resolvePlaylistRoot } from "../../../services/playlistPaths.js";
+import { normalizePathMappings } from "../../../services/pathMappings.js";
+import {
+  normalizeM3uPathMappings,
+  normalizeM3uPathMode,
+} from "../../../services/playlistM3uPaths.js";
+import { logger } from "../../../services/logger.js";
+
+function mergeIntegrations(existing, input, keys) {
+  const merged = { ...existing, ...input };
+  for (const key of keys) {
+    merged[key] = input[key]
+      ? { ...(existing[key] || {}), ...input[key] }
+      : existing[key];
+  }
+  return merged;
+}
+
+export default function register(router) {
+  router.get("/", noCache, (req, res) => {
+    try {
+      const settings = dbOps.getSettings();
+      if (settings?.integrations?.coverArtArchive) {
+        delete settings.integrations.coverArtArchive;
+      }
+      if (settings?.integrations?.musicbrainz) {
+        delete settings.integrations.musicbrainz;
+      }
+      if (!settings?.integrations?.search) {
+        settings.integrations.search = {
+          url: DEFAULT_SEARCH_URL,
+          apiKey: "",
+        };
+      } else {
+        settings.integrations.search = {
+          url: settings.integrations.search.url || DEFAULT_SEARCH_URL,
+          apiKey: settings.integrations.search.apiKey || "",
+        };
+      }
+      if (!settings?.integrations?.metadata) {
+        const legacyMusicbrainz = dbOps.getSettings()?.integrations?.musicbrainz || {};
+        settings.integrations.metadata = {
+          provider: "brainzmash",
+          baseUrl: String(legacyMusicbrainz.customUrl || "").trim().replace(/\/ws\/2\/?$/, "") ||
+              DEFAULT_METADATA_BASE_URL,
+          userAgentSuffix: "",
+          enableNarrowFallbacks: true,
+        };
+      } else {
+        settings.integrations.metadata = {
+          ...settings.integrations.metadata,
+          baseUrl: String(settings.integrations.metadata.baseUrl || "").trim().replace(/\/+$/, "") ||
+              DEFAULT_METADATA_BASE_URL,
+        };
+      }
+      settings.security = {
+        ...(settings.security || {}),
+        localNetworkBypass: {
+          enabled: settings?.security?.localNetworkBypass?.enabled === true,
+        },
+      };
+      res.json({
+        ...settings,
+        downloadFolderPath:
+          settings.downloadFolderPath || resolvePlaylistRoot(),
+      });
+    } catch (error) {
+      logger.error("settings", "Settings GET error:", error);
+      res
+        .status(500)
+        .json({ error: "Failed to fetch settings", message: error.message });
+    }
+  });
+
+  router.post("/", async (req, res) => {
+    try {
+      const {
+        quality,
+        releaseTypes,
+        integrations,
+        rootFolderPath,
+        downloadFolderPath,
+        pathMappings,
+        security,
+        playlistArtwork,
+      } = req.body;
+
+      const currentSettings = dbOps.getSettings();
+      const localBypassWasEnabled =
+        currentSettings?.security?.localNetworkBypass?.enabled === true;
+      const lidarrExternalUrl = integrations?.lidarr?.externalUrl;
+      if (lidarrExternalUrl !== undefined) {
+        const trimmedExternalUrl = String(lidarrExternalUrl).trim();
+        if (trimmedExternalUrl) {
+          const urlValidation = validateExternalUrl(trimmedExternalUrl);
+          if (!urlValidation.valid) {
+            return res.status(400).json({ error: urlValidation.error });
+          }
+          integrations.lidarr.externalUrl = urlValidation.url;
+        } else {
+          integrations.lidarr.externalUrl = "";
+        }
+      }
+
+      if (integrations?.search) {
+        const nextSearch = {
+          ...(currentSettings.integrations?.search || {}),
+          ...integrations.search,
+        };
+        const trimmedSearchUrl = String(nextSearch.url || "").trim();
+        if (trimmedSearchUrl) {
+          const urlValidation = validateExternalUrl(trimmedSearchUrl);
+          if (!urlValidation.valid) {
+            return res.status(400).json({
+              error: `Invalid search URL: ${urlValidation.error}`,
+            });
+          }
+          nextSearch.url = urlValidation.url.replace(/\/+$/, "");
+        } else {
+          nextSearch.url = "";
+        }
+        nextSearch.apiKey =
+          typeof nextSearch.apiKey === "string" ? nextSearch.apiKey.trim() : "";
+        integrations.search = nextSearch;
+      }
+      if (integrations?.metadata) {
+        const nextMetadata = {
+          ...(currentSettings.integrations?.metadata || {}),
+          ...integrations.metadata,
+        };
+        nextMetadata.provider = "brainzmash";
+        const baseUrlValidation = validateExternalUrl(nextMetadata.baseUrl || "");
+        if (!baseUrlValidation.valid) {
+          return res.status(400).json({
+            error: `Invalid metadata base URL: ${baseUrlValidation.error}`,
+          });
+        }
+        nextMetadata.baseUrl = String(baseUrlValidation.url || "").trim().replace(/\/+$/, "");
+        nextMetadata.userAgentSuffix =
+          typeof nextMetadata.userAgentSuffix === "string"
+            ? nextMetadata.userAgentSuffix.trim()
+            : "";
+        nextMetadata.enableNarrowFallbacks =
+          nextMetadata.enableNarrowFallbacks !== false;
+        integrations.metadata = nextMetadata;
+      }
+      if (integrations?.coverArtArchive) {
+        delete integrations.coverArtArchive;
+      }
+      if (integrations?.prowlarr) {
+        const nextProwlarr = {
+          ...(currentSettings.integrations?.prowlarr || {}),
+          ...integrations.prowlarr,
+        };
+        const trimmedUrl = String(nextProwlarr.url || "").trim();
+        if (trimmedUrl) {
+          const urlValidation = validateExternalUrl(trimmedUrl);
+          if (!urlValidation.valid) {
+            return res.status(400).json({
+              error: `Invalid Prowlarr URL: ${urlValidation.error}`,
+            });
+          }
+          nextProwlarr.url = urlValidation.url.replace(/\/+$/, "");
+        } else {
+          nextProwlarr.url = "";
+        }
+        nextProwlarr.enabled = nextProwlarr.enabled === true;
+        nextProwlarr.apiKey =
+          typeof nextProwlarr.apiKey === "string"
+            ? nextProwlarr.apiKey.trim()
+            : "";
+        nextProwlarr.categories = Array.isArray(nextProwlarr.categories)
+          ? nextProwlarr.categories
+              .map((entry) => Number.parseInt(entry, 10))
+              .filter((entry) => Number.isFinite(entry) && entry > 0)
+          : String(nextProwlarr.categories || "")
+              .split(",")
+              .map((entry) => Number.parseInt(entry.trim(), 10))
+              .filter((entry) => Number.isFinite(entry) && entry > 0);
+        if (nextProwlarr.categories.length === 0) {
+          nextProwlarr.categories = [3000];
+        }
+        const maxResults = Number.parseInt(nextProwlarr.maxResults, 10);
+        nextProwlarr.maxResults = Number.isFinite(maxResults)
+          ? Math.min(200, Math.max(10, maxResults))
+          : 60;
+        const indexers =
+          nextProwlarr.indexers && typeof nextProwlarr.indexers === "object"
+            ? nextProwlarr.indexers
+            : {};
+        nextProwlarr.indexers = Object.fromEntries(
+          Object.entries(indexers)
+            .map(([id, entry]) => {
+              const parsedId = Number.parseInt(id, 10);
+              if (!Number.isFinite(parsedId)) return null;
+              const priority = Number.parseInt(entry?.priority, 10);
+              return [
+                String(parsedId),
+                {
+                  enabled: entry?.enabled !== false,
+                  priority: Number.isFinite(priority)
+                    ? Math.min(1000, Math.max(1, priority))
+                    : 25,
+                },
+              ];
+            })
+            .filter(Boolean),
+        );
+        integrations.prowlarr = nextProwlarr;
+      }
+      if (integrations?.nzbget) {
+        const nextNzbget = {
+          ...(currentSettings.integrations?.nzbget || {}),
+          ...integrations.nzbget,
+        };
+        const trimmedUrl = String(nextNzbget.url || "").trim();
+        if (trimmedUrl) {
+          const urlValidation = validateExternalUrl(trimmedUrl);
+          if (!urlValidation.valid) {
+            return res.status(400).json({
+              error: `Invalid NZBGet URL: ${urlValidation.error}`,
+            });
+          }
+          nextNzbget.url = urlValidation.url.replace(/\/+$/, "");
+        } else {
+          nextNzbget.url = "";
+        }
+        nextNzbget.enabled = nextNzbget.enabled === true;
+        nextNzbget.username =
+          typeof nextNzbget.username === "string"
+            ? nextNzbget.username.trim()
+            : "";
+        nextNzbget.password =
+          typeof nextNzbget.password === "string" ? nextNzbget.password : "";
+        nextNzbget.category =
+          String(nextNzbget.category || "aurral").trim() || "aurral";
+        const priority = Number.parseInt(nextNzbget.priority, 10);
+        nextNzbget.priority = Number.isFinite(priority)
+          ? Math.min(1000, Math.max(1, priority))
+          : 20;
+        const nzbPriority = Number.parseInt(nextNzbget.nzbPriority, 10);
+        nextNzbget.nzbPriority = Number.isFinite(nzbPriority)
+          ? Math.min(900, Math.max(-100, nzbPriority))
+          : 0;
+        nextNzbget.addPaused = nextNzbget.addPaused === true;
+        nextNzbget.completedPath =
+          typeof nextNzbget.completedPath === "string"
+            ? nextNzbget.completedPath.trim()
+            : "";
+        integrations.nzbget = nextNzbget;
+      }
+      if (integrations?.slskd) {
+        const priority = Number.parseInt(integrations.slskd.priority, 10);
+        integrations.slskd.enabled = integrations.slskd.enabled !== false;
+        integrations.slskd.priority = Number.isFinite(priority)
+          ? Math.min(1000, Math.max(1, priority))
+          : 10;
+      }
+      if (integrations?.navidrome) {
+        integrations.navidrome.m3uPathMode = normalizeM3uPathMode(
+          integrations.navidrome.m3uPathMode,
+        );
+        integrations.navidrome.pathMappings = normalizeM3uPathMappings(
+          integrations.navidrome.pathMappings,
+        );
+      }
+
+      const INTEGRATION_KEYS = ["lidarr", "navidrome", "slskd", "prowlarr", "nzbget", "lastfm", "ticketmaster", "metadata", "search", "general", "gotify", "webhookEvents"];
+      let mergedIntegrations =
+        currentSettings.integrations || defaultData.settings.integrations || {};
+      if (integrations) {
+        mergedIntegrations = mergeIntegrations(mergedIntegrations, integrations, INTEGRATION_KEYS);
+        mergedIntegrations.plex = integrations.plex
+          ? {
+              ...(mergedIntegrations.plex || {}),
+              ...integrations.plex,
+              token: integrations.plex.token || mergedIntegrations.plex?.token || "",
+              clientId: integrations.plex.clientId || mergedIntegrations.plex?.clientId || "",
+            }
+          : mergedIntegrations.plex;
+        mergedIntegrations.webhooks = integrations.webhooks !== undefined
+          ? integrations.webhooks
+          : mergedIntegrations.webhooks;
+      }
+
+      if (mergedIntegrations?.coverArtArchive) {
+        delete mergedIntegrations.coverArtArchive;
+      }
+
+      const updatedSettings = {
+        ...currentSettings,
+        quality:
+          quality !== undefined ? quality : currentSettings.quality || "standard",
+        rootFolderPath:
+          rootFolderPath !== undefined
+            ? rootFolderPath
+            : currentSettings.rootFolderPath || null,
+        downloadFolderPath:
+          downloadFolderPath !== undefined
+            ? downloadFolderPath
+            : currentSettings.downloadFolderPath || null,
+        pathMappings:
+          pathMappings !== undefined
+            ? normalizePathMappings(pathMappings)
+            : currentSettings.pathMappings || [],
+        releaseTypes:
+          releaseTypes !== undefined
+            ? releaseTypes
+            : currentSettings.releaseTypes || defaultData.settings.releaseTypes,
+        integrations: mergedIntegrations,
+        security:
+          security !== undefined
+            ? {
+                ...(currentSettings.security || {}),
+                ...security,
+                localNetworkBypass: security.localNetworkBypass
+                  ? {
+                      ...(
+                        currentSettings.security?.localNetworkBypass ||
+                        defaultData.settings.security.localNetworkBypass
+                      ),
+                      ...security.localNetworkBypass,
+                      enabled: security.localNetworkBypass.enabled === true,
+                    }
+                  : currentSettings.security?.localNetworkBypass ||
+                    defaultData.settings.security.localNetworkBypass,
+              }
+            : currentSettings.security || defaultData.settings.security,
+        playlistArtwork:
+          playlistArtwork !== undefined
+            ? {
+                ...(currentSettings.playlistArtwork ||
+                  defaultData.settings.playlistArtwork),
+                ...playlistArtwork,
+              }
+            : currentSettings.playlistArtwork ||
+              defaultData.settings.playlistArtwork,
+      };
+
+      if (updatedSettings?.integrations?.coverArtArchive) {
+        delete updatedSettings.integrations.coverArtArchive;
+      }
+      if (updatedSettings?.integrations?.musicbrainz) {
+        delete updatedSettings.integrations.musicbrainz;
+      }
+
+      dbOps.updateSettings(updatedSettings);
+      const reconciled = reconcileLocalNetworkBypassSetting().settings;
+      if (
+        localBypassWasEnabled &&
+        reconciled?.security?.localNetworkBypass?.enabled !== true
+      ) {
+        websocketService.reconcileAuthState();
+      }
+      res.json(reconciled);
+    } catch (error) {
+      logger.error("settings", "Settings POST error:", error);
+      res
+        .status(500)
+        .json({ error: "Failed to save settings", message: error.message });
+    }
+  });
+
+  router.get("/tasks", noCache, async (_req, res) => {
+    try {
+      const { getHonkerTaskStatus } = await import(
+        "../../../services/honkerTaskStatus.js"
+      );
+      res.json(await getHonkerTaskStatus());
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to get task status",
+        message: error.message,
+      });
+    }
+  });
+
+  router.post("/tasks/clear-stale", noCache, async (_req, res) => {
+    try {
+      const { clearStaleHonkerJobs, getHonkerTaskStatus } = await import(
+        "../../../services/honkerTaskStatus.js"
+      );
+      const result = await clearStaleHonkerJobs();
+      res.json({
+        ...result,
+        tasks: await getHonkerTaskStatus(),
+      });
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to clear stuck jobs",
+        message: error.message,
+      });
+    }
+  });
+
+  router.get("/storage-health", noCache, async (req, res) => {
+    try {
+      const { runStorageHealthCheck } =
+        await import("../../../services/storageHealthService.js");
+      const force = req.query.force === "1" || req.query.force === "true";
+      const result = await runStorageHealthCheck({ force });
+      res.json({
+        success: result.ok,
+        ...result,
+      });
+    } catch (error) {
+      logger.error("settings", "Storage health check error:", error);
+      res.status(500).json({
+        error: "Storage health check failed",
+        message: error.message,
+      });
+    }
+  });
+
+  router.get("/browse", async (req, res) => {
+    try {
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const target = path.resolve(req.query.path ? String(req.query.path) : "/");
+      const dirents = await fs.readdir(target, { withFileTypes: true });
+      const directories = (
+        await Promise.all(
+          dirents.map(async (d) => {
+            let isDir = d.isDirectory();
+            if (!isDir && d.isSymbolicLink()) {
+              try {
+                isDir = (await fs.stat(path.join(target, d.name))).isDirectory();
+              } catch {
+                isDir = false;
+              }
+            }
+            return isDir ? { name: d.name, path: path.join(target, d.name) } : null;
+          }),
+        )
+      )
+        .filter(Boolean)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      res.json({
+        path: target,
+        parent: target === "/" ? null : path.dirname(target),
+        directories,
+      });
+    } catch (error) {
+      res
+        .status(400)
+        .json({ error: "Cannot read path", message: error.message });
+    }
+  });
+}

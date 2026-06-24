@@ -1,6 +1,6 @@
 import NodeCache from "node-cache";
-import { getDiscoveryCache } from "./discoveryService.js";
-import { getLastfmApiKey, lastfmRequest } from "./apiClients.js";
+import { getDiscoveryCache } from "./discovery/index.js";
+import { getLastfmApiKey, lastfmRequest } from "./apiClients/index.js";
 import { buildImageProxyUrl } from "./imageProxyService.js";
 import { selectBestArtistImage } from "./imageService.js";
 import { lidarrClient } from "./lidarrClient.js";

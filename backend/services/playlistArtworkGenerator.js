@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { buildPlaylistArtworkWebpBuffer } from "./playlistArtwork.js";
 import {
   fetchImageBuffer,

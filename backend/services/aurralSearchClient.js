@@ -1,4 +1,4 @@
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { DEFAULT_SEARCH_URL } from "../config/constants.js";
 
 function getSettingsSearch() {

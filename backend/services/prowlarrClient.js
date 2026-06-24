@@ -1,5 +1,5 @@
 import axios from "axios";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 
 const DEFAULT_MUSIC_CATEGORIES = [3000];
 const DEFAULT_MAX_RESULTS = 60;

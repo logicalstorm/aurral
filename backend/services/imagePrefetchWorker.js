@@ -1,6 +1,6 @@
 import createHonkerWorker from "./honkerWorkerFactory.js";
 import { getImagePrefetchQueue } from "./honkerDb.js";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { getArtistImage } from "./imageService.js";
 
 async function processImagePrefetch(payload = {}) {

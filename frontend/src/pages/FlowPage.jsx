@@ -46,7 +46,6 @@ import {
   isReleaseRadarFlow,
 } from "./flows/flowStats";
 import { getPlaylistRunActivity } from "./flows/flowRunActivity";
-import { omitKey } from "../utils/object";
 import {
   PlaylistLibraryItem,
   PlaylistDetailHero,
@@ -54,6 +53,7 @@ import {
   FlowLibraryCreateMenu,
   LibrarySidebarToggleIcon,
 } from "./flows/FlowPlaylistUI";
+import { useFlowMobileLayout } from "./flows/useFlowMobileLayout";
 import {
   FlowEmptyState,
   FlowDetailPlaceholder,
@@ -97,31 +97,6 @@ function readLibrarySidebarCollapsed() {
   } catch {
     return false;
   }
-}
-
-const FLOW_MOBILE_LAYOUT_QUERY = "(max-width: 767px)";
-
-function useFlowMobileLayout() {
-  const [isMobileLayout, setIsMobileLayout] = useState(() =>
-    typeof window !== "undefined" && typeof window.matchMedia === "function"
-      ? window.matchMedia(FLOW_MOBILE_LAYOUT_QUERY).matches
-      : false,
-  );
-
-  useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      typeof window.matchMedia !== "function"
-    ) {
-      return undefined;
-    }
-    const mediaQuery = window.matchMedia(FLOW_MOBILE_LAYOUT_QUERY);
-    const handleChange = (event) => setIsMobileLayout(event.matches);
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  return isMobileLayout;
 }
 
 function FlowPage() {
@@ -224,13 +199,13 @@ function FlowPage() {
       ...prev,
       [flow.id]: flowToForm(flow),
     }));
-    setSimpleErrors((prev) => omitKey(prev, flow.id));
+    setSimpleErrors(({ [flow.id]: _, ...prev }) => prev);
     setDetailTab("tracks");
   };
 
   const handleApplySimple = async (flow) => {
     setApplyingFlowId(flow.id);
-    setSimpleErrors((prev) => omitKey(prev, flow.id));
+    setSimpleErrors(({ [flow.id]: _, ...prev }) => prev);
     try {
       const draft = simpleDrafts[flow.id] || flowToForm(flow);
       if (!isReleaseRadarFlow(flow)) {
@@ -270,7 +245,7 @@ function FlowPage() {
   const handleApplyFlowNameEdit = async (flow, nameOverride) => {
     if (!flow?.id) return;
     setApplyingFlowNameId(flow.id);
-    setSimpleErrors((prev) => omitKey(prev, flow.id));
+    setSimpleErrors(({ [flow.id]: _, ...prev }) => prev);
     try {
       const currentDraft = simpleDrafts[flow.id] ?? flowToForm(flow);
       if (!isReleaseRadarFlow(flow)) {
@@ -472,7 +447,7 @@ function FlowPage() {
         err.response?.data?.message || err.message || "Failed to update flow"
       );
     } finally {
-      setOptimisticEnabled((prev) => omitKey(prev, flow.id));
+      setOptimisticEnabled(({ [flow.id]: _, ...prev }) => prev);
       setTogglingId(null);
       setTogglingToEnabled(null);
     }
@@ -805,7 +780,7 @@ function FlowPage() {
   const handleApplySharedPlaylist = async (playlist, nameOverride) => {
     if (!playlist) return;
     setApplyingSharedPlaylistNameId(playlist.id);
-    setSharedPlaylistErrors((prev) => omitKey(prev, playlist.id));
+    setSharedPlaylistErrors(({ [playlist.id]: _, ...prev }) => prev);
     try {
       const name =
         nameOverride !== undefined
@@ -992,7 +967,7 @@ function FlowPage() {
     }
     setCoverArtworkError("");
     if (target.kind === "flow") {
-      setSimpleErrors((prev) => omitKey(prev, target.id));
+      setSimpleErrors(({ [target.id]: _, ...prev }) => prev);
       setRenameModal({
         kind: "flow",
         id: target.id,
@@ -1000,7 +975,7 @@ function FlowPage() {
       });
       return;
     }
-    setSharedPlaylistErrors((prev) => omitKey(prev, target.id));
+    setSharedPlaylistErrors(({ [target.id]: _, ...prev }) => prev);
     setRenameModal({
       kind: "shared",
       id: target.id,
@@ -1144,7 +1119,7 @@ function FlowPage() {
       showError(message);
       await fetchFlowTracks(playlistId, { showSpinner: false });
     } finally {
-      setReSearchingTrackIds((prev) => omitKey(prev, jobId));
+      setReSearchingTrackIds(({ [jobId]: _, ...prev }) => prev);
     }
   };
 
@@ -1471,7 +1446,7 @@ function FlowPage() {
                 }
                 onClearError={() => {
                   if (simpleErrors[selectedFlow.id]) {
-                    setSimpleErrors((prev) => omitKey(prev, selectedFlow.id));
+                    setSimpleErrors(({ [selectedFlow.id]: _, ...prev }) => prev);
                   }
                 }}
               />
@@ -1493,7 +1468,7 @@ function FlowPage() {
                 }
                 onClearError={() => {
                   if (simpleErrors[selectedFlow.id]) {
-                    setSimpleErrors((prev) => omitKey(prev, selectedFlow.id));
+                    setSimpleErrors(({ [selectedFlow.id]: _, ...prev }) => prev);
                   }
                 }}
                 normalizeMixPercent={normalizeMixPercent}

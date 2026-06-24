@@ -1,4 +1,4 @@
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { buildImageProxyUrl, warmImageProxy } from "./imageProxyService.js";
 import {
   getAlbumByMbid,

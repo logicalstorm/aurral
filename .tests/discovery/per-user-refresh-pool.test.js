@@ -13,7 +13,7 @@ test("per-user refresh: rerankCachedRecommendations produces a personalized slic
     "backend/services/discoveryRecommendations.js",
   );
   const { rerankCachedRecommendations } = await importFromRepo(
-    "backend/services/discoveryService.js",
+    "backend/services/discovery/index.js",
   );
 
   const globalPool = Array.from({ length: 300 }, (_, index) => {
@@ -66,7 +66,7 @@ test("per-user refresh: rerankCachedRecommendations produces a personalized slic
 
 test("per-user refresh: user-specific feedback is isolated from global feedback", async () => {
   const { addDiscoveryFeedback, getDiscoveryFeedback, resetDiscoveryFeedback } = await importFromRepo(
-    "backend/services/discoveryService.js",
+    "backend/services/discovery/index.js",
   );
 
   resetDiscoveryFeedback("global");
@@ -108,7 +108,7 @@ test("per-user refresh: mergeRetainedRecommendationPool preserves per-user retai
   const { mergeRetainedRecommendationPool, rerankRecommendations } =
     await importFromRepo("backend/services/discoveryRecommendations.js");
   const { rerankCachedRecommendations } = await importFromRepo(
-    "backend/services/discoveryService.js",
+    "backend/services/discovery/index.js",
   );
 
   const runStartedAt = "2026-06-22T00:00:00.000Z";
@@ -195,7 +195,7 @@ test("per-user refresh: mergeRetainedRecommendationPool preserves per-user retai
 
 test("per-user refresh: addDiscoveryFeedback deduplicates feedback per user", async () => {
   const { addDiscoveryFeedback, getDiscoveryFeedback } = await importFromRepo(
-    "backend/services/discoveryService.js",
+    "backend/services/discovery/index.js",
   );
 
   addDiscoveryFeedback("user-dedup", {
@@ -279,7 +279,7 @@ test("per-user refresh: returns null when global pool is empty without degrading
   applyIsolatedBackendEnv(isolatedState);
 
   const { db } = await importFromRepo("backend/config/db-sqlite.js");
-  const { dbOps } = await importFromRepo("backend/config/db-helpers.js");
+  const { dbOps } = await importFromRepo("backend/db/helpers/index.js");
   resetDatabase(db);
 
   const prevKey = process.env.LASTFM_API_KEY;
@@ -307,7 +307,7 @@ test("per-user refresh: returns null when global pool is empty without degrading
   );
 
   const { getDiscoveryCache, updateUserDiscoveryCache, resetDiscoveryModuleCache } = await importFromRepo(
-    "backend/services/discoveryService.js",
+    "backend/services/discovery/index.js",
   );
 
   resetDiscoveryModuleCache();

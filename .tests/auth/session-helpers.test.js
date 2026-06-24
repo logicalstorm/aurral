@@ -14,7 +14,7 @@ applyIsolatedBackendEnv(isolatedState);
 
 const [{ db }, { userOps }, sessionHelpers, bcryptModule] = await Promise.all([
   importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/config/db-helpers.js"),
+  importFromRepo("backend/db/helpers/index.js"),
   importFromRepo("backend/config/session-helpers.js"),
   import("bcrypt"),
 ]);

@@ -1,5 +1,5 @@
-import { lastfmRequest, getLastfmApiKey } from "./apiClients.js";
-import { getDiscoveryCache } from "./discoveryService.js";
+import { lastfmRequest, getLastfmApiKey } from "./apiClients/index.js";
+import { getDiscoveryCache } from "./discovery/index.js";
 import { normalizeWeightMap } from "./weeklyFlowPlaylistConfig.js";
 
 const MBID_REGEX =

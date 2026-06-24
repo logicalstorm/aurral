@@ -17,7 +17,7 @@ const {
   markDiscoveryRefreshDequeued,
   scheduleNextDiscoveryRefresh,
 } = await importFromRepo("backend/services/discoveryRefreshScheduler.js");
-const { getDiscoveryCache } = await importFromRepo("backend/services/discoveryService.js");
+const { getDiscoveryCache } = await importFromRepo("backend/services/discovery/index.js");
 
 let heldGlobalRefreshLock = null;
 

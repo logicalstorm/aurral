@@ -1,4 +1,4 @@
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { enqueueImagePrefetchJob } from "./honkerDb.js";
 
 const BATCH_SIZE = 10;

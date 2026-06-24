@@ -6,7 +6,7 @@ import {
   getLastfmApiKey,
   getTicketmasterApiKey,
   getMetadataProviderHealthSnapshot,
-} from "../services/apiClients.js";
+} from "../services/apiClients/index.js";
 import { getSearchBaseUrl } from "../services/aurralSearchClient.js";
 import { APP_VERSION } from "../config/constants.js";
 import {
@@ -19,12 +19,13 @@ import {
 import {
   getDiscoveryCache,
   getDiscoveryUpdateStatus,
-} from "../services/discoveryService.js";
+} from "../services/discovery/index.js";
 import { getCachedArtistCount } from "../services/libraryManager.js";
+import { logger } from "../services/logger.js";
 import { lidarrClient } from "../services/lidarrClient.js";
 import { PLAYLIST_LIBRARY_DIR, resolvePlaylistRoot } from "../services/playlistPaths.js";
 import { getFilesystemBrowseRoots } from "../services/downloadFolderConfig.js";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { db } from "../config/db-sqlite.js";
 import { resolveAurralDataDir } from "../config/data-dir.js";
 import { websocketService } from "../services/websocketService.js";
@@ -268,7 +269,7 @@ router.get("/bootstrap", noCache, (req, res) => {
   try {
     res.json(buildBootstrapPayload(req));
   } catch (error) {
-    console.error("Bootstrap check error:", error);
+    logger.error("health", "Bootstrap check error:", { message: error.message });
     res.status(500).json({
       error: "Internal server error",
     });
@@ -321,7 +322,7 @@ router.get("/", noCache, async (req, res) => {
     }
     res.json(payload);
   } catch (error) {
-    console.error("Health check error:", error);
+    logger.error("health", "Health check error:", { message: error.message });
     res.status(500).json({
       error: "Internal server error",
     });

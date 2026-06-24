@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { db } from "./db-sqlite.js";
-import { userOps } from "./db-helpers.js";
+import { userOps } from "../db/helpers/index.js";
 
 const DEFAULT_EXPIRY_HOURS = 24;
 

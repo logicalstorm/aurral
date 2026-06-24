@@ -5,12 +5,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "exclude": [
-    "node_modules",
-    "**/node_modules",
-    "dist",
-    "**/dist",
-    "frontend/dist",
-    "backend/data"
-  ]
+  "exclude": ["node_modules", "**/node_modules", "dist", "**/dist", "frontend/dist", "backend/data"]
 }

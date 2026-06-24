@@ -18,7 +18,7 @@ export default [
     },
     rules: {
       ...js.configs.recommended.rules,
-      "no-console": "off",
+      "no-console": "warn",
       "no-empty": ["error", { allowEmptyCatch: true }],
       "no-unused-vars": [
         "error",

@@ -27,78 +27,8 @@ import {
 } from "./Settings/components/SettingsField";
 import DownloadFolderField from "../components/DownloadFolderField";
 
-function OnboardingStep({ centered = false, children }) {
-  return (
-    <div
-      className={`onboarding-step${centered ? " onboarding-step--center" : ""}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function OnboardingStepHeader({
-  title,
-  titleClassName = "",
-  copy,
-  centered = false,
-}) {
-  return (
-    <div
-      className={`onboarding-step__header${centered ? " onboarding-step__header--center" : ""}`}
-    >
-      <h2
-        className={`onboarding-title${titleClassName ? ` ${titleClassName}` : ""}`}
-      >
-        {title}
-      </h2>
-      {copy ? <p className="onboarding-copy">{copy}</p> : null}
-    </div>
-  );
-}
-
-function OnboardingHint({ children, center = false }) {
-  if (!children) return null;
-  return (
-    <p className={`onboarding-hint${center ? " onboarding-hint--center" : ""}`}>
-      {children}
-    </p>
-  );
-}
-
-function OnboardingFieldGroup({ label, hint, children }) {
-  return (
-    <div className="onboarding-field-group">
-      {label ? <span className="onboarding-label">{label}</span> : null}
-      {children}
-      {hint ? <OnboardingHint>{hint}</OnboardingHint> : null}
-    </div>
-  );
-}
-
-const getApiErrorMessage = (error, fallback) =>
-  error?.response?.data?.message ||
-  error?.response?.data?.error ||
-  error?.message ||
-  fallback;
-
-const ONBOARDING_HERO_LOGO_SIZE = 56;
-const ONBOARDING_COMPACT_LOGO_SIZE = 28;
-
-const STEPS = [
-  "welcome",
-  "admin",
-  "downloads",
-  "lidarr-connect",
-  "lidarr-library",
-  "lidarr-davo",
-  "lidarr-preferences",
-  "navidrome",
-  "lastfm",
-  "slskd",
-  "ticketmaster",
-  "brainzmash",
-];
+import { OnboardingStep, OnboardingStepHeader, OnboardingHint, OnboardingFieldGroup } from "./onboardingUtils.jsx";
+import { getApiErrorMessage, ONBOARDING_HERO_LOGO_SIZE, ONBOARDING_COMPACT_LOGO_SIZE, STEPS } from "./onboardingUtils.jsx";
 
 function Onboarding() {
   useDocumentTitle("Setup");

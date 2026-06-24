@@ -3,10 +3,11 @@ import { cacheMiddleware } from "../../../middleware/cache.js";
 import { noCache } from "../../../middleware/cache.js";
 import { verifyTokenAuth } from "../../../middleware/auth.js";
 import { getAlbumTracksByAlbumMbid } from "../../../services/providers/brainzmashProvider.js";
-import { enrichTracksWithDeezerPreviews } from "../../../services/apiClients.js";
+import { enrichTracksWithDeezerPreviews } from "../../../services/apiClients/index.js";
 import fs from "fs";
 import fsp from "fs/promises";
 import path from "path";
+import { logger } from "../../../services/logger.js";
 
 const AUDIO_CONTENT_TYPES = {
   ".mp3": "audio/mpeg",
@@ -97,7 +98,7 @@ export default function registerTracks(router) {
       if (tracks.length === 0 && releaseGroupMbid) {
         if (String(releaseGroupMbid).startsWith("dz-")) {
           const { deezerGetAlbumTracks } = await import(
-            "../../../services/apiClients.js"
+            "../../../services/apiClients/index.js"
           );
           const dzTracks = await deezerGetAlbumTracks(releaseGroupMbid);
           tracks = dzTracks.map((t) => ({
@@ -126,9 +127,7 @@ export default function registerTracks(router) {
               }));
             }
           } catch (mbError) {
-            console.warn(
-              `[Library] Failed to fetch tracks from metadata provider: ${mbError.message}`
-            );
+            logger.warn("library", `Failed to fetch tracks from metadata provider: ${mbError.message}`);
           }
         }
       }

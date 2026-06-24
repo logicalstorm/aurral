@@ -1,6 +1,6 @@
 import { UUID_REGEX } from "../../../config/constants.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
-import { youtubeFindTopSongVideo } from "../../../services/apiClients.js";
+import { youtubeFindTopSongVideo } from "../../../services/apiClients/index.js";
 
 export default function registerVideo(router) {
   router.get("/:mbid/video", cacheMiddleware(3600), async (req, res) => {

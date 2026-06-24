@@ -38,82 +38,28 @@ import {
   buildSearchArtistResults,
   resolveSearchTopResult,
 } from "../utils/searchNavigation";
-import { omitKey } from "../utils/object";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { allReleaseTypes } from "./ArtistDetails/constants";
 import { readReleaseListViewMode, writeReleaseListViewMode } from "./ArtistDetails/utils";
 import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
 import { getArtistRecordId } from "../utils/artistTaste";
-
-const PAGE_SIZE = 20;
-const DEFAULT_ALBUM_SORT = "relevance";
-const ALBUM_PENDING_STATUSES = new Set([
-  "searching",
-  "downloading",
-  "processing",
-]);
-const LASTFM_TAG_BANNER_KEY = "aurral:lastfm-tag-results-banner-dismissed";
-const ALBUM_SORT_OPTIONS = [
-  { value: "relevance", label: "Relevance" },
-  { value: "dateDesc", label: "Newest" },
-  { value: "artistAsc", label: "Artist (A-Z)" },
-  { value: "titleAsc", label: "Title (A-Z)" },
-];
-const ALBUM_RELEASE_TABS = [
-  { value: "all", label: "All" },
-  { value: "albums", label: "Albums" },
-  { value: "singles", label: "EP & Singles" },
-  { value: "compilations", label: "Compilations" },
-];
-const UNIFIED_FILTER_OPTIONS = [
-  { value: "all", label: "All" },
-  { value: "artists", label: "Artists" },
-  { value: "albums", label: "Albums" },
-  { value: "tracks", label: "Songs" },
-];
-
-function isAlbumCompilation(album) {
-  return (
-    album?.primaryType === "Compilation" ||
-    (album?.secondaryTypes || []).includes("Compilation")
-  );
-}
-
-function isAlbumSingleOrEp(album) {
-  return album?.primaryType === "Single" || album?.primaryType === "EP";
-}
-
-function matchesAlbumReleaseTab(album, tab) {
-  if (tab === "all") return true;
-  if (tab === "compilations") return isAlbumCompilation(album);
-  if (tab === "singles") {
-    return isAlbumSingleOrEp(album) && !isAlbumCompilation(album);
-  }
-  return album?.primaryType === "Album" && !isAlbumCompilation(album);
-}
-
-function dedupeArtists(artists) {
-  const seen = new Set();
-  return artists.filter((artist) => {
-    const artistId = getArtistRecordId(artist);
-    if (!artistId || seen.has(artistId)) return false;
-    seen.add(artistId);
-    return true;
-  });
-}
-
-function dedupeAlbums(albums) {
-  const seen = new Set();
-  return albums.filter((album) => {
-    if (!album?.id || seen.has(album.id)) return false;
-    seen.add(album.id);
-    return true;
-  });
-}
-
-const ARTIST_IMAGE_HYDRATION_CONCURRENCY = 6;
-const ALBUM_COVER_HYDRATION_CONCURRENCY = 6;
+import {
+  PAGE_SIZE,
+  DEFAULT_ALBUM_SORT,
+  ALBUM_PENDING_STATUSES,
+  LASTFM_TAG_BANNER_KEY,
+  ALBUM_SORT_OPTIONS,
+  ALBUM_RELEASE_TABS,
+  UNIFIED_FILTER_OPTIONS,
+  isAlbumCompilation,
+  isAlbumSingleOrEp,
+  matchesAlbumReleaseTab,
+  dedupeArtists,
+  dedupeAlbums,
+  ARTIST_IMAGE_HYDRATION_CONCURRENCY,
+  ALBUM_COVER_HYDRATION_CONCURRENCY,
+} from "./searchPageUtils";
 
 function SearchResultsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1028,7 +974,7 @@ function SearchResultsPage() {
             "Failed to request album",
         );
       } finally {
-        setPendingAlbumIds((prev) => omitKey(prev, album.id));
+        setPendingAlbumIds(({ [album.id]: _, ...prev }) => prev);
       }
     },
     [showError, showSuccess],
@@ -1119,7 +1065,7 @@ function SearchResultsPage() {
         );
         return false;
       } finally {
-        setPendingArtistIds((prev) => omitKey(prev, artistId));
+        setPendingArtistIds(({ [artistId]: _, ...prev }) => prev);
       }
     },
     [showError, showSuccess],

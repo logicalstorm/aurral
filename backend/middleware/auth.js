@@ -2,7 +2,7 @@ import basicAuth from "express-basic-auth";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import os from "os";
-import { dbOps, userOps } from "../config/db-helpers.js";
+import { dbOps, userOps } from "../db/helpers/index.js";
 import { getDefaultListenHistoryProfile } from "../services/listeningHistory.js";
 import { getSessionByToken } from "../config/session-helpers.js";
 
@@ -678,3 +678,14 @@ export function hasPermission(user, permission) {
   if (user.role === "admin") return true;
   return !!user.permissions?.[permission];
 }
+
+export const requirePasswordStrength = (password) => {
+  const raw = String(password || "");
+  if (raw.length < 8) {
+    return {
+      valid: false,
+      error: "Password must be at least 8 characters long",
+    };
+  }
+  return { valid: true };
+};

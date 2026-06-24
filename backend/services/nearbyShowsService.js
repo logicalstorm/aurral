@@ -1,6 +1,6 @@
 import axios from "axios";
 import NodeCache from "node-cache";
-import { getTicketmasterApiKey } from "./apiClients.js";
+import { getTicketmasterApiKey } from "./apiClients/index.js";
 
 const ticketmasterEventCache = new NodeCache({
   stdTTL: 15 * 60,

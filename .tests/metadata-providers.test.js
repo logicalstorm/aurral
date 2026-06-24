@@ -14,13 +14,13 @@ import {
 const isolatedState = await createIsolatedStateDir("metadata-providers");
 applyIsolatedBackendEnv(isolatedState);
 
-const { dbOps } = await importFromRepo("backend/config/db-helpers.js");
+const { dbOps } = await importFromRepo("backend/db/helpers/index.js");
 const {
   __setMetadataProviderHealthStateForTests,
   getMetadataProviderHealthSnapshot,
   getMusicbrainzApiBaseUrls,
   getMusicbrainzApiBaseUrl,
-} = await importFromRepo("backend/services/apiClients.js");
+} = await importFromRepo("backend/services/apiClients/index.js");
 
 test.after(async () => {
   __setMetadataProviderHealthStateForTests("musicbrainz");

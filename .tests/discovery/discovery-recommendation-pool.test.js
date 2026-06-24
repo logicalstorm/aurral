@@ -16,7 +16,7 @@ const {
   getDiscoveryRecommendationsPerRefresh,
   getDiscoveryRecommendationPoolLimit,
   rerankCachedRecommendations,
-} = await importFromRepo("backend/services/discoveryService.js");
+} = await importFromRepo("backend/services/discovery/index.js");
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);

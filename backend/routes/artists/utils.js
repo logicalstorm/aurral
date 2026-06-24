@@ -1,4 +1,5 @@
 import { getArtistImage } from "../../services/imageService.js";
+import { logger } from "../../services/logger.js";
 
 export const parseLastFmDate = (dateStr) => {
   if (!dateStr) return "";
@@ -15,7 +16,7 @@ export const sendSSE = (res, event, data) => {
       res.flush();
     }
   } catch (err) {
-    console.error(`[SSE] Error sending event ${event}:`, err.message);
+    logger.error("sse", `Error sending event ${event}:`, { message: err.message });
   }
 };
 

@@ -11,7 +11,7 @@ import {
 } from "./aurralSearchClient.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { getCachedArtists } from "./libraryManager.js";
-import { getDiscoveryCache } from "./discoveryService.js";
+import { getDiscoveryCache } from "./discovery/index.js";
 import { compareSearchResults, getLocalMatchThreshold } from "./searchRanking.js";
 
 const unifiedSearchCache = new NodeCache({

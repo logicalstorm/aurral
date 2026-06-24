@@ -1,17 +1,25 @@
 import express from "express";
 import bcrypt from "bcrypt";
-import { dbOps, userOps } from "../config/db-helpers.js";
+import { dbOps, userOps } from "../db/helpers/index.js";
 import { getDefaultListenHistoryProfile } from "../services/listeningHistory.js";
 import {
   DEFAULT_METADATA_BASE_URL,
   defaultData,
 } from "../config/constants.js";
 import { validateExternalUrl } from "../middleware/urlValidator.js";
-import { requirePasswordStrength } from "../middleware/validation.js";
+import { requirePasswordStrength } from "../middleware/auth.js";
 import {
   getSuggestedDownloadFolderPath,
   validateDownloadFolderPath,
 } from "../services/downloadFolderConfig.js";
+import { logger } from "../services/logger.js";
+import {
+  testLidarrConnection as lidarrTest,
+  testLidarrLibraryAccess,
+  fetchQualityProfiles,
+  fetchMetadataProfiles,
+  applyCommunityGuide,
+} from "../services/lidarrSettingsService.js";
 
 const router = express.Router();
 
@@ -28,24 +36,9 @@ router.use((req, res, next) => {
 
 router.get("/lidarr/test-library-access", async (req, res) => {
   try {
-    const { lidarrClient } = await import("../services/lidarrClient.js");
-    const { validateLidarrTestCredentials, withTemporaryLidarrClient } =
-      await import("../services/lidarrTestSession.js");
-    const { runLidarrLibraryAccessTest } =
-      await import("../services/lidarrLibraryAccessTest.js");
-
-    let url = (req.query.url || "").trim().replace(/\/+$/, "");
+    const url = (req.query.url || "").trim().replace(/\/+$/, "");
     const apiKey = (req.query.apiKey || "").trim();
-    const validation = validateLidarrTestCredentials(url, apiKey);
-    if (!validation.valid) {
-      return res.status(400).json({ error: validation.error });
-    }
-    url = validation.url;
-
-    const result = await withTemporaryLidarrClient(url, apiKey, (client) =>
-      runLidarrLibraryAccessTest(client),
-    );
-
+    const result = await testLidarrLibraryAccess({ url, apiKey });
     res.json({
       success: result.ok,
       ok: result.ok,
@@ -54,7 +47,7 @@ router.get("/lidarr/test-library-access", async (req, res) => {
       sample: result.sample,
     });
   } catch (error) {
-    res.status(400).json({
+    res.status(error.statusCode || 400).json({
       error: "Library access check failed",
       message: error.message,
     });
@@ -63,24 +56,12 @@ router.get("/lidarr/test-library-access", async (req, res) => {
 
 router.get("/lidarr/profiles", async (req, res) => {
   try {
-    const { validateLidarrTestCredentials, withTemporaryLidarrClient } =
-      await import("../services/lidarrTestSession.js");
-
-    let url = (req.query.url || "").trim().replace(/\/+$/, "");
+    const url = (req.query.url || "").trim().replace(/\/+$/, "");
     const apiKey = (req.query.apiKey || "").trim();
-    const validation = validateLidarrTestCredentials(url, apiKey);
-    if (!validation.valid) {
-      return res.status(400).json({ error: validation.error });
-    }
-    url = validation.url;
-
-    const profiles = await withTemporaryLidarrClient(url, apiKey, (client) =>
-      client.getQualityProfiles(true),
-    );
-
+    const profiles = await fetchQualityProfiles({ url, apiKey });
     res.json(profiles);
   } catch (error) {
-    res.status(400).json({
+    res.status(error.statusCode || 400).json({
       error: "Failed to fetch Lidarr quality profiles",
       message: error.message,
     });
@@ -89,24 +70,12 @@ router.get("/lidarr/profiles", async (req, res) => {
 
 router.get("/lidarr/metadata-profiles", async (req, res) => {
   try {
-    const { validateLidarrTestCredentials, withTemporaryLidarrClient } =
-      await import("../services/lidarrTestSession.js");
-
-    let url = (req.query.url || "").trim().replace(/\/+$/, "");
+    const url = (req.query.url || "").trim().replace(/\/+$/, "");
     const apiKey = (req.query.apiKey || "").trim();
-    const validation = validateLidarrTestCredentials(url, apiKey);
-    if (!validation.valid) {
-      return res.status(400).json({ error: validation.error });
-    }
-    url = validation.url;
-
-    const profiles = await withTemporaryLidarrClient(url, apiKey, (client) =>
-      client.getMetadataProfiles(true),
-    );
-
+    const profiles = await fetchMetadataProfiles({ url, apiKey });
     res.json(profiles);
   } catch (error) {
-    res.status(400).json({
+    res.status(error.statusCode || 400).json({
       error: "Failed to fetch Lidarr metadata profiles",
       message: error.message,
     });
@@ -115,34 +84,16 @@ router.get("/lidarr/metadata-profiles", async (req, res) => {
 
 router.get("/lidarr/test", async (req, res) => {
   try {
-    const { lidarrClient } = await import("../services/lidarrClient.js");
-    let url = (req.query.url || "").trim().replace(/\/+$/, "");
+    const url = (req.query.url || "").trim().replace(/\/+$/, "");
     const apiKey = (req.query.apiKey || "").trim();
-    if (!url || !apiKey) {
-      return res.status(400).json({ error: "URL and API key are required" });
-    }
-    const urlValidation = validateExternalUrl(url);
-    if (!urlValidation.valid) {
-      return res.status(400).json({ error: urlValidation.error });
-    }
-    url = urlValidation.url;
-    const originalConfig = { ...lidarrClient.config };
-    const originalApiPath = lidarrClient.apiPath;
-    lidarrClient.config = { url, apiKey };
-    lidarrClient.apiPath = "/api/v1";
-    try {
-      const result = await lidarrClient.testConnection(true);
-      if (result.connected) {
-        res.json({ success: true, message: "Connection successful" });
-      } else {
-        res.status(400).json({ error: result.error || "Connection failed" });
-      }
-    } finally {
-      lidarrClient.config = originalConfig;
-      lidarrClient.apiPath = originalApiPath;
+    const result = await lidarrTest({ url, apiKey });
+    if (result.connected) {
+      res.json({ success: true, message: "Connection successful" });
+    } else {
+      res.status(400).json({ error: result.error || "Connection failed" });
     }
   } catch (error) {
-    res.status(400).json({
+    res.status(error.statusCode || 400).json({
       error: "Connection failed",
       message: error.message,
     });
@@ -178,31 +129,17 @@ router.post("/navidrome/test", async (req, res) => {
 
 router.post("/lidarr/apply-community-guide", async (req, res) => {
   try {
-    const { applyLidarrCommunityGuide } =
-      await import("../services/lidarrCommunityGuide.js");
-    const { validateLidarrTestCredentials, withTemporaryLidarrClient } =
-      await import("../services/lidarrTestSession.js");
-
-    let url = (req.body?.url || "").trim().replace(/\/+$/, "");
+    const url = (req.body?.url || "").trim().replace(/\/+$/, "");
     const apiKey = (req.body?.apiKey || "").trim();
-    const validation = validateLidarrTestCredentials(url, apiKey);
-    if (!validation.valid) {
-      return res.status(400).json({ error: validation.error });
-    }
-    url = validation.url;
-
-    const results = await withTemporaryLidarrClient(url, apiKey, (client) =>
-      applyLidarrCommunityGuide(client),
-    );
-
+    const results = await applyCommunityGuide({ url, apiKey });
     res.json({
       success: true,
       message: "Community guide settings applied successfully",
       results,
     });
   } catch (error) {
-    console.error("Onboarding community guide error:", error);
-    res.status(500).json({
+    logger.error("onboarding", "Community guide error:", { message: error.message });
+    res.status(error.statusCode || 500).json({
       error: "Failed to apply community guide settings",
       message: error.message,
       details: error.response?.data,
@@ -408,7 +345,7 @@ router.post("/complete", async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Onboarding complete error:", error);
+    logger.error("onboarding", "Complete error:", { message: error.message });
     res.status(500).json({
       error: "Failed to save onboarding",
       message: error.message,

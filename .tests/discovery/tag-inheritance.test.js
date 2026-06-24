@@ -10,7 +10,7 @@ import {
 
 test("tag inheritance: candidate with >= 3 seed tags inherits tags and skips artist.getTopTags", async () => {
   const { canInheritTagsFromSeeds } = await importFromRepo(
-    "backend/services/discoveryService.js",
+    "backend/services/discovery/index.js",
   );
 
   const candidateWithManyTags = {
@@ -119,7 +119,7 @@ test("tag inheritance: inherited tags produce tagSource: inherited and keep exis
 
 test("tag inheritance: candidate with lastfm tags preserves direct tagSource when inherited tags exist", async () => {
   const { canInheritTagsFromSeeds } = await importFromRepo(
-    "backend/services/discoveryService.js",
+    "backend/services/discovery/index.js",
   );
 
   const alreadyHydrated = {
@@ -205,7 +205,7 @@ test("tag inheritance: multi-seed candidate merges tags from all contributing se
 
 test("tag inheritance: sparse tags (< 3) trigger direct hydration path", async () => {
   const { canInheritTagsFromSeeds } = await importFromRepo(
-    "backend/services/discoveryService.js",
+    "backend/services/discovery/index.js",
   );
 
   const sparseTagsCandidate = {
@@ -232,7 +232,7 @@ test("tag inheritance: tag inheritance reduces artist.getTopTags call count for 
     getLastfmApiCallCount,
     getLastfmApiCallCountByMethod,
     resetLastfmApiCallCount,
-  } = await importFromRepo("backend/services/apiClients.js");
+  } = await importFromRepo("backend/services/apiClients/index.js");
 
   const {
     addRecommendationCandidate,

@@ -132,7 +132,7 @@ test("single-pass refresh: mergeRetainedRecommendationPool handles fresh + retai
     await importFromRepo("backend/services/discoveryRecommendations.js");
 
   const { rerankCachedRecommendations } = await importFromRepo(
-    "backend/services/discoveryService.js",
+    "backend/services/discovery/index.js",
   );
 
   const runStartedAt = "2026-06-22T00:00:00.000Z";
@@ -208,7 +208,7 @@ test("single-pass refresh: recommendationQuality constants are correctly defined
     DISCOVERY_QUALITY_ENRICHED,
     getDiscoveryRecommendationsPerRefresh,
     getDiscoveryRecommendationPoolLimit,
-  } = await importFromRepo("backend/services/discoveryService.js");
+  } = await importFromRepo("backend/services/discovery/index.js");
 
   assert.equal(DISCOVERY_QUALITY_INITIAL, "initial");
   assert.equal(DISCOVERY_QUALITY_ENRICHING, "enriching");
@@ -224,7 +224,7 @@ test("single-pass refresh: recommendationQuality constants are correctly defined
 
 test("single-pass refresh: getDiscoveryFlowsPerRefresh defaults and clamping", async () => {
   const { getDiscoveryFlowsPerRefresh, getMaxFocusPlaylists } =
-    await importFromRepo("backend/services/discoveryService.js");
+    await importFromRepo("backend/services/discovery/index.js");
 
   assert.equal(getDiscoveryFlowsPerRefresh(), 9);
   assert.equal(getMaxFocusPlaylists(), 4);
@@ -256,7 +256,7 @@ test.after(async () => {
 
 test("single-pass refresh: db discovery cache stores enriched quality after single-pass write", async () => {
   const { db } = await importFromRepo("backend/config/db-sqlite.js");
-  const { dbOps } = await importFromRepo("backend/config/db-helpers.js");
+  const { dbOps } = await importFromRepo("backend/db/helpers/index.js");
   resetDatabase(db);
 
   const enrichedAt = new Date().toISOString();
@@ -284,7 +284,7 @@ test("single-pass refresh: db discovery cache stores enriched quality after sing
 
 test("single-pass refresh: db discovery cache stores initial quality for backwards compatibility reads", async () => {
   const { db } = await importFromRepo("backend/config/db-sqlite.js");
-  const { dbOps } = await importFromRepo("backend/config/db-helpers.js");
+  const { dbOps } = await importFromRepo("backend/db/helpers/index.js");
   resetDatabase(db);
 
   dbOps.updateDiscoveryCache({
@@ -305,7 +305,7 @@ test("single-pass refresh: db discovery cache stores initial quality for backwar
 
 test("single-pass refresh: api call counter instruments lastfmRequest with method breakdown", async () => {
   const { getLastfmApiCallCount, getLastfmApiCallCountByMethod, resetLastfmApiCallCount } =
-    await importFromRepo("backend/services/apiClients.js");
+    await importFromRepo("backend/services/apiClients/index.js");
 
   resetLastfmApiCallCount();
   assert.equal(getLastfmApiCallCount(), 0);

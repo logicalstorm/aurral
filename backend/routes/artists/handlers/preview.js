@@ -2,8 +2,8 @@ import { UUID_REGEX } from "../../../config/constants.js";
 import {
   deezerGetArtistTopTracks,
   deezerGetArtistTopTracksById,
-} from "../../../services/apiClients.js";
-import { dbOps } from "../../../config/db-helpers.js";
+} from "../../../services/apiClients/index.js";
+import { dbOps } from "../../../db/helpers/index.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 
 export default function registerPreview(router) {

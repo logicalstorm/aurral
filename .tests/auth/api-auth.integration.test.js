@@ -156,3 +156,54 @@ test("weekly flow worker settings default to concurrency 2", async () => {
   assert.equal(response.status, 200);
   assert.equal(payload.concurrency, 2);
 });
+
+test("weekly flow stream route reaches handler (not blocked by global auth)", async () => {
+  const response = await fetch(
+    buildApiUrl(server.port, "/api/weekly-flow/stream/nonexistent-job"),
+  );
+  assert.equal(response.status, 404);
+});
+
+test("weekly flow artwork serve route reaches handler (not blocked by global auth)", async () => {
+  const response = await fetch(
+    buildApiUrl(server.port, "/api/weekly-flow/artwork/nonexistent-id"),
+  );
+  assert.equal(response.status, 404);
+});
+
+test("weekly flow authenticated-only routes reject unauthenticated requests", async () => {
+  const routes = [
+    { path: "/api/weekly-flow/status", method: "GET" },
+    { path: "/api/weekly-flow/flows", method: "POST" },
+    { path: "/api/weekly-flow/jobs", method: "GET" },
+    { path: "/api/weekly-flow/worker/settings", method: "GET" },
+    { path: "/api/weekly-flow/worker/settings", method: "PUT" },
+    { path: "/api/weekly-flow/jobs/completed", method: "DELETE" },
+  ];
+
+  for (const { path, method } of routes) {
+    const response = await fetch(buildApiUrl(server.port, path), { method });
+    assert.equal(
+      response.status,
+      401,
+      `${method} ${path} should reject unauthenticated requests`,
+    );
+    const payload = await response.json();
+    assert.ok(payload.error || payload.code, `${method} ${path} should have an error`);
+  }
+
+  const artifactRoutes = [
+    { path: "/api/weekly-flow/artwork/nonexistent-id", method: "PUT" },
+    { path: "/api/weekly-flow/artwork/nonexistent-id", method: "DELETE" },
+    { path: "/api/weekly-flow/artwork/nonexistent-id", method: "POST" },
+  ];
+
+  for (const { path, method } of artifactRoutes) {
+    const response = await fetch(buildApiUrl(server.port, path), { method });
+    assert.equal(
+      response.status,
+      401,
+      `${method} ${path} should reject unauthenticated requests (post-auth)`,
+    );
+  }
+});

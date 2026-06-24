@@ -1,7 +1,7 @@
 import path from "path";
 import fs from "fs/promises";
 import crypto from "crypto";
-import { dbOps } from "../config/db-helpers.js";
+import { dbOps } from "../db/helpers/index.js";
 import { NavidromeClient } from "./navidrome.js";
 import { PlexClient } from "./plex.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";

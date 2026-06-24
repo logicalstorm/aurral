@@ -1,5 +1,5 @@
 import { WebSocketServer } from 'ws';
-import { dbOps, userOps } from "../config/db-helpers.js";
+import { dbOps, userOps } from "../db/helpers/index.js";
 import { logger } from "./logger.js";
 import {
   getAuthPassword,

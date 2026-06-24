@@ -15,17 +15,17 @@ import { websocketService } from "./services/websocketService.js";
 import { getAllDownloadStatuses } from "./routes/library/handlers/downloads.js";
 import { getWeeklyFlowStatusSnapshot } from "./services/weeklyFlowStatusSnapshot.js";
 
-import settingsRouter from "./routes/settings.js";
+import settingsRouter from "./routes/settings/index.js";
 import onboardingRouter from "./routes/onboarding.js";
 import usersRouter from "./routes/users.js";
 import artistsRouter from "./routes/artists/index.js";
 import searchRouter from "./routes/search.js";
 import libraryRouter from "./routes/library/index.js";
-import discoveryRouter from "./routes/discovery.js";
+import discoveryRouter from "./routes/discovery/index.js";
 import requestsRouter from "./routes/requests.js";
 import healthRouter from "./routes/health.js";
 import filesystemRouter from "./routes/filesystem.js";
-import weeklyFlowRouter from "./routes/weeklyFlow.js";
+import weeklyFlowRouter from "./routes/weeklyFlow/index.js";
 import { bootstrapHonkerSchedules } from "./services/honkerDb.js";
 import { initializeAppRuntime } from "./services/appRuntime.js";
 import {

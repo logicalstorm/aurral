@@ -1,7 +1,7 @@
 import axios from "axios";
 import { noCache } from "../../../middleware/cache.js";
 import { verifyTokenAuth } from "../../../middleware/auth.js";
-import { dbOps } from "../../../config/db-helpers.js";
+import { dbOps } from "../../../db/helpers/index.js";
 
 export default function registerStream(router) {
   router.get("/stream/:songId", noCache, async (req, res) => {
