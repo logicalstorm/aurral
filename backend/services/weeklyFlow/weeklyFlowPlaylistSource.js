@@ -1651,7 +1651,7 @@ export class WeeklyFlowPlaylistSource {
       excludeArtistKeys,
       targetSize,
       reserveSize: 0,
-      _sourceTargets,
+      sourceTargets: _sourceTargets,
       reserveTargets: { discover: 0, mix: 0, trending: 0, focus: 0 },
       includeReserve: false,
     });
@@ -2087,7 +2087,7 @@ export class WeeklyFlowPlaylistSource {
   async getReleaseRadarTracks(limit, options = {}) {
     if (limit <= 0) return [];
     const { getRecentMissingReleases } = await import(
-      "./discovery/recentReleases.js"
+      "../discovery/recentReleases.js"
     );    const albums = await getRecentMissingReleases(limit, {
       artists: options?.libraryArtists,
       includeFuture: false,
