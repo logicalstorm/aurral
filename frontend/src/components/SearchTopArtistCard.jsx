@@ -117,13 +117,10 @@ function SearchTopArtistCard({
   if (!result || !label) return null;
   const isArtist = result.type === "artist";
   const artistId = isArtist ? getArtistRecordId(result) : null;
-  const isInLibrary =
-    result.inLibrary ||
-    (isArtist && artistId ? libraryLookup[artistId] : false);
+  const isInLibrary = result.inLibrary || (isArtist && artistId ? libraryLookup[artistId] : false);
   const metaLabel = getMetaLabel(result);
   const previewLabel = getPreviewLabel(result, previewTracks);
-  const navigateToResult = () =>
-    navigateFromSearchResult(navigate, result, { query });
+  const navigateToResult = () => navigateFromSearchResult(navigate, result, { query });
   const handleMainKeyDown = (event) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
@@ -154,11 +151,7 @@ function SearchTopArtistCard({
           {gradientColors ? (
             <span className="search-top-artist__backdrop-gradient" />
           ) : backdropSrc ? (
-            <img
-              src={backdropSrc}
-              alt=""
-              className="search-top-artist__backdrop-image"
-            />
+            <img src={backdropSrc} alt="" className="search-top-artist__backdrop-image" />
           ) : null}
           <span className="search-top-artist__backdrop-wash" />
         </span>
@@ -169,11 +162,7 @@ function SearchTopArtistCard({
               isArtist ? "" : " search-top-artist__image-wrap--square"
             }`}
           >
-            <TopResultArtwork
-              item={result}
-              artistImages={artistImages}
-              albumCovers={albumCovers}
-            />
+            <TopResultArtwork item={result} artistImages={artistImages} albumCovers={albumCovers} />
           </span>
 
           <span className="search-top-artist__copy">

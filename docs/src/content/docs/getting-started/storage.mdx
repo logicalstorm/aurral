@@ -22,14 +22,14 @@ Docker only exposes mounted paths. Aurral uses the literal filesystem paths Lida
 
 ## Paths each service should use
 
-| Service | Mount | Path inside container |
-| --- | --- | --- |
-| Lidarr | `/srv/media:/data` | Root folder `/data/music` |
-| slskd | `/srv/media:/data` | Downloads `/data/downloads/slskd/complete` |
-| NZBGet | `/srv/media:/data` | Completed `/data/downloads/nzbget/completed` (or your category path) |
-| Aurral | `/srv/media:/data` | `DOWNLOAD_FOLDER=/data/downloads/aurral` |
-| Navidrome | `/srv/media:/data:ro` | Scan `/data/music` and `/data/downloads/aurral` |
-| Plex | `/srv/media:/data` | Read `/data/downloads/aurral/aurral-weekly-flow` (Aurral creates the library via API) |
+| Service   | Mount                 | Path inside container                                                                 |
+| --------- | --------------------- | ------------------------------------------------------------------------------------- |
+| Lidarr    | `/srv/media:/data`    | Root folder `/data/music`                                                             |
+| slskd     | `/srv/media:/data`    | Downloads `/data/downloads/slskd/complete`                                            |
+| NZBGet    | `/srv/media:/data`    | Completed `/data/downloads/nzbget/completed` (or your category path)                  |
+| Aurral    | `/srv/media:/data`    | `DOWNLOAD_FOLDER=/data/downloads/aurral`                                              |
+| Navidrome | `/srv/media:/data:ro` | Scan `/data/music` and `/data/downloads/aurral`                                       |
+| Plex      | `/srv/media:/data`    | Read `/data/downloads/aurral/aurral-weekly-flow` (Aurral creates the library via API) |
 
 Aurral app state stays in `/config` and does not need to be shared with the other apps.
 
@@ -109,11 +109,11 @@ After changing `volumes` or `environment`, recreate the container (`docker compo
 
 These solve two different problems in mixed Windows/Docker setups:
 
-| Setting | Direction | Used for |
-| --- | --- | --- |
-| **Path mappings** (`PATH_MAPPINGS` or **Settings → Downloads → Advanced remote path mappings**) | Host → container (`N:\...` → `/music/...`) | Aurral reading Lidarr, slskd, and NZBGet files, library reuse, **Test library access** |
-| **Navidrome playlist mappings** (`M3U_PATH_MAPPINGS` or **Settings → Playback → Navidrome → Navidrome path mappings**) | Aurral path → Navidrome path (`/music/...` → `/data/media/music/...` or `N:\...`) | M3U playlists Navidrome reads when it has a different filesystem view |
-| **Plex downloads path** (Plex integration setting) | Aurral → Plex library root | Plex music library location when Plex sees a different mount than Aurral |
+| Setting                                                                                                                | Direction                                                                         | Used for                                                                               |
+| ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| **Path mappings** (`PATH_MAPPINGS` or **Settings → Downloads → Advanced remote path mappings**)                        | Host → container (`N:\...` → `/music/...`)                                        | Aurral reading Lidarr, slskd, and NZBGet files, library reuse, **Test library access** |
+| **Navidrome playlist mappings** (`M3U_PATH_MAPPINGS` or **Settings → Playback → Navidrome → Navidrome path mappings**) | Aurral path → Navidrome path (`/music/...` → `/data/media/music/...` or `N:\...`) | M3U playlists Navidrome reads when it has a different filesystem view                  |
+| **Plex downloads path** (Plex integration setting)                                                                     | Aurral → Plex library root                                                        | Plex music library location when Plex sees a different mount than Aurral               |
 
 Path mappings let Aurral open files inside the container. They do not change what Navidrome sees in generated `.m3u` files unless you also enable Navidrome M3U path mode and add Navidrome playlist mappings. Plex uses its own downloads-path override instead of M3U path mode. See [Plex](/integrations/plex/#plex-downloads-path-optional).
 

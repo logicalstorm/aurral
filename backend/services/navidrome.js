@@ -6,15 +6,15 @@ const PLAYLIST_LIBRARY_NAME = "Aurral Playlists";
 const LEGACY_LIBRARY_NAMES = new Set(["Aurral Weekly Flow"]);
 
 function normalizeLibraryPath(value) {
-  return String(value || "").trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  return String(value || "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/\/+$/, "");
 }
 
 function isLegacyPlaylistLibraryPath(value) {
   const libraryPath = normalizeLibraryPath(value);
-  return (
-    libraryPath.endsWith(`/${LEGACY_LIBRARY_DIR}`) ||
-    libraryPath === LEGACY_LIBRARY_DIR
-  );
+  return libraryPath.endsWith(`/${LEGACY_LIBRARY_DIR}`) || libraryPath === LEGACY_LIBRARY_DIR;
 }
 
 export class NavidromeClient {
@@ -57,8 +57,7 @@ export class NavidromeClient {
 
       if (response.data["subsonic-response"]?.status === "failed") {
         throw new Error(
-          response.data["subsonic-response"].error?.message ||
-            "Navidrome request failed",
+          response.data["subsonic-response"].error?.message || "Navidrome request failed",
         );
       }
 
@@ -101,9 +100,7 @@ export class NavidromeClient {
     const songs = data.searchResult3?.song || [];
     const list = Array.isArray(songs) ? songs : [songs];
     return list
-      .filter(
-        (s) => s.artist && s.artist.toLowerCase() === artistName.toLowerCase(),
-      )
+      .filter((s) => s.artist && s.artist.toLowerCase() === artistName.toLowerCase())
       .slice(0, limit)
       .map((s) => ({
         id: s.id,
@@ -182,9 +179,7 @@ export class NavidromeClient {
         throw new Error("Playlist not found or empty");
       }
 
-      const entries = Array.isArray(playlist.entry)
-        ? playlist.entry
-        : [playlist.entry];
+      const entries = Array.isArray(playlist.entry) ? playlist.entry : [playlist.entry];
       const songIndex = entries.findIndex((entry) => entry.id === songId);
 
       if (songIndex === -1) {
@@ -266,9 +261,7 @@ export class NavidromeClient {
     try {
       const libs = await this.getLibraries();
       const list = Array.isArray(libs) ? libs : [];
-      const byPath = list.find(
-        (lib) => normalizeLibraryPath(lib.path) === normalizedPath,
-      );
+      const byPath = list.find((lib) => normalizeLibraryPath(lib.path) === normalizedPath);
       if (byPath) {
         if (byPath.name !== name) {
           return this.updateLibrary(byPath.id, {
@@ -280,9 +273,7 @@ export class NavidromeClient {
         return byPath;
       }
 
-      const byName = list.find(
-        (lib) => lib.name === name || LEGACY_LIBRARY_NAMES.has(lib.name),
-      );
+      const byName = list.find((lib) => lib.name === name || LEGACY_LIBRARY_NAMES.has(lib.name));
       if (byName) {
         if (normalizeLibraryPath(byName.path) !== normalizedPath) {
           return this.updateLibrary(byName.id, {

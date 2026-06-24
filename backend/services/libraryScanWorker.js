@@ -39,10 +39,7 @@ export function clearScheduledLibraryScan(jobId = null) {
 export function scheduleLibraryScan(force = false) {
   if (force) {
     clearScheduledLibraryScan();
-    const jobId = enqueueLibraryScanJob(
-      { force: true, requestedAt: Date.now() },
-      { priority: 10 },
-    );
+    const jobId = enqueueLibraryScanJob({ force: true, requestedAt: Date.now() }, { priority: 10 });
     setScanRegistry({ jobId });
     return jobId;
   }
@@ -59,7 +56,7 @@ export function scheduleLibraryScan(force = false) {
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
+let _loopPromise = null;
 let idleController = null;
 
 async function runLoop() {
@@ -111,7 +108,7 @@ async function runLoop() {
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
+    _loopPromise = null;
     const intentional = stopRequested || idleStopped || databaseClosed;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startLibraryScanWorker, {
@@ -124,7 +121,7 @@ export function startLibraryScanWorker() {
   if (running || isHonkerShuttingDown()) return;
   running = true;
   stopRequested = false;
-  loopPromise = runLoop();
+  _loopPromise = runLoop();
 }
 
 export function stopLibraryScanWorker() {

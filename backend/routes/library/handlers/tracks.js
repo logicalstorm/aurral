@@ -40,10 +40,7 @@ const streamAudioFile = async (req, res, filePath) => {
   }
 
   const ext = path.extname(filePath).toLowerCase();
-  res.setHeader(
-    "Content-Type",
-    AUDIO_CONTENT_TYPES[ext] || "application/octet-stream",
-  );
+  res.setHeader("Content-Type", AUDIO_CONTENT_TYPES[ext] || "application/octet-stream");
   res.setHeader("Accept-Ranges", "bytes");
 
   const range = req.headers.range;
@@ -99,8 +96,7 @@ export function registerTracks(router) {
         if (String(releaseGroupMbid).startsWith("dz-")) {
           const { deezerGetAlbumTracks } = await import(
             "../../../services/apiClients/index.js"
-          );
-          const dzTracks = await deezerGetAlbumTracks(releaseGroupMbid);
+          );          const dzTracks = await deezerGetAlbumTracks(releaseGroupMbid);
           tracks = dzTracks.map((t) => ({
             ...t,
             path: null,
@@ -127,8 +123,7 @@ export function registerTracks(router) {
               }));
             }
           } catch (mbError) {
-            logger.warn("library", `Failed to fetch tracks from metadata provider: ${mbError.message}`);
-          }
+            logger.warn("library", `Failed to fetch tracks from metadata provider: ${mbError.message}`);          }
         }
       }
 
@@ -173,9 +168,7 @@ export function registerTracks(router) {
       const releaseDate =
         typeof req.query.releaseDate === "string" ? req.query.releaseDate.trim() : "";
       const deezerAlbumId =
-        typeof req.query.deezerAlbumId === "string"
-          ? req.query.deezerAlbumId.trim()
-          : "";
+        typeof req.query.deezerAlbumId === "string" ? req.query.deezerAlbumId.trim() : "";
 
       const enriched = await enrichTracksWithDeezerPreviews(tracksWithStreamState, {
         artistName,
@@ -183,9 +176,7 @@ export function registerTracks(router) {
         releaseType,
         releaseDate,
         deezerAlbumId,
-        cacheKey: `library:${albumId || releaseGroupMbid}:${
-          deezerAlbumId || artistName
-        }`,
+        cacheKey: `library:${albumId || releaseGroupMbid}:${deezerAlbumId || artistName}`,
       }).catch(() => tracksWithStreamState);
 
       res.json(
@@ -209,9 +200,7 @@ export function registerTracks(router) {
 
     try {
       const tracks = await libraryManager.getTracks(req.params.albumId);
-      const track = tracks.find(
-        (item) => String(item.id) === String(req.params.trackId),
-      );
+      const track = tracks.find((item) => String(item.id) === String(req.params.trackId));
       if (!track?.hasFile || !track.path) {
         return res.status(404).json({ error: "Track file missing" });
       }

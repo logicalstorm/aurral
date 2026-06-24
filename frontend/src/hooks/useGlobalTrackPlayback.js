@@ -2,14 +2,8 @@ import { useCallback } from "react";
 import { useAudioQueue } from "./useAudioQueue";
 
 export function useGlobalTrackPlayback(normalizeTrack) {
-  const {
-    currentTrack,
-    isPlaying,
-    isLoading,
-    playTrack,
-    togglePlayPause,
-    source,
-  } = useAudioQueue();
+  const { currentTrack, isPlaying, isLoading, playTrack, togglePlayPause, source } =
+    useAudioQueue();
 
   const handlePlay = useCallback(
     (track, options = {}, ...normalizeArgs) => {
@@ -30,24 +24,18 @@ export function useGlobalTrackPlayback(normalizeTrack) {
   );
 
   const isTrackPlaying = useCallback(
-    (trackId) =>
-      !!trackId &&
-      currentTrack?.id === String(trackId) &&
-      (isPlaying || isLoading),
+    (trackId) => !!trackId && currentTrack?.id === String(trackId) && (isPlaying || isLoading),
     [currentTrack?.id, isLoading, isPlaying],
   );
 
   const isTrackLoading = useCallback(
-    (trackId) =>
-      !!trackId && currentTrack?.id === String(trackId) && isLoading,
+    (trackId) => !!trackId && currentTrack?.id === String(trackId) && isLoading,
     [currentTrack?.id, isLoading],
   );
 
   return {
     currentTrack,
-    playingTrackId: isTrackPlaying(currentTrack?.id)
-      ? currentTrack?.id
-      : null,
+    playingTrackId: isTrackPlaying(currentTrack?.id) ? currentTrack?.id : null,
     loadingTrackId: isTrackLoading(currentTrack?.id) ? currentTrack?.id : null,
     isTrackPlaying,
     isTrackLoading,

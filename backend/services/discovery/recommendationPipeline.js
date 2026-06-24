@@ -1,5 +1,4 @@
-const MBID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MBID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const SOURCE_BASE_WEIGHTS = {
   library: 1,
@@ -89,9 +88,7 @@ const mergeTags = (target, sourceTags = []) => {
 };
 
 const normalizeTagList = (tags = []) =>
-  (Array.isArray(tags) ? tags : [])
-    .map(normalizeText)
-    .filter(Boolean);
+  (Array.isArray(tags) ? tags : []).map(normalizeText).filter(Boolean);
 
 export const normalizeArtistIdentityKeys = (artist) => {
   const keys = [];
@@ -101,9 +98,7 @@ export const normalizeArtistIdentityKeys = (artist) => {
   for (const mbid of mbids) {
     keys.push(`mbid:${mbid}`);
   }
-  const names = [artist?.name, artist?.artistName]
-    .map(normalizeText)
-    .filter(Boolean);
+  const names = [artist?.name, artist?.artistName].map(normalizeText).filter(Boolean);
   for (const name of names) {
     keys.push(`name:${name}`);
   }
@@ -150,22 +145,16 @@ export const applyHydratedCandidateTags = (
   );
   const tagAffinityMultiplier = clamp(
     Number(
-      options.tagAffinityMultiplier ??
-        (Number(recommendation.discoveryDepth || 1) >= 2 ? 0.55 : 1),
+      options.tagAffinityMultiplier ?? (Number(recommendation.discoveryDepth || 1) >= 2 ? 0.55 : 1),
     ),
     0,
     1,
   );
   const scoreTagAffinity =
-    Math.min(45, tagWeightSum * 6 + matchedTags.length * 3) *
-    tagAffinityMultiplier;
+    Math.min(45, tagWeightSum * 6 + matchedTags.length * 3) * tagAffinityMultiplier;
   const previousScoreTagAffinity = Number(recommendation.scoreTagAffinity || 0);
-  const previousTotal = Number(
-    recommendation.scoreTotal || recommendation.score || 0,
-  );
-  const scoreTotal = Math.round(
-    previousTotal - previousScoreTagAffinity + scoreTagAffinity,
-  );
+  const previousTotal = Number(recommendation.scoreTotal || recommendation.score || 0);
+  const scoreTotal = Math.round(previousTotal - previousScoreTagAffinity + scoreTagAffinity);
 
   return {
     ...recommendation,
@@ -189,15 +178,11 @@ const calculateSeedWeight = (seed, index) => {
   }
 
   const playcount = Math.max(0, Number(seed?.playcount || 0));
-  const playcountBoost =
-    playcount > 0 ? Math.min(1.4, Math.log10(playcount + 1) * 0.4) : 0.15;
+  const playcountBoost = playcount > 0 ? Math.min(1.4, Math.log10(playcount + 1) * 0.4) : 0.15;
   return Number((baseWeight + playcountBoost).toFixed(4));
 };
 
-export const buildDiscoverySeedList = ({
-  libraryArtists = [],
-  historyArtists = [],
-} = {}) => {
+export const buildDiscoverySeedList = ({ libraryArtists = [], historyArtists = [] } = {}) => {
   const combined = [
     ...(Array.isArray(historyArtists) ? historyArtists : []),
     ...(Array.isArray(libraryArtists) ? libraryArtists : []),
@@ -207,9 +192,7 @@ export const buildDiscoverySeedList = ({
 
   for (let index = 0; index < combined.length; index += 1) {
     const artist = combined[index];
-    const mbid = normalizeMbid(
-      artist?.mbid || artist?.id || artist?.foreignArtistId,
-    );
+    const mbid = normalizeMbid(artist?.mbid || artist?.id || artist?.foreignArtistId);
     const artistName = String(artist?.artistName || artist?.name || "").trim();
     if (!artistName) continue;
 
@@ -269,10 +252,7 @@ export const buildDiscoverySeedList = ({
       identityKeys,
       playcount: Math.max(0, Number(artist?.playcount || 0)),
       weight: nextWeight,
-      affinityWeight: Math.max(
-        nextWeight,
-        Number(artist?.affinityWeight || 0) || nextWeight,
-      ),
+      affinityWeight: Math.max(nextWeight, Number(artist?.affinityWeight || 0) || nextWeight),
       profileBucket,
     });
   }
@@ -366,13 +346,9 @@ export const addRecommendationCandidate = (
     (sum, tag) => sum + Number(profileTagWeights.get(tag) || 0),
     0,
   );
-  const scoreSimilarity = Math.max(
-    0,
-    matchScore * 100 * seedWeight * similarityMultiplier,
-  );
+  const scoreSimilarity = Math.max(0, matchScore * 100 * seedWeight * similarityMultiplier);
   const scoreTagAffinity =
-    Math.min(45, tagWeightSum * 6 + matchedTags.length * 3) *
-    tagAffinityMultiplier;
+    Math.min(45, tagWeightSum * 6 + matchedTags.length * 3) * tagAffinityMultiplier;
   const perSeedContribution = scoreSimilarity + scoreTagAffinity + affinityWeight * 4;
 
   const existing = accumulator.get(candidateKey);
@@ -453,8 +429,7 @@ const finalizeRecommendationEntry = (entry, discoveryMode = "balanced") => {
   const matchedTags = topKeysFromMap(entry.matchedTagWeights, 4);
   const averageSeedWeight =
     entry.seedWeights.length > 0
-      ? entry.seedWeights.reduce((sum, value) => sum + value, 0) /
-        entry.seedWeights.length
+      ? entry.seedWeights.reduce((sum, value) => sum + value, 0) / entry.seedWeights.length
       : 0;
   const scoreSeedCoverage = Math.min(
     28,
@@ -521,8 +496,7 @@ const finalizeRecommendationEntry = (entry, discoveryMode = "balanced") => {
     scorePopularityPenalty: Math.round(scorePopularityPenalty),
     sourceArtist: summarizeSourceArtists(entry.supportingSeeds.keys()),
     sourceArtists: [...entry.supportingSeeds.keys()],
-    sourceType:
-      entry.sourceTypes.size === 1 ? [...entry.sourceTypes][0] : "blended",
+    sourceType: entry.sourceTypes.size === 1 ? [...entry.sourceTypes][0] : "blended",
     sourceTypes: [...entry.sourceTypes],
     sourceMix: [...entry.sourceTypes],
     discoveryDepth: Number(entry.discoveryDepth || 1),
@@ -533,11 +507,7 @@ const finalizeRecommendationEntry = (entry, discoveryMode = "balanced") => {
   };
 };
 
-export const finalizeRecommendationAccumulator = (
-  accumulator,
-  limit = 100,
-  options = {},
-) => {
+export const finalizeRecommendationAccumulator = (accumulator, limit = 100, options = {}) => {
   const discoveryMode = normalizeDiscoveryMode(options?.discoveryMode);
   return [...accumulator.values()]
     .map((entry) => finalizeRecommendationEntry(entry, discoveryMode))
@@ -616,11 +586,7 @@ const feedbackBoostForCandidate = (candidate, feedbackList = []) => {
   return { adjustment, hidden };
 };
 
-const rerankSingleRecommendation = (
-  recommendation,
-  selected,
-  options = {},
-) => {
+const _rerankSingleRecommendation = (recommendation, selected, options = {}) => {
   const mode = normalizeDiscoveryMode(options.discoveryMode);
   const multipliers = DISCOVERY_MODE_MULTIPLIERS[mode];
   const candidateTags = new Set(
@@ -632,10 +598,7 @@ const rerankSingleRecommendation = (
       .filter(Boolean),
   );
   const candidateSeeds = new Set(
-    (Array.isArray(recommendation.supportingSeeds)
-      ? recommendation.supportingSeeds
-      : []
-    )
+    (Array.isArray(recommendation.supportingSeeds) ? recommendation.supportingSeeds : [])
       .map((entry) => normalizeText(entry?.artistName))
       .filter(Boolean),
   );
@@ -643,10 +606,7 @@ const rerankSingleRecommendation = (
   let diversityPenalty = 0;
   for (const previous of selected) {
     const previousTags = new Set(
-      (Array.isArray(previous.matchedTags)
-        ? previous.matchedTags
-        : previous.tags || []
-      )
+      (Array.isArray(previous.matchedTags) ? previous.matchedTags : previous.tags || [])
         .map(normalizeText)
         .filter(Boolean),
     );
@@ -655,25 +615,19 @@ const rerankSingleRecommendation = (
         .map((entry) => normalizeText(entry?.artistName))
         .filter(Boolean),
     );
-    const tagOverlap = [...candidateTags].filter((tag) => previousTags.has(tag))
-      .length;
-    const seedOverlap = [...candidateSeeds].filter((seed) => previousSeeds.has(seed))
-      .length;
+    const tagOverlap = [...candidateTags].filter((tag) => previousTags.has(tag)).length;
+    const seedOverlap = [...candidateSeeds].filter((seed) => previousSeeds.has(seed)).length;
     diversityPenalty += tagOverlap * 1.8 + seedOverlap * 2.6;
   }
 
-  const { adjustment, hidden } = feedbackBoostForCandidate(
-    recommendation,
-    options.feedback || [],
-  );
+  const { adjustment, hidden } = feedbackBoostForCandidate(recommendation, options.feedback || []);
 
   const baseScore =
     Number(recommendation.scoreSimilarity || 0) * multipliers.similarity +
     Number(recommendation.scoreTagAffinity || 0) * multipliers.tagAffinity +
     Number(recommendation.scoreSeedCoverage || 0) * multipliers.seedCoverage +
     Number(recommendation.scoreNovelty || 0) * multipliers.novelty -
-    Number(recommendation.scorePopularityPenalty || 0) *
-      multipliers.popularityPenalty +
+    Number(recommendation.scorePopularityPenalty || 0) * multipliers.popularityPenalty +
     Number(recommendation.scoreFreshnessBoost || 0) -
     Number(recommendation.scoreAgingPenalty || 0);
 
@@ -690,11 +644,7 @@ const rerankSingleRecommendation = (
   };
 };
 
-export const rerankRecommendations = (
-  recommendations = [],
-  limit = 100,
-  options = {},
-) => {
+export const rerankRecommendations = (recommendations = [], limit = 100, options = {}) => {
   const mode = normalizeDiscoveryMode(options.discoveryMode);
   const multipliers = DISCOVERY_MODE_MULTIPLIERS[mode];
   const input = (Array.isArray(recommendations) ? recommendations : [])
@@ -726,9 +676,7 @@ export const rerankRecommendations = (
           : entry?.sourceType
             ? [entry.sourceType]
             : [],
-      reasonCodes: Array.isArray(entry?.reasonCodes)
-        ? [...entry.reasonCodes]
-        : [],
+      reasonCodes: Array.isArray(entry?.reasonCodes) ? [...entry.reasonCodes] : [],
       discoveryTier: entry?.discoveryTier || mode,
       discoveryDepth: Number(entry?.discoveryDepth || 1) || 1,
       confidence: Number(entry?.confidence || 0) || 0,
@@ -736,10 +684,7 @@ export const rerankRecommendations = (
     .map((entry) => {
       const candidateTags = [
         ...new Set(
-          (Array.isArray(entry.matchedTags)
-            ? entry.matchedTags
-            : entry.tags || []
-          )
+          (Array.isArray(entry.matchedTags) ? entry.matchedTags : entry.tags || [])
             .map(normalizeText)
             .filter(Boolean),
         ),
@@ -751,17 +696,13 @@ export const rerankRecommendations = (
             .filter(Boolean),
         ),
       ];
-      const { adjustment, hidden } = feedbackBoostForCandidate(
-        entry,
-        options.feedback || [],
-      );
+      const { adjustment, hidden } = feedbackBoostForCandidate(entry, options.feedback || []);
       const baseScore =
         Number(entry.scoreSimilarity || 0) * multipliers.similarity +
         Number(entry.scoreTagAffinity || 0) * multipliers.tagAffinity +
         Number(entry.scoreSeedCoverage || 0) * multipliers.seedCoverage +
         Number(entry.scoreNovelty || 0) * multipliers.novelty -
-        Number(entry.scorePopularityPenalty || 0) *
-          multipliers.popularityPenalty +
+        Number(entry.scorePopularityPenalty || 0) * multipliers.popularityPenalty +
         Number(entry.scoreFreshnessBoost || 0) -
         Number(entry.scoreAgingPenalty || 0);
       return {
@@ -829,19 +770,13 @@ export const rerankRecommendations = (
     }
   };
 
-  while (
-    pool.length > 0 &&
-    selected.length < Math.max(1, Number(limit) || 100)
-  ) {
+  while (pool.length > 0 && selected.length < Math.max(1, Number(limit) || 100)) {
     let bestIndex = 0;
     let bestCandidate = scoreCandidate(pool[0]);
 
     for (let index = 1; index < pool.length; index += 1) {
       const candidate = scoreCandidate(pool[index]);
-      if (
-        bestCandidate.hiddenByFeedback ||
-        candidate.scoreTotal > bestCandidate.scoreTotal
-      ) {
+      if (bestCandidate.hiddenByFeedback || candidate.scoreTotal > bestCandidate.scoreTotal) {
         bestCandidate = candidate;
         bestIndex = index;
       }
@@ -855,13 +790,9 @@ export const rerankRecommendations = (
   return selected.map(stripRerankMetadata);
 };
 
-export const filterRecommendationsForServe = (
-  recommendations = [],
-  feedback = [],
-) =>
+export const filterRecommendationsForServe = (recommendations = [], feedback = []) =>
   (Array.isArray(recommendations) ? recommendations : []).filter(
-    (recommendation) =>
-      !feedbackBoostForCandidate(recommendation, feedback).hidden,
+    (recommendation) => !feedbackBoostForCandidate(recommendation, feedback).hidden,
   );
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -880,9 +811,7 @@ const getRecommendationPoolKeys = (recommendation) => {
 
 const buildRecommendationPoolMetadataMap = (recommendations = []) => {
   const metadata = new Map();
-  for (const recommendation of Array.isArray(recommendations)
-    ? recommendations
-    : []) {
+  for (const recommendation of Array.isArray(recommendations) ? recommendations : []) {
     const keys = getRecommendationPoolKeys(recommendation);
     if (keys.length === 0) continue;
     const entry = {
@@ -914,13 +843,7 @@ const findRecommendationPoolMetadata = (recommendation, metadataMap) => {
 
 const applyRecommendationPoolMetadata = (
   recommendation,
-  {
-    fresh = false,
-    index = 0,
-    metadata = null,
-    runStartedAt,
-    runStartedMs,
-  } = {},
+  { fresh = false, index = 0, metadata = null, runStartedAt, runStartedMs } = {},
 ) => {
   const firstDiscoveredAt =
     metadata?.firstDiscoveredAt ||
@@ -938,9 +861,7 @@ const applyRecommendationPoolMetadata = (
     discoveredAt: recommendation.discoveredAt || firstDiscoveredAt,
     lastRecommendedAt: fresh
       ? runStartedAt
-      : metadata?.lastRecommendedAt ||
-        recommendation.lastRecommendedAt ||
-        firstDiscoveredAt,
+      : metadata?.lastRecommendedAt || recommendation.lastRecommendedAt || firstDiscoveredAt,
     recommendationPoolState: fresh ? "fresh" : "retained",
     scoreFreshnessBoost: Number(freshnessBoost.toFixed(2)),
     scoreAgingPenalty: Number(agingPenalty.toFixed(2)),
@@ -958,36 +879,27 @@ export const mergeRetainedRecommendationPool = ({
 } = {}) => {
   const normalizedLimit = Math.max(1, Number(limit) || 500);
   const runStartedMs = parseTimeMs(runStartedAt);
-  const existingMetadata = buildRecommendationPoolMetadataMap(
-    existingRecommendations,
+  const existingMetadata = buildRecommendationPoolMetadataMap(existingRecommendations);
+  const fresh = (Array.isArray(freshRecommendations) ? freshRecommendations : []).map(
+    (recommendation, index) =>
+      applyRecommendationPoolMetadata(recommendation, {
+        fresh: true,
+        index,
+        metadata: findRecommendationPoolMetadata(recommendation, existingMetadata),
+        runStartedAt,
+        runStartedMs,
+      }),
   );
-  const fresh = (Array.isArray(freshRecommendations)
-    ? freshRecommendations
-    : []
-  ).map((recommendation, index) =>
-    applyRecommendationPoolMetadata(recommendation, {
-      fresh: true,
-      index,
-      metadata: findRecommendationPoolMetadata(recommendation, existingMetadata),
-      runStartedAt,
-      runStartedMs,
-    }),
+  const retained = (Array.isArray(existingRecommendations) ? existingRecommendations : []).map(
+    (recommendation, index) =>
+      applyRecommendationPoolMetadata(recommendation, {
+        fresh: false,
+        index,
+        runStartedAt,
+        runStartedMs,
+      }),
   );
-  const retained = (Array.isArray(existingRecommendations)
-    ? existingRecommendations
-    : []
-  ).map((recommendation, index) =>
-    applyRecommendationPoolMetadata(recommendation, {
-      fresh: false,
-      index,
-      runStartedAt,
-      runStartedMs,
-    }),
-  );
-  const merged = mergeResolvedRecommendations(
-    [...fresh, ...retained],
-    existingArtistKeys,
-  );
+  const merged = mergeResolvedRecommendations([...fresh, ...retained], existingArtistKeys);
 
   return rerankRecommendations(merged, normalizedLimit, {
     discoveryMode,
@@ -1005,9 +917,7 @@ export const mergeResolvedRecommendations = (
   const merged = new Map();
   const aliases = new Map();
 
-  for (const recommendation of Array.isArray(recommendations)
-    ? recommendations
-    : []) {
+  for (const recommendation of Array.isArray(recommendations) ? recommendations : []) {
     const keys = normalizeArtistIdentityKeys(recommendation);
     if (keys.some((key) => existingArtistKeys.has(key))) continue;
 
@@ -1023,9 +933,7 @@ export const mergeResolvedRecommendations = (
     if (!existing) {
       const entry = {
         ...recommendation,
-        tags: Array.isArray(recommendation?.tags)
-          ? [...recommendation.tags]
-          : [],
+        tags: Array.isArray(recommendation?.tags) ? [...recommendation.tags] : [],
         matchedTags: Array.isArray(recommendation?.matchedTags)
           ? [...recommendation.matchedTags]
           : [],
@@ -1040,9 +948,7 @@ export const mergeResolvedRecommendations = (
         supportingSeeds: Array.isArray(recommendation?.supportingSeeds)
           ? [...recommendation.supportingSeeds]
           : [],
-        sourceMix: Array.isArray(recommendation?.sourceMix)
-          ? [...recommendation.sourceMix]
-          : [],
+        sourceMix: Array.isArray(recommendation?.sourceMix) ? [...recommendation.sourceMix] : [],
         reasonCodes: Array.isArray(recommendation?.reasonCodes)
           ? [...recommendation.reasonCodes]
           : [],
@@ -1063,10 +969,8 @@ export const mergeResolvedRecommendations = (
     existing.navigateTo =
       existing.navigateTo || recommendation.navigateTo || recommendation.id || null;
     existing.image = existing.image || recommendation.image || null;
-    existing.popularityLabel =
-      existing.popularityLabel || recommendation.popularityLabel || null;
-    existing.popularityRank =
-      existing.popularityRank || recommendation.popularityRank || null;
+    existing.popularityLabel = existing.popularityLabel || recommendation.popularityLabel || null;
+    existing.popularityRank = existing.popularityRank || recommendation.popularityRank || null;
     existing.listeners = Math.max(
       Number(existing.listeners || 0),
       Number(recommendation.listeners || 0),
@@ -1075,10 +979,7 @@ export const mergeResolvedRecommendations = (
       Number(existing.playcount || 0),
       Number(recommendation.playcount || 0),
     );
-    existing.score = Math.max(
-      Number(existing.score || 0),
-      Number(recommendation.score || 0),
-    );
+    existing.score = Math.max(Number(existing.score || 0), Number(recommendation.score || 0));
     existing.scoreTotal = Math.max(
       Number(existing.scoreTotal || 0),
       Number(recommendation.scoreTotal || recommendation.score || 0),
@@ -1111,8 +1012,7 @@ export const mergeResolvedRecommendations = (
       Number(existing.confidence || 0),
       Number(recommendation.confidence || 0),
     );
-    existing.discoveryTier =
-      existing.discoveryTier || recommendation.discoveryTier || "balanced";
+    existing.discoveryTier = existing.discoveryTier || recommendation.discoveryTier || "balanced";
     existing.discoveryDepth = Math.min(
       Number(existing.discoveryDepth || recommendation.discoveryDepth || 1) || 1,
       Number(recommendation.discoveryDepth || 1) || 1,
@@ -1140,17 +1040,13 @@ export const mergeResolvedRecommendations = (
     existing.sourceMix = [
       ...new Set([
         ...(existing.sourceMix || []),
-        ...(Array.isArray(recommendation?.sourceMix)
-          ? recommendation.sourceMix
-          : []),
+        ...(Array.isArray(recommendation?.sourceMix) ? recommendation.sourceMix : []),
       ]),
     ];
     existing.reasonCodes = [
       ...new Set([
         ...(existing.reasonCodes || []),
-        ...(Array.isArray(recommendation?.reasonCodes)
-          ? recommendation.reasonCodes
-          : []),
+        ...(Array.isArray(recommendation?.reasonCodes) ? recommendation.reasonCodes : []),
       ]),
     ];
     existing.tags = [
@@ -1162,9 +1058,7 @@ export const mergeResolvedRecommendations = (
     existing.matchedTags = [
       ...new Set([
         ...(existing.matchedTags || []),
-        ...(Array.isArray(recommendation?.matchedTags)
-          ? recommendation.matchedTags
-          : []),
+        ...(Array.isArray(recommendation?.matchedTags) ? recommendation.matchedTags : []),
       ]),
     ];
     existing.supportingSeeds = [

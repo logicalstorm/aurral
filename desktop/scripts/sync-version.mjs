@@ -4,9 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const desktopDir = join(rootDir, "desktop");
-const version = JSON.parse(
-  readFileSync(join(rootDir, "package.json"), "utf8"),
-).version;
+const version = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf8")).version;
 
 const packageJsonPath = join(desktopDir, "package.json");
 const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));

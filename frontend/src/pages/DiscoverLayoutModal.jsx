@@ -17,10 +17,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  restrictToParentElement,
-  restrictToVerticalAxis,
-} from "@dnd-kit/modifiers";
+import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { GripVertical, X } from "lucide-react";
 
 const FALLBACK_GENRE_SECTION_PREFIX = "fallbackGenre:";
@@ -51,11 +48,11 @@ function SortableSectionRow({ item, onToggle, showUnavailable }) {
       ref={setNodeRef}
       style={style}
       className={`artist-customize-section-row ${
-        item.enabled ? "artist-customize-section-row--enabled" : "artist-customize-section-row--disabled"
+        item.enabled
+          ? "artist-customize-section-row--enabled"
+          : "artist-customize-section-row--disabled"
       } ${
-        isDragging
-          ? "artist-customize-section-row--dragging"
-          : ""
+        isDragging ? "artist-customize-section-row--dragging" : ""
       } ${showUnavailable ? "artist-customize-section-row--unavailable" : ""}`}
     >
       <button
@@ -69,15 +66,9 @@ function SortableSectionRow({ item, onToggle, showUnavailable }) {
         <GripVertical className="artist-icon-sm" />
       </button>
       <div className="artist-customize-section-content">
-        <span
-          className="artist-customize-section-title"
-        >
-          {item.label}
-        </span>
+        <span className="artist-customize-section-title">{item.label}</span>
         {showUnavailable && (
-          <span className="artist-customize-section-subtitle">
-            Not enough data yet
-          </span>
+          <span className="artist-customize-section-subtitle">Not enough data yet</span>
         )}
       </div>
       <button
@@ -172,10 +163,7 @@ export function DiscoverLayoutModal({
       >
         <div className="artist-customize-modal__header">
           <div>
-            <h3
-              id="discover-layout-modal-title"
-              className="artist-customize-modal__title"
-            >
+            <h3 id="discover-layout-modal-title" className="artist-customize-modal__title">
               Customize Discover
             </h3>
             <p className="artist-customize-modal__subtitle">
@@ -200,10 +188,7 @@ export function DiscoverLayoutModal({
           onDragEnd={handleDragEnd}
         >
           <div className="artist-customize-modal__body">
-            <SortableContext
-              items={sectionIds}
-              strategy={verticalListSortingStrategy}
-            >
+            <SortableContext items={sectionIds} strategy={verticalListSortingStrategy}>
               <div className="artist-customize-sections-list">
                 {sections.map((item) => (
                   <SortableSectionRow
@@ -212,15 +197,12 @@ export function DiscoverLayoutModal({
                     onToggle={(id) =>
                       onSectionsChange((prev) =>
                         prev.map((section) =>
-                          section.id === id
-                            ? { ...section, enabled: !section.enabled }
-                            : section,
+                          section.id === id ? { ...section, enabled: !section.enabled } : section,
                         ),
                       )
                     }
                     showUnavailable={
-                      !getFallbackGenreFromSectionId(item.id) &&
-                      !sectionAvailability[item.id]
+                      !getFallbackGenreFromSectionId(item.id) && !sectionAvailability[item.id]
                     }
                   />
                 ))}

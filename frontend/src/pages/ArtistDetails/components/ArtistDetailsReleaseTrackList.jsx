@@ -40,8 +40,8 @@ export function ArtistDetailsReleaseTrackList({
     [artistName, release?.title, trackKey],
   );
 
-  const { isTrackPlaying, isTrackLoading, handlePlay } = useGlobalTrackPlayback(
-    (track, index) => normalizeTrack(track, index),
+  const { isTrackPlaying, isTrackLoading, handlePlay } = useGlobalTrackPlayback((track, index) =>
+    normalizeTrack(track, index),
   );
 
   const getQueueTracks = useCallback(
@@ -81,9 +81,7 @@ export function ArtistDetailsReleaseTrackList({
     });
     if (matchIndex < 0) return;
     const track = tracks[matchIndex];
-    const trackId = String(
-      track.id ?? track.mbid ?? `${trackKey}-${matchIndex}`,
-    );
+    const trackId = String(track.id ?? track.mbid ?? `${trackKey}-${matchIndex}`);
     const row = rowRefs.current[trackId];
     if (!row) return;
     row.classList.add("is-search-focused");
@@ -112,72 +110,57 @@ export function ArtistDetailsReleaseTrackList({
             onShufflePlay={handleShufflePlay}
           />
           <div className="artist-track-list__rows">
-          {tracks.map((track, index) => {
-            const currentTrackId = String(
-              track.id ?? track.mbid ?? `${trackKey}-${index}`,
-            );
-            const isPlaying = isTrackPlaying(currentTrackId);
-            const isLoadingPreview = isTrackLoading(currentTrackId);
-            const durationLabel = track.length
-              ? `${Math.floor(track.length / 60000)}:${Math.floor(
-                  (track.length % 60000) / 1000,
-                )
-                  .toString()
-                  .padStart(2, "0")}`
-              : "";
-            return (
-              <div
-                key={currentTrackId}
-                ref={(node) => {
-                  if (node) rowRefs.current[currentTrackId] = node;
-                }}
-                className="artist-track-row"
-              >
-                <span className="artist-track-number">
-                  {track.trackNumber || track.position || index + 1}
-                </span>
-                {track.preview_url ? (
-                  <TrackPlayButton
-                    track={track}
-                    isPlaying={isPlaying}
-                    isLoading={isLoadingPreview}
-                    onClick={(event) =>
-                      handleTrackPreviewPlay(track, index, event)
-                    }
-                  />
-                ) : (
-                  <span />
-                )}
-                <span className="artist-track-title">
-                  {track.title || track.trackName || "Unknown Track"}
-                </span>
-                {onAddTrackToPlaylist ? (
-                  <TrackPlaylistMenu
-                    track={
-                      resolveMembershipTrack
-                        ? resolveMembershipTrack(track, release)
-                        : track
-                    }
-                    playlists={playlists}
-                    loading={playlistsLoading}
-                    saving={playlistSavingKey === currentTrackId}
-                    error={playlistError}
-                    defaultNewPlaylistName={getDefaultPlaylistName?.(
-                      track,
-                      release,
-                    )}
-                    onLoadPlaylists={onLoadPlaylists}
-                    onSelect={(target) =>
-                      onAddTrackToPlaylist(track, release, target)
-                    }
-                  />
-                ) : null}
-                <span className="artist-track-duration">
-                  {durationLabel}
-                </span>
-              </div>
-            );
-          })}
+            {tracks.map((track, index) => {
+              const currentTrackId = String(track.id ?? track.mbid ?? `${trackKey}-${index}`);
+              const isPlaying = isTrackPlaying(currentTrackId);
+              const isLoadingPreview = isTrackLoading(currentTrackId);
+              const durationLabel = track.length
+                ? `${Math.floor(track.length / 60000)}:${Math.floor((track.length % 60000) / 1000)
+                    .toString()
+                    .padStart(2, "0")}`
+                : "";
+              return (
+                <div
+                  key={currentTrackId}
+                  ref={(node) => {
+                    if (node) rowRefs.current[currentTrackId] = node;
+                  }}
+                  className="artist-track-row"
+                >
+                  <span className="artist-track-number">
+                    {track.trackNumber || track.position || index + 1}
+                  </span>
+                  {track.preview_url ? (
+                    <TrackPlayButton
+                      track={track}
+                      isPlaying={isPlaying}
+                      isLoading={isLoadingPreview}
+                      onClick={(event) => handleTrackPreviewPlay(track, index, event)}
+                    />
+                  ) : (
+                    <span />
+                  )}
+                  <span className="artist-track-title">
+                    {track.title || track.trackName || "Unknown Track"}
+                  </span>
+                  {onAddTrackToPlaylist ? (
+                    <TrackPlaylistMenu
+                      track={
+                        resolveMembershipTrack ? resolveMembershipTrack(track, release) : track
+                      }
+                      playlists={playlists}
+                      loading={playlistsLoading}
+                      saving={playlistSavingKey === currentTrackId}
+                      error={playlistError}
+                      defaultNewPlaylistName={getDefaultPlaylistName?.(track, release)}
+                      onLoadPlaylists={onLoadPlaylists}
+                      onSelect={(target) => onAddTrackToPlaylist(track, release, target)}
+                    />
+                  ) : null}
+                  <span className="artist-track-duration">{durationLabel}</span>
+                </div>
+              );
+            })}
           </div>
         </>
       ) : (

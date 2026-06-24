@@ -88,9 +88,7 @@ function formatDuration(ms) {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  return [hours, minutes, seconds]
-    .map((part) => String(part).padStart(2, "0"))
-    .join(":");
+  return [hours, minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":");
 }
 
 function formatCount(value) {
@@ -125,9 +123,7 @@ function StatusBadge({ status }) {
       title={meta.title || undefined}
     >
       <Icon
-        className={`arr-task-status__icon${
-          status === "running" ? " animate-spin" : ""
-        }`}
+        className={`arr-task-status__icon${status === "running" ? " animate-spin" : ""}`}
         aria-hidden
       />
       {meta.label}
@@ -151,36 +147,17 @@ function LoadingRows({ colSpan }) {
   );
 }
 
-function TasksHealthSummary({
-  summary,
-  loading,
-  clearing = false,
-  onClearStale,
-}) {
+function TasksHealthSummary({ summary, loading, clearing = false, onClearStale }) {
   if (loading || !summary) {
-    return (
-      <div className="arr-info arr-info--tasks">
-        Loading background task status...
-      </div>
-    );
+    return <div className="arr-info arr-info--tasks">Loading background task status...</div>;
   }
 
-  const {
-    healthy,
-    activeCount,
-    staleCount,
-    failedCount,
-    workersFailedCount,
-    completedCount,
-  } = summary;
+  const { healthy, activeCount, staleCount, failedCount, workersFailedCount, completedCount } =
+    summary;
   const needsAttention = !healthy;
 
   return (
-    <div
-      className={`arr-info arr-info--tasks${
-        healthy ? "" : " arr-info--tasks-warning"
-      }`}
-    >
+    <div className={`arr-info arr-info--tasks${healthy ? "" : " arr-info--tasks-warning"}`}>
       {healthy ? (
         <p className="arr-info__lead">
           Background tasks are healthy.
@@ -206,9 +183,8 @@ function TasksHealthSummary({
           </p>
           {staleCount > 0 ? (
             <p className="arr-info__help">
-              These are usually leftover job records from an earlier run, not
-              active workers. Clear them to reset the queue. Aurral will
-              re-enqueue normal startup work if needed.
+              These are usually leftover job records from an earlier run, not active workers. Clear
+              them to reset the queue. Aurral will re-enqueue normal startup work if needed.
             </p>
           ) : null}
         </>
@@ -254,9 +230,7 @@ function ScheduledTable({ scheduled = [], loading = false }) {
                 <td>
                   <span className="arr-table__primary">{task.name}</span>
                   {task.description ? (
-                    <span className="arr-table__subtle">
-                      {task.description}
-                    </span>
+                    <span className="arr-table__subtle">{task.description}</span>
                   ) : null}
                 </td>
                 <td>{task.interval || task.schedule || "—"}</td>
@@ -298,59 +272,55 @@ function WorkersTable({ workers = [], loading = false, showAllWorkers = false })
 
   return (
     <div className="arr-table-wrap">
-        <table className="arr-table arr-table--tasks" aria-busy={loading}>
-          <thead>
-            <tr>
-              <th scope="col">Worker</th>
-              <th scope="col">Status</th>
-              <th scope="col">Active</th>
-              <th scope="col">Queued</th>
-              <th scope="col">Scheduled</th>
-              <th scope="col">Failed</th>
-              <th scope="col">Last Run</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <LoadingRows colSpan={7} />
-            ) : visibleWorkers.length === 0 ? (
-              <EmptyRows colSpan={7} />
-            ) : (
-              visibleWorkers.map((worker) => (
-                <tr key={worker.queue}>
-                  <td>
-                    <span className="arr-table__primary">
-                      {worker.name || worker.queueLabel}
-                    </span>
-                    {worker.description ? (
-                      <span className="arr-table__subtle">
-                        {worker.description}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td>
-                    <StatusBadge status={worker.status} />
-                  </td>
-                  <td>{formatCount(worker.processing)}</td>
-                  <td>{formatCount(worker.queued)}</td>
-                  <td>{formatCount(worker.scheduled)}</td>
-                  <td>
-                    <span
-                      className={
-                        formatCount(worker.failed) > 0
-                          ? "arr-task-count arr-task-count--danger"
-                          : "arr-task-count"
-                      }
-                    >
-                      {formatCount(worker.failed)}
-                    </span>
-                  </td>
-                  <td>{formatRelative(worker.lastRunAt)}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      <table className="arr-table arr-table--tasks" aria-busy={loading}>
+        <thead>
+          <tr>
+            <th scope="col">Worker</th>
+            <th scope="col">Status</th>
+            <th scope="col">Active</th>
+            <th scope="col">Queued</th>
+            <th scope="col">Scheduled</th>
+            <th scope="col">Failed</th>
+            <th scope="col">Last Run</th>
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            <LoadingRows colSpan={7} />
+          ) : visibleWorkers.length === 0 ? (
+            <EmptyRows colSpan={7} />
+          ) : (
+            visibleWorkers.map((worker) => (
+              <tr key={worker.queue}>
+                <td>
+                  <span className="arr-table__primary">{worker.name || worker.queueLabel}</span>
+                  {worker.description ? (
+                    <span className="arr-table__subtle">{worker.description}</span>
+                  ) : null}
+                </td>
+                <td>
+                  <StatusBadge status={worker.status} />
+                </td>
+                <td>{formatCount(worker.processing)}</td>
+                <td>{formatCount(worker.queued)}</td>
+                <td>{formatCount(worker.scheduled)}</td>
+                <td>
+                  <span
+                    className={
+                      formatCount(worker.failed) > 0
+                        ? "arr-task-count arr-task-count--danger"
+                        : "arr-task-count"
+                    }
+                  >
+                    {formatCount(worker.failed)}
+                  </span>
+                </td>
+                <td>{formatRelative(worker.lastRunAt)}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -358,10 +328,7 @@ function WorkersTable({ workers = [], loading = false, showAllWorkers = false })
 function QueueTable({ queue = [], loading = false }) {
   return (
     <div className="arr-table-wrap">
-      <table
-        className="arr-table arr-table--tasks arr-table--task-queue"
-        aria-busy={loading}
-      >
+      <table className="arr-table arr-table--tasks arr-table--task-queue" aria-busy={loading}>
         <thead>
           <tr>
             <th scope="col">Name</th>
@@ -370,14 +337,9 @@ function QueueTable({ queue = [], loading = false }) {
             <th scope="col">Started</th>
             <th scope="col">Ended</th>
             <th scope="col">
-              {queue.some((task) => task.status === "running")
-                ? "Running for"
-                : "Duration"}
+              {queue.some((task) => task.status === "running") ? "Running for" : "Duration"}
             </th>
-            <th
-              scope="col"
-              title="Retry count for jobs that can fail and re-run"
-            >
+            <th scope="col" title="Retry count for jobs that can fail and re-run">
               Attempt
             </th>
           </tr>
@@ -389,10 +351,7 @@ function QueueTable({ queue = [], loading = false }) {
             <EmptyRows colSpan={7} />
           ) : (
             queue.map((task) => (
-              <tr
-                key={task.id}
-                className={task.isStale ? "arr-table__row--warning" : undefined}
-              >
+              <tr key={task.id} className={task.isStale ? "arr-table__row--warning" : undefined}>
                 <td>
                   <span className="arr-table__primary">{task.name}</span>
                   {task.description || task.payloadSummary ? (
@@ -413,10 +372,7 @@ function QueueTable({ queue = [], loading = false }) {
                   {Number(task.duplicateCount || 1) > 1 ? (
                     <span className="arr-table__subtle">
                       {task.duplicateCount}{" "}
-                      {task.status === "scheduled"
-                        ? "delayed copies"
-                        : "recent runs"}{" "}
-                      grouped
+                      {task.status === "scheduled" ? "delayed copies" : "recent runs"} grouped
                     </span>
                   ) : null}
                 </td>
@@ -440,9 +396,7 @@ function QueueTable({ queue = [], loading = false }) {
                 <td>{formatQueueDuration(task)}</td>
                 <td>
                   {task.maxAttempts
-                    ? `${formatCount(task.attempt)} / ${formatCount(
-                        task.maxAttempts,
-                      )}`
+                    ? `${formatCount(task.attempt)} / ${formatCount(task.maxAttempts)}`
                     : formatCount(task.attempt)}
                 </td>
               </tr>
@@ -490,9 +444,7 @@ export function SettingsTasksTab({ showError, showSuccess }) {
       setLoadError(null);
       const cleared = Number(result.cleared || 0);
       if (cleared > 0) {
-        showSuccess?.(
-          `Cleared ${cleared} stuck job${cleared === 1 ? "" : "s"}.`,
-        );
+        showSuccess?.(`Cleared ${cleared} stuck job${cleared === 1 ? "" : "s"}.`);
       } else {
         showSuccess?.("No stuck jobs needed clearing.");
       }
@@ -557,18 +509,12 @@ export function SettingsTasksTab({ showError, showSuccess }) {
               className="arr-btn arr-btn--ghost"
               onClick={() => setShowAllWorkers((value) => !value)}
             >
-              {showAllWorkers
-                ? "Hide idle workers"
-                : `Show all workers (${workers.length})`}
+              {showAllWorkers ? "Hide idle workers" : `Show all workers (${workers.length})`}
             </button>
           ) : null
         }
       >
-        <WorkersTable
-          workers={workers}
-          loading={loading}
-          showAllWorkers={showAllWorkers}
-        />
+        <WorkersTable workers={workers} loading={loading} showAllWorkers={showAllWorkers} />
       </SettingsArrFieldSet>
 
       <SettingsArrFieldSet legend="Queue">

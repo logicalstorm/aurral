@@ -206,9 +206,7 @@ if (!tableColumns.includes("reason")) {
   tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN reason TEXT");
 }
 if (!tableColumns.includes("artist_mbid")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN artist_mbid TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN artist_mbid TEXT");
 }
 if (!tableColumns.includes("album_mbid")) {
   tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_mbid TEXT");
@@ -217,79 +215,49 @@ if (!tableColumns.includes("track_mbid")) {
   tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN track_mbid TEXT");
 }
 if (!tableColumns.includes("release_year")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN release_year TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN release_year TEXT");
 }
 if (!tableColumns.includes("duration_ms")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN duration_ms INTEGER",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN duration_ms INTEGER");
 }
 if (!tableColumns.includes("track_number")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN track_number INTEGER",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN track_number INTEGER");
 }
 if (!tableColumns.includes("album_track_count")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN album_track_count INTEGER",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_track_count INTEGER");
 }
 if (!tableColumns.includes("album_track_titles")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN album_track_titles TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_track_titles TEXT");
 }
 if (!tableColumns.includes("artist_aliases")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN artist_aliases TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN artist_aliases TEXT");
 }
 if (!tableColumns.includes("playlist_type")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN playlist_type TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN playlist_type TEXT");
 }
 if (!tableColumns.includes("external_path")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN external_path TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN external_path TEXT");
 }
 if (!tableColumns.includes("download_source")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN download_source TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN download_source TEXT");
 }
 if (!tableColumns.includes("download_client")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN download_client TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN download_client TEXT");
 }
 if (!tableColumns.includes("download_client_id")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN download_client_id TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN download_client_id TEXT");
 }
 if (!tableColumns.includes("release_guid")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN release_guid TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN release_guid TEXT");
 }
 if (!tableColumns.includes("release_title")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN release_title TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN release_title TEXT");
 }
 if (!tableColumns.includes("indexer_id")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN indexer_id TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN indexer_id TEXT");
 }
 if (!tableColumns.includes("indexer_name")) {
-  tryAddColumn(
-    "ALTER TABLE playlist_download_jobs ADD COLUMN indexer_name TEXT",
-  );
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN indexer_name TEXT");
 }
 
 const userColumns = db
@@ -310,9 +278,7 @@ if (!userColumns.includes("lidarr_root_folder_path")) {
   tryAddColumn("ALTER TABLE users ADD COLUMN lidarr_root_folder_path TEXT");
 }
 if (!userColumns.includes("lidarr_quality_profile_id")) {
-  tryAddColumn(
-    "ALTER TABLE users ADD COLUMN lidarr_quality_profile_id INTEGER",
-  );
+  tryAddColumn("ALTER TABLE users ADD COLUMN lidarr_quality_profile_id INTEGER");
 }
 if (!userColumns.includes("discover_layout")) {
   tryAddColumn("ALTER TABLE users ADD COLUMN discover_layout TEXT");

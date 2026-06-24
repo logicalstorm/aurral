@@ -33,9 +33,7 @@ import {
 const getReleaseTypeLabel = (release) => {
   const types = [
     release?.["primary-type"],
-    ...(Array.isArray(release?.["secondary-types"])
-      ? release["secondary-types"]
-      : []),
+    ...(Array.isArray(release?.["secondary-types"]) ? release["secondary-types"] : []),
   ].filter(Boolean);
   return types.length ? types.join(" · ") : null;
 };
@@ -62,12 +60,10 @@ const mergeReleaseDetails = (baseRelease, details) => {
   return {
     ...baseRelease,
     title: details.title || baseRelease.title,
-    "first-release-date":
-      details["first-release-date"] || baseRelease["first-release-date"],
+    "first-release-date": details["first-release-date"] || baseRelease["first-release-date"],
     "primary-type": details["primary-type"] || baseRelease["primary-type"],
     "secondary-types":
-      Array.isArray(details["secondary-types"]) &&
-      details["secondary-types"].length
+      Array.isArray(details["secondary-types"]) && details["secondary-types"].length
         ? details["secondary-types"]
         : baseRelease["secondary-types"],
     rating: details.rating || baseRelease.rating || null,
@@ -117,9 +113,7 @@ function ReleasePage() {
   const downloadStatusPollInFlightRef = useRef(false);
 
   const releaseTitle = release.title || "Release";
-  const pageTitle = artistName
-    ? `${releaseTitle} — ${artistName}`
-    : releaseTitle;
+  const pageTitle = artistName ? `${releaseTitle} — ${artistName}` : releaseTitle;
   useDocumentTitle(pageTitle);
 
   const releaseTypeLabel = getReleaseTypeLabel(release);
@@ -134,21 +128,14 @@ function ReleasePage() {
   );
   const isComplete = libraryDisplay.isComplete;
   const isInLibrary = libraryDisplay.isInLibrary;
-  const lastfmUrl =
-    artistName && releaseTitle
-      ? buildLastfmAlbumUrl(artistName, releaseTitle)
-      : "";
+  const lastfmUrl = artistName && releaseTitle ? buildLastfmAlbumUrl(artistName, releaseTitle) : "";
 
   const releaseMeta = [
     releaseDateLabel,
     releaseTypeLabel,
     trackCount > 0 ? `${trackCount} track${trackCount === 1 ? "" : "s"}` : null,
     durationLabel,
-    metric.label
-      ? metric.type === "rating"
-        ? `${metric.label} rating`
-        : metric.label
-      : null,
+    metric.label ? (metric.type === "rating" ? `${metric.label} rating` : metric.label) : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -244,12 +231,7 @@ function ReleasePage() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [
-    downloadStatus?.status,
-    isComplete,
-    libraryInfo?.libraryAlbumId,
-    releaseMbid,
-  ]);
+  }, [downloadStatus?.status, isComplete, libraryInfo?.libraryAlbumId, releaseMbid]);
 
   useEffect(() => {
     if (!releaseMbid || coverUrl) return undefined;
@@ -291,11 +273,7 @@ function ReleasePage() {
         };
 
         const nextTracks = libraryInfo?.libraryAlbumId
-          ? await getLibraryTracks(
-              libraryInfo.libraryAlbumId,
-              releaseMbid,
-              context,
-            )
+          ? await getLibraryTracks(libraryInfo.libraryAlbumId, releaseMbid, context)
           : await getReleaseGroupTracks(releaseMbid, context);
 
         if (!cancelled) {
@@ -317,15 +295,21 @@ function ReleasePage() {
     return () => {
       cancelled = true;
     };
-  }, [artistMbid, artistName, release, releaseMbid, libraryInfo?.libraryAlbumId, isComplete, showError]);
+  }, [
+    artistMbid,
+    artistName,
+    release,
+    releaseMbid,
+    libraryInfo?.libraryAlbumId,
+    isComplete,
+    showError,
+  ]);
 
   const loadSharedPlaylists = useCallback(async () => {
     setPlaylistModalLoading(true);
     try {
       const data = await getFlowStatus();
-      const playlists = Array.isArray(data?.sharedPlaylists)
-        ? data.sharedPlaylists
-        : [];
+      const playlists = Array.isArray(data?.sharedPlaylists) ? data.sharedPlaylists : [];
       setSharedPlaylists(playlists);
       return playlists;
     } catch (err) {
@@ -381,10 +365,7 @@ function ReleasePage() {
         if (target?.mode === "new") {
           const name =
             String(target?.name || "").trim() ||
-            reserveUniquePlaylistName(
-              sharedPlaylists,
-              `${trackPayload.artistName} Picks`,
-            );
+            reserveUniquePlaylistName(sharedPlaylists, `${trackPayload.artistName} Picks`);
           const response = await createSharedPlaylist({
             name,
             tracks: [trackPayload],
@@ -505,12 +486,7 @@ function ReleasePage() {
       <div className="release-page__hero">
         <div className="release-page__cover">
           {coverUrl ? (
-            <img
-              src={coverUrl}
-              alt={releaseTitle}
-              loading="eager"
-              decoding="async"
-            />
+            <img src={coverUrl} alt={releaseTitle} loading="eager" decoding="async" />
           ) : (
             <div className="artist-release-card__placeholder">
               <Music className="artist-icon-lg" />

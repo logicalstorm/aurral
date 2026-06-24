@@ -41,9 +41,7 @@ export function getPlaylistRunActivity({
   if (reSearchingCount > 0) {
     return {
       message:
-        reSearchingCount === 1
-          ? "Re-searching track…"
-          : `Re-searching ${reSearchingCount} tracks…`,
+        reSearchingCount === 1 ? "Re-searching track…" : `Re-searching ${reSearchingCount} tracks…`,
       phase: "searching",
     };
   }
@@ -58,20 +56,14 @@ export function getPlaylistRunActivity({
   const hintMessage = String(status?.hint?.message || "").trim();
   const currentJob = status?.worker?.currentJob;
   const isCurrentJobForPlaylist =
-    currentJob?.playlistType === playlistId &&
-    currentJob?.artistName &&
-    currentJob?.trackName;
+    currentJob?.playlistType === playlistId && currentJob?.artistName && currentJob?.trackName;
   const pendingCount = Number(stats?.pending || 0);
   const downloadingCount = Number(stats?.downloading || 0);
   const doneCount = Number(stats?.done || 0);
   const isGeneratingThisPlaylist =
-    queueProcessing &&
-    GENERATION_ACTIONS.has(queueAction) &&
-    queueTargetsThisPlaylist;
+    queueProcessing && GENERATION_ACTIONS.has(queueAction) && queueTargetsThisPlaylist;
   const isQueueCleanupThisPlaylist =
-    queueProcessing &&
-    CLEANUP_ACTIONS.has(queueAction) &&
-    queueTargetsThisPlaylist;
+    queueProcessing && CLEANUP_ACTIONS.has(queueAction) && queueTargetsThisPlaylist;
 
   if (kind === "flow" && !enabled && !rerunning && !isQueueCleanupThisPlaylist) {
     return null;
@@ -110,12 +102,7 @@ export function getPlaylistRunActivity({
     };
   }
 
-  if (
-    queueProcessing &&
-    queueTargetsThisPlaylist &&
-    hintMessage &&
-    hintPhase !== "completed"
-  ) {
+  if (queueProcessing && queueTargetsThisPlaylist && hintMessage && hintPhase !== "completed") {
     return {
       message: hintMessage.endsWith("…") ? hintMessage : `${hintMessage}…`,
       phase: hintPhase || "preparing",

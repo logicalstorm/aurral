@@ -28,12 +28,12 @@ Track files live in flow subfolders under that path, for example `aurral-weekly-
 
 You can run both at the same time. They use the same download tree but different playback mechanisms.
 
-| | Navidrome | Plex |
-| --- | --- | --- |
-| Playlist format | `.m3u` files on disk | Regular Plex playlists via API |
-| Library setup | Scan folders + read M3U | Aurral creates an **Aurral** music library via API |
-| Path mismatch fix | **Use Navidrome paths in M3U files** / `M3U_PATH_MODE` | **Plex downloads path** (optional) |
-| Playlist names | `[A] Flow name`, `[AS] Shared name` | Bare flow or playlist name |
+|                   | Navidrome                                              | Plex                                               |
+| ----------------- | ------------------------------------------------------ | -------------------------------------------------- |
+| Playlist format   | `.m3u` files on disk                                   | Regular Plex playlists via API                     |
+| Library setup     | Scan folders + read M3U                                | Aurral creates an **Aurral** music library via API |
+| Path mismatch fix | **Use Navidrome paths in M3U files** / `M3U_PATH_MODE` | **Plex downloads path** (optional)                 |
+| Playlist names    | `[A] Flow name`, `[AS] Shared name`                    | Bare flow or playlist name                         |
 
 Navidrome's **Use Navidrome paths in M3U files** setting does not affect Plex. It only changes paths written inside `.m3u` files.
 
@@ -43,10 +43,10 @@ Leave this blank when Aurral and Plex share the same filesystem view (same host,
 
 Set it when Plex runs in a **different container or host** and sees a different mount prefix than Aurral. Enter the downloads folder **as the Plex server sees it** — Aurral appends `/aurral-weekly-flow` when creating the library.
 
-| Aurral writes to | Plex sees | Plex downloads path |
-| --- | --- | --- |
-| `/data/downloads/aurral` | `/data/downloads/aurral` | Leave blank |
-| `/music/Aurral` (in Docker) | `/data/media` (Plex container) | `/data/media` |
+| Aurral writes to            | Plex sees                      | Plex downloads path |
+| --------------------------- | ------------------------------ | ------------------- |
+| `/data/downloads/aurral`    | `/data/downloads/aurral`       | Leave blank         |
+| `/music/Aurral` (in Docker) | `/data/media` (Plex container) | `/data/media`       |
 
 **Browse** shows folders as Aurral sees them. If Plex's mount differs, type Plex's path manually.
 

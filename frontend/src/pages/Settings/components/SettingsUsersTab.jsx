@@ -3,10 +3,7 @@ import { Lock, Trash2, UserPlus, X } from "lucide-react";
 import { GRANULAR_PERMISSIONS, granularPerms } from "../constants";
 import { loginApi, setStoredAuth } from "../../../utils/api";
 import { SettingsInput } from "./SettingsField";
-import {
-  SettingsArrFieldSet,
-  SettingsArrFormGroup,
-} from "./arr/SettingsArrLayout";
+import { SettingsArrFieldSet, SettingsArrFormGroup } from "./arr/SettingsArrLayout";
 
 function getLocalBypassStatus(status) {
   if (!status) {
@@ -43,8 +40,7 @@ function getLocalBypassStatus(status) {
     case "not_single_user":
       return {
         title: "Unavailable: more than one user exists",
-        detail:
-          "Local-network auto-login is only available while exactly one stored user exists.",
+        detail: "Local-network auto-login is only available while exactly one stored user exists.",
         canToggle: false,
       };
     case "sole_user_not_admin":
@@ -64,15 +60,13 @@ function getLocalBypassStatus(status) {
     case "not_onboarded":
       return {
         title: "Unavailable: onboarding incomplete",
-        detail:
-          "Finish onboarding before enabling local-network auto-login.",
+        detail: "Finish onboarding before enabling local-network auto-login.",
         canToggle: false,
       };
     default:
       return {
         title: "Unavailable",
-        detail:
-          "Local-network auto-login is not currently available for this installation.",
+        detail: "Local-network auto-login is not currently available for this installation.",
         canToggle: false,
       };
   }
@@ -85,8 +79,7 @@ function formatListenHistory(user) {
   if (user.listenHistoryProvider === "koito") {
     return `Koito: ${user.listenHistoryUrl}`;
   }
-  const provider =
-    user.listenHistoryProvider === "listenbrainz" ? "ListenBrainz" : "Last.fm";
+  const provider = user.listenHistoryProvider === "listenbrainz" ? "ListenBrainz" : "Last.fm";
   return `${provider}: ${user.listenHistoryUsername}`;
 }
 
@@ -164,8 +157,7 @@ export function SettingsUsersTab({
 }) {
   const isSelfEdit = editUser && editUser.id === authUser?.id;
   const localBypassStatus = getLocalBypassStatus(health?.localNetworkBypass);
-  const localBypassEnabled =
-    settings?.security?.localNetworkBypass?.enabled === true;
+  const localBypassEnabled = settings?.security?.localNetworkBypass?.enabled === true;
 
   const openAddUserModal = () => {
     setNewUserUsername("");
@@ -198,20 +190,13 @@ export function SettingsUsersTab({
                 setChangePwNew("");
                 setChangePwConfirm("");
               } catch (err) {
-                showError(
-                  err.response?.data?.error ||
-                    err.message ||
-                    "Failed to change password",
-                );
+                showError(err.response?.data?.error || err.message || "Failed to change password");
               } finally {
                 setChangingPassword(false);
               }
             }}
           >
-            <SettingsArrFormGroup
-              label="Current password"
-              labelFor="change-pw-current"
-            >
+            <SettingsArrFormGroup label="Current password" labelFor="change-pw-current">
               <SettingsInput
                 id="change-pw-current"
                 type="password"
@@ -233,10 +218,7 @@ export function SettingsUsersTab({
                 required
               />
             </SettingsArrFormGroup>
-            <SettingsArrFormGroup
-              label="Confirm password"
-              labelFor="change-pw-confirm"
-            >
+            <SettingsArrFormGroup label="Confirm password" labelFor="change-pw-confirm">
               <SettingsInput
                 id="change-pw-confirm"
                 type="password"
@@ -300,11 +282,7 @@ export function SettingsUsersTab({
           <SettingsArrFieldSet
             legend="Users"
             actions={
-              <button
-                type="button"
-                className="arr-btn arr-btn--primary"
-                onClick={openAddUserModal}
-              >
+              <button type="button" className="arr-btn arr-btn--primary" onClick={openAddUserModal}>
                 <UserPlus className="artist-icon-xs" aria-hidden />
                 Add user
               </button>
@@ -345,9 +323,7 @@ export function SettingsUsersTab({
                           </span>
                         </td>
                         <td>
-                          <span className="arr-table__path">
-                            {formatListenHistory(user)}
-                          </span>
+                          <span className="arr-table__path">{formatListenHistory(user)}</span>
                         </td>
                         <td className="arr-table__actions">
                           <div className="arr-table__actions-inner">
@@ -376,10 +352,7 @@ export function SettingsUsersTab({
                               className="arr-btn arr-btn--ghost arr-btn--icon"
                               aria-label={`Delete ${user.username}`}
                               disabled={user.role === "admin"}
-                              onClick={() =>
-                                user.role !== "admin" &&
-                                setDeleteUserTarget(user)
-                              }
+                              onClick={() => user.role !== "admin" && setDeleteUserTarget(user)}
                             >
                               <Trash2 className="artist-icon-sm" aria-hidden />
                             </button>
@@ -408,18 +381,13 @@ export function SettingsUsersTab({
                       onClick={(event) => event.stopPropagation()}
                     >
                       <div className="arr-modal__header">
-                        <h3
-                          id="delete-user-modal-title"
-                          className="arr-modal__title"
-                        >
+                        <h3 id="delete-user-modal-title" className="arr-modal__title">
                           Delete user
                         </h3>
                         <button
                           type="button"
                           className="arr-btn arr-btn--ghost arr-btn--icon"
-                          onClick={() =>
-                            !deletingUser && setDeleteUserTarget(null)
-                          }
+                          onClick={() => !deletingUser && setDeleteUserTarget(null)}
                           aria-label="Close"
                           disabled={deletingUser}
                         >
@@ -429,17 +397,14 @@ export function SettingsUsersTab({
                       <div className="arr-modal__body">
                         <p className="arr-modal__copy">
                           Are you sure you want to delete{" "}
-                          <strong>{deleteUserTarget.username}</strong>? This
-                          cannot be undone.
+                          <strong>{deleteUserTarget.username}</strong>? This cannot be undone.
                         </p>
                       </div>
                       <div className="arr-modal__footer">
                         <button
                           type="button"
                           className="arr-btn"
-                          onClick={() =>
-                            !deletingUser && setDeleteUserTarget(null)
-                          }
+                          onClick={() => !deletingUser && setDeleteUserTarget(null)}
                           disabled={deletingUser}
                         >
                           Cancel
@@ -457,9 +422,7 @@ export function SettingsUsersTab({
                               await refreshUsers();
                               await refreshSettingsData();
                             } catch (err) {
-                              showError(
-                                err.response?.data?.error || "Failed to delete",
-                              );
+                              showError(err.response?.data?.error || "Failed to delete");
                             } finally {
                               setDeletingUser(false);
                             }
@@ -478,10 +441,7 @@ export function SettingsUsersTab({
           {showAddUserModal
             ? createPortal(
                 <div className="arr-portal">
-                  <div
-                    className="arr-modal-backdrop"
-                    onClick={() => setShowAddUserModal(false)}
-                  >
+                  <div className="arr-modal-backdrop" onClick={() => setShowAddUserModal(false)}>
                     <div
                       className="arr-modal"
                       role="dialog"
@@ -533,9 +493,7 @@ export function SettingsUsersTab({
                             await refreshSettingsData();
                           } catch (err) {
                             showError(
-                              err.response?.data?.error ||
-                                err.message ||
-                                "Failed to create user",
+                              err.response?.data?.error || err.message || "Failed to create user",
                             );
                           } finally {
                             setCreatingUser(false);
@@ -543,40 +501,27 @@ export function SettingsUsersTab({
                         }}
                       >
                         <div className="arr-modal__body">
-                          <SettingsArrFormGroup
-                            label="Username"
-                            labelFor="add-user-username"
-                          >
+                          <SettingsArrFormGroup label="Username" labelFor="add-user-username">
                             <SettingsInput
                               id="add-user-username"
                               type="text"
                               placeholder="Username"
                               autoComplete="off"
                               value={newUserUsername}
-                              onChange={(event) =>
-                                setNewUserUsername(event.target.value)
-                              }
+                              onChange={(event) => setNewUserUsername(event.target.value)}
                             />
                           </SettingsArrFormGroup>
-                          <SettingsArrFormGroup
-                            label="Password"
-                            labelFor="add-user-password"
-                          >
+                          <SettingsArrFormGroup label="Password" labelFor="add-user-password">
                             <SettingsInput
                               id="add-user-password"
                               type="password"
                               placeholder="Password"
                               autoComplete="new-password"
                               value={newUserPassword}
-                              onChange={(event) =>
-                                setNewUserPassword(event.target.value)
-                              }
+                              onChange={(event) => setNewUserPassword(event.target.value)}
                             />
                           </SettingsArrFormGroup>
-                          <SettingsArrFormGroup
-                            label="Permissions"
-                            size="large"
-                          >
+                          <SettingsArrFormGroup label="Permissions" size="large">
                             <PermissionChecklist
                               permissions={newUserPermissions}
                               onChange={setNewUserPermissions}
@@ -610,10 +555,7 @@ export function SettingsUsersTab({
           {editUser
             ? createPortal(
                 <div className="arr-portal">
-                  <div
-                    className="arr-modal-backdrop"
-                    onClick={() => setEditUser(null)}
-                  >
+                  <div className="arr-modal-backdrop" onClick={() => setEditUser(null)}>
                     <div
                       className="arr-modal"
                       role="dialog"
@@ -652,10 +594,7 @@ export function SettingsUsersTab({
                                 currentPassword: editCurrentPassword,
                                 password: editPassword,
                               });
-                              const result = await loginApi(
-                                authUser?.username,
-                                editPassword,
-                              );
+                              const result = await loginApi(authUser?.username, editPassword);
                               if (result?.token) {
                                 setStoredAuth({ token: result.token });
                               }
@@ -663,9 +602,7 @@ export function SettingsUsersTab({
                               setEditUser(null);
                             } catch (err) {
                               showError(
-                                err.response?.data?.error ||
-                                  err.message ||
-                                  "Failed to update",
+                                err.response?.data?.error || err.message || "Failed to update",
                               );
                             } finally {
                               setSavingEdit(false);
@@ -684,9 +621,7 @@ export function SettingsUsersTab({
                             await refreshSettingsData();
                           } catch (err) {
                             showError(
-                              err.response?.data?.error ||
-                                err.message ||
-                                "Failed to update",
+                              err.response?.data?.error || err.message || "Failed to update",
                             );
                           } finally {
                             setSavingEdit(false);
@@ -706,9 +641,7 @@ export function SettingsUsersTab({
                                   placeholder="Current password"
                                   autoComplete="current-password"
                                   value={editCurrentPassword}
-                                  onChange={(event) =>
-                                    setEditCurrentPassword(event.target.value)
-                                  }
+                                  onChange={(event) => setEditCurrentPassword(event.target.value)}
                                 />
                               </SettingsArrFormGroup>
                               <SettingsArrFormGroup
@@ -721,9 +654,7 @@ export function SettingsUsersTab({
                                   placeholder="New password"
                                   autoComplete="new-password"
                                   value={editPassword}
-                                  onChange={(event) =>
-                                    setEditPassword(event.target.value)
-                                  }
+                                  onChange={(event) => setEditPassword(event.target.value)}
                                 />
                               </SettingsArrFormGroup>
                             </>
@@ -740,15 +671,10 @@ export function SettingsUsersTab({
                                   placeholder="New password"
                                   autoComplete="new-password"
                                   value={editPassword}
-                                  onChange={(event) =>
-                                    setEditPassword(event.target.value)
-                                  }
+                                  onChange={(event) => setEditPassword(event.target.value)}
                                 />
                               </SettingsArrFormGroup>
-                              <SettingsArrFormGroup
-                                label="Permissions"
-                                size="large"
-                              >
+                              <SettingsArrFormGroup label="Permissions" size="large">
                                 <PermissionChecklist
                                   permissions={editPermissions}
                                   onChange={setEditPermissions}

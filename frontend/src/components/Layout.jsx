@@ -48,10 +48,9 @@ function Layout({ children }) {
   const location = useLocation();
   const { authRequired, logout, user } = useAuth();
   const { isActive: isPlayerActive } = useAudioQueue();
-  const isArtistDetailsRoute =
-    /^\/artist\/[^/]+(\/(albums|appears-on|release\/[^/]+))?$/.test(
-      location.pathname,
-    );
+  const isArtistDetailsRoute = /^\/artist\/[^/]+(\/(albums|appears-on|release\/[^/]+))?$/.test(
+    location.pathname,
+  );
   const isSettingsRoute = location.pathname.startsWith("/settings");
 
   const updateMainScrollbar = useCallback(() => {
@@ -61,22 +60,15 @@ function Layout({ children }) {
     const scrollable = scrollHeight > clientHeight + 1;
     if (!scrollable) {
       setScrollbar((current) =>
-        current.visible
-          ? { visible: false, active: false, top: 0, height: 0 }
-          : current,
+        current.visible ? { visible: false, active: false, top: 0, height: 0 } : current,
       );
       return;
     }
     const minThumbHeight = 48;
-    const thumbHeight = Math.max(
-      minThumbHeight,
-      (clientHeight / scrollHeight) * clientHeight,
-    );
+    const thumbHeight = Math.max(minThumbHeight, (clientHeight / scrollHeight) * clientHeight);
     const maxTop = Math.max(clientHeight - thumbHeight, 0);
     const top =
-      scrollHeight === clientHeight
-        ? 0
-        : (scrollTop / (scrollHeight - clientHeight)) * maxTop;
+      scrollHeight === clientHeight ? 0 : (scrollTop / (scrollHeight - clientHeight)) * maxTop;
     setScrollbar((current) => ({
       visible: true,
       active: current.active,
@@ -86,9 +78,7 @@ function Layout({ children }) {
   }, []);
 
   const showScrollbarTemporarily = useCallback(() => {
-    setScrollbar((current) =>
-      current.visible ? { ...current, active: true } : current,
-    );
+    setScrollbar((current) => (current.visible ? { ...current, active: true } : current));
     if (scrollbarFadeTimeoutRef.current) {
       clearTimeout(scrollbarFadeTimeoutRef.current);
     }
@@ -130,9 +120,7 @@ function Layout({ children }) {
     ];
     return items.filter(
       (item) =>
-        !item.permission ||
-        user?.role === "admin" ||
-        !!user?.permissions?.[item.permission],
+        !item.permission || user?.role === "admin" || !!user?.permissions?.[item.permission],
     );
   }, [user]);
 
@@ -150,9 +138,7 @@ function Layout({ children }) {
     ];
     return items.filter(
       (item) =>
-        !item.permission ||
-        user?.role === "admin" ||
-        !!user?.permissions?.[item.permission],
+        !item.permission || user?.role === "admin" || !!user?.permissions?.[item.permission],
     );
   }, [user]);
 
@@ -183,8 +169,7 @@ function Layout({ children }) {
     update();
     window.addEventListener("resize", update);
     const node = mainScrollRef.current;
-    const observer =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
     if (node && observer) {
       observer.observe(node);
       if (node.firstElementChild) {
@@ -224,12 +209,8 @@ function Layout({ children }) {
             type="button"
             onClick={toggleSidebarPin}
             className="app-nav-toggle"
-            aria-label={
-              sidebarMode === "icons" ? "Expand sidebar" : "Collapse to icons"
-            }
-            title={
-              sidebarMode === "icons" ? "Expand sidebar" : "Collapse to icons"
-            }
+            aria-label={sidebarMode === "icons" ? "Expand sidebar" : "Collapse to icons"}
+            title={sidebarMode === "icons" ? "Expand sidebar" : "Collapse to icons"}
           >
             <Menu aria-hidden="true" />
           </button>
@@ -316,10 +297,7 @@ function Layout({ children }) {
           </>
         )}
 
-        <nav
-          className="app-mobile-nav app-mobile-only"
-          aria-label="Mobile navigation"
-        >
+        <nav className="app-mobile-nav app-mobile-only" aria-label="Mobile navigation">
           <div className="app-mobile-nav__grid">
             {mobilePrimaryItems.map((item) => {
               const Icon = item.icon;
@@ -339,8 +317,7 @@ function Layout({ children }) {
               type="button"
               onClick={() => setIsMobileMenuOpen((open) => !open)}
               className={`app-mobile-nav__item${
-                isMobileMenuOpen ||
-                mobileOverflowItems.some((item) => isActive(item.path))
+                isMobileMenuOpen || mobileOverflowItems.some((item) => isActive(item.path))
                   ? " is-active"
                   : ""
               }`}

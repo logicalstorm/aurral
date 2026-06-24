@@ -32,33 +32,32 @@ export default function DownloadFolderPickerModal({
     setParentPath(result.parent || null);
   }, []);
 
-  const loadDirectory = useCallback(async (pathValue) => {
-    const requestId = ++requestIdRef.current;
-    setLoading(true);
-    setError("");
-    try {
-      const result = await browseFilesystem(pathValue || undefined);
-      if (requestId !== requestIdRef.current) {
+  const loadDirectory = useCallback(
+    async (pathValue) => {
+      const requestId = ++requestIdRef.current;
+      setLoading(true);
+      setError("");
+      try {
+        const result = await browseFilesystem(pathValue || undefined);
+        if (requestId !== requestIdRef.current) {
+          return false;
+        }
+        applyBrowseResult(result);
+        return true;
+      } catch (err) {
+        if (requestId !== requestIdRef.current) {
+          return false;
+        }
+        setError(err?.response?.data?.message || err?.message || "Failed to browse folders.");
         return false;
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+        }
       }
-      applyBrowseResult(result);
-      return true;
-    } catch (err) {
-      if (requestId !== requestIdRef.current) {
-        return false;
-      }
-      setError(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Failed to browse folders.",
-      );
-      return false;
-    } finally {
-      if (requestId === requestIdRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [applyBrowseResult]);
+    },
+    [applyBrowseResult],
+  );
 
   const ensureDirectory = useCallback(
     async (pathValue) => {
@@ -76,11 +75,7 @@ export default function DownloadFolderPickerModal({
         if (requestId !== requestIdRef.current) {
           return null;
         }
-        setError(
-          err?.response?.data?.message ||
-            err?.message ||
-            "Failed to prepare folder path.",
-        );
+        setError(err?.response?.data?.message || err?.message || "Failed to prepare folder path.");
         return null;
       } finally {
         if (requestId === requestIdRef.current) {
@@ -183,10 +178,7 @@ export default function DownloadFolderPickerModal({
             </thead>
             <tbody>
               {parentPath ? (
-                <tr
-                  className="file-browser-modal__row"
-                  onClick={() => handleNavigate(parentPath)}
-                >
+                <tr className="file-browser-modal__row" onClick={() => handleNavigate(parentPath)}>
                   <td>
                     <ArrowUp className="file-browser-modal__type-icon" />
                   </td>
@@ -207,9 +199,7 @@ export default function DownloadFolderPickerModal({
               ))}
             </tbody>
           </table>
-          {loading ? (
-            <p className="file-browser-modal__status">Loading folders...</p>
-          ) : null}
+          {loading ? <p className="file-browser-modal__status">Loading folders...</p> : null}
           {!loading && !parentPath && entries.length === 0 ? (
             <p className="file-browser-modal__status">No subfolders here.</p>
           ) : null}

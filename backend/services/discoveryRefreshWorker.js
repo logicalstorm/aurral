@@ -12,7 +12,6 @@ import {
   markDiscoveryRefreshDequeued,
   scheduleNextDiscoveryRefresh,
 } from "./discovery/refreshScheduler.js";
-
 async function runDiscoveryRefresh(payload) {
   if (!(await isDiscoveryRefreshConfigured())) {
     getDiscoveryCache().isUpdating = false;
@@ -27,19 +26,15 @@ async function runDiscoveryRefresh(payload) {
   const cache = getDiscoveryCache();
   if (!cache.isUpdating) {
     cache.isUpdating = true;
-    recordDiscoveryUpdateProgress(
-      "starting",
-      "Starting discovery refresh",
-      2,
-      { reason: payload?.reason || "scheduled" },
-    );
+    recordDiscoveryUpdateProgress("starting", "Starting discovery refresh", 2, {
+      reason: payload?.reason || "scheduled",
+    });
   }
 
   await updateDiscoveryCache();
 }
 
-const {
-  start: startDiscoveryRefreshWorker,
+const {  start: startDiscoveryRefreshWorker,
   stop: stopDiscoveryRefreshWorker,
   isRunning: isDiscoveryRefreshWorkerRunning,
 } = createHonkerWorker({

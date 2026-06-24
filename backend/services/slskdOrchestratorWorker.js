@@ -19,7 +19,7 @@ const WORKER_NAME = "slskd-pipeline";
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
+let _loopPromise = null;
 let idleController = null;
 
 async function runLoop() {
@@ -73,7 +73,7 @@ async function runLoop() {
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
+    _loopPromise = null;
     const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startSlskdOrchestratorWorker, {
@@ -89,7 +89,7 @@ export function startSlskdOrchestratorWorker() {
   running = true;
   stopRequested = false;
   enqueuePendingJobsWithoutBatch();
-  loopPromise = runLoop();
+  _loopPromise = runLoop();
 }
 
 export function stopSlskdOrchestratorWorker() {

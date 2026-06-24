@@ -1,10 +1,7 @@
 import { libraryManager } from "../../../services/libraryManager.js";
 import { dbOps } from "../../../db/helpers/index.js";
 import { noCache } from "../../../middleware/cache.js";
-import {
-  requireAuth,
-  requirePermission,
-} from "../../../middleware/requirePermission.js";
+import { requireAuth, requirePermission } from "../../../middleware/requirePermission.js";
 import { hasPermission } from "../../../middleware/auth.js";
 import {
   parseLidarrSearchContext,
@@ -21,9 +18,7 @@ let allDownloadStatusesCache = {
 };
 
 export const getDownloadStatusesForAlbumIds = async (albumIdArrayInput) => {
-  const albumIdArray = Array.isArray(albumIdArrayInput)
-    ? albumIdArrayInput
-    : [];
+  const albumIdArray = Array.isArray(albumIdArrayInput) ? albumIdArrayInput : [];
   const statuses = {};
   const { lidarrClient } = await import("../../../services/lidarrClient.js");
 
@@ -35,9 +30,7 @@ export const getDownloadStatusesForAlbumIds = async (albumIdArrayInput) => {
         lidarrClient.request("/command").catch(() => []),
       ]);
       const queueItems = Array.isArray(queue) ? queue : queue.records || [];
-      const historyItems = Array.isArray(history)
-        ? history
-        : history.records || [];
+      const historyItems = Array.isArray(history) ? history : history.records || [];
       const searchContext = parseLidarrSearchContext({
         queue,
         history,
@@ -71,19 +64,11 @@ export const getDownloadStatusesForAlbumIds = async (albumIdArrayInput) => {
         if (queueItem) {
           const queueStatus = String(queueItem.status || "").toLowerCase();
           const title = String(queueItem.title || "").toLowerCase();
-          const trackedDownloadState = String(
-            queueItem.trackedDownloadState || "",
-          ).toLowerCase();
-          const trackedDownloadStatus = String(
-            queueItem.trackedDownloadStatus || "",
-          ).toLowerCase();
-          const errorMessage = String(
-            queueItem.errorMessage || "",
-          ).toLowerCase();
+          const trackedDownloadState = String(queueItem.trackedDownloadState || "").toLowerCase();
+          const trackedDownloadStatus = String(queueItem.trackedDownloadStatus || "").toLowerCase();
+          const errorMessage = String(queueItem.errorMessage || "").toLowerCase();
           const statusMessages = Array.isArray(queueItem.statusMessages)
-            ? queueItem.statusMessages
-                .map((m) => String(m || "").toLowerCase())
-                .join(" ")
+            ? queueItem.statusMessages.map((m) => String(m || "").toLowerCase()).join(" ")
             : "";
 
           const size = Number(queueItem.size || 0);
@@ -147,14 +132,10 @@ export const getDownloadStatusesForAlbumIds = async (albumIdArrayInput) => {
           const eventType = String(recentHistory.eventType || "").toLowerCase();
           const data = recentHistory?.data || {};
           const statusMessages = Array.isArray(data?.statusMessages)
-            ? data.statusMessages
-                .map((m) => String(m || "").toLowerCase())
-                .join(" ")
+            ? data.statusMessages.map((m) => String(m || "").toLowerCase()).join(" ")
             : String(data?.statusMessages?.[0] || "").toLowerCase();
           const errorMessage = String(data?.errorMessage || "").toLowerCase();
-          const sourceTitle = String(
-            recentHistory?.sourceTitle || "",
-          ).toLowerCase();
+          const sourceTitle = String(recentHistory?.sourceTitle || "").toLowerCase();
           const dataString = JSON.stringify(data).toLowerCase();
           const isGrabbed =
             eventType.includes("grabbed") ||
@@ -180,8 +161,7 @@ export const getDownloadStatusesForAlbumIds = async (albumIdArrayInput) => {
             eventType.includes("import") &&
             !isFailedImport &&
             eventType !== "albumimportincomplete";
-          const isStaleGrabbed =
-            isGrabbed && Date.now() - historyTime > STALE_GRABBED_MS;
+          const isStaleGrabbed = isGrabbed && Date.now() - historyTime > STALE_GRABBED_MS;
           statuses[albumId] = {
             status: isComplete
               ? "added"
@@ -193,10 +173,7 @@ export const getDownloadStatusesForAlbumIds = async (albumIdArrayInput) => {
           continue;
         }
 
-        const searchOutcome = resolveAlbumSearchOutcome(
-          lidarrAlbumId,
-          searchContext,
-        );
+        const searchOutcome = resolveAlbumSearchOutcome(lidarrAlbumId, searchContext);
         if (searchOutcome?.status === "failed") {
           statuses[albumId] = {
             status: "failed",
@@ -231,13 +208,9 @@ const computeAllDownloadStatuses = async () => {
       ]);
 
       const queueItems = Array.isArray(queue) ? queue : queue.records || [];
-      const historyItems = Array.isArray(history)
-        ? history
-        : history.records || [];
+      const historyItems = Array.isArray(history) ? history : history.records || [];
       const allAlbums = Array.isArray(albums) ? albums : [];
-      const commandItems = Array.isArray(commands)
-        ? commands
-        : commands?.records || [];
+      const commandItems = Array.isArray(commands) ? commands : commands?.records || [];
       const searchingAlbumIds = new Set();
       for (const command of commandItems) {
         const name = String(command?.name || command?.commandName || "")
@@ -294,19 +267,11 @@ const computeAllDownloadStatuses = async () => {
         if (queueItem) {
           const queueStatus = String(queueItem.status || "").toLowerCase();
           const title = String(queueItem.title || "").toLowerCase();
-          const trackedDownloadState = String(
-            queueItem.trackedDownloadState || "",
-          ).toLowerCase();
-          const trackedDownloadStatus = String(
-            queueItem.trackedDownloadStatus || "",
-          ).toLowerCase();
-          const errorMessage = String(
-            queueItem.errorMessage || "",
-          ).toLowerCase();
+          const trackedDownloadState = String(queueItem.trackedDownloadState || "").toLowerCase();
+          const trackedDownloadStatus = String(queueItem.trackedDownloadStatus || "").toLowerCase();
+          const errorMessage = String(queueItem.errorMessage || "").toLowerCase();
           const statusMessages = Array.isArray(queueItem.statusMessages)
-            ? queueItem.statusMessages
-                .map((m) => String(m || "").toLowerCase())
-                .join(" ")
+            ? queueItem.statusMessages.map((m) => String(m || "").toLowerCase()).join(" ")
             : "";
 
           const size = Number(queueItem.size || 0);
@@ -370,14 +335,10 @@ const computeAllDownloadStatuses = async () => {
           const eventType = String(recentHistory.eventType || "").toLowerCase();
           const data = recentHistory?.data || {};
           const statusMessages = Array.isArray(data?.statusMessages)
-            ? data.statusMessages
-                .map((m) => String(m || "").toLowerCase())
-                .join(" ")
+            ? data.statusMessages.map((m) => String(m || "").toLowerCase()).join(" ")
             : String(data?.statusMessages?.[0] || "").toLowerCase();
           const errorMessage = String(data?.errorMessage || "").toLowerCase();
-          const sourceTitle = String(
-            recentHistory?.sourceTitle || "",
-          ).toLowerCase();
+          const sourceTitle = String(recentHistory?.sourceTitle || "").toLowerCase();
           const dataString = JSON.stringify(data).toLowerCase();
           const isGrabbed =
             eventType.includes("grabbed") ||
@@ -403,11 +364,8 @@ const computeAllDownloadStatuses = async () => {
             eventType.includes("import") &&
             !isFailedImport &&
             eventType !== "albumimportincomplete";
-          const isStaleGrabbed =
-            isGrabbed && Date.now() - historyTime > STALE_GRABBED_MS;
-          const historyDate = new Date(
-            recentHistory.date || recentHistory.eventDate || 0,
-          );
+          const isStaleGrabbed = isGrabbed && Date.now() - historyTime > STALE_GRABBED_MS;
+          const historyDate = new Date(recentHistory.date || recentHistory.eventDate || 0);
           const oneHourAgo = Date.now() - 60 * 60 * 1000;
 
           if (historyDate.getTime() > oneHourAgo) {
@@ -468,96 +426,33 @@ export function registerDownloads(router) {
     "/downloads/album",
     requireAuth,
     requirePermission("addAlbum"),
-    async (req, res) => {
-      try {
-        const { artistId, albumId, artistMbid, artistName } = req.body;
-
-        if (!albumId) {
-          return res.status(400).json({ error: "albumId is required" });
+    async (req, res) => {      try {
+        artist = await libraryManager.ensureArtistMonitored(artist);
+        if (!album.monitored) {
+          await libraryManager.updateAlbum(albumId, { monitored: true });
         }
 
-        const { lidarrClient } =
-          await import("../../../services/lidarrClient.js");
-        if (!lidarrClient || !lidarrClient.isConfigured()) {
-          return res.status(400).json({ error: "Lidarr is not configured" });
-        }
+        const settings = dbOps.getSettings();
+        const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
 
-        const album = await libraryManager.getAlbumById(albumId);
-        if (!album) {
-          return res.status(404).json({ error: "Album not found" });
-        }
-
-        let artist = artistId
-          ? await libraryManager.getArtistById(artistId)
-          : null;
-
-        if (!artist && artistMbid && artistName) {
-          if (!hasPermission(req.user, "addArtist")) {
-            return res.status(403).json({
-              error: "Forbidden",
-              message: "Permission required: addArtist",
-            });
-          }
-          artist = await libraryManager.addArtistWithPreferences(
-            artistMbid,
-            artistName,
-            {
-              user: req.user,
-              quality: dbOps.getSettings().quality || "standard",
-              albumOnly: true,
-              albumMbid: album.mbid || album.foreignAlbumId,
-            },
-          );
-          if (artist?.error) artist = null;
-        }
-
-        if (!artist && album.artistId) {
-          artist = await libraryManager.getArtistById(album.artistId);
-        }
-
-        if (!artist) {
-          return res.status(404).json({
-            error:
-              "Artist not found. Please add the artist to your library first.",
+        if (searchOnAdd) {
+          await lidarrClient.request("/command", "POST", {
+            name: "AlbumSearch",
+            albumIds: [parseInt(albumId, 10)],
           });
+          await libraryManager.ensureRequestedAlbumMonitoring(artist.id, albumId);
+          libraryManager.scheduleRequestedAlbumMonitoringRepair(artist.id, albumId);
         }
+        invalidateAllDownloadStatusesCache();
 
-        try {
-          artist = await libraryManager.ensureArtistMonitored(artist);
-          if (!album.monitored) {
-            await libraryManager.updateAlbum(albumId, { monitored: true });
-          }
-
-          const settings = dbOps.getSettings();
-          const searchOnAdd =
-            settings.integrations?.lidarr?.searchOnAdd ?? false;
-
-          if (searchOnAdd) {
-            await lidarrClient.request("/command", "POST", {
-              name: "AlbumSearch",
-              albumIds: [parseInt(albumId, 10)],
-            });
-            await libraryManager.ensureRequestedAlbumMonitoring(
-              artist.id,
-              albumId,
-            );
-            libraryManager.scheduleRequestedAlbumMonitoringRepair(
-              artist.id,
-              albumId,
-            );
-          }
-          invalidateAllDownloadStatusesCache();
-
-          const { recordAlbumRequested } = await import(
-            "../../../services/aurralHistoryService.js"
-          );
-          recordAlbumRequested({
-            albumId,
-            albumName: album.albumName,
-            artistName: artist?.artistName || album.artistName,
-            artistMbid: artist?.mbid || artist?.foreignArtistId,
-            searching: searchOnAdd,
-          });
+        const { recordAlbumRequested } = await import("../../../services/aurralHistoryService.js");
+        recordAlbumRequested({
+          albumId,
+          albumName: album.albumName,
+          artistName: artist?.artistName || album.artistName,
+          artistMbid: artist?.mbid || artist?.foreignArtistId,
+          searching: searchOnAdd,
+        });
 
           res.json({
             success: true,
@@ -565,22 +460,14 @@ export function registerDownloads(router) {
               ? "Album search triggered"
               : "Album added to library",
           });
-        } catch (error) {
-          logger.error("downloads", `Failed to trigger album search ${albumId}:`, { message: error.message });
-          res.status(500).json({
-            error: "Failed to trigger album search",
-            message: error.message,
-          });
-        }
-      } catch (error) {
-        logger.error("downloads", "Error initiating album download:", { message: error.message });
-        res.status(500).json({
-          error: "Failed to initiate album download",
-          message: error.message,
-        });
-      }
-    },
-  );
+    } catch (error) {
+      console.error("Error initiating album download:", error);
+      res.status(500).json({
+        error: "Failed to initiate album download",
+        message: error.message,
+      });
+    }
+  });
 
   router.post(
     "/downloads/album/search",
@@ -594,8 +481,7 @@ export function registerDownloads(router) {
           return res.status(400).json({ error: "albumId is required" });
         }
 
-        const { lidarrClient } =
-          await import("../../../services/lidarrClient.js");
+        const { lidarrClient } = await import("../../../services/lidarrClient.js");
         if (!lidarrClient || !lidarrClient.isConfigured()) {
           return res.status(400).json({ error: "Lidarr is not configured" });
         }
@@ -605,9 +491,7 @@ export function registerDownloads(router) {
           return res.status(404).json({ error: "Album not found" });
         }
 
-        const artist = album.artistId
-          ? await libraryManager.getArtistById(album.artistId)
-          : null;
+        const artist = album.artistId ? await libraryManager.getArtistById(album.artistId) : null;
         if (artist) {
           await libraryManager.ensureArtistMonitored(artist);
         }
@@ -621,20 +505,13 @@ export function registerDownloads(router) {
           albumIds: [parseInt(albumId, 10)],
         });
         if (album.artistId) {
-          await libraryManager.ensureRequestedAlbumMonitoring(
-            album.artistId,
-            albumId,
-          );
-          libraryManager.scheduleRequestedAlbumMonitoringRepair(
-            album.artistId,
-            albumId,
-          );
+          await libraryManager.ensureRequestedAlbumMonitoring(album.artistId, albumId);
+          libraryManager.scheduleRequestedAlbumMonitoringRepair(album.artistId, albumId);
         }
         invalidateAllDownloadStatusesCache();
 
-        const { recordAlbumSearchStarted } = await import(
-          "../../../services/aurralHistoryService.js"
-        );
+        const { recordAlbumSearchStarted } =
+          await import("../../../services/aurralHistoryService.js");
         recordAlbumSearchStarted({
           albumId,
           albumName: album.albumName,
@@ -647,8 +524,7 @@ export function registerDownloads(router) {
           message: "Album search triggered",
         });
       } catch (error) {
-        logger.error("downloads", `Failed to trigger album search ${req.body?.albumId}:`, { message: error.message });
-        res.status(500).json({
+        logger.error("downloads", `Failed to trigger album search ${req.body?.albumId}:`, { message: error.message });        res.status(500).json({
           error: "Failed to trigger album search",
           message: error.message,
         });
@@ -657,15 +533,12 @@ export function registerDownloads(router) {
   );
 
   router.post("/downloads/track", async (req, res) => {
-    res
-      .status(400)
-      .json({ error: "Track downloads are not supported by Lidarr" });
+    res.status(400).json({ error: "Track downloads are not supported by Lidarr" });
   });
 
   router.get("/downloads", async (req, res) => {
     try {
-      const { lidarrClient } =
-        await import("../../../services/lidarrClient.js");
+      const { lidarrClient } = await import("../../../services/lidarrClient.js");
       if (!lidarrClient.isConfigured()) {
         return res.json([]);
       }
@@ -679,9 +552,7 @@ export function registerDownloads(router) {
           title: item.title,
           artistName: item.artist?.artistName,
           albumTitle: item.album?.title,
-          progress: item.size
-            ? Math.round((1 - item.sizeleft / item.size) * 100)
-            : 0,
+          progress: item.size ? Math.round((1 - item.sizeleft / item.size) * 100) : 0,
           source: "lidarr",
         })),
       );
@@ -697,13 +568,9 @@ export function registerDownloads(router) {
     try {
       const { albumIds } = req.query;
       if (!albumIds) {
-        return res
-          .status(400)
-          .json({ error: "albumIds query parameter is required" });
+        return res.status(400).json({ error: "albumIds query parameter is required" });
       }
-      const albumIdArray = Array.isArray(albumIds)
-        ? albumIds
-        : albumIds.split(",");
+      const albumIdArray = Array.isArray(albumIds) ? albumIds : albumIds.split(",");
       const statuses = await getDownloadStatusesForAlbumIds(albumIdArray);
       res.json(statuses);
     } catch (error) {

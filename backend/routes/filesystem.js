@@ -2,10 +2,7 @@ import express from "express";
 import { dbOps } from "../db/helpers/index.js";
 import { noCache } from "../middleware/cache.js";
 import { resolveRequestUser } from "../middleware/auth.js";
-import {
-  ensureDownloadFolderPath,
-  listBrowseDirectory,
-} from "../services/downloadFolderConfig.js";
+import { ensureDownloadFolderPath, listBrowseDirectory } from "../services/downloadFolderConfig.js";
 
 const router = express.Router();
 

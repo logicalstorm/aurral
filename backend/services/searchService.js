@@ -29,7 +29,6 @@ const ALL_RELEASE_TYPES = new Set([
   ...SECONDARY_RELEASE_TYPES,
 ]);
 const albumLibraryLookupCache = createCache(60);
-
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -67,20 +66,14 @@ async function getAlbumLibraryLookup(albumMbids) {
     for (const album of Array.isArray(lidarrAlbums) ? lidarrAlbums : []) {
       const foreignAlbumId = album?.foreignAlbumId;
       if (!foreignAlbumId || !wanted.has(foreignAlbumId)) continue;
-      const percentOfTracks = normalizePercentOfTracks(
-        album?.statistics?.percentOfTracks,
-      );
+      const percentOfTracks = normalizePercentOfTracks(album?.statistics?.percentOfTracks);
       const sizeOnDisk = Number(album?.statistics?.sizeOnDisk || 0);
       lookup.set(foreignAlbumId, {
         inLibrary: true,
-        libraryAlbumId:
-          album.id !== undefined && album.id !== null ? String(album.id) : null,
+        libraryAlbumId: album.id !== undefined && album.id !== null ? String(album.id) : null,
         libraryArtistId:
-          album.artistId !== undefined && album.artistId !== null
-            ? String(album.artistId)
-            : null,
-        status:
-          percentOfTracks >= 100 || sizeOnDisk > 0 ? "available" : "inLibrary",
+          album.artistId !== undefined && album.artistId !== null ? String(album.artistId) : null,
+        status: percentOfTracks >= 100 || sizeOnDisk > 0 ? "available" : "inLibrary",
       });
     }
   } catch (error) {
@@ -167,9 +160,7 @@ function normalizeAlbumItem(item, lookup = null) {
 }
 
 export function normalizeAlbumSearchItem(item, lookup = {}) {
-  const artistCredit = Array.isArray(item?.["artist-credit"])
-    ? item["artist-credit"]
-    : [];
+  const artistCredit = Array.isArray(item?.["artist-credit"]) ? item["artist-credit"] : [];
   const primaryCredit = artistCredit[0] || {};
   const artist = primaryCredit.artist || {};
   const normalized = normalizeAlbumItem(
@@ -179,15 +170,12 @@ export function normalizeAlbumSearchItem(item, lookup = {}) {
       artistName: primaryCredit.name || artist.name || item?.artistName,
       artistId: artist.id || item?.artistMbid || item?.artistId || null,
       type: item?.type || item?.["primary-type"] || null,
-      secondaryTypes:
-        item?.secondaryTypes || item?.["secondary-types"] || [],
+      secondaryTypes: item?.secondaryTypes || item?.["secondary-types"] || [],
       releaseDate: item?.releaseDate || item?.["first-release-date"] || null,
       coverUrl: item?.coverUrl || null,
       score: item?.score || 0,
     },
-    lookup?.inLibrary || lookup?.libraryAlbumId || lookup?.libraryArtistId
-      ? lookup
-      : null,
+    lookup?.inLibrary || lookup?.libraryAlbumId || lookup?.libraryArtistId ? lookup : null,
   );
   delete normalized.score;
   return normalized;
@@ -198,16 +186,12 @@ export function matchesAlbumReleaseTypeFilter(item, selectedReleaseTypes = []) {
   if (selected.length === 0) return true;
 
   const primaryType = String(item?.primaryType || item?.["primary-type"] || "").trim();
-  const secondaryTypes = Array.isArray(
-    item?.secondaryTypes || item?.["secondary-types"],
-  )
+  const secondaryTypes = Array.isArray(item?.secondaryTypes || item?.["secondary-types"])
     ? item.secondaryTypes || item["secondary-types"]
     : [];
 
   const primaryMatches = selected.filter((value) => PRIMARY_RELEASE_TYPES.has(value));
-  const secondaryMatches = selected.filter((value) =>
-    SECONDARY_RELEASE_TYPES.has(value),
-  );
+  const secondaryMatches = selected.filter((value) => SECONDARY_RELEASE_TYPES.has(value));
 
   if (primaryMatches.length > 0 && !primaryMatches.includes(primaryType)) {
     return false;
@@ -265,9 +249,7 @@ export async function searchAlbums(
     count: result.count,
     offset: result.offset,
     hasMore: result.offset + result.items.length < result.count,
-    items: result.items.map((item) =>
-      normalizeAlbumItem(item, albumLookup.get(item.id)),
-    ),
+    items: result.items.map((item) => normalizeAlbumItem(item, albumLookup.get(item.id))),
   };
 }
 
@@ -279,18 +261,20 @@ function normalizeTagArtistItem(artist, tag) {
 }
 
 function getTagArtistKey(artist) {
-  const artistId = String(artist?.id || artist?.mbid || "").trim().toLowerCase();
+  const artistId = String(artist?.id || artist?.mbid || "")
+    .trim()
+    .toLowerCase();
   if (artistId) return `id:${artistId}`;
-  const artistName = String(artist?.name || "").trim().toLowerCase();
+  const artistName = String(artist?.name || "")
+    .trim()
+    .toLowerCase();
   return artistName ? `name:${artistName}` : null;
 }
 
 function matchesTagSearch(artist, normalizedTag) {
   const tags = Array.isArray(artist?.tags) ? artist.tags : [];
   const genres = Array.isArray(artist?.genres) ? artist.genres : [];
-  return [...tags, ...genres].some(
-    (entry) => normalizeSearchText(entry) === normalizedTag,
-  );
+  return [...tags, ...genres].some((entry) => normalizeSearchText(entry) === normalizedTag);
 }
 
 function dedupeTagArtists(artists) {
@@ -322,10 +306,7 @@ function normalizeLastfmTagArtist(artist, tag) {
       artist.image.find((entry) => entry.size === "extralarge") ||
       artist.image.find((entry) => entry.size === "large") ||
       artist.image.slice(-1)[0];
-    if (
-      img?.["#text"] &&
-      !String(img["#text"]).includes("2a96cbd8b46e442fc41c2b86b821562f")
-    ) {
+    if (img?.["#text"] && !String(img["#text"]).includes("2a96cbd8b46e442fc41c2b86b821562f")) {
       imageUrl = img["#text"];
     }
   }
@@ -388,12 +369,8 @@ async function fetchMergedLastfmTagArtists(tag, limitInt, offsetInt, recommended
     }
 
     const reportedTotal = Number.parseInt(data?.topartists?.["@attr"]?.total, 10);
-    const totalPages = Number.isFinite(reportedTotal)
-      ? Math.ceil(reportedTotal / pageSize)
-      : null;
-    exhausted =
-      artists.length < pageSize ||
-      (Number.isFinite(totalPages) && page >= totalPages);
+    const totalPages = Number.isFinite(reportedTotal) ? Math.ceil(reportedTotal / pageSize) : null;
+    exhausted = artists.length < pageSize || (Number.isFinite(totalPages) && page >= totalPages);
     page += 1;
   }
 
@@ -403,12 +380,10 @@ async function fetchMergedLastfmTagArtists(tag, limitInt, offsetInt, recommended
   };
 }
 
-export async function searchTags(
-  query,
-  limit = 24,
-  offset = 0,
-) {
-  const tag = String(query || "").trim().replace(/^#/, "");
+export async function searchTags(query, limit = 24, offset = 0) {
+  const tag = String(query || "")
+    .trim()
+    .replace(/^#/, "");
   const limitInt = parsePositiveInt(limit, 24);
   const offsetInt = Math.max(0, Number.parseInt(offset, 10) || 0);
 
@@ -439,12 +414,7 @@ export async function searchTags(
   );
 
   if (getLastfmApiKey()) {
-    const merged = await fetchMergedLastfmTagArtists(
-      tag,
-      limitInt,
-      offsetInt,
-      recommendedMatches,
-    );
+    const merged = await fetchMergedLastfmTagArtists(tag, limitInt, offsetInt, recommendedMatches);
     const items = merged.items.slice(offsetInt, offsetInt + limitInt);
     return {
       scope: "tag",
@@ -520,8 +490,7 @@ export async function searchTags(
       normalizeTagArtistItem(
         {
           ...artist,
-          tagResultSource:
-            artist.tagResultSource === "recommended" ? "recommended" : "all",
+          tagResultSource: artist.tagResultSource === "recommended" ? "recommended" : "all",
         },
         tag,
       ),

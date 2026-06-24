@@ -67,9 +67,7 @@ export function ArtistDetailsPreviewTracks({
   }
 
   const showVideoPanel = loadingVideo || topSongVideo?.embedUrl;
-  const embedSrc = topSongVideo?.embedUrl
-    ? `${topSongVideo.embedUrl}?rel=0&modestbranding=1`
-    : "";
+  const embedSrc = topSongVideo?.embedUrl ? `${topSongVideo.embedUrl}?rel=0&modestbranding=1` : "";
 
   return (
     <section className="artist-section">
@@ -89,17 +87,10 @@ export function ArtistDetailsPreviewTracks({
           <div className="artist-preview-list">
             {previewTracks.map((track, index) => {
               const trackId = String(track.id || `${track.title}-${index}`);
-              const isPlaying =
-                isArtistPlaybackActive &&
-                String(playingPreviewId) === trackId;
+              const isPlaying = isArtistPlaybackActive && String(playingPreviewId) === trackId;
               return (
-                <div
-                  key={trackId}
-                  className="artist-track-row artist-track-row--preview"
-                >
-                  <span className="artist-track-number">
-                    {index + 1}
-                  </span>
+                <div key={trackId} className="artist-track-row artist-track-row--preview">
+                  <span className="artist-track-number">{index + 1}</span>
                   <button
                     type="button"
                     onClick={() => handlePreviewPlay(track)}
@@ -115,21 +106,13 @@ export function ArtistDetailsPreviewTracks({
                     )}
                   </button>
                   <div className="artist-track-cell">
-                    <p className="artist-track-title">
-                      {track.title}
-                    </p>
-                    <p className="artist-track-subtitle">
-                      {track.album || "Preview available"}
-                    </p>
+                    <p className="artist-track-title">{track.title}</p>
+                    <p className="artist-track-subtitle">{track.album || "Preview available"}</p>
                   </div>
                   {onAddTrackToPlaylist ? (
                     <div className="artist-relative">
                       <TrackPlaylistMenu
-                        track={
-                          resolveMembershipTrack
-                            ? resolveMembershipTrack(track)
-                            : track
-                        }
+                        track={resolveMembershipTrack ? resolveMembershipTrack(track) : track}
                         menuVariant="preview-tracks"
                         playlists={playlists}
                         loading={playlistsLoading}
@@ -137,9 +120,7 @@ export function ArtistDetailsPreviewTracks({
                         error={playlistError}
                         defaultNewPlaylistName={getDefaultPlaylistName?.(track)}
                         onLoadPlaylists={onLoadPlaylists}
-                        onSelect={(target) =>
-                          onAddTrackToPlaylist(track, target)
-                        }
+                        onSelect={(target) => onAddTrackToPlaylist(track, target)}
                       />
                     </div>
                   ) : null}

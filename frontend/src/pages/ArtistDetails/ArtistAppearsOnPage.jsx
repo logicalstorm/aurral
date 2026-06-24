@@ -22,7 +22,13 @@ import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
 import { useArtistSearchFocus } from "./hooks/useArtistSearchFocus";
 import { allReleaseTypes } from "./constants";
 import { navigateToReleaseGroup } from "../../utils/searchNavigation";
-import { getArtistPosterImage, getReleaseMetric, getReleaseYear, readReleaseListViewMode, writeReleaseListViewMode } from "./utils";
+import {
+  getArtistPosterImage,
+  getReleaseMetric,
+  getReleaseYear,
+  readReleaseListViewMode,
+  writeReleaseListViewMode,
+} from "./utils";
 
 const APPEARS_ON_LIMIT = 250;
 
@@ -44,8 +50,7 @@ const isCompilation = (releaseGroup) =>
   (releaseGroup?.["secondary-types"] || []).includes("Compilation");
 
 const isSingleOrEp = (releaseGroup) =>
-  releaseGroup?.["primary-type"] === "Single" ||
-  releaseGroup?.["primary-type"] === "EP";
+  releaseGroup?.["primary-type"] === "Single" || releaseGroup?.["primary-type"] === "EP";
 
 const matchesReleaseTab = (releaseGroup, tab) => {
   if (tab === "all") return true;
@@ -59,9 +64,7 @@ const matchesReleaseTab = (releaseGroup, tab) => {
 const getReleaseTypeLabel = (releaseGroup) => {
   const types = [
     releaseGroup?.["primary-type"],
-    ...(Array.isArray(releaseGroup?.["secondary-types"])
-      ? releaseGroup["secondary-types"]
-      : []),
+    ...(Array.isArray(releaseGroup?.["secondary-types"]) ? releaseGroup["secondary-types"] : []),
   ].filter(Boolean);
   return types.length ? types.join(" · ") : "Release";
 };
@@ -101,8 +104,7 @@ function ArtistAppearsOnPage() {
   const stream = useArtistDetailsStream(mbid, artistNameFromNav, allReleaseTypes, {
     visibleCoverIds,
     initialLibraryHint: {
-      existsInLibrary:
-        typeof state?.inLibrary === "boolean" ? state.inLibrary : undefined,
+      existsInLibrary: typeof state?.inLibrary === "boolean" ? state.inLibrary : undefined,
       libraryArtist: state?.libraryArtist || null,
     },
     appearsOnLimit: APPEARS_ON_LIMIT,
@@ -126,9 +128,7 @@ function ArtistAppearsOnPage() {
   const artistCoverImage = getArtistPosterImage(coverImages);
 
   const artistDisplayName = artist?.name || artistNameFromNav || "";
-  useDocumentTitle(
-    artistDisplayName ? `Featuring ${artistDisplayName}` : "",
-  );
+  useDocumentTitle(artistDisplayName ? `Featuring ${artistDisplayName}` : "");
 
   const library = useArtistDetailsLibrary({
     artist,
@@ -144,16 +144,11 @@ function ArtistAppearsOnPage() {
     selectedReleaseTypes: allReleaseTypes,
   });
 
-  const releaseGroups = useMemo(
-    () => artist?.["appears-on-release-groups"] || [],
-    [artist],
-  );
+  const releaseGroups = useMemo(() => artist?.["appears-on-release-groups"] || [], [artist]);
   const filteredReleaseGroups = useMemo(
     () =>
       sortReleaseGroups(
-        releaseGroups.filter((releaseGroup) =>
-          matchesReleaseTab(releaseGroup, selectedTab),
-        ),
+        releaseGroups.filter((releaseGroup) => matchesReleaseTab(releaseGroup, selectedTab)),
         sortKey,
         sortDirection,
       ),
@@ -262,10 +257,7 @@ function ArtistAppearsOnPage() {
               </span>
             )}
             {isComplete ? (
-              <span
-                className="artist-release-card__status"
-                title="Complete"
-              >
+              <span className="artist-release-card__status" title="Complete">
                 <SearchLibraryCheck size="overlay" />
                 <span className="sr-only">Complete</span>
               </span>
@@ -294,12 +286,7 @@ function ArtistAppearsOnPage() {
       >
         <div className="artist-release-card__cover">
           {cover ? (
-            <img
-              src={cover}
-              alt=""
-              loading="lazy"
-              decoding="async"
-            />
+            <img src={cover} alt="" loading="lazy" decoding="async" />
           ) : (
             <div className="artist-release-card__placeholder">
               <Music className="artist-icon-lg" />
@@ -307,10 +294,7 @@ function ArtistAppearsOnPage() {
           )}
           <div className="artist-release-card__action">
             {isComplete ? (
-              <span
-                className="artist-release-card__status"
-                title="Complete"
-              >
+              <span className="artist-release-card__status" title="Complete">
                 <SearchLibraryCheck size="overlay" />
                 <span className="sr-only">Complete</span>
               </span>
@@ -328,9 +312,7 @@ function ArtistAppearsOnPage() {
             ) : null}
           </div>
         </div>
-        <h2 className="artist-release-card__title artist-clamp-2">
-          {releaseGroup.title}
-        </h2>
+        <h2 className="artist-release-card__title artist-clamp-2">{releaseGroup.title}</h2>
         <p className="artist-release-card__meta artist-truncate">
           {[getReleaseYear(releaseGroup), artistCredit || releaseTypeLabel]
             .filter(Boolean)
@@ -415,9 +397,7 @@ function ArtistAppearsOnPage() {
                     className={`artist-menu-item${active ? " is-active" : ""}`}
                   >
                     <span>{option.label}</span>
-                    <span>
-                      {active && <DirectionIcon className="artist-icon-xs" />}
-                    </span>
+                    <span>{active && <DirectionIcon className="artist-icon-xs" />}</span>
                   </button>
                 );
               })}
@@ -454,16 +434,8 @@ function ArtistAppearsOnPage() {
         {filteredReleaseGroups.length === 1 ? "" : "s"}
       </div>
 
-      <div
-        className={
-          viewMode === "grid"
-            ? "artist-albums-grid"
-            : "artist-release-list"
-        }
-      >
-        {filteredReleaseGroups.map((releaseGroup) =>
-          renderReleaseCard(releaseGroup),
-        )}
+      <div className={viewMode === "grid" ? "artist-albums-grid" : "artist-release-list"}>
+        {filteredReleaseGroups.map((releaseGroup) => renderReleaseCard(releaseGroup))}
       </div>
     </div>
   );

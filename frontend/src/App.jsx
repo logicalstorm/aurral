@@ -1,9 +1,4 @@
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect, Suspense, lazy, useRef } from "react";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
@@ -32,16 +27,10 @@ const ShowsPage = lazy(() => import("./pages/ShowsPage"));
 const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const SettingsPage = lazy(() => import("./pages/Settings/SettingsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
-const ArtistDetailsPage = lazy(
-  () => import("./pages/ArtistDetails/ArtistDetailsPage"),
-);
-const ArtistAlbumsPage = lazy(
-  () => import("./pages/ArtistDetails/ArtistAlbumsPage"),
-);
+const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetails/ArtistDetailsPage"));
+const ArtistAlbumsPage = lazy(() => import("./pages/ArtistDetails/ArtistAlbumsPage"));
 const ReleasePage = lazy(() => import("./pages/ArtistDetails/ReleasePage"));
-const ArtistAppearsOnPage = lazy(
-  () => import("./pages/ArtistDetails/ArtistAppearsOnPage"),
-);
+const ArtistAppearsOnPage = lazy(() => import("./pages/ArtistDetails/ArtistAppearsOnPage"));
 const ActivityPage = lazy(() => import("./pages/ActivityPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
 
@@ -52,8 +41,7 @@ const PageLoader = () => (
 );
 
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, isLoading, authRequired, onboardingRequired } =
-    useAuth();
+  const { isAuthenticated, isLoading, authRequired, onboardingRequired } = useAuth();
 
   if (isLoading) {
     return (
@@ -95,18 +83,13 @@ function AppContent() {
   useWebSocketChannel("discovery", (msg) => {
     if (msg.type !== "discovery_update") return;
 
-    const hasPendingManualRefresh =
-      localStorage.getItem(DISCOVERY_MANUAL_REFRESH_KEY) === "1";
+    const hasPendingManualRefresh = localStorage.getItem(DISCOVERY_MANUAL_REFRESH_KEY) === "1";
     if (!hasPendingManualRefresh) return;
 
     if (msg.phase === "error") {
       localStorage.removeItem(DISCOVERY_MANUAL_REFRESH_KEY);
       discoveryToastShownRef.current = false;
-      showError(
-        msg.error
-          ? `Discovery refresh failed: ${msg.error}`
-          : "Discovery refresh failed",
-      );
+      showError(msg.error ? `Discovery refresh failed: ${msg.error}` : "Discovery refresh failed");
       return;
     }
 
@@ -114,9 +97,7 @@ function AppContent() {
       if (discoveryToastShownRef.current) return;
       discoveryToastShownRef.current = true;
       localStorage.removeItem(DISCOVERY_MANUAL_REFRESH_KEY);
-      showSuccess(
-        "Discovery refresh completed. Recommendations are now updated.",
-      );
+      showSuccess("Discovery refresh completed. Recommendations are now updated.");
       setTimeout(() => {
         discoveryToastShownRef.current = false;
       }, 1000);
@@ -191,55 +172,45 @@ function AppContent() {
               </p>
             </div>
           )}
-
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-              <Route path="/" element={<DiscoverPage />} />
-              <Route path="/shows" element={<Navigate to="/shows/all" replace />} />
-              <Route path="/shows/:filter" element={<ShowsPage />} />
-              <Route path="/search" element={<SearchResultsPage />} />
-              <Route path="/discover" element={<Navigate to="/" replace />} />
-              <Route path="/library" element={<LibraryPage />} />
-              <Route
-                path="/playlists"
-                element={
-                  <PermissionRoute permission="accessFlow">
-                    <FlowPage />
-                  </PermissionRoute>
-                }
-              />
-              <Route path="/flow" element={<Navigate to="/playlists" replace />} />
-              <Route path="/downloads" element={<Navigate to="/activity/queue/all" replace />} />
-              <Route path="/requests" element={<Navigate to="/activity/queue/all" replace />} />
-              <Route path="/history" element={<Navigate to="/activity/history/all" replace />} />
-              <Route path="/history/:legacyTab" element={<LegacyHistoryRedirect />} />
-              <Route path="/activity" element={<ActivityRootRedirect />} />
-              <Route path="/activity/:view" element={<ActivityPartialRedirect />} />
-              <Route path="/activity/:view/:source" element={<ActivityPage />} />
-              <Route
-                path="/artist/:mbid/albums"
-                element={<ArtistAlbumsPage />}
-              />
-              <Route
-                path="/artist/:mbid/release/:releaseMbid"
-                element={<ReleasePage />}
-              />
-              <Route
-                path="/artist/:mbid/appears-on"
-                element={<ArtistAppearsOnPage />}
-              />
-              <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
-              <Route
-                path="/settings/:tab?"
-                element={
-                  <PermissionRoute permission="accessSettings">
-                    <SettingsPage />
-                  </PermissionRoute>
-                }
-              />
-              <Route path="/profile" element={<ProfilePage />} />
-            </Routes>
-          </Suspense>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<DiscoverPage />} />
+                <Route path="/shows" element={<Navigate to="/shows/all" replace />} />
+                <Route path="/shows/:filter" element={<ShowsPage />} />
+                <Route path="/search" element={<SearchResultsPage />} />
+                <Route path="/discover" element={<Navigate to="/" replace />} />
+                <Route path="/library" element={<LibraryPage />} />
+                <Route
+                  path="/playlists"
+                  element={
+                    <PermissionRoute permission="accessFlow">
+                      <FlowPage />
+                    </PermissionRoute>
+                  }
+                />
+                <Route path="/flow" element={<Navigate to="/playlists" replace />} />
+                <Route path="/downloads" element={<Navigate to="/activity/queue/all" replace />} />
+                <Route path="/requests" element={<Navigate to="/activity/queue/all" replace />} />
+                <Route path="/history" element={<Navigate to="/activity/history/all" replace />} />
+                <Route path="/history/:legacyTab" element={<LegacyHistoryRedirect />} />
+                <Route path="/activity" element={<ActivityRootRedirect />} />
+                <Route path="/activity/:view" element={<ActivityPartialRedirect />} />
+                <Route path="/activity/:view/:source" element={<ActivityPage />} />
+                <Route path="/artist/:mbid/albums" element={<ArtistAlbumsPage />} />
+                <Route path="/artist/:mbid/release/:releaseMbid" element={<ReleasePage />} />
+                <Route path="/artist/:mbid/appears-on" element={<ArtistAppearsOnPage />} />
+                <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
+                <Route
+                  path="/settings/:tab?"
+                  element={
+                    <PermissionRoute permission="accessSettings">
+                      <SettingsPage />
+                    </PermissionRoute>
+                  }
+                />
+                <Route path="/profile" element={<ProfilePage />} />
+              </Routes>
+            </Suspense>
           </Layout>
         </ProtectedRoute>
       </DiscoverRecentProvider>

@@ -6,16 +6,12 @@ function SettingsMetadataSponsorSection() {
     <div className="settings-page__section settings-page__section--sponsor">
       <div className="settings-page__section-header">
         <h3 className="settings-page__section-title">Support hosted services</h3>
-        <Heart
-          className="settings-page__sponsor-icon"
-          aria-hidden="true"
-        />
+        <Heart className="settings-page__sponsor-icon" aria-hidden="true" />
       </div>
       <p className="settings-page__sponsor-copy">
-        Aurral&apos;s metadata and search backends currently run on personal
-        infrastructure and may experience occasional downtime. Sponsorship goes
-        directly toward maintaining Aurral, keeping those services online, and
-        funding cloud capacity when needed.
+        Aurral&apos;s metadata and search backends currently run on personal infrastructure and may
+        experience occasional downtime. Sponsorship goes directly toward maintaining Aurral, keeping
+        those services online, and funding cloud capacity when needed.
       </p>
       <a
         href={SPONSOR_URL}

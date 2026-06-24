@@ -24,15 +24,9 @@ const Login = () => {
     <div className="login-page">
       <div className="login-card">
         <div className="login-header">
-          <img
-            src="/arralogo.svg"
-            alt="Aurral"
-            className="login-logo"
-          />
+          <img src="/arralogo.svg" alt="Aurral" className="login-logo" />
           <h1 className="login-title">Sign in</h1>
-          <p className="login-subtitle">
-            Enter your credentials to access Aurral
-          </p>
+          <p className="login-subtitle">Enter your credentials to access Aurral</p>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>

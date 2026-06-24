@@ -10,15 +10,12 @@ async function processImagePrefetch(payload = {}) {
   if (mbids.length === 0) return { skipped: true };
 
   const artistNames =
-    payload?.artistNames && typeof payload.artistNames === "object"
-      ? payload.artistNames
-      : {};
+    payload?.artistNames && typeof payload.artistNames === "object" ? payload.artistNames : {};
   await Promise.allSettled(
     mbids.map((mbid) => {
       const cached = dbOps.getImage(mbid);
       return getArtistImage(mbid, {
-        artistName:
-          typeof artistNames[mbid] === "string" ? artistNames[mbid] : null,
+        artistName: typeof artistNames[mbid] === "string" ? artistNames[mbid] : null,
         forceRefresh: cached?.imageUrl === "NOT_FOUND",
       });
     }),
@@ -26,8 +23,7 @@ async function processImagePrefetch(payload = {}) {
   return { prefetched: mbids.length };
 }
 
-const {
-  start: startImagePrefetchWorker,
+const {  start: startImagePrefetchWorker,
   stop: stopImagePrefetchWorker,
   isRunning: isImagePrefetchWorkerRunning,
 } = createHonkerWorker({

@@ -20,9 +20,7 @@ function writeStoredVolume(value) {
   if (typeof window === "undefined") return;
   const nextVolume = normalizeVolume(value);
   window.localStorage.setItem(SHARED_VOLUME_KEY, String(nextVolume));
-  window.dispatchEvent(
-    new CustomEvent(SHARED_VOLUME_EVENT, { detail: nextVolume }),
-  );
+  window.dispatchEvent(new CustomEvent(SHARED_VOLUME_EVENT, { detail: nextVolume }));
 }
 
 export function useSharedVolume() {
@@ -32,9 +30,7 @@ export function useSharedVolume() {
     const handleVolumeChange = (event) => {
       if (event.type === "storage" && event.key !== SHARED_VOLUME_KEY) return;
       setVolumeState(
-        event.type === SHARED_VOLUME_EVENT
-          ? normalizeVolume(event.detail)
-          : readStoredVolume(),
+        event.type === SHARED_VOLUME_EVENT ? normalizeVolume(event.detail) : readStoredVolume(),
       );
     };
 

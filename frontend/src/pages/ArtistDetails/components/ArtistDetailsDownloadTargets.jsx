@@ -15,14 +15,7 @@ import { normalizePreviewTrack } from "../../../utils/audioQueue";
 function PickCover({ pick, albumCovers, artistCoverImage }) {
   const cover = albumCovers?.[pick.releaseGroupId] || artistCoverImage;
   if (cover) {
-    return (
-      <img
-        src={cover}
-        alt=""
-        loading="lazy"
-        decoding="async"
-      />
-    );
+    return <img src={cover} alt="" loading="lazy" decoding="async" />;
   }
   return (
     <div className="artist-media-placeholder">
@@ -144,9 +137,7 @@ export function ArtistDetailsDownloadTargets({
     [artist?.name, artistName, missingReleasePick?.title],
   );
 
-  const { isTrackPlaying, isTrackLoading, handlePlay } = useGlobalTrackPlayback(
-    normalizeTrack,
-  );
+  const { isTrackPlaying, isTrackLoading, handlePlay } = useGlobalTrackPlayback(normalizeTrack);
 
   const getQueueTracks = useCallback(
     () =>
@@ -178,15 +169,12 @@ export function ArtistDetailsDownloadTargets({
 
   if (!missingReleasePick) return null;
 
-  const metric =
-    missingReleasePick.metric || getReleaseMetric(missingReleasePick.releaseGroup);
+  const metric = missingReleasePick.metric || getReleaseMetric(missingReleasePick.releaseGroup);
 
   return (
     <section className="artist-section">
       <div
-        className={`artist-pick-panel${
-          gradientColors ? " artist-pick-panel--gradient" : ""
-        }`}
+        className={`artist-pick-panel${gradientColors ? " artist-pick-panel--gradient" : ""}`}
         style={
           gradientColors
             ? {
@@ -212,12 +200,8 @@ export function ArtistDetailsDownloadTargets({
           </div>
           <div className="artist-pick-panel__content">
             <div className="artist-min-0">
-              <div className="artist-eyebrow">
-                Aurral Pick
-              </div>
-              <h2 className="artist-pick-title">
-                {missingReleasePick.title}
-              </h2>
+              <div className="artist-eyebrow">Aurral Pick</div>
+              <h2 className="artist-pick-title">{missingReleasePick.title}</h2>
               <div className="artist-meta-line">
                 {missingReleasePick.year && <span>{missingReleasePick.year}</span>}
                 {missingReleasePick.type && <span>{missingReleasePick.type}</span>}
@@ -235,10 +219,7 @@ export function ArtistDetailsDownloadTargets({
                   className="btn-add-album is-expanded"
                   onClick={(event) => {
                     event.stopPropagation();
-                    handleRequestAlbum(
-                      missingReleasePick.releaseGroupId,
-                      missingReleasePick.title,
-                    );
+                    handleRequestAlbum(missingReleasePick.releaseGroupId, missingReleasePick.title);
                   }}
                   isLoading={requestingAlbum === missingReleasePick.releaseGroupId}
                   disabled={requestingAlbum === missingReleasePick.releaseGroupId}
@@ -261,69 +242,56 @@ export function ArtistDetailsDownloadTargets({
                   onShufflePlay={handleShufflePlay}
                 />
                 <div className="artist-pick-panel__track-grid">
-                {visibleTracks.map((track, index) => {
-                  const currentTrackId = String(
-                    track.id ?? track.mbid ?? `pick-${index}`,
-                  );
-                  const isPlaying = isTrackPlaying(currentTrackId);
-                  const isLoadingPreview = isTrackLoading(currentTrackId);
-                  return (
-                    <div
-                      key={currentTrackId}
-                      className="artist-track-row artist-track-row--compact"
-                    >
-                      <span className="artist-track-number">
-                        {track.trackNumber || track.position || index + 1}
-                      </span>
-                      {track.preview_url ? (
-                        <TrackPlayButton
-                          track={track}
-                          isPlaying={isPlaying}
-                          isLoading={isLoadingPreview}
-                          onClick={(event) =>
-                            handleTrackPreviewPlay(track, index, event)
-                          }
-                        />
-                      ) : (
-                        <span />
-                      )}
-                      <span className="artist-track-title">
-                        {track.title || track.trackName || "Unknown Track"}
-                      </span>
-                      {onAddTrackToPlaylist ? (
-                        <TrackPlaylistMenu
-                          track={
-                            resolveMembershipTrack
-                              ? resolveMembershipTrack(
-                                  track,
-                                  missingReleasePick.releaseGroup,
-                                )
-                              : track
-                          }
-                          playlists={playlists}
-                          loading={playlistsLoading}
-                          saving={playlistSavingKey === currentTrackId}
-                          error={playlistError}
-                          defaultNewPlaylistName={getDefaultPlaylistName?.(
-                            track,
-                            missingReleasePick.releaseGroup,
-                          )}
-                          onLoadPlaylists={onLoadPlaylists}
-                          onSelect={(target) =>
-                            onAddTrackToPlaylist(
+                  {visibleTracks.map((track, index) => {
+                    const currentTrackId = String(track.id ?? track.mbid ?? `pick-${index}`);
+                    const isPlaying = isTrackPlaying(currentTrackId);
+                    const isLoadingPreview = isTrackLoading(currentTrackId);
+                    return (
+                      <div
+                        key={currentTrackId}
+                        className="artist-track-row artist-track-row--compact"
+                      >
+                        <span className="artist-track-number">
+                          {track.trackNumber || track.position || index + 1}
+                        </span>
+                        {track.preview_url ? (
+                          <TrackPlayButton
+                            track={track}
+                            isPlaying={isPlaying}
+                            isLoading={isLoadingPreview}
+                            onClick={(event) => handleTrackPreviewPlay(track, index, event)}
+                          />
+                        ) : (
+                          <span />
+                        )}
+                        <span className="artist-track-title">
+                          {track.title || track.trackName || "Unknown Track"}
+                        </span>
+                        {onAddTrackToPlaylist ? (
+                          <TrackPlaylistMenu
+                            track={
+                              resolveMembershipTrack
+                                ? resolveMembershipTrack(track, missingReleasePick.releaseGroup)
+                                : track
+                            }
+                            playlists={playlists}
+                            loading={playlistsLoading}
+                            saving={playlistSavingKey === currentTrackId}
+                            error={playlistError}
+                            defaultNewPlaylistName={getDefaultPlaylistName?.(
                               track,
                               missingReleasePick.releaseGroup,
-                              target,
-                            )
-                          }
-                        />
-                      ) : null}
-                      <span className="artist-track-duration">
-                        {formatDuration(track)}
-                      </span>
-                    </div>
-                  );
-                })}
+                            )}
+                            onLoadPlaylists={onLoadPlaylists}
+                            onSelect={(target) =>
+                              onAddTrackToPlaylist(track, missingReleasePick.releaseGroup, target)
+                            }
+                          />
+                        ) : null}
+                        <span className="artist-track-duration">{formatDuration(track)}</span>
+                      </div>
+                    );
+                  })}
                 </div>
                 {hasHiddenTracks ? (
                   <button
@@ -331,9 +299,7 @@ export function ArtistDetailsDownloadTargets({
                     className="btn btn-ghost btn-sm artist-pick-panel__show-all"
                     onClick={() => setShowAllTracks((current) => !current)}
                   >
-                    {showAllTracks
-                      ? "Show fewer tracks"
-                      : `Show all ${tracks.length} tracks`}
+                    {showAllTracks ? "Show fewer tracks" : `Show all ${tracks.length} tracks`}
                   </button>
                 ) : null}
               </>

@@ -2,10 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { RefreshCw, Trash2, X } from "lucide-react";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
-import {
-  SettingsArrFieldSet,
-  SettingsArrFormGroup,
-} from "./arr/SettingsArrLayout";
+import { SettingsArrFieldSet, SettingsArrFormGroup } from "./arr/SettingsArrLayout";
 
 const AUTO_REFRESH_OPTIONS = [
   { value: 24, label: "Daily" },
@@ -60,35 +57,21 @@ export function SettingsDiscoverTab({
   );
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const autoRefreshHours =
-    settings.integrations?.lastfm?.discoveryAutoRefreshHours || 168;
-  const discoveryMode =
-    settings.integrations?.lastfm?.discoveryMode || "balanced";
+  const autoRefreshHours = settings.integrations?.lastfm?.discoveryAutoRefreshHours || 168;
+  const discoveryMode = settings.integrations?.lastfm?.discoveryMode || "balanced";
   const discoveryRecommendationsPerRefresh =
     settings.integrations?.lastfm?.discoveryRecommendationsPerRefresh ?? 200;
-  const discoveryFlowsPerRefresh =
-    settings.integrations?.lastfm?.discoveryFlowsPerRefresh ?? 9;
+  const discoveryFlowsPerRefresh = settings.integrations?.lastfm?.discoveryFlowsPerRefresh ?? 9;
   const baseDiscoverFlowCount = 5;
-  const focusFlowCount = Math.max(
-    0,
-    discoveryFlowsPerRefresh - baseDiscoverFlowCount,
-  );
+  const focusFlowCount = Math.max(0, discoveryFlowsPerRefresh - baseDiscoverFlowCount);
   const discoveryProvider =
-    health?.discovery?.provider === "listenbrainz-fallback"
-      ? "ListenBrainz fallback"
-      : "Last.fm";
-  const isListenBrainzFallback =
-    health?.discovery?.provider === "listenbrainz-fallback";
-  const showLastfmDiscoverBanner =
-    isListenBrainzFallback && !lastfmBannerDismissed;
-  const activeProgress =
-    discoveryProgress ?? health?.discovery?.updateProgress;
-  const showProgress =
-    health?.discovery?.isUpdating || refreshingDiscovery;
+    health?.discovery?.provider === "listenbrainz-fallback" ? "ListenBrainz fallback" : "Last.fm";
+  const isListenBrainzFallback = health?.discovery?.provider === "listenbrainz-fallback";
+  const showLastfmDiscoverBanner = isListenBrainzFallback && !lastfmBannerDismissed;
+  const activeProgress = discoveryProgress ?? health?.discovery?.updateProgress;
+  const showProgress = health?.discovery?.isUpdating || refreshingDiscovery;
   const progressMessage =
-    discoveryProgressMessage ||
-    health?.discovery?.updateProgressMessage ||
-    "Refreshing discovery";
+    discoveryProgressMessage || health?.discovery?.updateProgressMessage || "Refreshing discovery";
 
   const updateLastfmDiscovery = (patch) =>
     updateSettings({
@@ -104,24 +87,18 @@ export function SettingsDiscoverTab({
 
   return (
     <div className="arr-page">
-      <form
-        onSubmit={handleSaveSettings}
-        className="arr-form"
-        autoComplete="off"
-      >
+      <form onSubmit={handleSaveSettings} className="arr-form" autoComplete="off">
         {showLastfmDiscoverBanner && (
           <div className="settings-page__banner">
             <div className="settings-page__banner-copy">
-              <p className="settings-page__banner-title">
-                Optional Last.fm upgrade
-              </p>
+              <p className="settings-page__banner-title">Optional Last.fm upgrade</p>
               <p className="settings-page__banner-text">
                 Add a free Last.fm API key in{" "}
                 <Link to="/settings/connect" className="arr-link">
                   Connect
                 </Link>{" "}
-                to unlock personalized recommendations, similar artists, tag
-                search, and custom weekly flows.
+                to unlock personalized recommendations, similar artists, tag search, and custom
+                weekly flows.
               </p>
             </div>
             <button
@@ -142,8 +119,8 @@ export function SettingsDiscoverTab({
 
         <SettingsArrFieldSet legend="Discovery Behavior">
           <div className="arr-info">
-            Controls how often Aurral refreshes recommendations and flows.
-            Listening history API keys are configured in{" "}
+            Controls how often Aurral refreshes recommendations and flows. Listening history API
+            keys are configured in{" "}
             <Link to="/settings/connect" className="arr-link">
               Connect
             </Link>
@@ -154,10 +131,7 @@ export function SettingsDiscoverTab({
             .
           </div>
 
-          <SettingsArrFormGroup
-            label="Auto-refresh frequency"
-            labelFor="discover-refresh"
-          >
+          <SettingsArrFormGroup label="Auto-refresh frequency" labelFor="discover-refresh">
             <SettingsSelect
               id="discover-refresh"
               value={String(autoRefreshHours)}
@@ -182,18 +156,15 @@ export function SettingsDiscoverTab({
               help={
                 <>
                   <strong>Safer</strong> favors more obvious recommendations.{" "}
-                  <strong>Balanced</strong> mixes familiar artists with
-                  exploration. <strong>Deeper</strong> pushes further beyond
-                  obvious similar artists.
+                  <strong>Balanced</strong> mixes familiar artists with exploration.{" "}
+                  <strong>Deeper</strong> pushes further beyond obvious similar artists.
                 </>
               }
             >
               <SettingsSelect
                 id="discover-mode"
                 value={discoveryMode}
-                onChange={(e) =>
-                  updateLastfmDiscovery({ discoveryMode: e.target.value })
-                }
+                onChange={(e) => updateLastfmDiscovery({ discoveryMode: e.target.value })}
               >
                 {DISCOVERY_MODE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -320,9 +291,7 @@ export function SettingsDiscoverTab({
             </div>
             <div>
               <dt className="arr-meta-term">Cached images</dt>
-              <dd className="arr-meta-value">
-                {health?.discovery?.cachedImagesCount ?? "—"}
-              </dd>
+              <dd className="arr-meta-value">{health?.discovery?.cachedImagesCount ?? "—"}</dd>
             </div>
           </dl>
 
@@ -337,19 +306,14 @@ export function SettingsDiscoverTab({
               </p>
               {typeof activeProgress === "number" ? (
                 <div className="arr-progress__bar">
-                  <div
-                    className="arr-progress__fill"
-                    style={{ width: `${activeProgress}%` }}
-                  />
+                  <div className="arr-progress__fill" style={{ width: `${activeProgress}%` }} />
                 </div>
               ) : null}
             </div>
           ) : null}
 
           {!showProgress && discoveryProgressMessage ? (
-            <p className="arr-form-help arr-form-help--success">
-              {discoveryProgressMessage}
-            </p>
+            <p className="arr-form-help arr-form-help--success">{discoveryProgressMessage}</p>
           ) : null}
         </SettingsArrFieldSet>
       </form>

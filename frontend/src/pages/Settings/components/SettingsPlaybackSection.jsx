@@ -2,10 +2,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle, Folder, Plus, RefreshCw, Trash2, Wrench } from "lucide-react";
 import DownloadFolderPickerModal from "../../../components/DownloadFolderPickerModal";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
-import {
-  IntegrationCard,
-  SettingsIntegrationModal,
-} from "./SettingsIntegrationCards";
+import { IntegrationCard, SettingsIntegrationModal } from "./SettingsIntegrationCards";
 import {
   SettingsArrCardGrid,
   SettingsArrFieldSet,
@@ -59,9 +56,9 @@ export function SettingsPlaybackSection({
   const navidromeConfigured = Boolean(navidrome.url);
   const plexConfigured = Boolean(plex.token && plex.url);
   const plexToken = plex.token;
-  const navidromePathMappings = coerceNavidromePathMappings(
-    navidrome.pathMappings,
-  ).filter((entry) => entry.local || entry.remote);
+  const navidromePathMappings = coerceNavidromePathMappings(navidrome.pathMappings).filter(
+    (entry) => entry.local || entry.remote,
+  );
   const showNavidromeMappings =
     navidrome.m3uPathMode === "remote" || navidromePathMappings.length > 0;
 
@@ -155,11 +152,7 @@ export function SettingsPlaybackSection({
     setPlexConnecting(true);
     try {
       const { pinId, code, authUrl, clientId } = await startPlexAuth();
-      const popup = window.open(
-        authUrl,
-        "plex-auth",
-        "width=600,height=700",
-      );
+      const popup = window.open(authUrl, "plex-auth", "width=600,height=700");
       const deadline = Date.now() + 3 * 60 * 1000;
       let token = null;
       while (Date.now() < deadline) {
@@ -194,8 +187,7 @@ export function SettingsPlaybackSection({
           : "Signed in to Plex. Select your server below.",
       );
     } catch (err) {
-      const errorMsg =
-        err.response?.data?.message || err.response?.data?.error || err.message;
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
       showError(`Plex sign-in failed: ${errorMsg}`);
     } finally {
       setPlexConnecting(false);
@@ -221,9 +213,7 @@ export function SettingsPlaybackSection({
     try {
       const result = await testPlexConnection(plex.url, plex.token);
       if (result.success) {
-        showSuccess(
-          `Plex connection successful!${result.version ? ` (v${result.version})` : ""}`,
-        );
+        showSuccess(`Plex connection successful!${result.version ? ` (v${result.version})` : ""}`);
         if (result.machineIdentifier) {
           updatePlex({ machineIdentifier: result.machineIdentifier });
         }
@@ -231,8 +221,7 @@ export function SettingsPlaybackSection({
         showError(`Connection failed: ${result.message || result.error}`);
       }
     } catch (err) {
-      const errorMsg =
-        err.response?.data?.message || err.response?.data?.error || err.message;
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
       showError(`Connection failed: ${errorMsg}`);
     } finally {
       setTestingPlex(false);
@@ -249,15 +238,10 @@ export function SettingsPlaybackSection({
       if (handleSaveSettings) {
         await handleSaveSettings();
       }
-      await testNavidromeOnboarding(
-        navidrome.url,
-        navidrome.username,
-        navidrome.password || "",
-      );
+      await testNavidromeOnboarding(navidrome.url, navidrome.username, navidrome.password || "");
       showSuccess("Navidrome connection OK");
     } catch (err) {
-      const errorMsg =
-        err.response?.data?.message || err.response?.data?.error || err.message;
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
       showError(`Navidrome connection failed: ${errorMsg}`);
     } finally {
       setTestingNavidrome(false);
@@ -283,8 +267,7 @@ export function SettingsPlaybackSection({
         );
       }
     } catch (err) {
-      const errorMsg =
-        err.response?.data?.message || err.response?.data?.error || err.message;
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
       showError(`Plex sync failed: ${errorMsg}`);
     } finally {
       setSyncingPlex(false);
@@ -323,8 +306,8 @@ export function SettingsPlaybackSection({
 
       <SettingsArrFieldSet legend="Navidrome Playlist Paths">
         <div className="arr-info">
-          Only needed when Navidrome cannot open Aurral&apos;s container paths,
-          including native Navidrome or Docker containers with different mounts.
+          Only needed when Navidrome cannot open Aurral&apos;s container paths, including native
+          Navidrome or Docker containers with different mounts.
         </div>
 
         <SettingsArrFormGroup
@@ -349,9 +332,8 @@ export function SettingsPlaybackSection({
         {showNavidromeMappings ? (
           <>
             <p className="arr-form-help arr-form-help--spaced">
-              These mappings only change track lines in generated{" "}
-              <code>.m3u</code> files. They do not help Aurral read files
-              reported by Lidarr, slskd, or NZBGet.
+              These mappings only change track lines in generated <code>.m3u</code> files. They do
+              not help Aurral read files reported by Lidarr, slskd, or NZBGet.
             </p>
 
             <div className="arr-table-wrap">
@@ -420,10 +402,9 @@ export function SettingsPlaybackSection({
         ) : null}
 
         <p className="arr-form-help">
-          When using Weekly Flow: set Navidrome&apos;s{" "}
-          <code>Scanner.PurgeMissing</code> to <code>always</code> or{" "}
-          <code>full</code> (e.g. <code>ND_SCANNER_PURGEMISSING=always</code>)
-          so turning off a flow removes those tracks from the library.
+          When using Weekly Flow: set Navidrome&apos;s <code>Scanner.PurgeMissing</code> to{" "}
+          <code>always</code> or <code>full</code> (e.g. <code>ND_SCANNER_PURGEMISSING=always</code>
+          ) so turning off a flow removes those tracks from the library.
         </p>
       </SettingsArrFieldSet>
 
@@ -435,8 +416,7 @@ export function SettingsPlaybackSection({
               : "Add Navidrome Path Mapping"
           }
           initialValue={
-            navidromeMappingModal.mode === "edit" &&
-            navidromeMappingModal.index != null
+            navidromeMappingModal.mode === "edit" && navidromeMappingModal.index != null
               ? navidromePathMappings[navidromeMappingModal.index]
               : undefined
           }
@@ -454,13 +434,9 @@ export function SettingsPlaybackSection({
               type="button"
               className="btn btn-secondary"
               onClick={handleTestNavidrome}
-              disabled={
-                testingNavidrome || !navidrome.url || !navidrome.username
-              }
+              disabled={testingNavidrome || !navidrome.url || !navidrome.username}
             >
-              <RefreshCw
-                className={`artist-icon-sm${testingNavidrome ? " animate-spin" : ""}`}
-              />
+              <RefreshCw className={`artist-icon-sm${testingNavidrome ? " animate-spin" : ""}`} />
               {testingNavidrome ? "Testing…" : "Test connection"}
             </button>
           }
@@ -472,9 +448,7 @@ export function SettingsPlaybackSection({
                 placeholder="https://music.example.com"
                 autoComplete="off"
                 value={navidrome.url || ""}
-                onChange={(event) =>
-                  updateNavidrome({ url: event.target.value })
-                }
+                onChange={(event) => updateNavidrome({ url: event.target.value })}
               />
             </SettingsModalField>
             <SettingsModalField label="Username">
@@ -482,9 +456,7 @@ export function SettingsPlaybackSection({
                 type="text"
                 autoComplete="off"
                 value={navidrome.username || ""}
-                onChange={(event) =>
-                  updateNavidrome({ username: event.target.value })
-                }
+                onChange={(event) => updateNavidrome({ username: event.target.value })}
               />
             </SettingsModalField>
             <SettingsModalField label="Password">
@@ -492,9 +464,7 @@ export function SettingsPlaybackSection({
                 type="password"
                 autoComplete="off"
                 value={navidrome.password || ""}
-                onChange={(event) =>
-                  updateNavidrome({ password: event.target.value })
-                }
+                onChange={(event) => updateNavidrome({ password: event.target.value })}
               />
             </SettingsModalField>
           </SettingsModalSection>
@@ -512,17 +482,15 @@ export function SettingsPlaybackSection({
               onClick={handleTestPlex}
               disabled={testingPlex || !plex.url || !plex.token}
             >
-              <RefreshCw
-                className={`artist-icon-sm${testingPlex ? " animate-spin" : ""}`}
-              />
+              <RefreshCw className={`artist-icon-sm${testingPlex ? " animate-spin" : ""}`} />
               {testingPlex ? "Testing…" : "Test connection"}
             </button>
           }
         >
           <SettingsModalIntro>
-            Sign in with your Plex account to let Aurral create a dedicated
-            music library pointed at your flow downloads and build a playlist
-            for each flow. Playlists appear in Plex and Plexamp.
+            Sign in with your Plex account to let Aurral create a dedicated music library pointed at
+            your flow downloads and build a playlist for each flow. Playlists appear in Plex and
+            Plexamp.
           </SettingsModalIntro>
 
           <SettingsModalSection title="Account">
@@ -564,10 +532,7 @@ export function SettingsPlaybackSection({
                     {plexServers.length ? "Select a server…" : "Loading servers…"}
                   </option>
                   {plexServers.map((server) => (
-                    <option
-                      key={server.clientIdentifier}
-                      value={server.clientIdentifier}
-                    >
+                    <option key={server.clientIdentifier} value={server.clientIdentifier}>
                       {server.name}
                       {server.owned ? "" : " (shared)"}
                     </option>
@@ -594,11 +559,10 @@ export function SettingsPlaybackSection({
               label="Plex downloads path (optional)"
               hint={
                 <>
-                  Only needed if Plex runs in a different container/host than
-                  Aurral. Enter the downloads folder path as the{" "}
-                  <strong>Plex server</strong> sees it — Aurral appends{" "}
-                  <code>/aurral-weekly-flow</code>. Leave blank to use
-                  Aurral&apos;s own download path.
+                  Only needed if Plex runs in a different container/host than Aurral. Enter the
+                  downloads folder path as the <strong>Plex server</strong> sees it — Aurral appends{" "}
+                  <code>/aurral-weekly-flow</code>. Leave blank to use Aurral&apos;s own download
+                  path.
                 </>
               }
             >
@@ -609,9 +573,7 @@ export function SettingsPlaybackSection({
                   placeholder="/data/aurral_downloads"
                   autoComplete="off"
                   value={plex.downloadsPath || ""}
-                  onChange={(event) =>
-                    updatePlex({ downloadsPath: event.target.value })
-                  }
+                  onChange={(event) => updatePlex({ downloadsPath: event.target.value })}
                 />
                 <button
                   type="button"
@@ -649,10 +611,9 @@ export function SettingsPlaybackSection({
               </button>
             </SettingsModalActions>
             <p className="settings-modal__hint">
-              Creates an &quot;Aurral&quot; music library pointed at your
-              downloads, scans it, and builds a playlist per flow. The Plex server
-              must be able to read the same downloads path Aurral writes to. Save
-              settings before syncing.
+              Creates an &quot;Aurral&quot; music library pointed at your downloads, scans it, and
+              builds a playlist per flow. The Plex server must be able to read the same downloads
+              path Aurral writes to. Save settings before syncing.
             </p>
           </SettingsModalSection>
         </SettingsIntegrationModal>

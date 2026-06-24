@@ -10,20 +10,16 @@ export function useAccountSettings(authUser, showSuccess, showError) {
   const [listenHistoryProvider, setListenHistoryProvider] = useState("lastfm");
   const [listenHistoryUsername, setListenHistoryUsername] = useState("");
   const [listenHistoryUrl, setListenHistoryUrl] = useState("");
-  const [savedListenHistoryProvider, setSavedListenHistoryProvider] =
-    useState("lastfm");
-  const [savedListenHistoryUsername, setSavedListenHistoryUsername] =
-    useState("");
+  const [savedListenHistoryProvider, setSavedListenHistoryProvider] = useState("lastfm");
+  const [savedListenHistoryUsername, setSavedListenHistoryUsername] = useState("");
   const [savedListenHistoryUrl, setSavedListenHistoryUrl] = useState("");
   const [lidarrConfigured, setLidarrConfigured] = useState(false);
   const [lidarrRootFolders, setLidarrRootFolders] = useState([]);
   const [lidarrQualityProfiles, setLidarrQualityProfiles] = useState([]);
   const [lidarrRootFolderPath, setLidarrRootFolderPath] = useState("");
-  const [savedLidarrRootFolderPath, setSavedLidarrRootFolderPath] =
-    useState("");
+  const [savedLidarrRootFolderPath, setSavedLidarrRootFolderPath] = useState("");
   const [lidarrQualityProfileId, setLidarrQualityProfileId] = useState("");
-  const [savedLidarrQualityProfileId, setSavedLidarrQualityProfileId] =
-    useState("");
+  const [savedLidarrQualityProfileId, setSavedLidarrQualityProfileId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -35,8 +31,7 @@ export function useAccountSettings(authUser, showSuccess, showError) {
     lidarrQualityProfileId !== savedLidarrQualityProfileId;
 
   const isListenHistoryValid =
-    listenHistoryProvider !== "koito" ||
-    !!listenHistoryUrl.trim().replace(/\/+$/, "");
+    listenHistoryProvider !== "koito" || !!listenHistoryUrl.trim().replace(/\/+$/, "");
 
   const canSave = hasUnsavedChanges && isListenHistoryValid;
 
@@ -57,16 +52,11 @@ export function useAccountSettings(authUser, showSuccess, showError) {
       setSavedListenHistoryUsername(username);
       setSavedListenHistoryUrl(url);
       setLidarrConfigured(lidarrData?.configured === true);
-      setLidarrRootFolders(
-        Array.isArray(lidarrData?.rootFolders) ? lidarrData.rootFolders : [],
-      );
+      setLidarrRootFolders(Array.isArray(lidarrData?.rootFolders) ? lidarrData.rootFolders : []);
       setLidarrQualityProfiles(
-        Array.isArray(lidarrData?.qualityProfiles)
-          ? lidarrData.qualityProfiles
-          : [],
+        Array.isArray(lidarrData?.qualityProfiles) ? lidarrData.qualityProfiles : [],
       );
-      const nextRootFolderPath =
-        lidarrData?.savedDefaults?.rootFolderPath || "";
+      const nextRootFolderPath = lidarrData?.savedDefaults?.rootFolderPath || "";
       const nextQualityProfileId =
         lidarrData?.savedDefaults?.qualityProfileId != null
           ? String(lidarrData.savedDefaults.qualityProfileId)
@@ -99,16 +89,12 @@ export function useAccountSettings(authUser, showSuccess, showError) {
       const lidarrData = await Promise.all([
         updateMyListeningHistory(authUser.id, {
           listenHistoryProvider,
-          listenHistoryUsername:
-            listenHistoryProvider === "koito" ? null : trimmedUsername || null,
-          listenHistoryUrl:
-            listenHistoryProvider === "koito" ? trimmedUrl || null : null,
+          listenHistoryUsername: listenHistoryProvider === "koito" ? null : trimmedUsername || null,
+          listenHistoryUrl: listenHistoryProvider === "koito" ? trimmedUrl || null : null,
         }),
         updateMyLidarrPreferences({
           rootFolderPath: lidarrRootFolderPath || null,
-          qualityProfileId: lidarrQualityProfileId
-            ? Number(lidarrQualityProfileId)
-            : null,
+          qualityProfileId: lidarrQualityProfileId ? Number(lidarrQualityProfileId) : null,
         }),
       ]).then(([, lidarrResponse]) => lidarrResponse);
       setSavedListenHistoryProvider(listenHistoryProvider);
@@ -117,16 +103,11 @@ export function useAccountSettings(authUser, showSuccess, showError) {
       setListenHistoryUsername(trimmedUsername);
       setListenHistoryUrl(trimmedUrl);
       setLidarrConfigured(lidarrData?.configured === true);
-      setLidarrRootFolders(
-        Array.isArray(lidarrData?.rootFolders) ? lidarrData.rootFolders : [],
-      );
+      setLidarrRootFolders(Array.isArray(lidarrData?.rootFolders) ? lidarrData.rootFolders : []);
       setLidarrQualityProfiles(
-        Array.isArray(lidarrData?.qualityProfiles)
-          ? lidarrData.qualityProfiles
-          : [],
+        Array.isArray(lidarrData?.qualityProfiles) ? lidarrData.qualityProfiles : [],
       );
-      const nextRootFolderPath =
-        lidarrData?.savedDefaults?.rootFolderPath || "";
+      const nextRootFolderPath = lidarrData?.savedDefaults?.rootFolderPath || "";
       const nextQualityProfileId =
         lidarrData?.savedDefaults?.qualityProfileId != null
           ? String(lidarrData.savedDefaults.qualityProfileId)

@@ -3,7 +3,6 @@ import {
   normalizeReleaseVersion,
   selectLatestReleaseForChannel,
 } from "../../../lib/release-version";
-
 const UpdateBanner = ({ currentVersion, visible = true }) => {
   const [updateInfo, setUpdateInfo] = useState(null);
   const updateNotifiedRef = useRef(null);
@@ -16,16 +15,13 @@ const UpdateBanner = ({ currentVersion, visible = true }) => {
       ? "dev"
       : "stable";
   const releaseChannel = (() => {
-    const channel = (
-      import.meta.env.VITE_RELEASE_CHANNEL || inferredChannel
-    ).toLowerCase();
+    const channel = (import.meta.env.VITE_RELEASE_CHANNEL || inferredChannel).toLowerCase();
     if (channel === "test" || channel === "dev") {
       return channel;
     }
     return "stable";
   })();
-  const isPrereleaseChannel =
-    releaseChannel === "test" || releaseChannel === "dev";
+  const isPrereleaseChannel = releaseChannel === "test" || releaseChannel === "dev";
   const dismissKey = useMemo(
     () => `aurral:updateDismissed:${repo}:${releaseChannel}`,
     [releaseChannel, repo],
@@ -57,26 +53,17 @@ const UpdateBanner = ({ currentVersion, visible = true }) => {
         try {
           checkMeta = JSON.parse(localStorage.getItem(checkMetaKey) || "null");
         } catch {}
-        if (
-          checkMeta?.lastCheckedAt &&
-          now - Number(checkMeta.lastCheckedAt) < CHECK_INTERVAL_MS
-        ) {
+        if (checkMeta?.lastCheckedAt && now - Number(checkMeta.lastCheckedAt) < CHECK_INTERVAL_MS) {
           return;
         }
         const endpoint = `https://api.github.com/repos/${repo}/git/matching-refs/tags/v`;
         const res = await fetch(endpoint);
         if (!res.ok) {
-          localStorage.setItem(
-            checkMetaKey,
-            JSON.stringify({ lastCheckedAt: Date.now() }),
-          );
+          localStorage.setItem(checkMetaKey, JSON.stringify({ lastCheckedAt: Date.now() }));
           return;
         }
         const payload = await res.json();
-        localStorage.setItem(
-          checkMetaKey,
-          JSON.stringify({ lastCheckedAt: Date.now() }),
-        );
+        localStorage.setItem(checkMetaKey, JSON.stringify({ lastCheckedAt: Date.now() }));
         const latestRelease = selectLatestReleaseForChannel(
           Array.isArray(payload) ? payload : [],
           releaseChannel,
@@ -94,15 +81,11 @@ const UpdateBanner = ({ currentVersion, visible = true }) => {
         }
         if (
           (!currentIsSha && latestLabel === currentLabel) ||
-          (currentIsSha &&
-            updateNotifiedRef.current === latestKey &&
-            currentLabel === latestLabel)
+          (currentIsSha && updateNotifiedRef.current === latestKey && currentLabel === latestLabel)
         ) {
           return;
         }
-        const dismissedVersion =
-          dismissedUpdateRef.current ??
-          localStorage.getItem(dismissKey);
+        const dismissedVersion = dismissedUpdateRef.current ?? localStorage.getItem(dismissKey);
         if (dismissedVersion === latestKey) {
           return;
         }
@@ -174,11 +157,7 @@ const UpdateBanner = ({ currentVersion, visible = true }) => {
         >
           {isPrereleaseChannel ? "View tags" : "View release"}
         </a>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          onClick={dismissUpdate}
-        >
+        <button type="button" className="btn btn-ghost btn-sm" onClick={dismissUpdate}>
           Hide until next update
         </button>
       </div>

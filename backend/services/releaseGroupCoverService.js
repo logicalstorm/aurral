@@ -1,9 +1,6 @@
 import { dbOps } from "../db/helpers/index.js";
 import { buildImageProxyUrl, warmImageProxy } from "./imageProxyService.js";
-import {
-  getAlbumByMbid,
-  resolveAlbumByArtistAndTitle,
-} from "./providers/brainzmashProvider.js";
+import { getAlbumByMbid, resolveAlbumByArtistAndTitle } from "./providers/brainzmashProvider.js";
 
 const RG_CACHE_PREFIX = "rg:";
 const LEGACY_COVER_HOST_PATTERN =
@@ -16,12 +13,12 @@ const pickAlbumCoverUrl = (images = []) => {
   const ranked = images
     .map((image) => ({
       url: getImageUrl(image),
-      kind: String(image?.kind || image?.CoverType || "").trim().toLowerCase(),
+      kind: String(image?.kind || image?.CoverType || "")
+        .trim()
+        .toLowerCase(),
     }))
     .filter((entry) => entry.url);
-  const preferred = ranked.find((entry) =>
-    ["front", "cover", "albumcover"].includes(entry.kind),
-  );
+  const preferred = ranked.find((entry) => ["front", "cover", "albumcover"].includes(entry.kind));
   return (preferred || ranked[0])?.url || null;
 };
 
@@ -92,10 +89,8 @@ export const fetchReleaseGroupCoverUrl = async (
       transientError: false,
     };
   }
-  const normalizedArtistName =
-    typeof artistName === "string" ? artistName.trim() : "";
-  const normalizedAlbumTitle =
-    typeof albumTitle === "string" ? albumTitle.trim() : "";
+  const normalizedArtistName = typeof artistName === "string" ? artistName.trim() : "";
+  const normalizedAlbumTitle = typeof albumTitle === "string" ? albumTitle.trim() : "";
   let sawTransientError = false;
   try {
     const album = await getAlbumByMbid(releaseGroupMbid);
@@ -145,18 +140,12 @@ export const attachCachedCoverUrls = (releaseGroups = [], limit = null) => {
     return releaseGroups;
   }
   const targets =
-    typeof limit === "number" && limit > 0
-      ? releaseGroups.slice(0, limit)
-      : releaseGroups;
-  const targetIds = new Set(
-    targets.map((releaseGroup) => releaseGroup?.id).filter(Boolean),
-  );
+    typeof limit === "number" && limit > 0 ? releaseGroups.slice(0, limit) : releaseGroups;
+  const targetIds = new Set(targets.map((releaseGroup) => releaseGroup?.id).filter(Boolean));
   if (targetIds.size === 0) {
     return releaseGroups;
   }
-  const cachedEntries = dbOps.getImages(
-    [...targetIds].map((id) => `${RG_CACHE_PREFIX}${id}`),
-  );
+  const cachedEntries = dbOps.getImages([...targetIds].map((id) => `${RG_CACHE_PREFIX}${id}`));
   return releaseGroups.map((releaseGroup) => {
     if (!releaseGroup?.id || !targetIds.has(releaseGroup.id)) {
       return releaseGroup;
@@ -173,10 +162,7 @@ export const attachCachedCoverUrls = (releaseGroups = [], limit = null) => {
   });
 };
 
-export const resolveReleaseGroupCoversBatch = async (
-  items = [],
-  { concurrency = 6 } = {},
-) => {
+export const resolveReleaseGroupCoversBatch = async (items = [], { concurrency = 6 } = {}) => {
   const seen = new Set();
   const normalized = items
     .map(normalizeBatchItem)
@@ -191,9 +177,7 @@ export const resolveReleaseGroupCoversBatch = async (
   }
 
   const covers = {};
-  const cachedEntries = dbOps.getImages(
-    normalized.map((item) => `${RG_CACHE_PREFIX}${item.mbid}`),
-  );
+  const cachedEntries = dbOps.getImages(normalized.map((item) => `${RG_CACHE_PREFIX}${item.mbid}`));
   const missing = [];
 
   for (const item of normalized) {
@@ -213,10 +197,7 @@ export const resolveReleaseGroupCoversBatch = async (
     missing.push(item);
   }
 
-  const safeConcurrency = Math.min(
-    12,
-    Math.max(1, Number.parseInt(concurrency, 10) || 6),
-  );
+  const safeConcurrency = Math.min(12, Math.max(1, Number.parseInt(concurrency, 10) || 6));
 
   for (let index = 0; index < missing.length; index += safeConcurrency) {
     const batch = missing.slice(index, index + safeConcurrency);

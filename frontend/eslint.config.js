@@ -3,6 +3,7 @@ import globals from "globals";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
+import eslintConfigPrettier from "eslint-config-prettier";
 
 export default [
   {
@@ -36,11 +37,9 @@ export default [
       "react-hooks/purity": "off",
       "react-hooks/refs": "off",
       "react-hooks/set-state-in-effect": "off",
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
+      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "no-empty": ["error", { allowEmptyCatch: true }],
     },
   },
+  eslintConfigPrettier,
 ];

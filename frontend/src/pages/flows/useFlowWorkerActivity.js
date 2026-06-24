@@ -64,8 +64,7 @@ export function useFlowWorkerActivity({ enabled = true } = {}) {
     if (!enabled) return;
 
     const poll = () => {
-      const hasRecentWsUpdate =
-        Date.now() - lastFlowWsMessageAtRef.current < WS_RECENT_MS;
+      const hasRecentWsUpdate = Date.now() - lastFlowWsMessageAtRef.current < WS_RECENT_MS;
       if (isFlowSocketConnected && hasRecentWsUpdate) return;
       fetchStatus();
     };
@@ -84,14 +83,10 @@ export function useFlowWorkerActivity({ enabled = true } = {}) {
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () =>
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [enabled, fetchStatus]);
 
-  const hasActivity = useMemo(
-    () => hasFlowWorkerActivity(status),
-    [status],
-  );
+  const hasActivity = useMemo(() => hasFlowWorkerActivity(status), [status]);
 
   return { hasActivity, status };
 }

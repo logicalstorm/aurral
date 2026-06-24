@@ -57,8 +57,7 @@ const sanitizeZipCode = (value) =>
     .replace(/[^a-zA-Z0-9 -]/g, "")
     .slice(0, 12);
 
-const isLikelyUsZip = (value) =>
-  /^\d{5}(-\d{4})?$/.test(String(value || "").trim());
+const isLikelyUsZip = (value) => /^\d{5}(-\d{4})?$/.test(String(value || "").trim());
 
 const normalizeUsZip = (value) =>
   String(value || "")
@@ -124,11 +123,7 @@ const selectImage = (images = []) => {
 const parseVenueLocation = (event) => {
   const venue = event?._embedded?.venues?.[0] || {};
   const city = venue.city?.name || venue.city || null;
-  const region =
-    venue.state?.stateCode ||
-    venue.state?.name ||
-    venue.country?.countryCode ||
-    null;
+  const region = venue.state?.stateCode || venue.state?.name || venue.country?.countryCode || null;
   return {
     venueName: venue.name || null,
     city,
@@ -194,9 +189,7 @@ const getTicketmasterLocationParams = (location, radiusMiles) => {
   }
   if (location.postalCode) {
     const postalCode =
-      location.countryCode === "US"
-        ? normalizeUsZip(location.postalCode)
-        : location.postalCode;
+      location.countryCode === "US" ? normalizeUsZip(location.postalCode) : location.postalCode;
     return {
       postalCode,
       countryCode: location.countryCode || undefined,
@@ -303,10 +296,8 @@ const resolveIpLocation = async (ipAddress) => {
     region: response.data?.region || null,
     regionCode: response.data?.region_code || null,
     countryCode: response.data?.country_code || null,
-    latitude:
-      response.data?.latitude != null ? Number(response.data.latitude) : null,
-    longitude:
-      response.data?.longitude != null ? Number(response.data.longitude) : null,
+    latitude: response.data?.latitude != null ? Number(response.data.latitude) : null,
+    longitude: response.data?.longitude != null ? Number(response.data.longitude) : null,
   };
   location.label = buildLocationLabel(location);
   ipLocationCache.set(cacheKey, location);
@@ -371,12 +362,8 @@ const buildShowRecord = (event, artist, matchType) => {
     region: venue.region,
     countryCode: venue.countryCode,
     postalCode: venue.postalCode,
-    distance: Number.isFinite(Number(event.distance))
-      ? Number(event.distance)
-      : null,
-    priceRange: Array.isArray(event.priceRanges)
-      ? event.priceRanges[0] || null
-      : null,
+    distance: Number.isFinite(Number(event.distance)) ? Number(event.distance) : null,
+    priceRange: Array.isArray(event.priceRanges) ? event.priceRanges[0] || null : null,
   };
 };
 
@@ -389,10 +376,7 @@ export const getNearbyShows = async ({
   radiusMiles = DEFAULT_RADIUS_MILES,
   limit = DEFAULT_SHOW_LIMIT,
 }) => {
-  const resolvedLimit = Math.max(
-    1,
-    Math.min(Number(limit) || DEFAULT_SHOW_LIMIT, MAX_SHOW_LIMIT),
-  );
+  const resolvedLimit = Math.max(1, Math.min(Number(limit) || DEFAULT_SHOW_LIMIT, MAX_SHOW_LIMIT));
   const sanitizedZipCode = sanitizeZipCode(zipCode);
   const libraryArtistCount = Array.isArray(libraryArtists) ? libraryArtists.length : 0;
   const libraryArtistMap = new Map();
@@ -480,11 +464,15 @@ export const getNearbyShows = async ({
       const dedupeKey = `${event.id}:${artist.key}:${match.sourceType}`;
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
-      const show = buildShowRecord(event, {
-        ...artist,
-        name: match.name || artist.name,
-        sourceType: match.sourceType,
-      }, libraryMatch ? "library" : "recommended");
+      const show = buildShowRecord(
+        event,
+        {
+          ...artist,
+          name: match.name || artist.name,
+          sourceType: match.sourceType,
+        },
+        libraryMatch ? "library" : "recommended",
+      );
       if (libraryMatch) {
         libraryShows.push(show);
       } else {
@@ -498,12 +486,8 @@ export const getNearbyShows = async ({
       const aTime = a.dateTime || a.date || "";
       const bTime = b.dateTime || b.date || "";
       if (aTime !== bTime) return aTime.localeCompare(bTime);
-      const aDistance = Number.isFinite(a.distance)
-        ? a.distance
-        : Number.POSITIVE_INFINITY;
-      const bDistance = Number.isFinite(b.distance)
-        ? b.distance
-        : Number.POSITIVE_INFINITY;
+      const aDistance = Number.isFinite(a.distance) ? a.distance : Number.POSITIVE_INFINITY;
+      const bDistance = Number.isFinite(b.distance) ? b.distance : Number.POSITIVE_INFINITY;
       return aDistance - bDistance;
     });
 

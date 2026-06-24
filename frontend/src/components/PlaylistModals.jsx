@@ -1,14 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Check,
-  Loader2,
-  MoreVertical,
-  Plus,
-  Sparkles,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react";
+import { Check, Loader2, MoreVertical, Plus, Sparkles, Trash2, Upload, X } from "lucide-react";
 
 function ModalShell({
   open,
@@ -21,17 +12,12 @@ function ModalShell({
 }) {
   if (!open) return null;
   return (
-    <div
-      className="playlist-modal-backdrop"
-      onClick={disableClose ? undefined : onClose}
-    >
+    <div className="playlist-modal-backdrop" onClick={disableClose ? undefined : onClose}>
       <div className="playlist-modal" onClick={(event) => event.stopPropagation()}>
         <div className="playlist-modal__header">
           <div className="playlist-modal__heading">
             <h3 className="playlist-modal__title">{title}</h3>
-            {description ? (
-              <p className="playlist-modal__description">{description}</p>
-            ) : null}
+            {description ? <p className="playlist-modal__description">{description}</p> : null}
           </div>
           <button
             type="button"
@@ -132,9 +118,7 @@ export function CreatePlaylistModal({
           placeholder="Night Drive"
           autoFocus
         />
-        {localError || error ? (
-          <p className="artist-error-text">{localError || error}</p>
-        ) : null}
+        {localError || error ? <p className="artist-error-text">{localError || error}</p> : null}
       </div>
     </ModalShell>
   );
@@ -254,8 +238,7 @@ export function RenamePlaylistModal({
     await onUpload?.(file);
   };
 
-  const coverSrc =
-    previewUrl || (!imageFailed && artworkUrl ? artworkUrl : null);
+  const coverSrc = previewUrl || (!imageFailed && artworkUrl ? artworkUrl : null);
   const fallbackLabel =
     String(displayName || name || "?")
       .trim()
@@ -264,12 +247,7 @@ export function RenamePlaylistModal({
   const combinedError = localError || coverError || error;
 
   return (
-    <ModalShell
-      open={open}
-      title={title}
-      onClose={onClose}
-      disableClose={busy}
-    >
+    <ModalShell open={open} title={title} onClose={onClose} disableClose={busy}>
       <input
         ref={fileInputRef}
         type="file"
@@ -291,34 +269,26 @@ export function RenamePlaylistModal({
               aria-label="Change cover image"
             >
               {coverSrc ? (
-                <img
-                  src={coverSrc}
-                  alt=""
-                  onError={() => setImageFailed(true)}
-                />
+                <img src={coverSrc} alt="" onError={() => setImageFailed(true)} />
               ) : (
-                <div className="playlist-modal__cover-fallback">
-                  {fallbackLabel}
-                </div>
+                <div className="playlist-modal__cover-fallback">{fallbackLabel}</div>
               )}
-              <span className="playlist-modal__cover-picker-overlay">
-                Change image
-              </span>
+              <span className="playlist-modal__cover-picker-overlay">Change image</span>
             </button>
             <div className="playlist-modal__cover-menu">
               <button
-              type="button"
-              className="btn btn-secondary btn-icon btn-sm playlist-modal__cover-menu-trigger"
-              disabled={busy}
-              aria-label="Cover image options"
-              aria-expanded={coverMenuOpen}
-              aria-haspopup="menu"
-              onClick={(event) => {
-                event.stopPropagation();
-                setCoverMenuOpen((prev) => !prev);
-              }}
-            >
-              <MoreVertical className="artist-icon-sm" />
+                type="button"
+                className="btn btn-secondary btn-icon btn-sm playlist-modal__cover-menu-trigger"
+                disabled={busy}
+                aria-label="Cover image options"
+                aria-expanded={coverMenuOpen}
+                aria-haspopup="menu"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setCoverMenuOpen((prev) => !prev);
+                }}
+              >
+                <MoreVertical className="artist-icon-sm" />
               </button>
               {coverMenuOpen ? (
                 <>
@@ -400,9 +370,7 @@ export function RenamePlaylistModal({
                 autoFocus
               />
             </div>
-            {combinedError ? (
-              <p className="artist-error-text">{combinedError}</p>
-            ) : null}
+            {combinedError ? <p className="artist-error-text">{combinedError}</p> : null}
           </div>
           <div className="playlist-modal__edit-actions">
             <button

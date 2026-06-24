@@ -1,12 +1,7 @@
 import { useMemo, useState } from "react";
 import PropTypes from "prop-types";
 import { MapPin } from "lucide-react";
-import {
-  formatLifeSpan,
-  getArtistHeroImage,
-  getArtistType,
-  getTagColor,
-} from "../utils";
+import { formatLifeSpan, getArtistHeroImage, getArtistType, getTagColor } from "../utils";
 
 const normalizeTagName = (value) => String(value || "").trim();
 
@@ -69,9 +64,7 @@ export function ArtistDetailsHero({
         )}
 
         <div className="artist-hero__content">
-          <h1 className="artist-hero__title">
-            {artist.name}
-          </h1>
+          <h1 className="artist-hero__title">{artist.name}</h1>
 
           <div className="artist-meta-line">
             {artistType && <span>{artistType}</span>}
@@ -104,9 +97,7 @@ export function ArtistDetailsHero({
                   key={tag.key}
                   type="button"
                   onClick={() =>
-                    onNavigate?.(
-                      `/search?q=${encodeURIComponent(`#${tag.name}`)}&type=tag`,
-                    )
+                    onNavigate?.(`/search?q=${encodeURIComponent(`#${tag.name}`)}&type=tag`)
                   }
                   className="artist-tag"
                   style={{ backgroundColor: getTagColor(tag.name) }}

@@ -16,9 +16,7 @@ export function IntegrationCard({ title, subtitle, status, meta, onClick }) {
         {meta ? <span className="arr-card__meta">{meta}</span> : null}
       </span>
       <span className="arr-card__side">
-        <span
-          className={`arr-card__status arr-card__status--${statusTone(status.className)}`}
-        >
+        <span className={`arr-card__status arr-card__status--${statusTone(status.className)}`}>
           {status.label}
         </span>
         <Pencil className="artist-icon-sm" aria-hidden />
@@ -47,10 +45,7 @@ export function SettingsIntegrationModal({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="settings-page__modal-header">
-          <h3
-            id="integration-settings-modal-title"
-            className="settings-page__modal-title"
-          >
+          <h3 id="integration-settings-modal-title" className="settings-page__modal-title">
             {title}
           </h3>
           <button

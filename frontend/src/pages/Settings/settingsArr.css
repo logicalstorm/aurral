@@ -42,7 +42,6 @@
   --arr-success-text: color-mix(in srgb, var(--aurral-green) 75%, var(--aurral-white));
 }
 
-
 .app-main--settings {
   padding: 0;
   background: var(--aurral-surface);
@@ -1153,7 +1152,6 @@
   font-size: 12px;
 }
 
-
 .arr-table__row--warning {
   background: rgba(251, 191, 36, 0.08);
 }
@@ -1389,7 +1387,10 @@
 }
 
 .settings-arr .settings-page__section-header .settings-page__section-title,
-.settings-arr .settings-page__section-header .settings-page__section-intro .settings-page__section-title {
+.settings-arr
+  .settings-page__section-header
+  .settings-page__section-intro
+  .settings-page__section-title {
   margin: 0 0 8px;
   padding: 0;
   border: 0;

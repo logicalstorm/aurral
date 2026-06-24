@@ -7,7 +7,6 @@ import {
   fetchImageBuffer,
   renderStylizedPhotoArtwork,
 } from "./discovery/stylizedArtwork.js";
-
 export const PLAYLIST_ARTWORK_STYLES = ["aurral", "photo"];
 
 export function getPlaylistArtworkStyle() {
@@ -40,10 +39,10 @@ export async function resolvePlaylistSourceImageUrl() {
 export async function buildGeneratedPlaylistArtworkBuffer({
   title,
   kind = "Playlist",
-  signature,
-  relatedArtists = [],
+  _signature,
+  _relatedArtists = [],
   style = null,
-  rotateSourceImage = false,
+  _rotateSourceImage = false,
   paletteSeed = null,
 }) {
   const resolvedStyle = style || getPlaylistArtworkStyle();
@@ -90,9 +89,7 @@ export async function writeGeneratedPlaylistArtwork({
 
   for (const extension of [".jpg", ".webp", ".png"]) {
     if (extension === keepExtension) continue;
-    await fs
-      .unlink(path.join(directory, `${baseName}${extension}`))
-      .catch(() => {});
+    await fs.unlink(path.join(directory, `${baseName}${extension}`)).catch(() => {});
   }
 
   const buffer = await buildGeneratedPlaylistArtworkBuffer({

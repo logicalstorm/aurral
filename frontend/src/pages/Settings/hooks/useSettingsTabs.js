@@ -21,15 +21,10 @@ export function useSettingsTabs(authUser) {
 
   const activeTab = useMemo(() => {
     const normalized = normalizeSettingsTabId(tabParam);
-    return SETTINGS_TAB_IDS.includes(normalized)
-      ? normalized
-      : DEFAULT_SETTINGS_TAB;
+    return SETTINGS_TAB_IDS.includes(normalized) ? normalized : DEFAULT_SETTINGS_TAB;
   }, [tabParam]);
 
-  const activeTabMeta = useMemo(
-    () => getSettingsTabById(activeTab),
-    [activeTab],
-  );
+  const activeTabMeta = useMemo(() => getSettingsTabById(activeTab), [activeTab]);
 
   const setActiveTab = useCallback(
     (tabId) => {

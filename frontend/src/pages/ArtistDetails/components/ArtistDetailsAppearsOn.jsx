@@ -9,9 +9,7 @@ import { getReleaseMetric, getReleaseYear } from "../utils";
 
 const sortLatest = (items) =>
   [...items].sort((a, b) =>
-    String(b["first-release-date"] || "").localeCompare(
-      String(a["first-release-date"] || ""),
-    ),
+    String(b["first-release-date"] || "").localeCompare(String(a["first-release-date"] || "")),
   );
 
 export function ArtistDetailsAppearsOn({
@@ -28,10 +26,7 @@ export function ArtistDetailsAppearsOn({
   onViewAll,
 }) {
   const navigate = useDiscoverNavigation();
-  const releaseGroups = useMemo(
-    () => artist["appears-on-release-groups"] || [],
-    [artist],
-  );
+  const releaseGroups = useMemo(() => artist["appears-on-release-groups"] || [], [artist]);
   const visibleReleaseGroups = useMemo(
     () => sortLatest(releaseGroups).slice(0, 6),
     [releaseGroups],
@@ -61,11 +56,7 @@ export function ArtistDetailsAppearsOn({
           </div>
         </div>
         {onViewAll ? (
-          <button
-            type="button"
-            onClick={onViewAll}
-            className="artist-link-button"
-          >
+          <button type="button" onClick={onViewAll} className="artist-link-button">
             View All
             <ArrowRight className="artist-icon-sm" />
           </button>
@@ -116,9 +107,7 @@ export function ArtistDetailsAppearsOn({
                   ) : null}
                 </div>
               </div>
-              <h3 className="artist-release-card__title artist-clamp-2">
-                {releaseGroup.title}
-              </h3>
+              <h3 className="artist-release-card__title artist-clamp-2">{releaseGroup.title}</h3>
               <p className="artist-release-card__meta artist-truncate">
                 {[getReleaseYear(releaseGroup), artistCredit || releaseGroup["primary-type"]]
                   .filter(Boolean)

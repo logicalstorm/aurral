@@ -138,7 +138,6 @@ const pipeline = registerQueue({
   workerStartFn: "startSlskdOrchestratorWorker",
   defaultPriorityFn: (payload) => getPipelinePriorityForPhase(payload?.phase),
 });
-
 export const getPipelineQueue = pipeline.getQueue;
 export const enqueuePipelineJob = pipeline.enqueueJob;
 
@@ -150,7 +149,6 @@ const discoveryRefresh = registerQueue({
   workerStartFn: "startDiscoveryRefreshWorker",
   skipInTest: true,
 });
-
 export const getDiscoveryRefreshQueue = discoveryRefresh.getQueue;
 export const enqueueDiscoveryRefreshJob = discoveryRefresh.enqueueJob;
 
@@ -161,7 +159,6 @@ const discoveryPlaylistBuild = registerQueue({
   workerModule: "./discoveryPlaylistBuildWorker.js",
   workerStartFn: "startDiscoveryPlaylistBuildWorker",
 });
-
 export const getDiscoveryPlaylistBuildQueue = discoveryPlaylistBuild.getQueue;
 export const enqueueDiscoveryPlaylistBuildJob = discoveryPlaylistBuild.enqueueJob;
 
@@ -172,7 +169,6 @@ const discoveryUserRefresh = registerQueue({
   workerModule: "./discoveryUserRefreshWorker.js",
   workerStartFn: "startDiscoveryUserRefreshWorker",
 });
-
 export const getDiscoveryUserRefreshQueue = discoveryUserRefresh.getQueue;
 export const enqueueDiscoveryUserRefreshJob = discoveryUserRefresh.enqueueJob;
 
@@ -194,7 +190,6 @@ const playlistRetry = registerQueue({
   workerModule: "./weeklyFlow/weeklyFlowPlaylistRetryWorker.js",
   workerStartFn: "startWeeklyFlowPlaylistRetryWorker",
 });
-
 export const getPlaylistRetryQueue = playlistRetry.getQueue;
 export const enqueuePlaylistRetryJob = playlistRetry.enqueueJob;
 
@@ -258,13 +253,10 @@ export function getNotificationOutbox() {
     notificationOutbox = getHonkerDb().outbox(
       "notifications",
       async (payload, job) => {
-        const { deliverQueuedNotification } =
-          await import("./notificationService.js");
+        const { deliverQueuedNotification } = await import("./notificationService.js");
         const { withJobHeartbeat } = await import("./honkerWorkerRuntime.js");
         const outbox = getNotificationOutbox();
-        await withJobHeartbeat(job, outbox.queue, () =>
-          deliverQueuedNotification(payload),
-        );
+        await withJobHeartbeat(job, outbox.queue, () => deliverQueuedNotification(payload));
       },
       {
         visibilityTimeoutS: 120,
@@ -282,8 +274,7 @@ export function enqueueNotification(payload) {
     .then(({ startNotificationOutboxWorker }) =>
       startNotificationOutboxWorker(),
     )
-    .catch((err) => { console.warn(err); });
-  return jobId;
+    .catch((err) => { console.warn(err); });  return jobId;
 }
 
 export function bootstrapHonkerSchedules() {
@@ -297,22 +288,13 @@ export function bootstrapHonkerSchedules() {
 }
 
 export function enqueueHonkerStartupTasks() {
-  enqueueSystemTaskJob(
-    { kind: "playlist-startup-migration" },
-    { delaySeconds: 3, priority: 10 },
-  );
-  enqueueSystemTaskJob(
-    { kind: "weekly-flow-startup-check" },
-    { delaySeconds: 5, priority: 5 },
-  );
+  enqueueSystemTaskJob({ kind: "playlist-startup-migration" }, { delaySeconds: 3, priority: 10 });
+  enqueueSystemTaskJob({ kind: "weekly-flow-startup-check" }, { delaySeconds: 5, priority: 5 });
   enqueueSystemTaskJob(
     { kind: "weekly-flow-startup-reuse-repair" },
     { delaySeconds: 15, priority: 5 },
   );
-  enqueueSystemTaskJob(
-    { kind: "discovery-bootstrap" },
-    { delaySeconds: 15, priority: 5 },
-  );
+  enqueueSystemTaskJob({ kind: "discovery-bootstrap" }, { delaySeconds: 15, priority: 5 });
   enqueuePlaylistMbidEnrichmentJob(
     { kind: "playlist-mbid-enrichment-sweep", reason: "startup" },
     { delaySeconds: 30, priority: -5 },
@@ -383,11 +365,7 @@ export function isHonkerLockHeld(name) {
 
 export function tryAcquireDiscoveryRefreshQueueLock() {
   if (discoveryRefreshQueueLock) return true;
-  const lock = getHonkerDb().tryLock(
-    DISCOVERY_REFRESH_QUEUE_LOCK,
-    WORKER_ID,
-    3600,
-  );
+  const lock = getHonkerDb().tryLock(DISCOVERY_REFRESH_QUEUE_LOCK, WORKER_ID, 3600);
   if (!lock) return false;
   discoveryRefreshQueueLock = lock;
   return true;
@@ -402,10 +380,7 @@ export function releaseDiscoveryRefreshQueueLock() {
 }
 
 export function isDiscoveryRefreshQueueLocked() {
-  return (
-    discoveryRefreshQueueLock != null ||
-    isHonkerLockHeld(DISCOVERY_REFRESH_QUEUE_LOCK)
-  );
+  return discoveryRefreshQueueLock != null || isHonkerLockHeld(DISCOVERY_REFRESH_QUEUE_LOCK);
 }
 
 const inProcessLockTails = new Map();
@@ -454,10 +429,7 @@ export async function withHonkerLock(
       );
     }
 
-    const heartbeatMs = Math.max(
-      1000,
-      Math.floor((Number(ttlSeconds) || 120) * 1000 * 0.33),
-    );
+    const heartbeatMs = Math.max(1000, Math.floor((Number(ttlSeconds) || 120) * 1000 * 0.33));
     const heartbeat = setInterval(() => {
       try {
         lock.heartbeat(ttlSeconds);
@@ -537,10 +509,7 @@ export function getHonkerQueueNextClaimAt(queueName) {
   const safeQueue = String(queueName || "").trim();
   if (!safeQueue) return null;
   const queue = getHonkerQueueByName(safeQueue);
-  const value =
-    queue && typeof queue._nextClaimAt === "function"
-      ? queue._nextClaimAt()
-      : null;
+  const value = queue && typeof queue._nextClaimAt === "function" ? queue._nextClaimAt() : null;
   const timestamp = Number(value);
   return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
 }

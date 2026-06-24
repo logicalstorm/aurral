@@ -10,8 +10,7 @@ import { hydrateArtistImages } from "./artistImageHydration.js";
 import { getArtistGenres } from "./providers/brainzmashProvider.js";
 
 export const DISCOVERY_PROVIDER_LASTFM = "lastfm";
-export const DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK =
-  "listenbrainz-fallback";
+export const DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK = "listenbrainz-fallback";
 
 const LISTENBRAINZ_SITEWIDE_POOL_CACHE = createCache(6 * 60 * 60);
 const LISTENBRAINZ_ENRICHED_POOL_CACHE = createCache(6 * 60 * 60);
@@ -56,15 +55,7 @@ export const DEFAULT_DISCOVERY_GENRE_SECTIONS = [
   },
   {
     name: "Pop",
-    tags: [
-      "pop",
-      "dance pop",
-      "synthpop",
-      "indie pop",
-      "r&b",
-      "rnb",
-      "soul",
-    ],
+    tags: ["pop", "dance pop", "synthpop", "indie pop", "r&b", "rnb", "soul"],
     artists: [
       "Taylor Swift",
       "Michael Jackson",
@@ -104,16 +95,7 @@ export const DEFAULT_DISCOVERY_GENRE_SECTIONS = [
   },
   {
     name: "Electronic",
-    tags: [
-      "electronic",
-      "electronica",
-      "edm",
-      "house",
-      "techno",
-      "ambient",
-      "downtempo",
-      "idm",
-    ],
+    tags: ["electronic", "electronica", "edm", "house", "techno", "ambient", "downtempo", "idm"],
     artists: [
       "Daft Punk",
       "The Chemical Brothers",
@@ -250,13 +232,14 @@ const getListenbrainzArtistMbid = (artist) => {
   return normalizeMbid(fromArray);
 };
 
-const artistKeys = (artist) => [
-  normalizeKey(artist?.id),
-  normalizeKey(artist?.mbid),
-  normalizeKey(artist?.foreignArtistId),
-  normalizeKey(artist?.name),
-  normalizeKey(artist?.artistName),
-].filter(Boolean);
+const artistKeys = (artist) =>
+  [
+    normalizeKey(artist?.id),
+    normalizeKey(artist?.mbid),
+    normalizeKey(artist?.foreignArtistId),
+    normalizeKey(artist?.name),
+    normalizeKey(artist?.artistName),
+  ].filter(Boolean);
 
 const isExistingArtist = (artist, existingArtistKeys) =>
   artistKeys(artist).some((key) => existingArtistKeys?.has(key));
@@ -266,9 +249,7 @@ const normalizeCuratedArtist = async (entry, genre) => {
     typeof entry === "string" ? entry : entry?.name || entry?.artistName || "",
   ).trim();
   if (!name) return null;
-  const explicitMbid = normalizeMbid(
-    typeof entry === "object" ? entry.mbid || entry.id : null,
-  );
+  const explicitMbid = normalizeMbid(typeof entry === "object" ? entry.mbid || entry.id : null);
   const mbid =
     explicitMbid ||
     musicbrainzGetCachedArtistMbidByName(name) ||
@@ -291,18 +272,14 @@ const normalizeCuratedArtist = async (entry, genre) => {
 export const getFallbackGenreNames = () =>
   DEFAULT_DISCOVERY_GENRE_SECTIONS.map((section) => section.name);
 
-export const getFallbackTagNames = () => [
-  ...new Set(getFallbackGenreNames().filter(Boolean)),
-];
+export const getFallbackTagNames = () => [...new Set(getFallbackGenreNames().filter(Boolean))];
 
 export const findFallbackGenreSection = (tag) => {
   const wanted = normalizeKey(String(tag || "").replace(/^#/, ""));
   if (!wanted) return null;
   return (
     DEFAULT_DISCOVERY_GENRE_SECTIONS.find((section) =>
-      [section.name, ...(section.tags || [])]
-        .map(normalizeKey)
-        .includes(wanted),
+      [section.name, ...(section.tags || [])].map(normalizeKey).includes(wanted),
     ) || null
   );
 };
@@ -310,27 +287,30 @@ export const findFallbackGenreSection = (tag) => {
 const getFallbackGenreAliases = (tag) => {
   const section = findFallbackGenreSection(tag);
   if (section) {
-    return [
-      section.name,
-      ...(Array.isArray(section.tags) ? section.tags : []),
-    ].filter(Boolean);
+    return [section.name, ...(Array.isArray(section.tags) ? section.tags : [])].filter(Boolean);
   }
-  const trimmed = String(tag || "").replace(/^#/, "").trim();
+  const trimmed = String(tag || "")
+    .replace(/^#/, "")
+    .trim();
   return trimmed ? [trimmed] : [];
 };
 
-const getNormalizedArtistGenreTerms = (artist) => [
-  ...(Array.isArray(artist?.genres) ? artist.genres : []),
-  ...(Array.isArray(artist?.tags) ? artist.tags : []),
-]
-  .map(normalizeGenreText)
-  .filter(Boolean);
+const getNormalizedArtistGenreTerms = (artist) =>
+  [
+    ...(Array.isArray(artist?.genres) ? artist.genres : []),
+    ...(Array.isArray(artist?.tags) ? artist.tags : []),
+  ]
+    .map(normalizeGenreText)
+    .filter(Boolean);
 
 const getNormalizedSectionAliases = (section) =>
-  [...new Set([section.name, ...(Array.isArray(section.tags) ? section.tags : [])]
-    .map(normalizeGenreText)
-    .filter(Boolean))]
-    .sort((left, right) => right.length - left.length);
+  [
+    ...new Set(
+      [section.name, ...(Array.isArray(section.tags) ? section.tags : [])]
+        .map(normalizeGenreText)
+        .filter(Boolean),
+    ),
+  ].sort((left, right) => right.length - left.length);
 
 const scoreGenreAliasMatch = (genreTerm, alias) => {
   if (!genreTerm || !alias) return 0;
@@ -377,9 +357,7 @@ export const fetchListenbrainzGlobalTopArtists = async ({
     offset,
     range,
   }).catch(() => null);
-  const artists = Array.isArray(data?.payload?.artists)
-    ? data.payload.artists
-    : [];
+  const artists = Array.isArray(data?.payload?.artists) ? data.payload.artists : [];
   return artists
     .map((artist, index) => {
       const name = String(artist?.artist_name || "").trim();
@@ -415,11 +393,7 @@ const fetchListenbrainzSitewideArtistPool = async ({
   if (Array.isArray(cached)) return cached;
 
   const artists = [];
-  for (
-    let offset = 0;
-    offset < boundedLimit;
-    offset += LISTENBRAINZ_SITEWIDE_PAGE_SIZE
-  ) {
+  for (let offset = 0; offset < boundedLimit; offset += LISTENBRAINZ_SITEWIDE_PAGE_SIZE) {
     const page = await fetchListenbrainzGlobalTopArtists({
       count: Math.min(LISTENBRAINZ_SITEWIDE_PAGE_SIZE, boundedLimit - offset),
       offset,
@@ -449,11 +423,7 @@ const fetchListenbrainzSitewideArtistPool = async ({
 
 const enrichListenbrainzArtistPoolWithGenres = async (artists = []) => {
   const enriched = [];
-  for (
-    let index = 0;
-    index < artists.length;
-    index += LISTENBRAINZ_GENRE_ENRICH_CONCURRENCY
-  ) {
+  for (let index = 0; index < artists.length; index += LISTENBRAINZ_GENRE_ENRICH_CONCURRENCY) {
     const batch = artists.slice(index, index + LISTENBRAINZ_GENRE_ENRICH_CONCURRENCY);
     const results = await Promise.allSettled(
       batch.map(async (artist) => {
@@ -525,9 +495,7 @@ const buildFallbackGenrePoolsFromArtists = ({
           ? artist.tags
           : [section.name, ...(section.tags || [])],
       genres:
-        Array.isArray(artist.genres) && artist.genres.length > 0
-          ? artist.genres
-          : [section.name],
+        Array.isArray(artist.genres) && artist.genres.length > 0 ? artist.genres : [section.name],
     });
   }
   return buckets;
@@ -579,9 +547,7 @@ const buildGenreSection = async (
   { existingArtistKeys = new Set(), hydrate = true } = {},
 ) => {
   const artists = (
-    await Promise.all(
-      genre.artists.map((artist) => normalizeCuratedArtist(artist, genre)),
-    )
+    await Promise.all(genre.artists.map((artist) => normalizeCuratedArtist(artist, genre)))
   )
     .filter(Boolean)
     .filter((artist) => !isExistingArtist(artist, existingArtistKeys));
@@ -649,7 +615,11 @@ export const searchFallbackGenreArtists = async ({
       artists: pagedArtists,
       total: matchingArtists.length,
       section: {
-        name: targetSectionName || String(tag || "").replace(/^#/, "").trim(),
+        name:
+          targetSectionName ||
+          String(tag || "")
+            .replace(/^#/, "")
+            .trim(),
         tags: aliases,
         artists: pagedArtists,
       },
@@ -709,6 +679,7 @@ export const getFlowCapabilities = (hasLastfmKey = !!getLastfmApiKey()) => {
 
 export const buildListenbrainzFallbackDiscovery = async ({
   existingArtistKeys = new Set(),
+  blockSets = { tags: new Set() },
   onProgress = null,
 } = {}) => {
   onProgress?.({
@@ -778,9 +749,7 @@ export const buildListenbrainzFallbackDiscovery = async ({
     recommendations: [],
     globalTop,
     basedOn: [],
-    topTags: getFallbackTagNames().filter(
-      (tag) => !blockSets.tags.has(normalizeKey(tag)),
-    ),
+    topTags: getFallbackTagNames().filter((tag) => !blockSets.tags.has(normalizeKey(tag))),
     topGenres,
     fallbackGenres,
     fallbackGenrePools,

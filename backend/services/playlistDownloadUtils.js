@@ -35,8 +35,7 @@ export function stringifyStringListJson(value) {
 }
 
 export function buildResolvedPlaylistTrack(job, payloadTrack = {}) {
-  const track =
-    payloadTrack && typeof payloadTrack === "object" ? payloadTrack : {};
+  const track = payloadTrack && typeof payloadTrack === "object" ? payloadTrack : {};
   return {
     artistName: job.artistName || track.artistName,
     trackName: job.trackName || track.trackName,
@@ -47,12 +46,9 @@ export function buildResolvedPlaylistTrack(job, payloadTrack = {}) {
     releaseYear: job.releaseYear || track.releaseYear,
     durationMs: job.durationMs ?? track.durationMs ?? null,
     trackNumber: normalizePositiveInteger(job.trackNumber ?? track.trackNumber),
-    albumTrackCount: normalizePositiveInteger(
-      job.albumTrackCount ?? track.albumTrackCount,
-    ),
+    albumTrackCount: normalizePositiveInteger(job.albumTrackCount ?? track.albumTrackCount),
     albumTrackTitles: normalizeStringList(
-      (job.albumTrackTitles?.length ? job.albumTrackTitles : null) ||
-        track.albumTrackTitles,
+      (job.albumTrackTitles?.length ? job.albumTrackTitles : null) || track.albumTrackTitles,
     ),
     artistAliases:
       Array.isArray(job.artistAliases) && job.artistAliases.length
@@ -108,10 +104,7 @@ export async function commitImportToPlaylistLibrary(sourcePath, targetPath) {
       `.aurral-import-${process.pid}-${Date.now()}-${path.basename(resolvedTarget)}.tmp`,
     );
     await fs.copyFile(sourcePath, tempTarget);
-    const [sourceStat, tempStat] = await Promise.all([
-      fs.stat(sourcePath),
-      fs.stat(tempTarget),
-    ]);
+    const [sourceStat, tempStat] = await Promise.all([fs.stat(sourcePath), fs.stat(tempTarget)]);
     if (sourceStat.size !== tempStat.size) {
       await fs.rm(tempTarget, { force: true }).catch(() => {});
       throw new Error("Imported file copy did not match source size");

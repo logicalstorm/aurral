@@ -32,18 +32,14 @@ const withLocalNetworkBypassDefaults = (settings = dbOps.getSettings()) => ({
 
 export const getAuthUser = () => {
   const settings = dbOps.getSettings();
-  return (
-    settings.integrations?.general?.authUser || process.env.AUTH_USER || "admin"
-  );
+  return settings.integrations?.general?.authUser || process.env.AUTH_USER || "admin";
 };
 
 export const getAuthPassword = () => {
   const settings = dbOps.getSettings();
   const dbPass = settings.integrations?.general?.authPassword;
   if (dbPass) return [dbPass];
-  return process.env.AUTH_PASSWORD
-    ? process.env.AUTH_PASSWORD.split(",").map((p) => p.trim())
-    : [];
+  return process.env.AUTH_PASSWORD ? process.env.AUTH_PASSWORD.split(",").map((p) => p.trim()) : [];
 };
 
 export const isProxyAuthEnabled = () => {
@@ -75,11 +71,8 @@ function normalizeIp(value) {
     .trim()
     .toLowerCase();
   if (!raw) return "";
-  const withoutBrackets =
-    raw.startsWith("[") && raw.endsWith("]") ? raw.slice(1, -1) : raw;
-  return withoutBrackets.startsWith("::ffff:")
-    ? withoutBrackets.slice(7)
-    : withoutBrackets;
+  const withoutBrackets = raw.startsWith("[") && raw.endsWith("]") ? raw.slice(1, -1) : raw;
+  return withoutBrackets.startsWith("::ffff:") ? withoutBrackets.slice(7) : withoutBrackets;
 }
 
 function isLoopbackIp(ip) {
@@ -110,11 +103,12 @@ function ipv4ToInt(ip) {
     return null;
   }
   return (
-    ((parts[0] << 24) >>> 0) +
-    ((parts[1] << 16) >>> 0) +
-    ((parts[2] << 8) >>> 0) +
-    (parts[3] >>> 0)
-  ) >>> 0;
+    (((parts[0] << 24) >>> 0) +
+      ((parts[1] << 16) >>> 0) +
+      ((parts[2] << 8) >>> 0) +
+      (parts[3] >>> 0)) >>>
+    0
+  );
 }
 
 function parseNetmaskPrefix(netmask) {
@@ -164,20 +158,14 @@ function getIpv4SubnetCandidates() {
       if (detail.family !== "IPv4") continue;
       const normalizedAddress = normalizeIp(detail.address);
       if (!isPrivateIpv4(normalizedAddress)) continue;
-      const subnet = buildIpv4Subnet(
-        normalizedAddress,
-        detail.netmask,
-        name,
-      );
+      const subnet = buildIpv4Subnet(normalizedAddress, detail.netmask, name);
       if (subnet) {
         candidates.push(subnet);
       }
     }
   }
   candidates.sort((a, b) =>
-    `${a.interfaceName}:${a.address}`.localeCompare(
-      `${b.interfaceName}:${b.address}`,
-    ),
+    `${a.interfaceName}:${a.address}`.localeCompare(`${b.interfaceName}:${b.address}`),
   );
   return candidates;
 }
@@ -203,9 +191,7 @@ function getRequestIps(req) {
 }
 
 function isTrustedProxy(req) {
-  const allowed = parseCsv(process.env.AUTH_PROXY_TRUSTED_IPS).map((ip) =>
-    normalizeIp(ip),
-  );
+  const allowed = parseCsv(process.env.AUTH_PROXY_TRUSTED_IPS).map((ip) => normalizeIp(ip));
   if (allowed.length === 0) return true;
   const requestIps = getRequestIps(req);
   return requestIps.some((ip) => allowed.includes(ip));
@@ -271,11 +257,7 @@ export function getUnauthorizedDetails(req) {
   };
 }
 
-export function sendUnauthorizedResponse(
-  req,
-  res,
-  { challenge = false, ...overrides } = {},
-) {
+export function sendUnauthorizedResponse(req, res, { challenge = false, ...overrides } = {}) {
   if (challenge) {
     res.setHeader("WWW-Authenticate", 'Basic realm="Aurral"');
   }
@@ -353,10 +335,7 @@ export function getLocalNetworkBypassStatus(req) {
   }
 
   const active =
-    config.enabled &&
-    eligible &&
-    isRequestFromTrustedLocalSubnet(req) &&
-    !!soleAdminUser;
+    config.enabled && eligible && isRequestFromTrustedLocalSubnet(req) && !!soleAdminUser;
 
   return {
     enabled: config.enabled,
@@ -398,10 +377,7 @@ export function reconcileLocalNetworkBypassSetting() {
 }
 
 function createProxyUser(username, role) {
-  const passwordHash = bcrypt.hashSync(
-    crypto.randomBytes(32).toString("hex"),
-    10,
-  );
+  const passwordHash = bcrypt.hashSync(crypto.randomBytes(32).toString("hex"), 10);
   const created = userOps.createUser(username, passwordHash, role, null);
   return created
     ? toResolvedUser(userOps.getUserByUsername(created.username) || created)
@@ -419,9 +395,7 @@ export function resolveProxyUser(req) {
   if (existing) {
     return toResolvedUser(existing);
   }
-  const adminUsers = parseCsv(process.env.AUTH_PROXY_ADMIN_USERS).map((u) =>
-    u.toLowerCase(),
-  );
+  const adminUsers = parseCsv(process.env.AUTH_PROXY_ADMIN_USERS).map((u) => u.toLowerCase());
   const headerRoleName = process.env.AUTH_PROXY_ROLE_HEADER
     ? String(process.env.AUTH_PROXY_ROLE_HEADER).trim().toLowerCase()
     : "";
@@ -431,14 +405,11 @@ export function resolveProxyUser(req) {
         .toLowerCase()
     : "";
   const defaultRole =
-    (process.env.AUTH_PROXY_DEFAULT_ROLE || "user").trim().toLowerCase() ===
-    "admin"
+    (process.env.AUTH_PROXY_DEFAULT_ROLE || "user").trim().toLowerCase() === "admin"
       ? "admin"
       : "user";
   const role =
-    headerRole === "admin" || adminUsers.includes(username.toLowerCase())
-      ? "admin"
-      : defaultRole;
+    headerRole === "admin" || adminUsers.includes(username.toLowerCase()) ? "admin" : defaultRole;
   return createProxyUser(username, role);
 }
 
@@ -486,9 +457,7 @@ function legacyAuth(username, password) {
   const passwords = getAuthPassword();
   if (passwords.length === 0) return null;
   const userMatches = safeCompare(username, authUser);
-  const passwordMatches = passwords.some((p) =>
-    safeCompare(password, p),
-  );
+  const passwordMatches = passwords.some((p) => safeCompare(password, p));
   if (!userMatches || !passwordMatches) return null;
   return {
     id: 0,
@@ -555,8 +524,7 @@ export function issueStreamToken(user, ttlMs = STREAM_TOKEN_TTL_MS) {
       role: user.role,
       permissions: user.permissions || {},
     },
-    expiresAt:
-      Date.now() + Math.max(1000, Number(ttlMs) || STREAM_TOKEN_TTL_MS),
+    expiresAt: Date.now() + Math.max(1000, Number(ttlMs) || STREAM_TOKEN_TTL_MS),
   });
   return token;
 }
@@ -594,12 +562,9 @@ export const createAuthMiddleware = () => {
       /^\/api\/artists\/[a-f0-9-]{36}\/stream$/i.test(req.path) ||
       /^\/api\/weekly-flow\/stream\/[^/]+$/i.test(req.path) ||
       /^\/api\/playlists\/stream\/[^/]+$/i.test(req.path) ||
-      (req.method === "GET" &&
-        /^\/api\/weekly-flow\/artwork\/[^/]+$/i.test(req.path)) ||
-      (req.method === "GET" &&
-        /^\/api\/playlists\/artwork\/[^/]+$/i.test(req.path)) ||
-      (req.method === "GET" &&
-        /^\/api\/discover\/artwork\/[^/]+$/i.test(req.path))
+      (req.method === "GET" && /^\/api\/weekly-flow\/artwork\/[^/]+$/i.test(req.path)) ||
+      (req.method === "GET" && /^\/api\/playlists\/artwork\/[^/]+$/i.test(req.path)) ||
+      (req.method === "GET" && /^\/api\/discover\/artwork\/[^/]+$/i.test(req.path))
     ) {
       return next();
     }
@@ -608,8 +573,7 @@ export const createAuthMiddleware = () => {
     const settings = dbOps.getSettings();
     const onboardingDone = settings.onboardingComplete;
 
-    if (req.path.startsWith("/api/onboarding") && !onboardingDone)
-      return next();
+    if (req.path.startsWith("/api/onboarding") && !onboardingDone) return next();
 
     const authRequired = isAuthRequiredByConfig();
 

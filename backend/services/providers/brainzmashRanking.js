@@ -31,8 +31,7 @@ export function scoreTextMatch(left, right) {
   for (const word of leftWords) {
     if (rightWords.has(word)) overlap += 1;
   }
-  const ratio =
-    (2 * overlap) / Math.max(1, leftWords.size + rightWords.size);
+  const ratio = (2 * overlap) / Math.max(1, leftWords.size + rightWords.size);
   return Math.round(ratio * 100);
 }
 
@@ -50,9 +49,7 @@ function typeRank(value) {
 
 function bootlegPenalty(item) {
   const statuses = Array.isArray(item?.releaseStatuses) ? item.releaseStatuses : [];
-  return statuses.some((status) => String(status || "").toLowerCase() === "bootleg")
-    ? 1
-    : 0;
+  return statuses.some((status) => String(status || "").toLowerCase() === "bootleg") ? 1 : 0;
 }
 
 export function rankArtistCandidates(query, candidates = []) {
@@ -96,12 +93,8 @@ export function rankAlbumCandidates(
       return rightTitleScore - leftTitleScore;
     }
 
-    const leftArtistScore = normalizedArtist
-      ? scoreTextMatch(left?.artistName, artistName)
-      : 0;
-    const rightArtistScore = normalizedArtist
-      ? scoreTextMatch(right?.artistName, artistName)
-      : 0;
+    const leftArtistScore = normalizedArtist ? scoreTextMatch(left?.artistName, artistName) : 0;
+    const rightArtistScore = normalizedArtist ? scoreTextMatch(right?.artistName, artistName) : 0;
     if (leftArtistScore !== rightArtistScore) {
       return rightArtistScore - leftArtistScore;
     }
@@ -111,11 +104,7 @@ export function rankAlbumCandidates(
     const leftYearScore =
       targetYear && leftYear === targetYear ? 1 : targetYear && leftYear ? -1 : 0;
     const rightYearScore =
-      targetYear && rightYear === targetYear
-        ? 1
-        : targetYear && rightYear
-          ? -1
-          : 0;
+      targetYear && rightYear === targetYear ? 1 : targetYear && rightYear ? -1 : 0;
     if (leftYearScore !== rightYearScore) {
       return rightYearScore - leftYearScore;
     }

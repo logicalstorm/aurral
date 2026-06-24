@@ -10,7 +10,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 let cachedFlows = null;
 let cachedSharedPlaylists = null;
 
-const titleCase = (value) =>
+const _titleCase = (value) =>
   String(value || "")
     .split(" ")
     .filter(Boolean)
@@ -62,11 +62,7 @@ const getFlowEntryName = (value) => {
 };
 
 const normalizeStringArray = (value) => {
-  const raw = Array.isArray(value)
-    ? value
-    : value == null
-      ? []
-      : [value];
+  const raw = Array.isArray(value) ? value : value == null ? [] : [value];
   const seen = new Set();
   const out = [];
   for (const entry of raw) {
@@ -108,19 +104,14 @@ const normalizeScheduleDays = (value) => {
   return [...out].sort((a, b) => a - b);
 };
 
-const getDefaultScheduleDay = (timeMs = Date.now()) =>
-  new Date(timeMs).getDay();
+const getDefaultScheduleDay = (timeMs = Date.now()) => new Date(timeMs).getDay();
 
 const normalizeScheduleTime = (value) => {
   const text = String(value ?? "").trim();
   const match = /^(\d{1,2}):(\d{2})$/.exec(text);
   if (!match) return DEFAULT_SCHEDULE_TIME;
   const hours = Number(match[1]);
-  if (
-    !Number.isInteger(hours) ||
-    hours < 0 ||
-    hours > 23
-  ) {
+  if (!Number.isInteger(hours) || hours < 0 || hours > 23) {
     return DEFAULT_SCHEDULE_TIME;
   }
   return `${String(hours).padStart(2, "0")}:00`;
@@ -182,9 +173,7 @@ const extractFromBlocks = (value) => {
     if (block.deepDive === true) deepDive = true;
     const include = block.include ?? {};
     const includeTags = normalizeStringList(include.tags ?? include.tag);
-    const includeRelated = normalizeStringList(
-      include.relatedArtists ?? include.relatedArtist,
-    );
+    const includeRelated = normalizeStringList(include.relatedArtists ?? include.relatedArtist);
     if (includeTags.length > 0) {
       const distributed = distributeCount(count, includeTags);
       for (const [tag, qty] of Object.entries(distributed)) {
@@ -202,12 +191,7 @@ const extractFromBlocks = (value) => {
     const source = String(block.source || "")
       .trim()
       .toLowerCase();
-    const key =
-      source === "mix"
-        ? "mix"
-        : source === "trending"
-          ? "trending"
-          : "discover";
+    const key = source === "mix" ? "mix" : source === "trending" ? "trending" : "discover";
     recipe[key] += count;
   }
   if (total <= 0) return null;
@@ -266,18 +250,18 @@ const normalizeFlow = (flow) => {
   const normalizedRelatedArray = normalizeStringArray(flow?.relatedArtists);
   const legacyTags = normalizeWeightMap(flow?.tags);
   const legacyRelatedArtists = normalizeWeightMap(flow?.relatedArtists);
-  const tags = normalizedTagsArray.length > 0
-    ? normalizedTagsArray
-    : Object.keys(legacyTags).length > 0
-      ? Object.keys(legacyTags)
-      : normalizeStringArray(Object.keys(normalizeWeightMap(blocksData?.tags)));
-  const relatedArtists = normalizedRelatedArray.length > 0
-    ? normalizedRelatedArray
-    : Object.keys(legacyRelatedArtists).length > 0
-      ? Object.keys(legacyRelatedArtists)
-      : normalizeStringArray(
-          Object.keys(normalizeWeightMap(blocksData?.relatedArtists)),
-        );
+  const tags =
+    normalizedTagsArray.length > 0
+      ? normalizedTagsArray
+      : Object.keys(legacyTags).length > 0
+        ? Object.keys(legacyTags)
+        : normalizeStringArray(Object.keys(normalizeWeightMap(blocksData?.tags)));
+  const relatedArtists =
+    normalizedRelatedArray.length > 0
+      ? normalizedRelatedArray
+      : Object.keys(legacyRelatedArtists).length > 0
+        ? Object.keys(legacyRelatedArtists)
+        : normalizeStringArray(Object.keys(normalizeWeightMap(blocksData?.relatedArtists)));
   const baseSize = blocksData?.size > 0 ? blocksData.size : size;
   return {
     id: flow?.id || randomUUID(),
@@ -313,30 +297,15 @@ const normalizeFlow = (flow) => {
 export const normalizeSharedTrack = (track) => {
   if (!track || typeof track !== "object" || Array.isArray(track)) return null;
   const artistName = String(
-    track.artistName ??
-      track.artist ??
-      track.artist_name ??
-      track["Artist Name(s)"] ??
-      "",
+    track.artistName ?? track.artist ?? track.artist_name ?? track["Artist Name(s)"] ?? "",
   ).trim();
   const trackName = String(
-    track.trackName ??
-      track.title ??
-      track.name ??
-      track.track ??
-      track["Track Name"] ??
-      "",
+    track.trackName ?? track.title ?? track.name ?? track.track ?? track["Track Name"] ?? "",
   ).trim();
   if (!artistName || !trackName) return null;
-  const albumName = String(
-    track.albumName ?? track.album ?? track["Album Name"] ?? "",
-  ).trim();
-  const artistMbid = String(
-    track.artistMbid ?? track.artistId ?? track.mbid ?? "",
-  ).trim();
-  const albumMbid = String(
-    track.albumMbid ?? track.releaseGroupMbid ?? track.albumId ?? "",
-  ).trim();
+  const albumName = String(track.albumName ?? track.album ?? track["Album Name"] ?? "").trim();
+  const artistMbid = String(track.artistMbid ?? track.artistId ?? track.mbid ?? "").trim();
+  const albumMbid = String(track.albumMbid ?? track.releaseGroupMbid ?? track.albumId ?? "").trim();
   const trackMbid = String(
     track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? "",
   ).trim();
@@ -346,9 +315,7 @@ export const normalizeSharedTrack = (track) => {
       ? Math.max(0, Math.round(Number(track.durationMs)))
       : null;
   const artistAliases = Array.isArray(track.artistAliases)
-    ? track.artistAliases
-        .map((entry) => String(entry || "").trim())
-        .filter(Boolean)
+    ? track.artistAliases.map((entry) => String(entry || "").trim()).filter(Boolean)
     : [];
   const reason = String(track.reason ?? "").trim();
   return {
@@ -369,8 +336,7 @@ export const buildSharedTrackIdentity = (track) =>
   [
     String(track?.artistName || "").trim().toLowerCase(),
     String(track?.trackName || "").trim().toLowerCase(),
-    String(track?.albumName || "").trim().toLowerCase(),
-    String(track?.artistMbid || "").trim(),
+    String(track?.albumName || "").trim().toLowerCase(),    String(track?.artistMbid || "").trim(),
     String(track?.albumMbid || "").trim(),
     String(track?.trackMbid || "").trim(),
     String(track?.releaseYear || "").trim(),
@@ -378,8 +344,7 @@ export const buildSharedTrackIdentity = (track) =>
 
 export const buildCoreTrackIdentity = (track) => {
   const artistName = String(track?.artistName || "").trim().toLowerCase();
-  const trackName = String(track?.trackName || "").trim().toLowerCase();
-  if (!artistName || !trackName) return "";
+  const trackName = String(track?.trackName || "").trim().toLowerCase();  if (!artistName || !trackName) return "";
   return `${artistName}\u0001${trackName}`;
 };
 
@@ -408,9 +373,7 @@ export const dedupeSharedTracks = (tracks) => {
 
 export const filterMissingSharedTracks = (existingTracks, incomingTracks) => {
   const seen = new Set(
-    dedupeSharedTracks(existingTracks).map((track) =>
-      buildSharedTrackIdentity(track),
-    ),
+    dedupeSharedTracks(existingTracks).map((track) => buildSharedTrackIdentity(track)),
   );
   const missingTracks = [];
   for (const track of Array.isArray(incomingTracks) ? incomingTracks : []) {
@@ -431,16 +394,14 @@ const normalizeSharedPlaylist = (playlist) => {
     id: playlist?.id || randomUUID(),
     name: name || "Shared Playlist",
     ownerUserId:
-      playlist?.ownerUserId != null &&
-      Number.isFinite(Number(playlist.ownerUserId))
+      playlist?.ownerUserId != null && Number.isFinite(Number(playlist.ownerUserId))
         ? Math.trunc(Number(playlist.ownerUserId))
         : null,
     sourceName: String(playlist?.sourceName || "").trim() || null,
     sourceFlowId: String(playlist?.sourceFlowId || "").trim() || null,
     discoverPresetId: String(playlist?.discoverPresetId || "").trim() || null,
     importedAt:
-      playlist?.importedAt != null &&
-      Number.isFinite(Number(playlist.importedAt))
+      playlist?.importedAt != null && Number.isFinite(Number(playlist.importedAt))
         ? Number(playlist.importedAt)
         : Date.now(),
     createdAt:
@@ -517,10 +478,7 @@ const getStoredSharedPlaylists = () => {
     const next = stored.map(normalizeSharedPlaylist);
     const needsSave =
       next.length !== stored.length ||
-      next.some(
-        (playlist, index) =>
-          JSON.stringify(playlist) !== JSON.stringify(stored[index]),
-      );
+      next.some((playlist, index) => JSON.stringify(playlist) !== JSON.stringify(stored[index]));
     if (needsSave) {
       dbOps.updateSettings({
         ...settings,
@@ -583,11 +541,7 @@ const canUserAccessOwnerScopedEntity = (user, ownerUserId) => {
   return Number(user.id) === Number(ownerUserId);
 };
 
-const assertUniqueSharedPlaylistName = (
-  playlists,
-  nextName,
-  exceptPlaylistId = null,
-) => {
+const assertUniqueSharedPlaylistName = (playlists, nextName, exceptPlaylistId = null) => {
   const key = normalizeNameKey(nextName);
   if (!key) return;
   const hasConflict = playlists.some((playlist) => {
@@ -687,10 +641,7 @@ export const flowPlaylistConfig = {
       relatedArtists: updates?.relatedArtists ?? current.relatedArtists,
       scheduleDays: updates?.scheduleDays ?? current.scheduleDays,
       scheduleTime: updates?.scheduleTime ?? current.scheduleTime,
-      deepDive:
-        typeof updates?.deepDive === "boolean"
-          ? updates.deepDive
-          : current.deepDive,
+      deepDive: typeof updates?.deepDive === "boolean" ? updates.deepDive : current.deepDive,
       enabled: current.enabled,
       nextRunAt: current.nextRunAt,
       lastRunAt: current.lastRunAt,
@@ -707,11 +658,7 @@ export const flowPlaylistConfig = {
       const effectiveSchedule =
         nextSchedule.length > 0 ? nextSchedule : [getDefaultScheduleDay(now)];
       next.scheduleDays = effectiveSchedule;
-      next.nextRunAt = computeNextRunAt(
-        effectiveSchedule,
-        nextScheduleTime,
-        now,
-      );
+      next.nextRunAt = computeNextRunAt(effectiveSchedule, nextScheduleTime, now);
     }
     flows[index] = next;
     setFlows(flows);
@@ -745,9 +692,7 @@ export const flowPlaylistConfig = {
     if (index === -1) return null;
     const flow = { ...flows[index] };
     flow.nextRunAt =
-      nextRunAt != null && Number.isFinite(Number(nextRunAt))
-        ? Number(nextRunAt)
-        : null;
+      nextRunAt != null && Number.isFinite(Number(nextRunAt)) ? Number(nextRunAt) : null;
     flows[index] = flow;
     setFlows(flows);
     return flow;
@@ -759,9 +704,7 @@ export const flowPlaylistConfig = {
     if (index === -1) return null;
     const flow = { ...flows[index] };
     flow.lastRunAt =
-      lastRunAt != null && Number.isFinite(Number(lastRunAt))
-        ? Number(lastRunAt)
-        : Date.now();
+      lastRunAt != null && Number.isFinite(Number(lastRunAt)) ? Number(lastRunAt) : Date.now();
     flows[index] = flow;
     setFlows(flows);
     return flow;
@@ -775,9 +718,7 @@ export const flowPlaylistConfig = {
     const flow = { ...flows[index] };
     const normalizedSchedule = normalizeScheduleDays(flow.scheduleDays);
     flow.scheduleDays =
-      normalizedSchedule.length > 0
-        ? normalizedSchedule
-        : [getDefaultScheduleDay(now)];
+      normalizedSchedule.length > 0 ? normalizedSchedule : [getDefaultScheduleDay(now)];
     flow.scheduleTime = normalizeScheduleTime(flow.scheduleTime);
     flow.nextRunAt = computeNextRunAt(flow.scheduleDays, flow.scheduleTime, now);
     flows[index] = flow;
@@ -788,10 +729,7 @@ export const flowPlaylistConfig = {
   getDueForRefresh() {
     const now = Date.now();
     return getStoredFlows().filter(
-      (flow) =>
-        flow.enabled === true &&
-        flow.nextRunAt != null &&
-        flow.nextRunAt <= now,
+      (flow) => flow.enabled === true && flow.nextRunAt != null && flow.nextRunAt <= now,
     );
   },
 
@@ -819,11 +757,7 @@ export const flowPlaylistConfig = {
   },
 
   getSharedPlaylist(playlistId) {
-    return (
-      getStoredSharedPlaylists().find(
-        (playlist) => playlist.id === playlistId,
-      ) || null
-    );
+    return getStoredSharedPlaylists().find((playlist) => playlist.id === playlistId) || null;
   },
 
   getSharedPlaylistForUser(user, playlistId) {

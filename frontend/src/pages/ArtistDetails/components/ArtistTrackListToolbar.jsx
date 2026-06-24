@@ -17,11 +17,7 @@ export function ArtistTrackListToolbar({
         disabled={disabled}
         aria-label={isPlaying ? "Pause playback" : "Play all tracks"}
       >
-        {isPlaying ? (
-          <Pause className="artist-icon-md" />
-        ) : (
-          <Play className="artist-icon-md" />
-        )}
+        {isPlaying ? <Pause className="artist-icon-md" /> : <Play className="artist-icon-md" />}
       </button>
       <button
         type="button"

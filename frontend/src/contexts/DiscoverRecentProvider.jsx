@@ -3,8 +3,7 @@ import {
   useEffect,
   useMemo,
   useState,
-} from "react";
-import { useLocation } from "react-router-dom";
+} from "react";import { useLocation } from "react-router-dom";
 import { DiscoverRecentContext } from "./discoverRecentContext";
 import {
   buildDiscoverRecentLabel,
@@ -54,20 +53,10 @@ function DiscoverFlowLocationSync({
       return;
     }
 
-    if (
-      discoverFlowActive &&
-      isDiscoverBrowsePath(pathname) &&
-      shouldTrackDiscoverPath(path)
-    ) {
+    if (discoverFlowActive && isDiscoverBrowsePath(pathname) && shouldTrackDiscoverPath(path)) {
       addRecentPage(normalizedPath, location.state || {});
     }
-  }, [
-    addRecentPage,
-    discoverFlowActive,
-    location,
-    recentPages,
-    setDiscoverFlowActive,
-  ]);
+  }, [addRecentPage, discoverFlowActive, location, recentPages, setDiscoverFlowActive]);
 
   return null;
 }
@@ -75,9 +64,7 @@ function DiscoverFlowLocationSync({
 export function DiscoverRecentProvider({ children }) {
   const location = useLocation();
   const [recentPages, setRecentPages] = useState(() => readDiscoverRecentPages());
-  const [discoverFlowActive, setDiscoverFlowActiveState] = useState(() =>
-    readDiscoverFlowActive(),
-  );
+  const [discoverFlowActive, setDiscoverFlowActiveState] = useState(() => readDiscoverFlowActive());
 
   const setDiscoverFlowActive = useCallback((active) => {
     writeDiscoverFlowActive(active);
@@ -104,35 +91,38 @@ export function DiscoverRecentProvider({ children }) {
     return () => window.removeEventListener("storage", onStorage);
   }, [syncFromStorage]);
 
-  const addRecentPage = useCallback((path, state = {}) => {
-    const normalizedPath = normalizeDiscoverPath(path);
-    if (!normalizedPath || !shouldTrackDiscoverPath(normalizedPath)) return;
+  const addRecentPage = useCallback(
+    (path, state = {}) => {
+      const normalizedPath = normalizeDiscoverPath(path);
+      if (!normalizedPath || !shouldTrackDiscoverPath(normalizedPath)) return;
 
-    const label = buildDiscoverRecentLabel(normalizedPath, state);
-    const pageState = pickDiscoverRecentPageState(state);
-    setRecentPages((current) => {
-      if (
-        current[0]?.path === normalizedPath &&
-        current[0]?.label === label &&
-        JSON.stringify(current[0]?.state || {}) === JSON.stringify(pageState) &&
-        current.length <= DISCOVER_RECENT_PAGES_LIMIT
-      ) {
-        return current;
-      }
-      const next = [
-        {
-          id: normalizedPath,
-          path: normalizedPath,
-          label,
-          state: pageState,
-        },
-        ...current.filter((entry) => entry.path !== normalizedPath),
-      ].slice(0, DISCOVER_RECENT_PAGES_LIMIT);
-      writeDiscoverRecentPages(next);
-      return next;
-    });
-    setDiscoverFlowActive(true);
-  }, [setDiscoverFlowActive]);
+      const label = buildDiscoverRecentLabel(normalizedPath, state);
+      const pageState = pickDiscoverRecentPageState(state);
+      setRecentPages((current) => {
+        if (
+          current[0]?.path === normalizedPath &&
+          current[0]?.label === label &&
+          JSON.stringify(current[0]?.state || {}) === JSON.stringify(pageState) &&
+          current.length <= DISCOVER_RECENT_PAGES_LIMIT
+        ) {
+          return current;
+        }
+        const next = [
+          {
+            id: normalizedPath,
+            path: normalizedPath,
+            label,
+            state: pageState,
+          },
+          ...current.filter((entry) => entry.path !== normalizedPath),
+        ].slice(0, DISCOVER_RECENT_PAGES_LIMIT);
+        writeDiscoverRecentPages(next);
+        return next;
+      });
+      setDiscoverFlowActive(true);
+    },
+    [setDiscoverFlowActive],
+  );
 
   const clearRecentPages = useCallback(() => {
     writeDiscoverRecentPages([]);
@@ -140,28 +130,16 @@ export function DiscoverRecentProvider({ children }) {
     setDiscoverFlowActive(false);
   }, [setDiscoverFlowActive]);
 
-  const visibleRecentPages = useMemo(
-    () => filterDiscoverRecentPages(recentPages),
-    [recentPages],
-  );
+  const visibleRecentPages = useMemo(() => filterDiscoverRecentPages(recentPages), [recentPages]);
 
   const shouldRecordNavigation = useCallback(
     (fromLocation = location) =>
-      shouldRecordDiscoverNavigation(
-        fromLocation,
-        visibleRecentPages,
-        discoverFlowActive,
-      ),
+      shouldRecordDiscoverNavigation(fromLocation, visibleRecentPages, discoverFlowActive),
     [discoverFlowActive, location, visibleRecentPages],
   );
 
   const isDiscoverSectionActive = useMemo(
-    () =>
-      shouldKeepDiscoverSectionActive(
-        location,
-        visibleRecentPages,
-        discoverFlowActive,
-      ),
+    () => shouldKeepDiscoverSectionActive(location, visibleRecentPages, discoverFlowActive),
     [discoverFlowActive, location, visibleRecentPages],
   );
 

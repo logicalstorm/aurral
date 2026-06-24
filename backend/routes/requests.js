@@ -1,10 +1,7 @@
 import express from "express";
 import { UUID_REGEX } from "../config/constants.js";
 import { noCache } from "../middleware/cache.js";
-import {
-  requireAuth,
-  requirePermission,
-} from "../middleware/requirePermission.js";
+import { requireAuth, requirePermission } from "../middleware/requirePermission.js";
 import { invalidateAllDownloadStatusesCache } from "./library/handlers/downloads.js";
 import { buildLidarrRequests } from "../services/lidarrRequestBuilder.js";
 
@@ -28,9 +25,7 @@ const pruneDismissedAlbumIds = () => {
   if (dismissedAlbumIds.size <= MAX_DISMISSED_ALBUMS) {
     return;
   }
-  const entries = Array.from(dismissedAlbumIds.entries()).sort(
-    (a, b) => a[1] - b[1],
-  );
+  const entries = Array.from(dismissedAlbumIds.entries()).sort((a, b) => a[1] - b[1]);
   const removeCount = dismissedAlbumIds.size - MAX_DISMISSED_ALBUMS;
   for (let i = 0; i < removeCount; i++) {
     dismissedAlbumIds.delete(entries[i][0]);
@@ -39,9 +34,7 @@ const pruneDismissedAlbumIds = () => {
 
 const filterDismissedRequests = (requests) =>
   Array.isArray(requests)
-    ? requests.filter(
-        (r) => !r.albumId || !dismissedAlbumIds.has(String(r.albumId)),
-      )
+    ? requests.filter((r) => !r.albumId || !dismissedAlbumIds.has(String(r.albumId)))
     : [];
 
 const updateRequestsCache = (requests) => {
@@ -90,23 +83,16 @@ const filterRedundantAurralRequests = (aurralRequests, lidarrRequests) => {
 
 
 const buildAurralRequests = async (lidarrClient = null) => {
-  const { getAurralHistoryRequests } = await import(
-    "../services/aurralHistoryService.js"
-  );
+  const { getAurralHistoryRequests } = await import("../services/aurralHistoryService.js");
   return getAurralHistoryRequests(lidarrClient);
 };
 
 const buildRequestsResponse = async (lidarrClient) => {
   const [lidarrRequests, aurralRequests] = await Promise.all([
-    lidarrClient?.isConfigured()
-      ? buildLidarrRequests(lidarrClient)
-      : Promise.resolve([]),
+    lidarrClient?.isConfigured() ? buildLidarrRequests(lidarrClient) : Promise.resolve([]),
     buildAurralRequests(lidarrClient),
   ]);
-  const filteredAurral = filterRedundantAurralRequests(
-    aurralRequests,
-    lidarrRequests,
-  );
+  const filteredAurral = filterRedundantAurralRequests(aurralRequests, lidarrRequests);
   return [...lidarrRequests, ...filteredAurral].sort(
     (a, b) => new Date(b.requestedAt) - new Date(a.requestedAt),
   );
@@ -150,45 +136,39 @@ router.delete(
   requireAuth,
   requirePermission("deleteAlbum"),
   async (req, res) => {
-  const { albumId } = req.params;
-  if (!albumId) return res.status(400).json({ error: "albumId is required" });
+    const { albumId } = req.params;
+    if (!albumId) return res.status(400).json({ error: "albumId is required" });
 
-  dismissedAlbumIds.set(String(albumId), Date.now());
-  pruneDismissedAlbumIds();
-  removeAlbumFromRequestsCache(albumId);
+    dismissedAlbumIds.set(String(albumId), Date.now());
+    pruneDismissedAlbumIds();
+    removeAlbumFromRequestsCache(albumId);
 
-  try {
-    const { lidarrClient } = await import("../services/lidarrClient.js");
-    if (lidarrClient?.isConfigured()) {
-      const queue = await lidarrClient.getQueue().catch(() => []);
-      const queueItems = Array.isArray(queue) ? queue : queue?.records || [];
-      const targetAlbumId = parseInt(albumId, 10);
+    try {
+      const { lidarrClient } = await import("../services/lidarrClient.js");
+      if (lidarrClient?.isConfigured()) {
+        const queue = await lidarrClient.getQueue().catch(() => []);
+        const queueItems = Array.isArray(queue) ? queue : queue?.records || [];
+        const targetAlbumId = parseInt(albumId, 10);
 
-      for (const item of queueItems) {
-        const match =
-          (item?.albumId != null && item.albumId === targetAlbumId) ||
-          (item?.album?.id != null && item.album.id === targetAlbumId);
-        if (match && item?.id != null) {
-          await lidarrClient
-            .request(`/queue/${item.id}`, "DELETE")
-            .catch(() => null);
+        for (const item of queueItems) {
+          const match =
+            (item?.albumId != null && item.albumId === targetAlbumId) ||
+            (item?.album?.id != null && item.album.id === targetAlbumId);
+          if (match && item?.id != null) {
+            await lidarrClient.request(`/queue/${item.id}`, "DELETE").catch(() => null);
+          }
         }
       }
-    }
-    invalidateAllDownloadStatusesCache();
+      invalidateAllDownloadStatusesCache();
 
-    res.json({ success: true });
-  } catch {
-    res.status(500).json({ error: "Failed to remove request" });
-  }
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to remove request" });
+    }
   },
 );
 
-router.delete(
-  "/:mbid",
-  requireAuth,
-  requirePermission("deleteArtist"),
-  async (req, res) => {
+router.delete("/:mbid", requireAuth, requirePermission("deleteArtist"), async (req, res) => {
   const { mbid } = req.params;
   if (!UUID_REGEX.test(mbid)) {
     return res.status(400).json({ error: "Invalid MBID format" });
@@ -211,9 +191,7 @@ router.delete(
     for (const item of queueItems) {
       const itemArtistId = item?.artist?.id ?? item?.album?.artistId;
       if (itemArtistId === artist.id && item?.id != null) {
-        await lidarrClient
-          .request(`/queue/${item.id}`, "DELETE")
-          .catch(() => null);
+        await lidarrClient.request(`/queue/${item.id}`, "DELETE").catch(() => null);
       }
     }
     invalidateAllDownloadStatusesCache();
@@ -222,7 +200,6 @@ router.delete(
   } catch {
     res.status(500).json({ error: "Failed to remove request" });
   }
-  },
-);
+});
 
 export default router;

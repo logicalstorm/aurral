@@ -59,10 +59,7 @@ export async function withJobHeartbeat(job, queue, fn, extendSeconds = null) {
   }
 }
 
-export function createIdleAbortController({
-  idleStopMs = 0,
-  onIdleStop = null,
-} = {}) {
+export function createIdleAbortController({ idleStopMs = 0, onIdleStop = null } = {}) {
   const controller = new AbortController();
   const timeoutMs = Math.max(0, Math.floor(Number(idleStopMs) || 0));
   let timer = null;
@@ -131,9 +128,7 @@ export function scheduleHonkerComponentRestart(name, startFn, options = {}) {
   if (shuttingDown || process.env.NODE_ENV === "test") return;
   const safeName = String(name || "component");
   const shouldRestart =
-    typeof options.shouldRestart === "function"
-      ? options.shouldRestart
-      : () => true;
+    typeof options.shouldRestart === "function" ? options.shouldRestart : () => true;
   if (!shouldRestart()) return;
 
   const attempts = Number(restartAttempts.get(safeName) || 0);
@@ -166,9 +161,7 @@ export function markHonkerWorkerLoopEnded(name, startFn, options = {}) {
   scheduleHonkerComponentRestart(safeName, startFn, options);
 }
 
-export async function shutdownHonkerInfrastructure({
-  timeoutMs = 30000,
-} = {}) {
+export async function shutdownHonkerInfrastructure({ timeoutMs = 30000 } = {}) {
   if (shuttingDown) return;
   shuttingDown = true;
 

@@ -40,11 +40,9 @@ const buildArtistHref = (artistMbid) => {
   return `/artist/${mbid}`;
 };
 
-const createId = () =>
-  `aurral-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+const createId = () => `aurral-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
 
-const stableId = (kind, referenceId) =>
-  `aurral-${kind}-${String(referenceId || "").trim()}`;
+const stableId = (kind, referenceId) => `aurral-${kind}-${String(referenceId || "").trim()}`;
 
 const toIso = (createdAt) => {
   const value = Number(createdAt);
@@ -55,15 +53,15 @@ const toIso = (createdAt) => {
 };
 
 const resolveTrackDownloadHistorySource = (downloadSource) => {
-  const normalized = String(downloadSource || "").trim().toLowerCase();
+  const normalized = String(downloadSource || "")
+    .trim()
+    .toLowerCase();
   if (normalized === "usenet") return "nzbget";
   return "slskd";
 };
 
 const resolveDownloadClientLabel = (downloadSource) =>
-  resolveTrackDownloadHistorySource(downloadSource) === "nzbget"
-    ? "NZBGet"
-    : "slskd";
+  resolveTrackDownloadHistorySource(downloadSource) === "nzbget" ? "NZBGet" : "slskd";
 
 const resolveHistorySource = (kind, metadata = null) => {
   if (kind === "track_download") {
@@ -86,8 +84,7 @@ const hasHistoryRecordChanged = (existing, next) => {
     existing.status !== next.status ||
     existing.statusLabel !== next.statusLabel ||
     existing.href !== next.href ||
-    serializeHistoryMetadata(existing.metadata) !==
-      serializeHistoryMetadata(next.metadata)
+    serializeHistoryMetadata(existing.metadata) !== serializeHistoryMetadata(next.metadata)
   );
 };
 
@@ -114,9 +111,7 @@ export const appendAurralHistory = (entry = {}) => {
 export const upsertAurralHistory = (entry = {}) => {
   const title = String(entry.title || "").trim();
   if (!title) return null;
-  const referenceId = entry.referenceId
-    ? String(entry.referenceId).trim()
-    : null;
+  const referenceId = entry.referenceId ? String(entry.referenceId).trim() : null;
   const kind = String(entry.kind || "activity").trim();
   const id = referenceId ? stableId(kind, referenceId) : createId();
   const existing = dbOps.getAurralHistoryById(id);
@@ -157,15 +152,10 @@ export const recordDiscoveryRefreshStarted = () =>
     href: "/discover",
   });
 
-export const recordDiscoveryUpdated = ({
-  recommendationCount = 0,
-  genreCount = 0,
-} = {}) => {
+export const recordDiscoveryUpdated = ({ recommendationCount = 0, genreCount = 0 } = {}) => {
   const parts = [];
   if (recommendationCount > 0) {
-    parts.push(
-      `${recommendationCount} recommendation${recommendationCount === 1 ? "" : "s"}`,
-    );
+    parts.push(`${recommendationCount} recommendation${recommendationCount === 1 ? "" : "s"}`);
   }
   if (genreCount > 0) {
     parts.push(`${genreCount} genre${genreCount === 1 ? "" : "s"}`);
@@ -234,12 +224,7 @@ export const recordAlbumRequested = ({
   });
 };
 
-export const recordAlbumSearchStarted = ({
-  albumId,
-  albumName,
-  artistName,
-  artistMbid,
-} = {}) =>
+export const recordAlbumSearchStarted = ({ albumId, albumName, artistName, artistMbid } = {}) =>
   recordAlbumRequested({
     albumId,
     albumName,
@@ -331,10 +316,7 @@ export const syncTrackDownloadHistory = async () => {
     const jobId = String(entry.metadata?.jobId || "").trim();
     if (!jobId) {
       if (Date.now() - Number(entry.createdAt || 0) >= STALE_TRACK_JOB_MS) {
-        recordTrackJobFailed(
-          buildHistoryJobFromEntry(entry),
-          "Download no longer active",
-        );
+        recordTrackJobFailed(buildHistoryJobFromEntry(entry), "Download no longer active");
       }
       continue;
     }
@@ -342,10 +324,7 @@ export const syncTrackDownloadHistory = async () => {
     const job = downloadTracker.getJob(jobId);
     if (!job) {
       if (Date.now() - Number(entry.createdAt || 0) >= STALE_TRACK_JOB_MS) {
-        recordTrackJobFailed(
-          buildHistoryJobFromEntry(entry),
-          "Download no longer active",
-        );
+        recordTrackJobFailed(buildHistoryJobFromEntry(entry), "Download no longer active");
       }
       continue;
     }
@@ -383,16 +362,10 @@ const syncDiscoveryRefreshHistory = async () => {
   const cutoff = Date.now() - MAX_AGE_MS;
   const pendingEntries = dbOps
     .getAurralHistory({ since: cutoff, limit: 300 })
-    .filter(
-      (entry) =>
-        entry.kind === "discovery_refresh" && entry.status === "processing",
-    );
+    .filter((entry) => entry.kind === "discovery_refresh" && entry.status === "processing");
   if (!pendingEntries.length) return;
 
-  const discoveryActive = await isHonkerQueueActive(
-    "discovery-refresh",
-    () => true,
-  );
+  const discoveryActive = await isHonkerQueueActive("discovery-refresh", () => true);
   if (discoveryActive) return;
 
   for (const entry of pendingEntries) {
@@ -407,10 +380,7 @@ const syncFlowGenerationHistory = async () => {
   const cutoff = Date.now() - MAX_AGE_MS;
   const pendingEntries = dbOps
     .getAurralHistory({ since: cutoff, limit: 300 })
-    .filter(
-      (entry) =>
-        entry.kind === "flow_generating" && entry.status === "processing",
-    );
+    .filter((entry) => entry.kind === "flow_generating" && entry.status === "processing");
   if (!pendingEntries.length) return;
 
   for (const entry of pendingEntries) {
@@ -421,8 +391,7 @@ const syncFlowGenerationHistory = async () => {
     }
     const flowActive = await isHonkerQueueActive(
       "weekly-flow-operation",
-      (payload) =>
-        String(payload?.flowId || payload?.playlistId || "").trim() === flowId,
+      (payload) => String(payload?.flowId || payload?.playlistId || "").trim() === flowId,
     );
     if (flowActive) continue;
     upsertAurralHistory({
@@ -453,15 +422,11 @@ export const syncAlbumSearchHistory = async (lidarrClient) => {
   const cutoff = Date.now() - MAX_AGE_MS;
   const pendingEntries = dbOps
     .getAurralHistory({ since: cutoff, limit: 300 })
-    .filter(
-      (entry) =>
-        entry.kind === "album_requested" && entry.status === "processing",
-    );
+    .filter((entry) => entry.kind === "album_requested" && entry.status === "processing");
   if (!pendingEntries.length) return;
 
-  const { parseLidarrSearchContext, resolveAlbumSearchOutcome } = await import(
-    "./albumSearchState.js"
-  );
+  const { parseLidarrSearchContext, resolveAlbumSearchOutcome } =
+    await import("./albumSearchState.js");
   const [queue, history, commands] = await Promise.all([
     lidarrClient.getQueue().catch(() => []),
     lidarrClient.getHistory(1, 200).catch(() => ({ records: [] })),
@@ -502,11 +467,7 @@ export const recordFlowGenerationStarted = ({ flowId } = {}) => {
   });
 };
 
-export const recordFlowTracksGenerated = ({
-  flowId,
-  tracksQueued = 0,
-  reserveTracks = 0,
-} = {}) => {
+export const recordFlowTracksGenerated = ({ flowId, tracksQueued = 0, reserveTracks = 0 } = {}) => {
   const id = String(flowId || "").trim();
   if (!id) return null;
   const total = tracksQueued + reserveTracks;
@@ -538,9 +499,7 @@ export const recordPlaylistTracksAdded = ({
   if (total <= 0) return null;
   const playlistName = resolvePlaylistName(playlistId);
   const title =
-    total === 1
-      ? `Added 1 track to ${playlistName}`
-      : `Added ${total} tracks to ${playlistName}`;
+    total === 1 ? `Added 1 track to ${playlistName}` : `Added ${total} tracks to ${playlistName}`;
   const subtitleParts = [];
   if (tracksReused > 0) {
     subtitleParts.push(`${tracksReused} from library`);
@@ -559,11 +518,7 @@ export const recordPlaylistTracksAdded = ({
   });
 };
 
-export const recordTrackReused = ({
-  track = {},
-  playlistId,
-  sourceType = "library",
-} = {}) => {
+export const recordTrackReused = ({ track = {}, playlistId, sourceType = "library" } = {}) => {
   const playlistName = resolvePlaylistName(playlistId);
   const trackName = String(track.trackName || track.title || "Track").trim();
   const artistName = String(track.artistName || track.artist || "Artist").trim();
@@ -574,8 +529,7 @@ export const recordTrackReused = ({
         ? "from Aurral library"
         : "from library";
   return appendAurralHistory({
-    kind:
-      sourceType === "lidarr" ? "track_reused_lidarr" : "track_reused_aurral",
+    kind: sourceType === "lidarr" ? "track_reused_lidarr" : "track_reused_aurral",
     title: `Reused ${trackName}`,
     subtitle: `${artistName} · ${playlistName} · ${fromLabel}`,
     status: "completed",

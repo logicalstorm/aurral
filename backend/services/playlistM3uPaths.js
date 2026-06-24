@@ -28,13 +28,13 @@ function pathMatchesPrefix(candidate, prefix) {
   if (normalizedCandidate.toLowerCase() === normalizedPrefix.toLowerCase()) {
     return true;
   }
-  return normalizedCandidate
-    .toLowerCase()
-    .startsWith(`${normalizedPrefix.toLowerCase()}/`);
+  return normalizedCandidate.toLowerCase().startsWith(`${normalizedPrefix.toLowerCase()}/`);
 }
 
 export function normalizeM3uPathMode(value) {
-  const normalized = String(value || "").trim().toLowerCase();
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
   return normalized === "remote" ? "remote" : "local";
 }
 
@@ -96,16 +96,10 @@ export function parseM3uPathMappingsEnv() {
 }
 
 export function getM3uPathMappings() {
-  return normalizeM3uPathMappings([
-    ...storedM3uPathMappings,
-    ...parseM3uPathMappingsEnv(),
-  ]);
+  return normalizeM3uPathMappings([...storedM3uPathMappings, ...parseM3uPathMappingsEnv()]);
 }
 
-export function resolveM3uVisiblePath(
-  localPath,
-  mappings = getM3uPathMappings(),
-) {
+export function resolveM3uVisiblePath(localPath, mappings = getM3uPathMappings()) {
   const raw = String(localPath || "").trim();
   if (!raw) return null;
 

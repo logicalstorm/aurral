@@ -32,12 +32,9 @@ export function usePreviewPlayer(
 
   const artistName = artistNameFromNav || artist?.name || "";
   const releaseGroups = artist?.["release-groups"] || [];
-  const artistSource = mbid
-    ? { type: "artist-all", id: mbid, label: artistName }
-    : null;
+  const artistSource = mbid ? { type: "artist-all", id: mbid, label: artistName } : null;
   const isArtistQueue = matchesSource(artistSource);
-  const playingPreviewId =
-    isArtistQueue && currentTrack?.id ? currentTrack.id : null;
+  const playingPreviewId = isArtistQueue && currentTrack?.id ? currentTrack.id : null;
   const isArtistPlaybackActive = isArtistQueue && (isPlaying || isLoading);
 
   useEffect(() => {
@@ -69,9 +66,7 @@ export function usePreviewPlayer(
 
     playTrack(normalized, {
       source: artistSource,
-      queue: getPlayableTracks().map((entry) =>
-        normalizePreviewTrack(entry, artistName),
-      ),
+      queue: getPlayableTracks().map((entry) => normalizePreviewTrack(entry, artistName)),
     });
   };
 

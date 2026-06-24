@@ -36,8 +36,7 @@ router.use((req, res, next) => {
 
 router.get("/lidarr/test-library-access", async (req, res) => {
   try {
-    const url = (req.query.url || "").trim().replace(/\/+$/, "");
-    const apiKey = (req.query.apiKey || "").trim();
+    const url = (req.query.url || "").trim().replace(/\/+$/, "");    const apiKey = (req.query.apiKey || "").trim();
     const result = await testLidarrLibraryAccess({ url, apiKey });
     res.json({
       success: result.ok,
@@ -129,8 +128,7 @@ router.post("/navidrome/test", async (req, res) => {
 
 router.post("/lidarr/apply-community-guide", async (req, res) => {
   try {
-    const url = (req.body?.url || "").trim().replace(/\/+$/, "");
-    const apiKey = (req.body?.apiKey || "").trim();
+    const url = (req.body?.url || "").trim().replace(/\/+$/, "");    const apiKey = (req.body?.apiKey || "").trim();
     const results = await applyCommunityGuide({ url, apiKey });
     res.json({
       success: true,
@@ -149,8 +147,7 @@ router.post("/lidarr/apply-community-guide", async (req, res) => {
 
 router.post("/slskd/test", async (req, res) => {
   try {
-    const { testSlskdWithCredentials } =
-      await import("../services/slskdClient.js");
+    const { testSlskdWithCredentials } = await import("../services/slskdClient.js");
     const url = (req.body?.url || "").trim();
     const apiKey = (req.body?.apiKey || "").trim();
     const result = await testSlskdWithCredentials(url, apiKey);
@@ -215,11 +212,11 @@ router.post("/complete", async (req, res) => {
               qualityProfileId:
                 lidarr.qualityProfileId != null
                   ? parseInt(lidarr.qualityProfileId, 10) || null
-                  : current.integrations?.lidarr?.qualityProfileId ?? null,
+                  : (current.integrations?.lidarr?.qualityProfileId ?? null),
               metadataProfileId:
                 lidarr.metadataProfileId != null
                   ? parseInt(lidarr.metadataProfileId, 10) || null
-                  : current.integrations?.lidarr?.metadataProfileId ?? null,
+                  : (current.integrations?.lidarr?.metadataProfileId ?? null),
               defaultMonitorOption:
                 lidarr.defaultMonitorOption != null
                   ? String(lidarr.defaultMonitorOption)
@@ -236,13 +233,11 @@ router.post("/complete", async (req, res) => {
                 metadata.baseUrl != null
                   ? String(metadata.baseUrl).trim().replace(/\/+$/, "")
                   : current.integrations?.metadata?.baseUrl ||
-                    DEFAULT_METADATA_BASE_URL,
-              userAgentSuffix:
+                    DEFAULT_METADATA_BASE_URL,              userAgentSuffix:
                 metadata.userAgentSuffix != null
                   ? String(metadata.userAgentSuffix).trim()
                   : current.integrations?.metadata?.userAgentSuffix || "",
-              enableNarrowFallbacks:
-                metadata.enableNarrowFallbacks !== false,
+              enableNarrowFallbacks: metadata.enableNarrowFallbacks !== false,
             }
           : current.integrations?.metadata,
       navidrome:
@@ -256,11 +251,11 @@ router.post("/complete", async (req, res) => {
               apiKey:
                 lastfm.apiKey != null
                   ? String(lastfm.apiKey).trim()
-                  : current.integrations?.lastfm?.apiKey ?? "",
+                  : (current.integrations?.lastfm?.apiKey ?? ""),
               username:
                 lastfm.username != null
                   ? String(lastfm.username).trim()
-                  : current.integrations?.lastfm?.username ?? "",
+                  : (current.integrations?.lastfm?.username ?? ""),
             }
           : current.integrations?.lastfm,
       slskd:
@@ -274,17 +269,11 @@ router.post("/complete", async (req, res) => {
               apiKey:
                 ticketmaster.apiKey != null
                   ? String(ticketmaster.apiKey).trim()
-                  : current.integrations?.ticketmaster?.apiKey ?? "",
+                  : (current.integrations?.ticketmaster?.apiKey ?? ""),
               searchRadiusMiles:
                 ticketmaster.searchRadiusMiles != null
-                  ? Math.max(
-                      5,
-                      Math.min(
-                        250,
-                        Math.floor(Number(ticketmaster.searchRadiusMiles)),
-                      ),
-                    )
-                  : current.integrations?.ticketmaster?.searchRadiusMiles ?? 250,
+                  ? Math.max(5, Math.min(250, Math.floor(Number(ticketmaster.searchRadiusMiles))))
+                  : (current.integrations?.ticketmaster?.searchRadiusMiles ?? 250),
             }
           : current.integrations?.ticketmaster,
     };
@@ -306,16 +295,13 @@ router.post("/complete", async (req, res) => {
       }
       nextSettings.downloadFolderPath = validation.path;
     } else if (!current.downloadFolderPath) {
-      const validation = validateDownloadFolderPath(
-        getSuggestedDownloadFolderPath(),
-        undefined,
-        { create: true },
-      );
+      const validation = validateDownloadFolderPath(getSuggestedDownloadFolderPath(), undefined, {
+        create: true,
+      });
       if (!validation.valid) {
         return res.status(400).json({
           error: "download_folder_required",
-          message:
-            "Choose a downloads folder before completing onboarding.",
+          message: "Choose a downloads folder before completing onboarding.",
         });
       }
       nextSettings.downloadFolderPath = validation.path;
@@ -333,15 +319,13 @@ router.post("/complete", async (req, res) => {
       }
     }
 
-    const hasLastfm =
-      integrations?.lastfm?.apiKey && integrations?.lastfm?.username;
+    const hasLastfm = integrations?.lastfm?.apiKey && integrations?.lastfm?.username;
     const hasLidarr = !!integrations?.lidarr?.apiKey;
     if (hasLastfm || hasLidarr) {
       const { enqueueDiscoveryRefresh } = await import(
         "../services/discovery/refreshScheduler.js"
       );
-      enqueueDiscoveryRefresh({ reason: "onboarding" });
-    }
+      enqueueDiscoveryRefresh({ reason: "onboarding" });    }
 
     res.json({ success: true });
   } catch (error) {

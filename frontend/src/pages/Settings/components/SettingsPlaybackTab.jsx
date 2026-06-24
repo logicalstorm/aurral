@@ -16,16 +16,11 @@ export function SettingsPlaybackTab({
   showError,
   showInfo,
 }) {
-  const playlistArtworkStyle =
-    settings.playlistArtwork?.style === "aurral" ? "aurral" : "photo";
+  const playlistArtworkStyle = settings.playlistArtwork?.style === "aurral" ? "aurral" : "photo";
 
   return (
     <div className="arr-page">
-      <form
-        onSubmit={handleSaveSettings}
-        className="arr-form"
-        autoComplete="off"
-      >
+      <form onSubmit={handleSaveSettings} className="arr-form" autoComplete="off">
         <SettingsPlaybackSection
           settings={settings}
           updateSettings={updateSettings}

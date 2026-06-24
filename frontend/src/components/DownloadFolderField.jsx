@@ -88,9 +88,7 @@ export default function DownloadFolderField({
             <Folder className="artist-icon-xs" />
           </button>
         </div>
-        {helperText ? (
-          <p className="download-folder-field__helper">{helperText}</p>
-        ) : null}
+        {helperText ? <p className="download-folder-field__helper">{helperText}</p> : null}
       </div>
 
       {showPicker ? (

@@ -9,8 +9,7 @@ const appVersion = resolveAppVersion({
   envValue: globalThis?.process?.env?.VITE_APP_VERSION,
   cwd: process.cwd(),
 });
-const releaseChannel =
-  globalThis?.process?.env?.VITE_RELEASE_CHANNEL || "stable";
+const releaseChannel = globalThis?.process?.env?.VITE_RELEASE_CHANNEL || "stable";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, cwd(), "");

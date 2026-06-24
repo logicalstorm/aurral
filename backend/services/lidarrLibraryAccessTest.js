@@ -10,7 +10,6 @@ import {
 } from "./pathMappings.js";
 import { pathsShareDevice } from "./weeklyFlow/weeklyFlowFileReuse.js";
 import { resolveWeeklyFlowRoot } from "./weeklyFlow/weeklyFlowPaths.js";
-
 function step(id, status, label, extra = {}) {
   return { id, status, label, ...extra };
 }
@@ -31,7 +30,10 @@ async function pathIsReadable(filePath, mappings = getPathMappings("lidarr")) {
 }
 
 function normalizeForDisplayCompare(filePath) {
-  return String(filePath || "").trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  return String(filePath || "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/\/+$/, "");
 }
 
 function formatPathAccessDetail(reportedPath, readablePath) {
@@ -50,9 +52,7 @@ function pathHasPrefix(candidate, prefix) {
   if (!normalizedCandidate || !normalizedPrefix) return false;
   return (
     normalizedCandidate.toLowerCase() === normalizedPrefix.toLowerCase() ||
-    normalizedCandidate
-      .toLowerCase()
-      .startsWith(`${normalizedPrefix.toLowerCase()}/`)
+    normalizedCandidate.toLowerCase().startsWith(`${normalizedPrefix.toLowerCase()}/`)
   );
 }
 
@@ -89,11 +89,7 @@ export async function findSampleTrackFile(lidarrClient) {
       if (track?.hasFile !== true && !track?.trackFileId) continue;
       const enriched = enrichLidarrTrackWithFiles(track, trackFileById);
       const filePath =
-        enriched.path ||
-        enriched.trackFile?.path ||
-        track.path ||
-        track.trackFile?.path ||
-        null;
+        enriched.path || enriched.trackFile?.path || track.path || track.trackFile?.path || null;
       if (!filePath) continue;
       return {
         path: filePath,
@@ -228,11 +224,12 @@ export async function runLidarrLibraryAccessTest(lidarrClient, options = {}) {
     return { ok: false, steps, sample };
   }
 
-  const resolvedSamplePath =
-    readableSamplePath || (await pathIsReadable(sample.path));
-  steps.push(step("file", "pass", "Sample Lidarr track file is readable from Aurral", {
-    detail: resolvedSamplePath || sample.path,
-  }));
+  const resolvedSamplePath = readableSamplePath || (await pathIsReadable(sample.path));
+  steps.push(
+    step("file", "pass", "Sample Lidarr track file is readable from Aurral", {
+      detail: resolvedSamplePath || sample.path,
+    }),
+  );
 
   if (!rootPaths.some((rootPath) => pathHasPrefix(sample.path, rootPath))) {
     steps.push(

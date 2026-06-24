@@ -30,10 +30,7 @@ export async function runScheduledRefresh() {
         { waitForCompletion: false },
       );
     } catch (error) {
-      console.error(
-        `[WeeklyFlowScheduler] Failed to refresh ${flow.id}:`,
-        error.message,
-      );
+      console.error(`[WeeklyFlowScheduler] Failed to refresh ${flow.id}:`, error.message);
     }
   }
 }
@@ -52,9 +49,7 @@ export async function startWorkerIfPending() {
     .getFlows()
     .filter((flow) => flow?.enabled === true)
     .map((flow) => flow.id);
-  const sharedIds = flowPlaylistConfig
-    .getSharedPlaylists()
-    .map((playlist) => playlist.id);
+  const sharedIds = flowPlaylistConfig.getSharedPlaylists().map((playlist) => playlist.id);
   const playlistIds = [...new Set([...flowIds, ...sharedIds])];
   for (const playlistId of playlistIds) {
     await weeklyFlowWorker.retryIncompletePlaylist(playlistId);

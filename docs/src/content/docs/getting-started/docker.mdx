@@ -34,10 +34,10 @@ Open `http://localhost:3001` and follow onboarding.
 
 ## What the mounts do
 
-| Mount | Container path | Purpose |
-| --- | --- | --- |
-| Host media root | `/data` | Shared library, downloads, and generated playlists |
-| Host config folder | `/config` | Aurral database, settings, users, and jobs |
+| Mount              | Container path | Purpose                                            |
+| ------------------ | -------------- | -------------------------------------------------- |
+| Host media root    | `/data`        | Shared library, downloads, and generated playlists |
+| Host config folder | `/config`      | Aurral database, settings, users, and jobs         |
 
 `DOWNLOAD_FOLDER` is configured during onboarding or in **Settings → Downloads → Downloads folder**. It must live inside the `/data` mount, for example `/data/downloads/aurral`.
 

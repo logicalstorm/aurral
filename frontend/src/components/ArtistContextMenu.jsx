@@ -1,19 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import PropTypes from "prop-types";
-import {
-  Library,
-  Loader2,
-  MoreVertical,
-  ThumbsDown,
-  ThumbsUp,
-} from "lucide-react";
+import { Library, Loader2, MoreVertical, ThumbsDown, ThumbsUp } from "lucide-react";
 import { getDiscoveryFeedbackLabel } from "../utils/discoveryFeedback";
 
 const MAIN_CONTENT_PORTAL_SELECTOR = ".app-main-wrap";
 
-const getMainContentPortalRoot = () =>
-  document.querySelector(MAIN_CONTENT_PORTAL_SELECTOR);
+const getMainContentPortalRoot = () => document.querySelector(MAIN_CONTENT_PORTAL_SELECTOR);
 
 const getMenuHorizontalAnchorRect = (button) => {
   const discoverCard = button.closest(".artist-discover-card");
@@ -80,8 +73,7 @@ export function ArtistContextMenu({
     const wrapRect = portalRoot.getBoundingClientRect();
     const rect = button.getBoundingClientRect();
     const gap = 8;
-    const menuHeight =
-      menuRef.current?.offsetHeight || estimateMenuHeight();
+    const menuHeight = menuRef.current?.offsetHeight || estimateMenuHeight();
     const spaceAbove = rect.top - wrapRect.top - gap;
     const spaceBelow = wrapRect.bottom - rect.bottom - gap;
     let placement = "above";
@@ -91,18 +83,11 @@ export function ArtistContextMenu({
       placement = spaceBelow > spaceAbove ? "below" : "above";
     }
     const top =
-      placement === "below"
-        ? rect.bottom - wrapRect.top + gap
-        : rect.top - wrapRect.top - gap;
+      placement === "below" ? rect.bottom - wrapRect.top + gap : rect.top - wrapRect.top - gap;
     const anchorRect = getMenuHorizontalAnchorRect(button);
     const right = wrapRect.right - anchorRect.right;
     setMenuPosition((prev) => {
-      if (
-        prev &&
-        prev.top === top &&
-        prev.right === right &&
-        prev.placement === placement
-      ) {
+      if (prev && prev.top === top && prev.right === right && prev.placement === placement) {
         return prev;
       }
       return { top, right, placement };
@@ -192,8 +177,7 @@ export function ArtistContextMenu({
     setPendingAction(null);
   };
 
-  const showMenuTrigger =
-    (canAddArtist && onAddToLibrary) || onFeedback;
+  const showMenuTrigger = (canAddArtist && onAddToLibrary) || onFeedback;
 
   if (!showMenuTrigger) return null;
 
@@ -233,9 +217,7 @@ export function ArtistContextMenu({
               {canAddArtist && onAddToLibrary && (
                 <button
                   type="button"
-                  onClick={(event) =>
-                    handleAction(event, "library", onAddToLibrary)
-                  }
+                  onClick={(event) => handleAction(event, "library", onAddToLibrary)}
                   disabled={isInLibrary || !!pendingAction}
                   className="artist-menu-item--discover"
                 >
@@ -253,9 +235,7 @@ export function ArtistContextMenu({
                 <>
                   <button
                     type="button"
-                    onClick={(event) =>
-                      handleFeedbackClick(event, "more_like_this")
-                    }
+                    onClick={(event) => handleFeedbackClick(event, "more_like_this")}
                     disabled={!!pendingAction}
                     className={`artist-menu-item--discover${feedbackUsed.more_like_this ? " is-selected" : ""}`}
                   >
@@ -270,9 +250,7 @@ export function ArtistContextMenu({
                   </button>
                   <button
                     type="button"
-                    onClick={(event) =>
-                      handleFeedbackClick(event, "less_like_this")
-                    }
+                    onClick={(event) => handleFeedbackClick(event, "less_like_this")}
                     disabled={!!pendingAction}
                     className={`artist-menu-item--discover${feedbackUsed.less_like_this ? " is-selected" : ""}`}
                   >

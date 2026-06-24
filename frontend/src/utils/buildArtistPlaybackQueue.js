@@ -1,9 +1,5 @@
 import { getLibraryTracks, getReleaseGroupTracks } from "./api";
-import {
-  isDownloadedLibraryAlbum,
-  normalizePreviewTrack,
-  normalizeQueueTrack,
-} from "./audioQueue";
+import { isDownloadedLibraryAlbum, normalizePreviewTrack, normalizeQueueTrack } from "./audioQueue";
 
 const RELEASE_GROUP_FETCH_BATCH = 8;
 
@@ -13,17 +9,13 @@ function isLibraryStreamTrack(track) {
 
 function getRecordingKey(track) {
   const key =
-    track?.mbid ||
-    track?.recordingId ||
-    track?.recordingMbid ||
-    track?.foreignRecordingId;
+    track?.mbid || track?.recordingId || track?.recordingMbid || track?.foreignRecordingId;
   return key ? `rec:${key}` : null;
 }
 
 function findLibraryAlbumForReleaseGroup(libraryAlbums, releaseGroupId) {
   return libraryAlbums.find(
-    (album) =>
-      String(album.mbid || album.foreignAlbumId) === String(releaseGroupId),
+    (album) => String(album.mbid || album.foreignAlbumId) === String(releaseGroupId),
   );
 }
 
@@ -34,13 +26,8 @@ async function fetchReleaseGroupTracks(
   const releaseGroupId = releaseGroup?.id;
   if (!releaseGroupId) return [];
 
-  const libraryAlbum = findLibraryAlbumForReleaseGroup(
-    libraryAlbums,
-    releaseGroupId,
-  );
-  const cacheKey = libraryAlbum?.id
-    ? String(libraryAlbum.id)
-    : String(releaseGroupId);
+  const libraryAlbum = findLibraryAlbumForReleaseGroup(libraryAlbums, releaseGroupId);
+  const cacheKey = libraryAlbum?.id ? String(libraryAlbum.id) : String(releaseGroupId);
 
   if (localCache[cacheKey]) {
     return localCache[cacheKey];
@@ -56,14 +43,10 @@ async function fetchReleaseGroupTracks(
 
   try {
     const tracks = libraryAlbum?.id
-      ? await getLibraryTracks(
-          libraryAlbum.id,
-          releaseGroupId,
-          {
-            ...context,
-            albumTitle: libraryAlbum.title || context.albumTitle,
-          },
-        )
+      ? await getLibraryTracks(libraryAlbum.id, releaseGroupId, {
+          ...context,
+          albumTitle: libraryAlbum.title || context.albumTitle,
+        })
       : await getReleaseGroupTracks(releaseGroupId, {
           artistMbid: artistMbid || "",
           ...context,
@@ -102,11 +85,7 @@ export async function buildArtistPlaybackQueue({
 
   const pushTrack = (track, rawTrack = null) => {
     if (!track?.src) return;
-    const keys = [
-      track.src,
-      track.id,
-      getRecordingKey(rawTrack || track),
-    ].filter(Boolean);
+    const keys = [track.src, track.id, getRecordingKey(rawTrack || track)].filter(Boolean);
     if (hasSeen(keys)) return;
     remember(keys);
     queue.push(track);
@@ -120,14 +99,10 @@ export async function buildArtistPlaybackQueue({
       const cacheKey = String(album.id ?? "");
       let tracks = localCache[cacheKey];
       if (!tracks) {
-        tracks = await getLibraryTracks(
-          album.id,
-          album.mbid || album.foreignAlbumId,
-          {
-            artistName,
-            albumTitle: album.title,
-          },
-        );
+        tracks = await getLibraryTracks(album.id, album.mbid || album.foreignAlbumId, {
+          artistName,
+          albumTitle: album.title,
+        });
         localCache[cacheKey] = tracks;
       }
       for (const track of tracks) {
@@ -162,13 +137,8 @@ export async function buildArtistPlaybackQueue({
     .sort((a, b) => (b?.fans || 0) - (a?.fans || 0));
 
   const pendingReleaseGroups = sortedReleaseGroups.filter((releaseGroup) => {
-    const libraryAlbum = findLibraryAlbumForReleaseGroup(
-      libraryAlbums,
-      releaseGroup.id,
-    );
-    const cacheKey = libraryAlbum?.id
-      ? String(libraryAlbum.id)
-      : String(releaseGroup.id);
+    const libraryAlbum = findLibraryAlbumForReleaseGroup(libraryAlbums, releaseGroup.id);
+    const cacheKey = libraryAlbum?.id ? String(libraryAlbum.id) : String(releaseGroup.id);
     return !localCache[cacheKey];
   });
 
@@ -187,16 +157,10 @@ export async function buildArtistPlaybackQueue({
   }
 
   for (const releaseGroup of sortedReleaseGroups) {
-    const libraryAlbum = findLibraryAlbumForReleaseGroup(
-      libraryAlbums,
-      releaseGroup.id,
-    );
-    const cacheKey = libraryAlbum?.id
-      ? String(libraryAlbum.id)
-      : String(releaseGroup.id);
+    const libraryAlbum = findLibraryAlbumForReleaseGroup(libraryAlbums, releaseGroup.id);
+    const cacheKey = libraryAlbum?.id ? String(libraryAlbum.id) : String(releaseGroup.id);
     const tracks = localCache[cacheKey] || [];
-    const albumTitle =
-      libraryAlbum?.title || releaseGroup.title || "Unknown Album";
+    const albumTitle = libraryAlbum?.title || releaseGroup.title || "Unknown Album";
 
     for (const track of tracks) {
       if (!track?.preview_url) continue;

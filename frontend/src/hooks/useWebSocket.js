@@ -4,10 +4,7 @@ import { getStoredAuth } from "../utils/api";
 function getWsUrl() {
   const { token } = getStoredAuth();
   const apiUrl = import.meta.env.VITE_API_URL;
-  if (
-    apiUrl &&
-    (apiUrl.startsWith("http://") || apiUrl.startsWith("https://"))
-  ) {
+  if (apiUrl && (apiUrl.startsWith("http://") || apiUrl.startsWith("https://"))) {
     const url = new URL(apiUrl);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     url.pathname = "/ws";
@@ -100,10 +97,7 @@ function connectSocket() {
 
   shouldReconnect = true;
 
-  if (
-    socket &&
-    (socket.readyState === OPEN || socket.readyState === CONNECTING)
-  ) {
+  if (socket && (socket.readyState === OPEN || socket.readyState === CONNECTING)) {
     return;
   }
 

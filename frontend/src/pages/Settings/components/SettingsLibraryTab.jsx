@@ -27,11 +27,7 @@ export function SettingsLibraryTab({
 }) {
   return (
     <div className="arr-page">
-      <form
-        onSubmit={handleSaveSettings}
-        className="arr-form"
-        autoComplete="off"
-      >
+      <form onSubmit={handleSaveSettings} className="arr-form" autoComplete="off">
         <LidarrSettingsSection
           settings={settings}
           updateSettings={updateSettings}

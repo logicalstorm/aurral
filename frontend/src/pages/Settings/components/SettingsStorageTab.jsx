@@ -9,11 +9,7 @@ export function SettingsStorageTab({
 }) {
   return (
     <div className="arr-page">
-      <form
-        onSubmit={handleSaveSettings}
-        className="arr-form"
-        autoComplete="off"
-      >
+      <form onSubmit={handleSaveSettings} className="arr-form" autoComplete="off">
         <SettingsStorageSection
           hasUnsavedChanges={hasUnsavedChanges}
           handleSaveSettings={handleSaveSettings}

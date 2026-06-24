@@ -2,10 +2,7 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
-import {
-  SettingsArrFieldSet,
-  SettingsArrFormGroup,
-} from "./arr/SettingsArrLayout";
+import { SettingsArrFieldSet, SettingsArrFormGroup } from "./arr/SettingsArrLayout";
 import {
   getLidarrMetadataProfiles,
   getLidarrProfiles,
@@ -39,9 +36,7 @@ export function LidarrSettingsSection({
 }) {
   const [lidarrTestLatencyMs, setLidarrTestLatencyMs] = useState(null);
 
-  const safeLidarrProfiles = Array.isArray(lidarrProfiles)
-    ? lidarrProfiles
-    : [];
+  const safeLidarrProfiles = Array.isArray(lidarrProfiles) ? lidarrProfiles : [];
   const safeLidarrMetadataProfiles = Array.isArray(lidarrMetadataProfiles)
     ? lidarrMetadataProfiles
     : [];
@@ -73,9 +68,7 @@ export function LidarrSettingsSection({
       const result = await testLidarrConnection(url, apiKey);
       setLidarrTestLatencyMs(Math.round(performance.now() - startTime));
       if (result.success) {
-        showSuccess(
-          `Lidarr connection successful! (${result.instanceName || "Lidarr"})`,
-        );
+        showSuccess(`Lidarr connection successful! (${result.instanceName || "Lidarr"})`);
         setLoadingLidarrProfiles(true);
         setLoadingLidarrMetadataProfiles(true);
         setLoadingLidarrTags(true);
@@ -86,9 +79,7 @@ export function LidarrSettingsSection({
             getLidarrTags(url, apiKey),
           ]);
           const nextProfiles = Array.isArray(profiles) ? profiles : [];
-          const nextMetadataProfiles = Array.isArray(metadataProfiles)
-            ? metadataProfiles
-            : [];
+          const nextMetadataProfiles = Array.isArray(metadataProfiles) ? metadataProfiles : [];
           const nextTags = Array.isArray(tags) ? tags : [];
           setLidarrProfiles(nextProfiles);
           setLidarrMetadataProfiles(nextMetadataProfiles);
@@ -97,9 +88,7 @@ export function LidarrSettingsSection({
             showInfo(`Loaded ${nextProfiles.length} quality profile(s)`);
           }
           if (nextMetadataProfiles.length > 0) {
-            showInfo(
-              `Loaded ${nextMetadataProfiles.length} metadata profile(s)`,
-            );
+            showInfo(`Loaded ${nextMetadataProfiles.length} metadata profile(s)`);
           }
           if (nextTags.length > 0) {
             showInfo(`Loaded ${nextTags.length} tag(s)`);
@@ -117,8 +106,7 @@ export function LidarrSettingsSection({
       }
     } catch (err) {
       setLidarrTestLatencyMs(Math.round(performance.now() - startTime));
-      const errorMsg =
-        err.response?.data?.message || err.response?.data?.error || err.message;
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
       showError(`Connection failed: ${errorMsg}`);
     } finally {
       setTestingLidarr(false);
@@ -126,9 +114,7 @@ export function LidarrSettingsSection({
   };
 
   const refreshingProfilesTags =
-    loadingLidarrProfiles ||
-    loadingLidarrMetadataProfiles ||
-    loadingLidarrTags;
+    loadingLidarrProfiles || loadingLidarrMetadataProfiles || loadingLidarrTags;
 
   const handleRefreshProfilesAndTags = async () => {
     const url = settings.integrations?.lidarr?.url;
@@ -147,18 +133,12 @@ export function LidarrSettingsSection({
         getLidarrTags(url, apiKey),
       ]);
       const nextProfiles = Array.isArray(profiles) ? profiles : [];
-      const nextMetadataProfiles = Array.isArray(metadataProfiles)
-        ? metadataProfiles
-        : [];
+      const nextMetadataProfiles = Array.isArray(metadataProfiles) ? metadataProfiles : [];
       const nextTags = Array.isArray(tags) ? tags : [];
       setLidarrProfiles(nextProfiles);
       setLidarrMetadataProfiles(nextMetadataProfiles);
       setLidarrTags(nextTags);
-      if (
-        nextProfiles.length === 0 &&
-        nextMetadataProfiles.length === 0 &&
-        nextTags.length === 0
-      ) {
+      if (nextProfiles.length === 0 && nextMetadataProfiles.length === 0 && nextTags.length === 0) {
         showInfo("No profiles or tags found in Lidarr");
       } else {
         const parts = [];
@@ -174,8 +154,7 @@ export function LidarrSettingsSection({
         showSuccess(`Loaded ${parts.join(", ")}`);
       }
     } catch (err) {
-      const errorMsg =
-        err.response?.data?.message || err.response?.data?.error || err.message;
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
       showError(`Failed to load profiles and tags: ${errorMsg}`);
     } finally {
       setLoadingLidarrProfiles(false);
@@ -191,8 +170,7 @@ export function LidarrSettingsSection({
           <div className="settings-page__section-intro">
             <h3 className="settings-page__section-title">Lidarr</h3>
             <p className="settings-page__section-note">
-              Connect Aurral to your Lidarr instance and configure library
-              defaults.
+              Connect Aurral to your Lidarr instance and configure library defaults.
             </p>
           </div>
         </div>
@@ -213,13 +191,9 @@ export function LidarrSettingsSection({
               className="arr-btn"
             >
               <RefreshCw
-                className={`artist-icon-sm${
-                  refreshingProfilesTags ? " animate-spin" : ""
-                }`}
+                className={`artist-icon-sm${refreshingProfilesTags ? " animate-spin" : ""}`}
               />
-              {refreshingProfilesTags
-                ? "Refreshing..."
-                : "Refresh profiles/tags"}
+              {refreshingProfilesTags ? "Refreshing..." : "Refresh profiles/tags"}
             </button>
             <button
               type="button"
@@ -237,8 +211,7 @@ export function LidarrSettingsSection({
         }
       >
         <div className="arr-info">
-          Music library manager. File access, mounts, and path mappings are
-          checked in{" "}
+          Music library manager. File access, mounts, and path mappings are checked in{" "}
           <Link to="/settings/system" className="arr-link">
             System
           </Link>
@@ -266,10 +239,7 @@ export function LidarrSettingsSection({
             <>
               Found in Settings &rarr; General &rarr; Security.
               {lidarrTestLatencyMs !== null && (
-                <>
-                  {" "}
-                  Last test response time: {lidarrTestLatencyMs} ms.
-                </>
+                <> Last test response time: {lidarrTestLatencyMs} ms.</>
               )}
             </>
           }
@@ -304,10 +274,7 @@ export function LidarrSettingsSection({
       </SettingsArrFieldSet>
 
       <SettingsArrFieldSet legend="Defaults">
-        <SettingsArrFormGroup
-          label="Default Quality Profile"
-          labelFor="lidarr-quality-profile"
-        >
+        <SettingsArrFormGroup label="Default Quality Profile" labelFor="lidarr-quality-profile">
           <SettingsSelect
             id="lidarr-quality-profile"
             value={
@@ -317,9 +284,7 @@ export function LidarrSettingsSection({
             }
             onChange={(e) =>
               updateLidarr({
-                qualityProfileId: e.target.value
-                  ? parseInt(e.target.value, 10)
-                  : null,
+                qualityProfileId: e.target.value ? parseInt(e.target.value, 10) : null,
               })
             }
             disabled={loadingLidarrProfiles}
@@ -339,10 +304,7 @@ export function LidarrSettingsSection({
           </SettingsSelect>
         </SettingsArrFormGroup>
 
-        <SettingsArrFormGroup
-          label="Default Metadata Profile"
-          labelFor="lidarr-metadata-profile"
-        >
+        <SettingsArrFormGroup label="Default Metadata Profile" labelFor="lidarr-metadata-profile">
           <SettingsSelect
             id="lidarr-metadata-profile"
             value={
@@ -352,9 +314,7 @@ export function LidarrSettingsSection({
             }
             onChange={(e) =>
               updateLidarr({
-                metadataProfileId: e.target.value
-                  ? parseInt(e.target.value, 10)
-                  : null,
+                metadataProfileId: e.target.value ? parseInt(e.target.value, 10) : null,
               })
             }
             disabled={loadingLidarrMetadataProfiles}
@@ -378,9 +338,7 @@ export function LidarrSettingsSection({
           <SettingsSelect
             id="lidarr-tag"
             value={
-              settings.integrations?.lidarr?.tagId
-                ? String(settings.integrations.lidarr.tagId)
-                : ""
+              settings.integrations?.lidarr?.tagId ? String(settings.integrations.lidarr.tagId) : ""
             }
             onChange={(e) =>
               updateLidarr({
@@ -404,18 +362,11 @@ export function LidarrSettingsSection({
           </SettingsSelect>
         </SettingsArrFormGroup>
 
-        <SettingsArrFormGroup
-          label="Default Monitoring Option"
-          labelFor="lidarr-monitor-option"
-        >
+        <SettingsArrFormGroup label="Default Monitoring Option" labelFor="lidarr-monitor-option">
           <SettingsSelect
             id="lidarr-monitor-option"
-            value={
-              settings.integrations?.lidarr?.defaultMonitorOption || "none"
-            }
-            onChange={(e) =>
-              updateLidarr({ defaultMonitorOption: e.target.value })
-            }
+            value={settings.integrations?.lidarr?.defaultMonitorOption || "none"}
+            onChange={(e) => updateLidarr({ defaultMonitorOption: e.target.value })}
           >
             <option value="none">None (Artist Only)</option>
             <option value="existing">Existing Albums</option>
@@ -444,10 +395,7 @@ export function LidarrSettingsSection({
         <button
           type="button"
           onClick={() => {
-            if (
-              !settings.integrations?.lidarr?.url ||
-              !settings.integrations?.lidarr?.apiKey
-            ) {
+            if (!settings.integrations?.lidarr?.url || !settings.integrations?.lidarr?.apiKey) {
               showError("Please configure Lidarr URL and API key first");
               return;
             }
@@ -456,13 +404,11 @@ export function LidarrSettingsSection({
           disabled={applyingCommunityGuide || !health?.lidarrConfigured}
           className="arr-btn arr-btn--primary"
         >
-          {applyingCommunityGuide
-            ? "Applying..."
-            : "Apply Davo's Recommended Settings"}
+          {applyingCommunityGuide ? "Applying..." : "Apply Davo's Recommended Settings"}
         </button>
         <p className="arr-form-help arr-form-help--spaced">
-          Creates quality profile, updates quality definitions, adds custom
-          formats, and updates naming scheme.{" "}
+          Creates quality profile, updates quality definitions, adds custom formats, and updates
+          naming scheme.{" "}
           <a
             href="https://wiki.servarr.com/lidarr/community-guide"
             target="_blank"

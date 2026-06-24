@@ -77,7 +77,11 @@
     <main class="wrap">
       <div class="header">
         <h1>Spotify Import</h1>
-        <p>Convert Exportify CSV files into Aurral playlist JSON. See the <a href="https://docs.aurral.org/using/playlist-imports/">playlist import guide</a> for accepted formats and import behavior.</p>
+        <p>
+          Convert Exportify CSV files into Aurral playlist JSON. See the
+          <a href="https://docs.aurral.org/using/playlist-imports/">playlist import guide</a> for
+          accepted formats and import behavior.
+        </p>
       </div>
 
       <section class="doc-intro">
@@ -87,18 +91,9 @@
             <a href="https://exportify.net/" target="_blank" rel="noopener noreferrer">Exportify</a>
             with your Spotify account.
           </li>
-          <li>
-            Click <strong>Export</strong> next to the playlist you want to bring
-            to Aurral.
-          </li>
-          <li>
-            Drop the downloaded <code>.csv</code> file into the box below and
-            click Convert.
-          </li>
-          <li>
-            Open Aurral, go to <strong>Playlists</strong>, and import the
-            generated JSON.
-          </li>
+          <li>Click <strong>Export</strong> next to the playlist you want to bring to Aurral.</li>
+          <li>Drop the downloaded <code>.csv</code> file into the box below and click Convert.</li>
+          <li>Open Aurral, go to <strong>Playlists</strong>, and import the generated JSON.</li>
         </ol>
       </section>
 
@@ -165,8 +160,12 @@
         <a href="https://docs.aurral.org/">Docs</a>
         <a href="https://docs.aurral.org/using/playlists/">Playlists</a>
         <a href="aurral-convert.html">Spotify Import</a>
-        <a href="https://github.com/lklynet/aurral" target="_blank" rel="noopener noreferrer">GitHub</a>
-        <a href="https://discord.gg/cpPYfgVURJ" target="_blank" rel="noopener noreferrer">Discord</a>
+        <a href="https://github.com/lklynet/aurral" target="_blank" rel="noopener noreferrer"
+          >GitHub</a
+        >
+        <a href="https://discord.gg/cpPYfgVURJ" target="_blank" rel="noopener noreferrer"
+          >Discord</a
+        >
       </div>
     </footer>
 
@@ -200,19 +199,11 @@
       }
 
       ["dragenter", "dragover"].forEach((eventName) => {
-        dropzone.addEventListener(
-          eventName,
-          () => dropzone.classList.add("dragover"),
-          false,
-        );
+        dropzone.addEventListener(eventName, () => dropzone.classList.add("dragover"), false);
       });
 
       ["dragleave", "drop"].forEach((eventName) => {
-        dropzone.addEventListener(
-          eventName,
-          () => dropzone.classList.remove("dragover"),
-          false,
-        );
+        dropzone.addEventListener(eventName, () => dropzone.classList.remove("dragover"), false);
       });
 
       dropzone.addEventListener("drop", (e) => {
@@ -292,15 +283,7 @@
       }
 
       const csvHeaderAliases = {
-        trackName: [
-          "Track Name",
-          "Track",
-          "Track Title",
-          "Title",
-          "Song",
-          "Song Name",
-          "Name",
-        ],
+        trackName: ["Track Name", "Track", "Track Title", "Title", "Song", "Song Name", "Name"],
         artistName: [
           "Artist Name(s)",
           "Artist Name",
@@ -310,14 +293,7 @@
           "Artist Names",
           "Track Artist",
         ],
-        albumName: [
-          "Album Name",
-          "Album",
-          "Release",
-          "Release Name",
-          "Record",
-          "Collection",
-        ],
+        albumName: ["Album Name", "Album", "Release", "Release Name", "Record", "Collection"],
       };
 
       function csvToPlaylistJson(csvText, filename) {
@@ -351,9 +327,7 @@
               trackName: cols[trackNameIndex] || "",
             };
           })
-          .filter(
-            (track) => track.artistName || track.albumName || track.trackName,
-          );
+          .filter((track) => track.artistName || track.albumName || track.trackName);
 
         if (tracks.length === 0) {
           throw new Error("No tracks were found after parsing the CSV.");
@@ -386,19 +360,13 @@
           previewEl.textContent = JSON.stringify(outputJson, null, 2);
           previewContainer.classList.add("visible");
           downloadBtn.disabled = false;
-          setStatus(
-            `Converted ${outputJson.tracks.length} tracks from "${file.name}".`,
-            "ok",
-          );
+          setStatus(`Converted ${outputJson.tracks.length} tracks from "${file.name}".`, "ok");
         } catch (error) {
           outputJson = null;
           downloadBtn.disabled = true;
           previewEl.textContent = "";
           previewContainer.classList.remove("visible");
-          setStatus(
-            error.message || "Conversion failed. Check your CSV file.",
-            "error",
-          );
+          setStatus(error.message || "Conversion failed. Check your CSV file.", "error");
         }
       });
 

@@ -1,25 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
-import {
-  Library,
-  Sparkles,
-  Activity,
-  AudioWaveform,
-  Ticket,
-  Settings,
-} from "lucide-react";
+import { Library, Sparkles, Activity, AudioWaveform, Ticket, Settings } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { getBootstrapStatus } from "../utils/api";
 import { useFlowWorkerActivity } from "../pages/flows/useFlowWorkerActivity";
-import {
-  DEFAULT_SETTINGS_TAB,
-  SETTINGS_NAV_TABS,
-} from "../pages/Settings/settingsTabsConfig";
-import {
-  DEFAULT_SHOWS_FILTER,
-  SHOWS_FILTERS,
-} from "../navigation/showsNavConfig";
+import { DEFAULT_SETTINGS_TAB, SETTINGS_NAV_TABS } from "../pages/Settings/settingsTabsConfig";
+import { DEFAULT_SHOWS_FILTER, SHOWS_FILTERS } from "../navigation/showsNavConfig";
 import {
   ACTIVITY_VIEWS,
   DEFAULT_ACTIVITY_VIEW,
@@ -27,16 +14,17 @@ import {
   buildActivityPath,
 } from "../navigation/activityNavConfig";
 import { useDiscoverRecent } from "../hooks/useDiscoverRecent";
-import { getDiscoverArtistPath, getDiscoverRecentPageLinkState } from "../utils/discoverRecentNavigation";
+import {
+  getDiscoverArtistPath,
+  getDiscoverRecentPageLinkState,
+} from "../utils/discoverRecentNavigation";
 import { useStorageHealth } from "../hooks/useStorageHealth";
 
 function Sidebar({ mode }) {
   const location = useLocation();
   const { user } = useAuth();
-  const hasFlowAccess =
-    user?.role === "admin" || !!user?.permissions?.accessFlow;
-  const canAccessSettings =
-    user?.role === "admin" || !!user?.permissions?.accessSettings;
+  const hasFlowAccess = user?.role === "admin" || !!user?.permissions?.accessFlow;
+  const canAccessSettings = user?.role === "admin" || !!user?.permissions?.accessSettings;
   const { hasActivity: hasRequestActivity } = useFlowWorkerActivity({
     enabled: hasFlowAccess,
   });
@@ -44,9 +32,7 @@ function Sidebar({ mode }) {
     enabled: canAccessSettings,
   });
   const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window !== "undefined"
-      ? window.matchMedia("(min-width: 768px)").matches
-      : true,
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 768px)").matches : true,
   );
   const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
   const {
@@ -62,8 +48,7 @@ function Sidebar({ mode }) {
   const isOnSettings = location.pathname.startsWith("/settings");
   const isOnShows = location.pathname.startsWith("/shows");
   const isOnActivity =
-    location.pathname.startsWith("/activity") ||
-    location.pathname.startsWith("/history");
+    location.pathname.startsWith("/activity") || location.pathname.startsWith("/history");
 
   const settingsTabs = useMemo(() => {
     if (!canAccessSettings) return [];
@@ -87,9 +72,7 @@ function Sidebar({ mode }) {
   const activeActivityView = useMemo(() => {
     if (!isOnActivity) return null;
     if (location.pathname.startsWith("/history")) {
-      const legacySegment = location.pathname
-        .replace(/^\/history\/?/, "")
-        .split("/")[0];
+      const legacySegment = location.pathname.replace(/^\/history\/?/, "").split("/")[0];
       if (legacySegment === "queue" || legacySegment === "history") {
         return legacySegment;
       }
@@ -102,14 +85,8 @@ function Sidebar({ mode }) {
   const activeActivitySource = useMemo(() => {
     if (!isOnActivity) return DEFAULT_ACTIVITY_SOURCE;
     if (location.pathname.startsWith("/history")) {
-      const legacySegment = location.pathname
-        .replace(/^\/history\/?/, "")
-        .split("/")[0];
-      if (
-        legacySegment &&
-        legacySegment !== "queue" &&
-        legacySegment !== "history"
-      ) {
+      const legacySegment = location.pathname.replace(/^\/history\/?/, "").split("/")[0];
+      if (legacySegment && legacySegment !== "queue" && legacySegment !== "history") {
         return legacySegment;
       }
       return DEFAULT_ACTIVITY_SOURCE;
@@ -121,10 +98,7 @@ function Sidebar({ mode }) {
   const positionSidebarTooltip = useCallback((event) => {
     const link = event.currentTarget;
     const rect = link.getBoundingClientRect();
-    link.style.setProperty(
-      "--sidebar-tooltip-top",
-      `${rect.top + rect.height / 2}px`,
-    );
+    link.style.setProperty("--sidebar-tooltip-top", `${rect.top + rect.height / 2}px`);
     link.style.setProperty("--sidebar-tooltip-left", `${rect.right + 8}px`);
   }, []);
 
@@ -213,14 +187,11 @@ function Sidebar({ mode }) {
     ];
     return items.filter(
       (item) =>
-        !item.permission ||
-        user?.role === "admin" ||
-        !!user?.permissions?.[item.permission],
+        !item.permission || user?.role === "admin" || !!user?.permissions?.[item.permission],
     );
   }, [discoverRecentPages, activityViewItems, ticketmasterConfigured, user]);
 
-  const translateClass =
-    mode === "hidden" ? "-translate-x-full" : "translate-x-0";
+  const translateClass = mode === "hidden" ? "-translate-x-full" : "translate-x-0";
 
   const renderSubnav = (item, activeId) => {
     if (isIcons || !item.subnav?.length || !isNavItemActive(item)) {
@@ -247,11 +218,7 @@ function Sidebar({ mode }) {
               </Link>
             );
           })}
-          <button
-            type="button"
-            className="sidebar-subnav-action"
-            onClick={clearRecentPages}
-          >
+          <button type="button" className="sidebar-subnav-action" onClick={clearRecentPages}>
             Clear recent
           </button>
         </nav>
@@ -306,20 +273,15 @@ function Sidebar({ mode }) {
       </div>
 
       <div className={`sidebar-body${isIcons ? " sidebar-body--icons" : ""}`}>
-        <div
-          className={`sidebar-nav-wrap${isIcons ? " sidebar-nav-wrap--icons" : ""}`}
-        >
+        <div className={`sidebar-nav-wrap${isIcons ? " sidebar-nav-wrap--icons" : ""}`}>
           <nav className="sidebar-nav">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = isNavItemActive(item);
-              const showActivityDot =
-                item.section === "activity" && hasRequestActivity;
+              const showActivityDot = item.section === "activity" && hasRequestActivity;
               const activeSubnavId =
                 item.section === "discover"
-                  ? discoverRecentPages.find(
-                      (entry) => entry.path === activeDiscoverRecentPath,
-                    )?.id
+                  ? discoverRecentPages.find((entry) => entry.path === activeDiscoverRecentPath)?.id
                   : item.section === "shows"
                     ? activeShowsFilter
                     : item.section === "activity"
@@ -327,10 +289,7 @@ function Sidebar({ mode }) {
                       : null;
 
               return (
-                <div
-                  key={item.path}
-                  className={getNavGroupClassName(item, active)}
-                >
+                <div key={item.path} className={getNavGroupClassName(item, active)}>
                   <Link
                     to={item.path}
                     onMouseEnter={(event) => {
@@ -350,23 +309,16 @@ function Sidebar({ mode }) {
                     <span className="sidebar-link__icon-wrap">
                       <Icon className="sidebar-link__icon" aria-hidden="true" />
                       {showActivityDot ? (
-                        <span
-                          className="sidebar-link__activity"
-                          aria-hidden="true"
-                        />
+                        <span className="sidebar-link__activity" aria-hidden="true" />
                       ) : null}
                     </span>
                     {!isIcons && (
                       <span className="sidebar-link__label">
                         {item.label}
-                        {showActivityDot ? (
-                          <span className="sr-only"> (active)</span>
-                        ) : null}
+                        {showActivityDot ? <span className="sr-only"> (active)</span> : null}
                       </span>
                     )}
-                    {isIcons && (
-                      <span className="sidebar-tooltip">{item.label}</span>
-                    )}
+                    {isIcons && <span className="sidebar-tooltip">{item.label}</span>}
                   </Link>
                   {renderSubnav(item, activeSubnavId)}
                 </div>
@@ -385,12 +337,8 @@ function Sidebar({ mode }) {
               <Link
                 to={`/settings/${DEFAULT_SETTINGS_TAB}`}
                 onMouseEnter={positionSidebarTooltip}
-                className={`sidebar-link sidebar-link--icons${
-                  isOnSettings ? " is-active" : ""
-                }`}
-                aria-label={
-                  hasStorageFailure ? "Settings (storage issues)" : "Settings"
-                }
+                className={`sidebar-link sidebar-link--icons${isOnSettings ? " is-active" : ""}`}
+                aria-label={hasStorageFailure ? "Settings (storage issues)" : "Settings"}
               >
                 <span className="sidebar-link__icon-wrap">
                   <Settings className="sidebar-link__icon" aria-hidden="true" />
@@ -407,15 +355,10 @@ function Sidebar({ mode }) {
               <>
                 <Link
                   to={`/settings/${DEFAULT_SETTINGS_TAB}`}
-                  className={`sidebar-link sidebar-link--full${
-                    isOnSettings ? " is-active" : ""
-                  }`}
+                  className={`sidebar-link sidebar-link--full${isOnSettings ? " is-active" : ""}`}
                 >
                   <span className="sidebar-link__icon-wrap">
-                    <Settings
-                      className="sidebar-link__icon"
-                      aria-hidden="true"
-                    />
+                    <Settings className="sidebar-link__icon" aria-hidden="true" />
                     {hasStorageFailure ? (
                       <span
                         className="sidebar-link__activity sidebar-link__activity--alert"
@@ -425,35 +368,24 @@ function Sidebar({ mode }) {
                   </span>
                   <span className="sidebar-link__label">
                     Settings
-                    {hasStorageFailure ? (
-                      <span className="sr-only"> (storage issues)</span>
-                    ) : null}
+                    {hasStorageFailure ? <span className="sr-only"> (storage issues)</span> : null}
                   </span>
                 </Link>
 
                 {isOnSettings && (
-                  <nav
-                    className="sidebar-subnav"
-                    aria-label="Settings sections"
-                  >
+                  <nav className="sidebar-subnav" aria-label="Settings sections">
                     {settingsTabs.map((tab) => {
                       const tabActive = activeSettingsTab === tab.id;
-                      const showStorageAlert =
-                        tab.id === "system" && hasStorageFailure;
+                      const showStorageAlert = tab.id === "system" && hasStorageFailure;
                       return (
                         <Link
                           key={tab.id}
                           to={`/settings/${tab.id}`}
-                          className={`sidebar-subnav-link${
-                            tabActive ? " is-active" : ""
-                          }`}
+                          className={`sidebar-subnav-link${tabActive ? " is-active" : ""}`}
                           aria-current={tabActive ? "page" : undefined}
                         >
                           {showStorageAlert ? (
-                            <span
-                              className="sidebar-subnav-link__alert"
-                              aria-hidden="true"
-                            />
+                            <span className="sidebar-subnav-link__alert" aria-hidden="true" />
                           ) : null}
                           <span>{tab.label}</span>
                         </Link>

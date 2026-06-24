@@ -7,8 +7,7 @@ import lastFmLogo from "../../../../images/logos/last-fm.svg?raw";
 import musicBrainzLogo from "../../../../images/logos/musicbrainz.svg?raw";
 import listenBrainzLogo from "../../../../images/logos/listenbrainz.svg?raw";
 
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const toCurrentColorSvg = (svg) =>
   svg
@@ -83,8 +82,7 @@ const buildRelationLinks = (artist) => {
     .filter(Boolean);
 };
 
-const tagSearchPath = (name) =>
-  `/search?q=${encodeURIComponent(`#${name}`)}&type=tag`;
+const tagSearchPath = (name) => `/search?q=${encodeURIComponent(`#${name}`)}&type=tag`;
 
 export function ArtistDetailsAbout({
   artist,
@@ -104,8 +102,7 @@ export function ArtistDetailsAbout({
       libraryArtist?.mbid ||
       artist?._lidarrData?.foreignArtistId;
     const lidarrUrl =
-      appSettings?.integrations?.lidarr?.externalUrl ||
-      appSettings?.integrations?.lidarr?.url;
+      appSettings?.integrations?.lidarr?.externalUrl || appSettings?.integrations?.lidarr?.url;
     const lidarrHref =
       lidarrUrl && lidarrArtistId
         ? `${lidarrUrl.replace(/\/$/, "")}/${
@@ -146,9 +143,7 @@ export function ArtistDetailsAbout({
         ? {
             key: "listenbrainz",
             label: "ListenBrainz",
-            href: `https://listenbrainz.org/artist/${encodeURIComponent(
-              artist.id,
-            )}/`,
+            href: `https://listenbrainz.org/artist/${encodeURIComponent(artist.id)}/`,
             logo: toCurrentColorSvg(listenBrainzLogo),
             color: "#b3b3b3",
           }
@@ -191,9 +186,7 @@ export function ArtistDetailsAbout({
               <span className="artist-rating-badge__value">
                 {Number(artist.rating.value).toFixed(1)}
               </span>
-              <span className="artist-rating-badge__label">
-                Rating
-              </span>
+              <span className="artist-rating-badge__label">Rating</span>
             </div>
           )}
 
@@ -205,9 +198,7 @@ export function ArtistDetailsAbout({
                 <span className="artist-about-meta__tags">
                   {visibleTags.map((tag, index) => (
                     <Fragment key={tag.key}>
-                      {index > 0 ? (
-                        <span aria-hidden="true"> · </span>
-                      ) : null}
+                      {index > 0 ? <span aria-hidden="true"> · </span> : null}
                       <button
                         type="button"
                         className="artist-about-meta__tag"
@@ -222,13 +213,9 @@ export function ArtistDetailsAbout({
               )}
             </div>
             {artist?.bio ? (
-              <p className="artist-about-bio">
-                {artist.bio}
-              </p>
+              <p className="artist-about-bio">{artist.bio}</p>
             ) : (
-              <p className="artist-modal__subcopy">
-                No biography available.
-              </p>
+              <p className="artist-modal__subcopy">No biography available.</p>
             )}
           </div>
         </div>

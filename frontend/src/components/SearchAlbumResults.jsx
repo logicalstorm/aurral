@@ -18,9 +18,7 @@ function getReleaseYear(releaseDate) {
 
 function getReleaseTypeLabel(album) {
   const primary = album.primaryType || null;
-  const secondary = Array.isArray(album.secondaryTypes)
-    ? album.secondaryTypes.filter(Boolean)
-    : [];
+  const secondary = Array.isArray(album.secondaryTypes) ? album.secondaryTypes.filter(Boolean) : [];
   const types = [primary, ...secondary].filter(Boolean);
   return types.length ? types.join(" · ") : null;
 }
@@ -37,21 +35,14 @@ function AlbumCover({ src, alt }) {
   }
 
   return (
-    <img
-      src={src}
-      alt={alt}
-      loading="lazy"
-      decoding="async"
-      onError={() => setFailed(true)}
-    />
+    <img src={src} alt={alt} loading="lazy" decoding="async" onError={() => setFailed(true)} />
   );
 }
 
 function AlbumAction({ album, isPending, canAddAlbum, onAlbumAction }) {
   const actionDisabled = isAlbumActionDisabled(album, isPending, canAddAlbum);
   const isComplete = album.status === "available";
-  const actionLabel =
-    album.status === "inLibrary" ? "Search Album" : "Add to Lidarr";
+  const actionLabel = album.status === "inLibrary" ? "Search Album" : "Add to Lidarr";
 
   if (isComplete) {
     return (
@@ -118,9 +109,7 @@ function SearchAlbumResults({
     const coverSrc = albumCovers[album.id] || album.coverUrl;
     const releaseYear = getReleaseYear(album.releaseDate);
     const releaseTypeLabel = getReleaseTypeLabel(album);
-    const releaseMeta = [releaseYear, releaseTypeLabel]
-      .filter(Boolean)
-      .join(" · ");
+    const releaseMeta = [releaseYear, releaseTypeLabel].filter(Boolean).join(" · ");
 
     if (viewMode === "list") {
       return (
@@ -138,9 +127,7 @@ function SearchAlbumResults({
             )}
           </div>
           <div className="artist-min-0">
-            <h2 className="artist-release-card__title artist-truncate">
-              {album.title}
-            </h2>
+            <h2 className="artist-release-card__title artist-truncate">{album.title}</h2>
             <div className="artist-release-card__meta artist-truncate">
               {album.artistName ? (
                 <button
@@ -155,10 +142,7 @@ function SearchAlbumResults({
               {releaseMeta ? <span>{releaseMeta}</span> : null}
             </div>
           </div>
-          <div
-            className="artist-row-actions"
-            onClick={(event) => event.stopPropagation()}
-          >
+          <div className="artist-row-actions" onClick={(event) => event.stopPropagation()}>
             <AlbumAction
               album={album}
               isPending={isPending}
@@ -184,10 +168,7 @@ function SearchAlbumResults({
               <Music className="artist-icon-lg" />
             </div>
           )}
-          <div
-            className="artist-release-card__action"
-            onClick={(event) => event.stopPropagation()}
-          >
+          <div className="artist-release-card__action" onClick={(event) => event.stopPropagation()}>
             <AlbumAction
               album={album}
               isPending={isPending}
@@ -205,26 +186,16 @@ function SearchAlbumResults({
             className="artist-card-button"
             onClick={(event) => openArtist(album, event)}
           >
-            <p className="artist-release-card__meta artist-truncate">
-              {album.artistName}
-            </p>
+            <p className="artist-release-card__meta artist-truncate">{album.artistName}</p>
           </button>
         ) : null}
-        {releaseMeta && (
-          <p className="artist-release-card__meta artist-truncate">
-            {releaseMeta}
-          </p>
-        )}
+        {releaseMeta && <p className="artist-release-card__meta artist-truncate">{releaseMeta}</p>}
       </article>
     );
   };
 
   return (
-    <div
-      className={
-        viewMode === "grid" ? "artist-albums-grid" : "artist-release-list"
-      }
-    >
+    <div className={viewMode === "grid" ? "artist-albums-grid" : "artist-release-list"}>
       {albums.map((album) => renderAlbum(album))}
     </div>
   );

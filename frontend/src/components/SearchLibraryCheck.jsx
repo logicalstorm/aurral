@@ -9,12 +9,7 @@ const SIZE_CLASS = {
   overlay: "library-check--overlay",
 };
 
-function SearchLibraryCheck({
-  action = false,
-  size,
-  className = "",
-  ...props
-}) {
+function SearchLibraryCheck({ action = false, size, className = "", ...props }) {
   const sizeClass = SIZE_CLASS[size || (action ? "action" : "md")];
 
   return (

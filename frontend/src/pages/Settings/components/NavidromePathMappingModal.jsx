@@ -7,12 +7,7 @@ import { SettingsArrFormGroup } from "./arr/SettingsArrLayout";
 
 const EMPTY_MAPPING = { local: "", remote: "" };
 
-export function NavidromePathMappingModal({
-  title,
-  initialValue,
-  onClose,
-  onSave,
-}) {
+export function NavidromePathMappingModal({ title, initialValue, onClose, onSave }) {
   const [draft, setDraft] = useState(() => ({
     ...EMPTY_MAPPING,
     ...initialValue,
@@ -33,8 +28,7 @@ export function NavidromePathMappingModal({
   };
 
   const canSave =
-    Boolean(String(draft.local || "").trim()) &&
-    Boolean(String(draft.remote || "").trim());
+    Boolean(String(draft.local || "").trim()) && Boolean(String(draft.remote || "").trim());
 
   return createPortal(
     <div className="arr-portal">
@@ -47,10 +41,7 @@ export function NavidromePathMappingModal({
           onClick={(event) => event.stopPropagation()}
         >
           <div className="arr-modal__header">
-            <h3
-              id="navidrome-path-mapping-modal-title"
-              className="arr-modal__title"
-            >
+            <h3 id="navidrome-path-mapping-modal-title" className="arr-modal__title">
               {title}
             </h3>
             <button

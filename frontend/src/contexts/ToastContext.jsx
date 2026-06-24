@@ -5,8 +5,7 @@ import {
   useCallback,
   useRef,
   useMemo,
-} from "react";
-import { ToastContainer } from "../components/Toast";
+} from "react";import { ToastContainer } from "../components/Toast";
 
 const ToastContext = createContext();
 
@@ -24,17 +23,26 @@ export function ToastProvider({ children }) {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
-  const showSuccess = useCallback((message, duration) => {
-    return addToast(message, "success", duration);
-  }, [addToast]);
+  const showSuccess = useCallback(
+    (message, duration) => {
+      return addToast(message, "success", duration);
+    },
+    [addToast],
+  );
 
-  const showError = useCallback((message, duration) => {
-    return addToast(message, "error", duration);
-  }, [addToast]);
+  const showError = useCallback(
+    (message, duration) => {
+      return addToast(message, "error", duration);
+    },
+    [addToast],
+  );
 
-  const showInfo = useCallback((message, duration) => {
-    return addToast(message, "info", duration);
-  }, [addToast]);
+  const showInfo = useCallback(
+    (message, duration) => {
+      return addToast(message, "info", duration);
+    },
+    [addToast],
+  );
 
   const value = useMemo(() => ({
     addToast,
@@ -45,8 +53,7 @@ export function ToastProvider({ children }) {
   }), [addToast, removeToast, showSuccess, showError, showInfo]);
 
   return (
-    <ToastContext.Provider value={value}>
-      {children}
+    <ToastContext.Provider value={value}>      {children}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </ToastContext.Provider>
   );

@@ -43,10 +43,9 @@ function SettingsSponsorBanner() {
       <div className="settings-page__banner-copy">
         <p className="settings-page__banner-title">Support Aurral</p>
         <p className="settings-page__banner-text">
-          Aurral&apos;s hosted metadata and search services run on personal
-          infrastructure and may experience occasional downtime. Sponsoring
-          development helps keep those services reliable, fund cloud capacity
-          when needed, and sustain ongoing work on Aurral.
+          Aurral&apos;s hosted metadata and search services run on personal infrastructure and may
+          experience occasional downtime. Sponsoring development helps keep those services reliable,
+          fund cloud capacity when needed, and sustain ongoing work on Aurral.
         </p>
         <a
           href={SPONSOR_URL}

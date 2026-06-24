@@ -71,23 +71,14 @@ export function useDiscoverLayoutState({
           return savedLayout;
         })
         .catch((err) => {
-          showError(
-            err.response?.data?.message || "Failed to save discover layout",
-          );
+          showError(err.response?.data?.message || "Failed to save discover layout");
           throw err;
         })
         .finally(() => {
           setIsSavingDiscoverLayout(false);
         });
     },
-    [
-      normalizeLayout,
-      saveServerLayout,
-      showError,
-      showSuccess,
-      userId,
-      writeStoredLayout,
-    ],
+    [normalizeLayout, saveServerLayout, showError, showSuccess, userId, writeStoredLayout],
   );
 
   return {

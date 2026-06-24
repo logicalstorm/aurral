@@ -194,9 +194,9 @@ textarea:disabled {
   border: none !important;
 }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
-    [type="color"]
-  ):not([type="file"]),
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not(
+    [type="file"]
+  ),
 select,
 textarea {
   border-radius: 0 !important;
@@ -1363,8 +1363,8 @@ textarea {
     --mobile-nav-height: 76px;
     --mobile-nav-top-padding: 0.5rem;
     --mobile-nav-reserved-height: calc(
-      var(--mobile-safe-area-bottom) + var(--mobile-edge-gap) +
-        var(--mobile-nav-top-padding) + var(--mobile-nav-height)
+      var(--mobile-safe-area-bottom) + var(--mobile-edge-gap) + var(--mobile-nav-top-padding) +
+        var(--mobile-nav-height)
     );
 
     padding-bottom: calc(var(--mobile-nav-reserved-height) + 0.5rem);
@@ -2304,8 +2304,7 @@ textarea {
   }
 
   .app-content {
-    padding: var(--aurral-space-outer) var(--aurral-space-outer)
-      var(--aurral-space-outer) 0;
+    padding: var(--aurral-space-outer) var(--aurral-space-outer) var(--aurral-space-outer) 0;
   }
 
   .app-content--sidebar-full {
@@ -2334,9 +2333,7 @@ textarea {
     padding-inline: var(--aurral-space-page-lg);
   }
 
-  .app-main--artist-details
-    .artist-details-page
-    > .artist-page-header:first-child {
+  .app-main--artist-details .artist-details-page > .artist-page-header:first-child {
     padding-top: var(--aurral-space-page);
   }
 
@@ -3257,11 +3254,7 @@ textarea {
 }
 
 .artist-track-row.is-search-focused {
-  background: color-mix(
-    in srgb,
-    var(--aurral-green) 14%,
-    var(--aurral-surface)
-  );
+  background: color-mix(in srgb, var(--aurral-green) 14%, var(--aurral-surface));
   outline: 1px solid color-mix(in srgb, var(--aurral-green) 35%, transparent);
 }
 
@@ -3348,11 +3341,7 @@ textarea {
 .artist-pick-panel__backdrop-wash {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.28) 0%,
-    rgba(0, 0, 0, 0.48) 100%
-  );
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.48) 100%);
 }
 
 .artist-pick-panel__grid {
@@ -3812,9 +3801,7 @@ textarea {
   margin-bottom: 1.75rem;
 }
 
-.app-main--artist-details
-  .artist-details-page
-  > .artist-page-header:first-child {
+.app-main--artist-details .artist-details-page > .artist-page-header:first-child {
   padding-top: 1rem;
 }
 
@@ -4344,8 +4331,7 @@ textarea {
   color: var(--aurral-white);
 }
 
-.artist-playlist-menu--search-suggestion
-  .artist-menu-item:hover:not(:disabled) {
+.artist-playlist-menu--search-suggestion .artist-menu-item:hover:not(:disabled) {
   background: var(--aurral-overlay-hover);
   color: var(--aurral-white);
 }
@@ -5061,9 +5047,7 @@ textarea {
   transition: color 0.18s ease;
 }
 
-.artist-discover-card:not(.artist-discover-card--album):not(
-    .artist-discover-card--playlist
-  )
+.artist-discover-card:not(.artist-discover-card--album):not(.artist-discover-card--playlist)
   .artist-card-title--discover,
 .artist-discover-card--artist .artist-card-title--discover,
 .artist-similar-name,
@@ -5431,11 +5415,7 @@ textarea {
   overflow: hidden;
   border: 1px dashed rgba(255, 255, 255, 0.15);
   background:
-    linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.04),
-      rgba(255, 255, 255, 0.01)
-    ),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
     var(--aurral-surface);
   border-radius: var(--aurral-radius-round);
   transition: border-color 0.18s ease;
@@ -5615,14 +5595,12 @@ textarea {
   transition: opacity 0.22s ease;
 }
 
-.artist-discover-card--playlist.is-expanded
-  .artist-discover-card__cover::after {
+.artist-discover-card--playlist.is-expanded .artist-discover-card__cover::after {
   opacity: 1;
 }
 
 .artist-discover-card--playlist.is-expanded .artist-discover-card__image,
-.artist-discover-card--playlist.is-expanded
-  .artist-media-placeholder--discover {
+.artist-discover-card--playlist.is-expanded .artist-media-placeholder--discover {
   filter: brightness(1.06);
 }
 
@@ -5833,9 +5811,7 @@ textarea {
   opacity: 0.72;
 }
 
-.artist-customize-section-row:hover:not(
-    .artist-customize-section-row--dragging
-  ) {
+.artist-customize-section-row:hover:not(.artist-customize-section-row--dragging) {
   background-color: var(--aurral-overlay-hover);
 }
 
@@ -6329,16 +6305,8 @@ textarea {
 
 .search-page__filter:hover,
 .search-page__filter.is-active {
-  border-color: color-mix(
-    in srgb,
-    var(--aurral-green) 45%,
-    var(--aurral-border)
-  );
-  background: color-mix(
-    in srgb,
-    var(--aurral-green) 12%,
-    var(--aurral-surface)
-  );
+  border-color: color-mix(in srgb, var(--aurral-green) 45%, var(--aurral-border));
+  background: color-mix(in srgb, var(--aurral-green) 12%, var(--aurral-surface));
   color: var(--aurral-white);
 }
 
@@ -6439,11 +6407,7 @@ textarea {
 }
 
 .search-top-artist__main--gradient .search-top-artist__backdrop-wash {
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0.28) 0%,
-    rgba(0, 0, 0, 0.48) 100%
-  );
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.48) 100%);
 }
 
 .search-top-artist__content {
@@ -6795,11 +6759,7 @@ textarea {
   flex-shrink: 0;
   padding: 2px;
   border-radius: var(--aurral-radius-round);
-  background: linear-gradient(
-    to bottom,
-    var(--aurral-warning) 0%,
-    #604848 100%
-  );
+  background: linear-gradient(to bottom, var(--aurral-warning) 0%, #604848 100%);
 }
 
 .search-page__tag-legend-ring-core {
@@ -7222,11 +7182,7 @@ textarea {
 }
 
 .requests-page__tabs .artist-tab.requests-page__tab--source:not(.is-active) {
-  color: color-mix(
-    in srgb,
-    var(--history-source-color) 72%,
-    var(--aurral-gray-light)
-  );
+  color: color-mix(in srgb, var(--history-source-color) 72%, var(--aurral-gray-light));
 }
 
 .requests-page__sort {
@@ -9457,8 +9413,7 @@ textarea {
   color: var(--aurral-gray-light);
 }
 
-.flow-page__library-create.is-compact
-  .flow-page__library-create-btn:hover:not(:disabled) {
+.flow-page__library-create.is-compact .flow-page__library-create-btn:hover:not(:disabled) {
   background-color: var(--aurral-overlay);
   color: var(--aurral-white);
 }
@@ -9799,11 +9754,7 @@ textarea {
   gap: 1rem;
   margin: -1.25rem -1.5rem 0;
   padding: 1.25rem 1.5rem 1.5rem;
-  background: linear-gradient(
-    180deg,
-    var(--aurral-surface-mid) 0%,
-    transparent 100%
-  );
+  background: linear-gradient(180deg, var(--aurral-surface-mid) 0%, transparent 100%);
   border-radius: var(--aurral-radius) var(--aurral-radius) 0 0;
 }
 
@@ -11050,8 +11001,7 @@ textarea {
 
 .flow-page__tracks-table-row:hover .flow-page__tracks-table-index-number,
 .flow-page__tracks-table-row.is-current .flow-page__tracks-table-index-number,
-.flow-page__tracks-table-row:focus-within
-  .flow-page__tracks-table-index-number {
+.flow-page__tracks-table-row:focus-within .flow-page__tracks-table-index-number {
   display: none;
 }
 
@@ -11616,9 +11566,7 @@ textarea {
     padding-inline: 0.125rem;
   }
 
-  .flow-page__library--collapsed
-    .flow-page__library-head
-    .flow-page__library-create {
+  .flow-page__library--collapsed .flow-page__library-head .flow-page__library-create {
     margin-left: 0;
   }
 
@@ -11681,8 +11629,7 @@ textarea {
     padding: 0;
   }
 
-  .flow-page__library--collapsed
-    .flow-page__library-item-artwork.flow-page__artwork {
+  .flow-page__library--collapsed .flow-page__library-item-artwork.flow-page__artwork {
     width: 3.5rem;
     height: 3.5rem;
     max-width: 100%;
@@ -11937,9 +11884,7 @@ textarea {
     display: none;
   }
 
-  .flow-page__library-inline-detail
-    .flow-page__tracks-table-head
-    th.flow-page__tracks-table-song {
+  .flow-page__library-inline-detail .flow-page__tracks-table-head th.flow-page__tracks-table-song {
     width: 46%;
   }
 
@@ -11971,24 +11916,16 @@ textarea {
     border-top: 1px solid var(--aurral-surface);
   }
 
-  .flow-page__track-menu-dropdown
-    .artist-menu-submenu:hover
-    .artist-menu-submenu__panel,
-  .flow-page__track-menu-dropdown
-    .artist-menu-submenu:focus-within
-    .artist-menu-submenu__panel {
+  .flow-page__track-menu-dropdown .artist-menu-submenu:hover .artist-menu-submenu__panel,
+  .flow-page__track-menu-dropdown .artist-menu-submenu:focus-within .artist-menu-submenu__panel {
     display: none;
   }
 
-  .flow-page__track-menu-dropdown
-    .artist-menu-submenu.is-open
-    .artist-menu-submenu__panel {
+  .flow-page__track-menu-dropdown .artist-menu-submenu.is-open .artist-menu-submenu__panel {
     display: block;
   }
 
-  .flow-page__track-menu-dropdown
-    .artist-menu-submenu.is-open
-    .artist-menu-submenu__trigger {
+  .flow-page__track-menu-dropdown .artist-menu-submenu.is-open .artist-menu-submenu__trigger {
     background-color: var(--aurral-overlay-hover);
     color: var(--aurral-white);
   }
@@ -12854,8 +12791,7 @@ textarea {
 }
 
 .playlist-modal__cover-picker:hover .playlist-modal__cover-picker-overlay,
-.playlist-modal__cover-picker:focus-visible
-  .playlist-modal__cover-picker-overlay {
+.playlist-modal__cover-picker:focus-visible .playlist-modal__cover-picker-overlay {
   opacity: 1;
 }
 
@@ -13164,9 +13100,7 @@ textarea {
   .global-player {
     position: fixed;
     right: 0.5rem;
-    bottom: calc(
-      var(--mobile-nav-reserved-height) + var(--global-player-mobile-gap)
-    );
+    bottom: calc(var(--mobile-nav-reserved-height) + var(--global-player-mobile-gap));
     left: 0.5rem;
     z-index: 38;
     margin-top: 0;
@@ -13226,12 +13160,10 @@ textarea {
 
   .app-main--player-active {
     padding-bottom: calc(
-      1rem + var(--global-player-mobile-height) +
-        var(--global-player-mobile-gap)
+      1rem + var(--global-player-mobile-height) + var(--global-player-mobile-gap)
     );
     scroll-padding-bottom: calc(
-      var(--global-player-mobile-height) + var(--global-player-mobile-gap) +
-        0.75rem
+      var(--global-player-mobile-height) + var(--global-player-mobile-gap) + 0.75rem
     );
   }
 }

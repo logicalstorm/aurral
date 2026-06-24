@@ -1,11 +1,7 @@
 export function SettingsModalSection({ title, children, className = "" }) {
   return (
-    <section
-      className={`settings-modal__section${className ? ` ${className}` : ""}`}
-    >
-      {title ? (
-        <h4 className="settings-modal__section-title">{title}</h4>
-      ) : null}
+    <section className={`settings-modal__section${className ? ` ${className}` : ""}`}>
+      {title ? <h4 className="settings-modal__section-title">{title}</h4> : null}
       <div className="settings-modal__section-body">{children}</div>
     </section>
   );

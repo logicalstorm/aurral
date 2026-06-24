@@ -4,8 +4,7 @@ import {
 } from "./honkerDb.js";
 import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
 import { playlistManager } from "./weeklyFlow/weeklyFlowPlaylistManager.js";
-import { resolveWeeklyFlowTrackContext } from "./weeklyFlow/weeklyFlowTrackResolver.js";
-import {
+import { resolveWeeklyFlowTrackContext } from "./weeklyFlow/weeklyFlowTrackResolver.js";import {
   flowPlaylistConfig,
   normalizeSharedTrack,
   tracksShareMembership,
@@ -18,11 +17,7 @@ function hasValue(value) {
 }
 
 function isMissingMbid(track) {
-  return (
-    !hasValue(track?.artistMbid) ||
-    !hasValue(track?.albumMbid) ||
-    !hasValue(track?.trackMbid)
-  );
+  return !hasValue(track?.artistMbid) || !hasValue(track?.albumMbid) || !hasValue(track?.trackMbid);
 }
 
 function hasMissingJobMbid(track, jobs) {
@@ -32,8 +27,8 @@ function hasMissingJobMbid(track, jobs) {
 }
 
 function hasMissingPlaylistMbids(playlist) {
-  return (Array.isArray(playlist?.tracks) ? playlist.tracks : []).some(
-    (track) => isMissingMbid(track),
+  return (Array.isArray(playlist?.tracks) ? playlist.tracks : []).some((track) =>
+    isMissingMbid(track),
   );
 }
 
@@ -44,13 +39,7 @@ function mergeMissingString(target, source, key) {
 
 function mergeMissingMetadata(target, source, { includeJobFields = false } = {}) {
   const patch = {};
-  for (const key of [
-    "artistMbid",
-    "albumMbid",
-    "trackMbid",
-    "albumName",
-    "releaseYear",
-  ]) {
+  for (const key of ["artistMbid", "albumMbid", "trackMbid", "albumName", "releaseYear"]) {
     const value = mergeMissingString(target, source, key);
     if (value !== undefined) patch[key] = value;
   }
@@ -76,11 +65,7 @@ function mergeMissingMetadata(target, source, { includeJobFields = false } = {})
   if (!includeJobFields) return patch;
 
   for (const key of ["trackNumber", "albumTrackCount"]) {
-    if (
-      target?.[key] == null &&
-      source?.[key] != null &&
-      Number.isFinite(Number(source[key]))
-    ) {
+    if (target?.[key] == null && source?.[key] != null && Number.isFinite(Number(source[key]))) {
       patch[key] = Math.max(1, Math.round(Number(source[key])));
     }
   }
@@ -89,9 +74,7 @@ function mergeMissingMetadata(target, source, { includeJobFields = false } = {})
     ? target.albumTrackTitles.filter(Boolean)
     : [];
   const sourceTitles = Array.isArray(source?.albumTrackTitles)
-    ? source.albumTrackTitles
-        .map((entry) => String(entry || "").trim())
-        .filter(Boolean)
+    ? source.albumTrackTitles.map((entry) => String(entry || "").trim()).filter(Boolean)
     : [];
   if (targetTitles.length === 0 && sourceTitles.length > 0) {
     patch.albumTrackTitles = [...new Set(sourceTitles)];
@@ -107,10 +90,12 @@ function hasPatch(patch) {
 function applyPlaylistTrackPatch(track, source) {
   const patch = mergeMissingMetadata(track, source);
   if (!hasPatch(patch)) return track;
-  return normalizeSharedTrack({
-    ...track,
-    ...patch,
-  }) || track;
+  return (
+    normalizeSharedTrack({
+      ...track,
+      ...patch,
+    }) || track
+  );
 }
 
 function findResolutionForTrack(track, resolutions, usedResolutionIndexes) {
@@ -129,9 +114,7 @@ function findResolutionForTrack(track, resolutions, usedResolutionIndexes) {
 }
 
 function matchingJobsForTrack(track, jobs) {
-  return (Array.isArray(jobs) ? jobs : []).filter((job) =>
-    tracksShareMembership(job, track),
-  );
+  return (Array.isArray(jobs) ? jobs : []).filter((job) => tracksShareMembership(job, track));
 }
 
 async function buildResolution(track, jobs, resolveTrackContext) {
@@ -172,7 +155,11 @@ async function buildResolution(track, jobs, resolveTrackContext) {
 
 export function schedulePlaylistMbidEnrichment(
   playlistId,
-  { reason = "playlist-update", delaySeconds = PLAYLIST_MBID_ENRICHMENT_DELAY_SECONDS, priority = 0 } = {},
+  {
+    reason = "playlist-update",
+    delaySeconds = PLAYLIST_MBID_ENRICHMENT_DELAY_SECONDS,
+    priority = 0,
+  } = {},
 ) {
   const safePlaylistId = String(playlistId || "").trim();
   if (!safePlaylistId) return null;
@@ -190,17 +177,14 @@ export function schedulePlaylistMbidEnrichment(
   );
 }
 
-export function schedulePlaylistMbidEnrichmentForMissingPlaylists(
-  { reason = "sweep" } = {},
-) {
+export function schedulePlaylistMbidEnrichmentForMissingPlaylists({ reason = "sweep" } = {}) {
   const jobIds = [];
   for (const playlist of flowPlaylistConfig.getSharedPlaylists()) {
     const jobs = downloadTracker.getByPlaylistType(playlist.id);
     const hasMissingConfig = hasMissingPlaylistMbids(playlist);
-    const hasMissingJobs = (Array.isArray(playlist?.tracks)
-      ? playlist.tracks
-      : []
-    ).some((track) => hasMissingJobMbid(track, jobs));
+    const hasMissingJobs = (Array.isArray(playlist?.tracks) ? playlist.tracks : []).some((track) =>
+      hasMissingJobMbid(track, jobs),
+    );
     if (!hasMissingConfig && !hasMissingJobs) continue;
     const jobId = schedulePlaylistMbidEnrichment(playlist.id, {
       reason,
@@ -223,9 +207,7 @@ export async function enrichSharedPlaylistMbids(
   if (!snapshotPlaylist) return { missing: true, changed: false };
 
   const snapshotJobs = downloadTracker.getByPlaylistType(safePlaylistId);
-  const snapshotTracks = Array.isArray(snapshotPlaylist.tracks)
-    ? snapshotPlaylist.tracks
-    : [];
+  const snapshotTracks = Array.isArray(snapshotPlaylist.tracks) ? snapshotPlaylist.tracks : [];
   const resolutions = [];
   let tracksExamined = 0;
   let tracksResolved = 0;
@@ -261,36 +243,25 @@ export async function enrichSharedPlaylistMbids(
   return withHonkerLock(
     `playlist-mutation:${safePlaylistId}`,
     async () => {
-      const currentPlaylist =
-        flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
+      const currentPlaylist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
       if (!currentPlaylist) return { missing: true, changed: false };
 
-      const currentTracks = Array.isArray(currentPlaylist.tracks)
-        ? currentPlaylist.tracks
-        : [];
+      const currentTracks = Array.isArray(currentPlaylist.tracks) ? currentPlaylist.tracks : [];
       const usedResolutionIndexes = new Set();
       let playlistTracksUpdated = 0;
       const nextTracks = currentTracks.map((track) => {
-        const resolution = findResolutionForTrack(
-          track,
-          resolutions,
-          usedResolutionIndexes,
-        );
+        const resolution = findResolutionForTrack(track, resolutions, usedResolutionIndexes);
         if (!resolution) return track;
-        const nextTrack = applyPlaylistTrackPatch(
-          track,
-          resolution.resolvedTrack,
-        );
+        const nextTrack = applyPlaylistTrackPatch(track, resolution.resolvedTrack);
         if (nextTrack !== track) playlistTracksUpdated += 1;
         return nextTrack;
       });
 
       let updatedPlaylist = currentPlaylist;
       if (playlistTracksUpdated > 0) {
-        updatedPlaylist = flowPlaylistConfig.updateSharedPlaylist(
-          safePlaylistId,
-          { tracks: nextTracks },
-        );
+        updatedPlaylist = flowPlaylistConfig.updateSharedPlaylist(safePlaylistId, {
+          tracks: nextTracks,
+        });
       }
 
       const jobs = downloadTracker.getByPlaylistType(safePlaylistId);

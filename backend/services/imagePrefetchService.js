@@ -6,9 +6,7 @@ const BATCH_SIZE = 10;
 function enqueueUncachedMbids(mbids) {
   const unique = [
     ...new Set(
-      (Array.isArray(mbids) ? mbids : [])
-        .map((mbid) => String(mbid || "").trim())
-        .filter(Boolean),
+      (Array.isArray(mbids) ? mbids : []).map((mbid) => String(mbid || "").trim()).filter(Boolean),
     ),
   ];
   if (unique.length === 0) return;

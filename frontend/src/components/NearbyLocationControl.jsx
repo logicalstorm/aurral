@@ -27,8 +27,7 @@ function NearbyLocationControl({
   const [showZipForm, setShowZipForm] = useState(false);
   const zipModeActive = locationMode === "zip";
   const cityLabel = getNearbyCityLabel(location);
-  const zipFormVisible =
-    showZipForm || (zipModeActive && menuOpen && !appliedZip.trim());
+  const zipFormVisible = showZipForm || (zipModeActive && menuOpen && !appliedZip.trim());
 
   useEffect(() => {
     setZipDraft(appliedZip);
@@ -149,11 +148,7 @@ function NearbyLocationControl({
                   />
                 </div>
                 <div className="artist-nearby-zip-editor__actions">
-                  <button
-                    type="button"
-                    onClick={closeMenu}
-                    className="btn btn-secondary btn-sm"
-                  >
+                  <button type="button" onClick={closeMenu} className="btn btn-secondary btn-sm">
                     Cancel
                   </button>
                   <button

@@ -2,7 +2,9 @@ const STORAGE_KEY = "aurral:recent-searches";
 const MAX_RECENT = 8;
 
 function normalizeQuery(value) {
-  return String(value || "").trim().replace(/\s+/g, " ");
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 export function readRecentSearches() {
@@ -33,9 +35,7 @@ export function addRecentSearch(query) {
   if (!normalized) return readRecentSearches();
   const next = [
     normalized,
-    ...readRecentSearches().filter(
-      (entry) => entry.toLowerCase() !== normalized.toLowerCase(),
-    ),
+    ...readRecentSearches().filter((entry) => entry.toLowerCase() !== normalized.toLowerCase()),
   ].slice(0, MAX_RECENT);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));

@@ -3,8 +3,7 @@ const STALE_SEARCH_MS = 5 * 60 * 1000;
 const RECENT_COMMAND_MS = 2 * 60 * 60 * 1000;
 const RECENT_HISTORY_MS = 60 * 60 * 1000;
 
-const normalizeItems = (value) =>
-  Array.isArray(value) ? value : value?.records || [];
+const normalizeItems = (value) => (Array.isArray(value) ? value : value?.records || []);
 
 const getCommandAlbumIds = (command) => {
   if (Array.isArray(command?.body?.albumIds)) return command.body.albumIds;
@@ -86,11 +85,7 @@ export const parseLidarrSearchContext = ({ queue, history, commands } = {}) => {
   };
 };
 
-export const resolveAlbumSearchOutcome = (
-  albumId,
-  context,
-  { searchStartedAt = 0 } = {},
-) => {
+export const resolveAlbumSearchOutcome = (albumId, context, { searchStartedAt = 0 } = {}) => {
   const lidarrAlbumId = parseInt(albumId, 10);
   if (isNaN(lidarrAlbumId) || !context) return null;
 

@@ -1,13 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import {
-  Loader,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  Music,
-  RotateCcw,
-} from "lucide-react";
+import { Loader, Clock, CheckCircle2, AlertCircle, Music, RotateCcw } from "lucide-react";
 import { getRequests, triggerAlbumSearch, checkHealth } from "../utils/api";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { TAG_COLORS } from "./ArtistDetails/constants";
@@ -84,10 +77,7 @@ const mergeActivityRequests = (previousRequests, nextRequests) => {
   return incoming.map((request) => {
     const previous = previousById.get(getRequestIdentity(request));
     if (!previous) return request;
-    if (
-      buildRequestChangeSignature(previous) !==
-      buildRequestChangeSignature(request)
-    ) {
+    if (buildRequestChangeSignature(previous) !== buildRequestChangeSignature(request)) {
       return request;
     }
     return {
@@ -110,16 +100,8 @@ const formatDateGroupLabel = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown date";
   const now = new Date();
-  const startOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  );
-  const startOfDate = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-  );
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const diffDays = Math.round(
     (startOfToday.getTime() - startOfDate.getTime()) / (24 * 60 * 60 * 1000),
   );
@@ -184,8 +166,7 @@ const QUEUE_EMPTY_STATE_COPY = {
   },
   lidarr: {
     title: "No Lidarr downloads in progress",
-    message:
-      "Album requests from Lidarr will appear here while they are active.",
+    message: "Album requests from Lidarr will appear here while they are active.",
   },
   slskd: {
     title: "No slskd downloads in progress",
@@ -197,8 +178,7 @@ const QUEUE_EMPTY_STATE_COPY = {
   },
   aurral: {
     title: "No Aurral jobs in progress",
-    message:
-      "Playlist updates, discovery refreshes, and other active work will appear here.",
+    message: "Playlist updates, discovery refreshes, and other active work will appear here.",
   },
 };
 
@@ -222,8 +202,7 @@ const HISTORY_EMPTY_STATE_COPY = {
   },
   aurral: {
     title: "No Aurral history",
-    message:
-      "Completed playlist updates, discovery refreshes, and other work will appear here.",
+    message: "Completed playlist updates, discovery refreshes, and other work will appear here.",
   },
 };
 
@@ -274,22 +253,16 @@ function ActivityPage() {
   const [reSearchingAlbumIds, setReSearchingAlbumIds] = useState({});
   const fetchRequestsInFlightRef = useRef(false);
 
-  const sourceNavItems = useMemo(
-    () => getActivitySourceItems(usenetActive),
-    [usenetActive],
-  );
+  const sourceNavItems = useMemo(() => getActivitySourceItems(usenetActive), [usenetActive]);
   const activeView = normalizeActivityView(viewParam);
   const activeSource = normalizeActivitySource(sourceParam, usenetActive);
   const isQueueView = activeView === "queue";
-  const shouldRedirectView =
-    viewParam && normalizeActivityView(viewParam) !== viewParam;
+  const shouldRedirectView = viewParam && normalizeActivityView(viewParam) !== viewParam;
   const shouldRedirectSource =
-    sourceParam &&
-    normalizeActivitySource(sourceParam, usenetActive) !== sourceParam;
+    sourceParam && normalizeActivitySource(sourceParam, usenetActive) !== sourceParam;
 
   const activeViewLabel =
-    ACTIVITY_VIEWS.find((entry) => entry.id === activeView)?.label ||
-    "Activity";
+    ACTIVITY_VIEWS.find((entry) => entry.id === activeView)?.label || "Activity";
   const activeSourceLabel =
     sourceNavItems.find((entry) => entry.id === activeSource)?.label || "All";
 
@@ -305,8 +278,7 @@ function ActivityPage() {
     () =>
       requests.filter(
         (request) =>
-          matchesActivityView(request, activeView) &&
-          matchesActivitySource(request, activeSource),
+          matchesActivityView(request, activeView) && matchesActivitySource(request, activeSource),
       ),
     [requests, activeView, activeSource],
   );
@@ -400,22 +372,14 @@ function ActivityPage() {
   }, [fetchRequests]);
 
   useEffect(() => {
-    const intervalMs = isQueueView
-      ? QUEUE_POLL_INTERVAL_MS
-      : HISTORY_POLL_INTERVAL_MS;
+    const intervalMs = isQueueView ? QUEUE_POLL_INTERVAL_MS : HISTORY_POLL_INTERVAL_MS;
     const interval = setInterval(() => {
       fetchRequests({ silent: true });
     }, intervalMs);
     return () => clearInterval(interval);
   }, [isQueueView, fetchRequests]);
 
-  const navigateToArtist = (
-    request,
-    isAlbum,
-    artistMbid,
-    artistName,
-    displayName,
-  ) => {
+  const navigateToArtist = (request, isAlbum, artistMbid, artistName, displayName) => {
     if (!artistMbid || artistMbid === "null" || artistMbid === "undefined") {
       return;
     }
@@ -442,10 +406,7 @@ function ActivityPage() {
                 statusLabel: "Searching",
                 title: item.albumName
                   ? `Searching Lidarr for ${item.albumName}`
-                  : item.title?.replace(
-                      /^No results for /,
-                      "Searching Lidarr for ",
-                    ) || item.title,
+                  : item.title?.replace(/^No results for /, "Searching Lidarr for ") || item.title,
                 canReSearch: false,
               }
             : item,
@@ -460,15 +421,7 @@ function ActivityPage() {
 
   const handleRowNavigate = (
     request,
-    {
-      isSlskd,
-      isNzbget,
-      isAurral,
-      isAlbum,
-      artistMbid,
-      artistName,
-      displayName,
-    },
+    { isSlskd, isNzbget, isAurral, isAlbum, artistMbid, artistName, displayName },
   ) => {
     if ((isSlskd || isNzbget) && request.playlistId) {
       navigate(`/playlists?selected=${encodeURIComponent(request.playlistId)}`);
@@ -484,8 +437,7 @@ function ActivityPage() {
   const renderRequestRow = (request, rowIndex = 0) => {
     const isSlskd = request.source === "slskd";
     const isNzbget = request.source === "nzbget";
-    const isTrackDownload =
-      isSlskd || isNzbget || request.kind === "track_download";
+    const isTrackDownload = isSlskd || isNzbget || request.kind === "track_download";
     const isAurral = request.source === "aurral" && !isTrackDownload;
     const isActivity = request.type === "activity";
     const isAlbum = request.type === "album";
@@ -506,12 +458,8 @@ function ActivityPage() {
     const sourceColor = ACTIVITY_SOURCE_COLORS[requestSource];
     const timelineTime = formatTimelineTime(request.requestedAt);
     const canReSearch =
-      request.canReSearch === true &&
-      request.albumId &&
-      !reSearchingAlbumIds[request.albumId];
-    const isReSearching = Boolean(
-      request.albumId && reSearchingAlbumIds[request.albumId],
-    );
+      request.canReSearch === true && request.albumId && !reSearchingAlbumIds[request.albumId];
+    const isReSearching = Boolean(request.albumId && reSearchingAlbumIds[request.albumId]);
     const displayRequest =
       isReSearching && request.status === "failed"
         ? {
@@ -546,18 +494,12 @@ function ActivityPage() {
           {(timelineTime || metaLine) && (
             <div className="requests-page__meta">
               {timelineTime && (
-                <time
-                  className="requests-page__meta-time"
-                  dateTime={request.requestedAt}
-                >
+                <time className="requests-page__meta-time" dateTime={request.requestedAt}>
                   {timelineTime}
                 </time>
               )}
               {timelineTime && metaLine && (
-                <span
-                  className="requests-page__meta-separator"
-                  aria-hidden="true"
-                >
+                <span className="requests-page__meta-separator" aria-hidden="true">
                   ·
                 </span>
               )}
@@ -566,10 +508,7 @@ function ActivityPage() {
           )}
         </div>
 
-        <div
-          className="requests-page__status"
-          onClick={(event) => event.stopPropagation()}
-        >
+        <div className="requests-page__status" onClick={(event) => event.stopPropagation()}>
           <RequestStatusBadge request={displayRequest} />
           {canReSearch && (
             <div className="requests-page__actions">
@@ -589,9 +528,7 @@ function ActivityPage() {
     );
   };
 
-  const emptyStateCopy = isQueueView
-    ? QUEUE_EMPTY_STATE_COPY
-    : HISTORY_EMPTY_STATE_COPY;
+  const emptyStateCopy = isQueueView ? QUEUE_EMPTY_STATE_COPY : HISTORY_EMPTY_STATE_COPY;
   const emptyState = emptyStateCopy[activeSource] || emptyStateCopy.all;
   const activityPath = buildActivityPath(activeView, activeSource);
 
@@ -631,11 +568,7 @@ function ActivityPage() {
       </header>
 
       <div className="requests-page__toolbar">
-        <div
-          className="artist-tabs requests-page__tabs"
-          role="tablist"
-          aria-label="Source"
-        >
+        <div className="artist-tabs requests-page__tabs" role="tablist" aria-label="Source">
           {sourceNavItems.map((entry) => (
             <Link
               key={entry.id}
@@ -717,9 +650,7 @@ function ActivityPage() {
               <div className="requests-page__load-more">
                 <button
                   type="button"
-                  onClick={() =>
-                    setVisibleCount((count) => count + ACTIVITY_PAGE_SIZE)
-                  }
+                  onClick={() => setVisibleCount((count) => count + ACTIVITY_PAGE_SIZE)}
                   className="btn btn-secondary btn--bold btn-min-h"
                 >
                   Load more

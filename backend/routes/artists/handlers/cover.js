@@ -10,9 +10,7 @@ export function registerCover(router) {
     const { mbid } = req.params;
     const { refresh = false, artistName: queryArtistName } = req.query;
     const artistNameFromQuery =
-      typeof queryArtistName === "string" && queryArtistName.trim()
-        ? queryArtistName.trim()
-        : null;
+      typeof queryArtistName === "string" && queryArtistName.trim() ? queryArtistName.trim() : null;
 
     try {
       if (!UUID_REGEX.test(mbid)) {
@@ -26,7 +24,7 @@ export function registerCover(router) {
       }
 
       const override = dbOps.getArtistOverride(mbid);
-      const resolvedMbid = override?.musicbrainzId || mbid;
+      const _resolvedMbid = override?.musicbrainzId || mbid;
 
       const cachedImage = dbOps.getImage(mbid);
       if (
@@ -35,12 +33,10 @@ export function registerCover(router) {
         cachedImage.imageUrl &&
         cachedImage.imageUrl !== "NOT_FOUND"
       ) {
-        logger.api("info", "Cover cache hit", { mbid });
-        res.set("Cache-Control", "public, max-age=31536000, immutable");
+        logger.api("info", "Cover cache hit", { mbid });        res.set("Cache-Control", "public, max-age=31536000, immutable");
 
         const cacheAge = cachedImage.cacheAge;
-        const shouldRefresh =
-          !cacheAge || Date.now() - cacheAge > 7 * 24 * 60 * 60 * 1000;
+        const shouldRefresh = !cacheAge || Date.now() - cacheAge > 7 * 24 * 60 * 60 * 1000;
 
         if (shouldRefresh) {
           fetchCoverInBackground(mbid, artistNameFromQuery).catch(() => {});
@@ -73,8 +69,7 @@ export function registerCover(router) {
         cachedImage.imageUrl === "NOT_FOUND" &&
         !artistNameFromQuery
       ) {
-        logger.api("info", "NOT_FOUND cache", { mbid });
-        res.set("Cache-Control", "public, max-age=3600");
+        logger.api("info", "NOT_FOUND cache", { mbid });        res.set("Cache-Control", "public, max-age=3600");
 
         setTimeout(() => {
           fetchCoverInBackground(mbid, artistNameFromQuery).catch(() => {});
@@ -86,8 +81,7 @@ export function registerCover(router) {
       logger.api("info", "Fetching cover", { mbid });
 
       const shouldForceRefresh =
-        !!refresh ||
-        (cachedImage?.imageUrl === "NOT_FOUND" && !!artistNameFromQuery);
+        !!refresh || (cachedImage?.imageUrl === "NOT_FOUND" && !!artistNameFromQuery);
 
       const fetchPromise = (async () => {
         try {
@@ -114,8 +108,7 @@ export function registerCover(router) {
         res.set("Cache-Control", "public, max-age=31536000, immutable");
       } else {
         if (result.notFound) {
-          logger.api("info", "No cover found, caching NOT_FOUND", { mbid });
-          dbOps.setImage(mbid, "NOT_FOUND");
+          logger.api("info", "No cover found, caching NOT_FOUND", { mbid });          dbOps.setImage(mbid, "NOT_FOUND");
           res.set("Cache-Control", "public, max-age=3600");
         } else {
           logger.api("warn", "Cover lookup failed transiently, skipping NOT_FOUND cache", { mbid });

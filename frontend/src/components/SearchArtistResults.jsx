@@ -12,14 +12,8 @@ const handleCoverKeyDown = (event, onClick) => {
   onClick();
 };
 
-function TagRecommendedArtistCover({
-  artist,
-  artistId,
-  artistImages,
-  onClick,
-}) {
-  const coverSrc =
-    artistImages[artistId] || artist.image || artist.imageUrl || "";
+function TagRecommendedArtistCover({ artist, artistId, artistImages, onClick }) {
+  const coverSrc = artistImages[artistId] || artist.image || artist.imageUrl || "";
   const gradientColors = useImageGradientColors(coverSrc);
 
   return (
@@ -73,16 +67,10 @@ function SearchArtistResults({
   variant = "square",
 }) {
   const formatLifeSpan = (artist) => {
-    const begin =
-      artist?.begin || artist?.["life-span"]?.begin || artist?.lifeSpan?.begin;
+    const begin = artist?.begin || artist?.["life-span"]?.begin || artist?.lifeSpan?.begin;
     if (!begin) return null;
-    const ended =
-      artist?.ended ??
-      artist?.["life-span"]?.ended ??
-      artist?.lifeSpan?.ended ??
-      false;
-    const end =
-      artist?.end || artist?.["life-span"]?.end || artist?.lifeSpan?.end || null;
+    const ended = artist?.ended ?? artist?.["life-span"]?.ended ?? artist?.lifeSpan?.ended ?? false;
+    const end = artist?.end || artist?.["life-span"]?.end || artist?.lifeSpan?.end || null;
     const beginYear = String(begin).split("-")[0];
     if (ended && end) {
       const endYear = String(end).split("-")[0];
@@ -124,35 +112,23 @@ function SearchArtistResults({
   };
 
   const gridClassName =
-    variant === "round"
-      ? "artist-release-grid search-artist-grid--round"
-      : "artist-release-grid";
+    variant === "round" ? "artist-release-grid search-artist-grid--round" : "artist-release-grid";
 
   return (
     <div className={gridClassName}>
       {artists.map((artist, index) => {
         const artistId = getArtistRecordId(artist);
-        const isRecommendedTagResult =
-          type === "tag" && artist.tagResultSource === "recommended";
+        const isRecommendedTagResult = type === "tag" && artist.tagResultSource === "recommended";
         const artistTypeLabel = normalizeArtistType(artist);
         const lifeSpan = formatLifeSpan(artist);
         const area = normalizeArea(artist);
         const country = artist?.country ? String(artist.country).trim() : null;
-        const disambiguation = artist?.disambiguation
-          ? String(artist.disambiguation).trim()
-          : null;
-        const disambiguationLine = [
-          artistTypeLabel,
-          area || country,
-          lifeSpan,
-          disambiguation,
-        ]
+        const disambiguation = artist?.disambiguation ? String(artist.disambiguation).trim() : null;
+        const disambiguationLine = [artistTypeLabel, area || country, lifeSpan, disambiguation]
           .filter(Boolean)
           .join(" • ");
         const artistMetaText = [
-          type === "recommended" &&
-            artist.sourceArtist &&
-            `Similar to ${artist.sourceArtist}`,
+          type === "recommended" && artist.sourceArtist && `Similar to ${artist.sourceArtist}`,
         ]
           .filter(Boolean)
           .join(" • ");
@@ -176,9 +152,7 @@ function SearchArtistResults({
                 role="button"
                 tabIndex={0}
                 onClick={() => openArtist(artist)}
-                onKeyDown={(event) =>
-                  handleCoverKeyDown(event, () => openArtist(artist))
-                }
+                onKeyDown={(event) => handleCoverKeyDown(event, () => openArtist(artist))}
                 className="artist-discover-card__cover"
                 aria-label={`Open ${artist.name}`}
               >
@@ -208,18 +182,12 @@ function SearchArtistResults({
                   {libraryLookup[artistId] && <SearchLibraryCheck />}
                 </div>
                 {artistMetaText ? (
-                  <p
-                    className="artist-card-meta--discover"
-                    title={artistMetaText}
-                  >
+                  <p className="artist-card-meta--discover" title={artistMetaText}>
                     {artistMetaText}
                   </p>
                 ) : null}
                 {variant !== "round" && disambiguationLine ? (
-                  <p
-                    className="artist-card-meta--discover"
-                    title={disambiguationLine}
-                  >
+                  <p className="artist-card-meta--discover" title={disambiguationLine}>
                     {disambiguationLine}
                   </p>
                 ) : null}

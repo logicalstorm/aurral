@@ -59,12 +59,7 @@ function getPrimaryMatchBoost(item) {
 export function getSearchRankScore(item) {
   const relevance = normalizeRelevanceScore(item);
   const tierBoost = getLibraryTier(item) * LIBRARY_TIER_STEP;
-  return (
-    relevance +
-    tierBoost +
-    getContextBoostNormalized(item) +
-    getPrimaryMatchBoost(item)
-  );
+  return relevance + tierBoost + getContextBoostNormalized(item) + getPrimaryMatchBoost(item);
 }
 
 export function compareSearchResults(left, right) {

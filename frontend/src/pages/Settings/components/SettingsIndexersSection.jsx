@@ -1,24 +1,15 @@
 import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { SettingsInput } from "./SettingsField";
-import {
-  IntegrationCard,
-  SettingsIntegrationModal,
-} from "./SettingsIntegrationCards";
+import { IntegrationCard, SettingsIntegrationModal } from "./SettingsIntegrationCards";
 import {
   SettingsModalActions,
   SettingsModalField,
   SettingsModalSection,
   SettingsModalToggle,
 } from "./SettingsModalLayout";
-import {
-  getIndexerStatus,
-  getProviderStatus,
-} from "../utils/integrationStatus";
-import {
-  getProwlarrIndexers,
-  testProwlarrConnection,
-} from "../../../utils/api";
+import { getIndexerStatus, getProviderStatus } from "../utils/integrationStatus";
+import { getProwlarrIndexers, testProwlarrConnection } from "../../../utils/api";
 
 function toNumber(value, fallback) {
   const next = parseInt(value, 10);
@@ -36,8 +27,7 @@ export function SettingsIndexersSection({
 }) {
   const [activeModal, setActiveModal] = useState(null);
   const [testingProwlarr, setTestingProwlarr] = useState(false);
-  const [loadingProwlarrIndexers, setLoadingProwlarrIndexers] =
-    useState(false);
+  const [loadingProwlarrIndexers, setLoadingProwlarrIndexers] = useState(false);
   const [prowlarrIndexers, setProwlarrIndexers] = useState([]);
 
   const prowlarr = settings.integrations?.prowlarr || {};
@@ -96,9 +86,7 @@ export function SettingsIndexersSection({
     getProwlarrIndexers()
       .then((result) => {
         if (!cancelled) {
-          setProwlarrIndexers(
-            Array.isArray(result?.indexers) ? result.indexers : [],
-          );
+          setProwlarrIndexers(Array.isArray(result?.indexers) ? result.indexers : []);
         }
       })
       .catch(() => {
@@ -128,8 +116,7 @@ export function SettingsIndexersSection({
   const getIndexerState = (indexer) => {
     const override = prowlarr.indexers?.[String(indexer.id)] || {};
     const aurralEnabled = override.enabled !== false;
-    const effectiveEnabled =
-      indexer.enabledInProwlarr !== false && aurralEnabled;
+    const effectiveEnabled = indexer.enabledInProwlarr !== false && aurralEnabled;
     return {
       aurralEnabled,
       effectiveEnabled,
@@ -162,8 +149,7 @@ export function SettingsIndexersSection({
 
   const activeIndexer = activeModal?.startsWith("indexer:")
     ? prowlarrIndexers.find(
-        (indexer) =>
-          String(indexer.id) === activeModal.slice("indexer:".length),
+        (indexer) => String(indexer.id) === activeModal.slice("indexer:".length),
       )
     : null;
 
@@ -193,9 +179,7 @@ export function SettingsIndexersSection({
               health?.prowlarrConfigured || prowlarrConfigured,
             )}
             meta={
-              prowlarr.maxResults
-                ? `Audio search · ${prowlarr.maxResults} results`
-                : "Audio search"
+              prowlarr.maxResults ? `Audio search · ${prowlarr.maxResults} results` : "Audio search"
             }
             onClick={() => setActiveModal("prowlarr")}
           />
@@ -233,9 +217,7 @@ export function SettingsIndexersSection({
               disabled={testingProwlarr || loadingProwlarrIndexers}
               onClick={handleTestProwlarr}
             >
-              <RefreshCw
-                className={`artist-icon-sm${testingProwlarr ? " animate-spin" : ""}`}
-              />
+              <RefreshCw className={`artist-icon-sm${testingProwlarr ? " animate-spin" : ""}`} />
               {testingProwlarr ? "Testing..." : "Test connection"}
             </button>
           }
@@ -244,9 +226,7 @@ export function SettingsIndexersSection({
             <SettingsModalToggle
               label="Enable Prowlarr"
               checked={prowlarrEnabled}
-              onChange={(event) =>
-                updateIntegration("prowlarr", { enabled: event.target.checked })
-              }
+              onChange={(event) => updateIntegration("prowlarr", { enabled: event.target.checked })}
             />
           </SettingsModalSection>
 
@@ -257,9 +237,7 @@ export function SettingsIndexersSection({
                 placeholder="http://localhost:9696"
                 autoComplete="off"
                 value={prowlarr.url || ""}
-                onChange={(event) =>
-                  updateIntegration("prowlarr", { url: event.target.value })
-                }
+                onChange={(event) => updateIntegration("prowlarr", { url: event.target.value })}
               />
             </SettingsModalField>
             <SettingsModalField label="API key">
@@ -267,9 +245,7 @@ export function SettingsIndexersSection({
                 type="password"
                 autoComplete="off"
                 value={prowlarr.apiKey || ""}
-                onChange={(event) =>
-                  updateIntegration("prowlarr", { apiKey: event.target.value })
-                }
+                onChange={(event) => updateIntegration("prowlarr", { apiKey: event.target.value })}
               />
             </SettingsModalField>
           </SettingsModalSection>
@@ -320,10 +296,7 @@ export function SettingsIndexersSection({
       )}
 
       {activeIndexer && (
-        <SettingsIntegrationModal
-          title={activeIndexer.name}
-          onClose={() => setActiveModal(null)}
-        >
+        <SettingsIntegrationModal title={activeIndexer.name} onClose={() => setActiveModal(null)}>
           {(() => {
             const state = getIndexerState(activeIndexer);
             return (
@@ -350,10 +323,7 @@ export function SettingsIndexersSection({
                       onChange={(event) =>
                         updateProwlarrIndexer(activeIndexer.id, {
                           enabled: state.aurralEnabled,
-                          priority: toNumber(
-                            event.target.value,
-                            activeIndexer.priority || 25,
-                          ),
+                          priority: toNumber(event.target.value, activeIndexer.priority || 25),
                         })
                       }
                     />
@@ -361,18 +331,11 @@ export function SettingsIndexersSection({
                 </SettingsModalSection>
                 <SettingsModalSection title="Details">
                   <SettingsModalField label="Protocol">
-                    <SettingsInput
-                      value={activeIndexer.protocol || "usenet"}
-                      readOnly
-                    />
+                    <SettingsInput value={activeIndexer.protocol || "usenet"} readOnly />
                   </SettingsModalField>
                   <SettingsModalField label="Prowlarr status">
                     <SettingsInput
-                      value={
-                        activeIndexer.enabledInProwlarr === false
-                          ? "Disabled"
-                          : "Enabled"
-                      }
+                      value={activeIndexer.enabledInProwlarr === false ? "Disabled" : "Enabled"}
                       readOnly
                     />
                   </SettingsModalField>

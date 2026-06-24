@@ -54,9 +54,7 @@ const formatShowLocation = (show) =>
 const formatDistance = (distance) => {
   if (distance == null || distance === "") return null;
   const numericDistance = Number(distance);
-  return Number.isFinite(numericDistance)
-    ? `${Math.round(numericDistance)} mi`
-    : null;
+  return Number.isFinite(numericDistance) ? `${Math.round(numericDistance)} mi` : null;
 };
 
 const getEventUrl = (value) => {
@@ -64,22 +62,13 @@ const getEventUrl = (value) => {
   if (!trimmed) return "";
   try {
     const parsed = new URL(trimmed);
-    return parsed.protocol === "http:" || parsed.protocol === "https:"
-      ? parsed.href
-      : "";
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : "";
   } catch {
     return "";
   }
 };
 
-function ShowImage({
-  show,
-  eventLabel,
-  distanceLabel,
-  variant,
-  overlay = false,
-  children = null,
-}) {
+function ShowImage({ show, eventLabel, distanceLabel, variant, overlay = false, children = null }) {
   return (
     <div
       className={`artist-show-card__image-wrap--discover artist-show-card__image-wrap--discover-${variant}`}
@@ -100,9 +89,7 @@ function ShowImage({
       {overlay && <div className="artist-show-card__image--discover-overlay" />}
       {distanceLabel && (
         <div className="artist-show-card__distance--discover">
-          <span className="artist-show-card__distance-badge--discover">
-            {distanceLabel}
-          </span>
+          <span className="artist-show-card__distance-badge--discover">{distanceLabel}</span>
         </div>
       )}
       {children}
@@ -120,9 +107,7 @@ function ShowMetaDetails({ showDate, showLocation, variant }) {
       ? "artist-show-card__body-detail-icon--discover"
       : "artist-show-card__detail-icon--discover";
   const textClass =
-    variant === "body"
-      ? "artist-truncate"
-      : "artist-show-card__detail-text--discover";
+    variant === "body" ? "artist-truncate" : "artist-show-card__detail-text--discover";
 
   return (
     <>
@@ -134,15 +119,10 @@ function ShowMetaDetails({ showDate, showLocation, variant }) {
       )}
       {showLocation && (
         <p className={`${baseClass} ${baseClass}-location`}>
-          <MapPin
-            className={`${iconClass} ${iconClass}-location`}
-            aria-hidden="true"
-          />
+          <MapPin className={`${iconClass} ${iconClass}-location`} aria-hidden="true" />
           <span
             className={
-              variant === "body"
-                ? "artist-clamp-2"
-                : "artist-show-card__detail-text--discover"
+              variant === "body" ? "artist-clamp-2" : "artist-show-card__detail-text--discover"
             }
           >
             {showLocation}
@@ -172,18 +152,10 @@ const ShowCard = memo(({ show }) => {
       <div className="artist-show-card__image--discover-content">
         <div />
         <div className="artist-show-card__image--discover-bottom">
-          <p className="artist-show-card__artist--discover artist-truncate">
-            {artistLabel}
-          </p>
-          <h3 className="artist-show-card__title--discover artist-truncate">
-            {eventLabel}
-          </h3>
+          <p className="artist-show-card__artist--discover artist-truncate">{artistLabel}</p>
+          <h3 className="artist-show-card__title--discover artist-truncate">{eventLabel}</h3>
           <div className="artist-show-card__details--discover">
-            <ShowMetaDetails
-              showDate={showDate}
-              showLocation={showLocation}
-              variant="image"
-            />
+            <ShowMetaDetails showDate={showDate} showLocation={showLocation} variant="image" />
           </div>
         </div>
       </div>
@@ -203,14 +175,10 @@ const ShowCard = memo(({ show }) => {
           {mobileContent}
         </a>
       ) : (
-        <article className="artist-show-card--discover-mobile is-disabled">
-          {mobileContent}
-        </article>
+        <article className="artist-show-card--discover-mobile is-disabled">{mobileContent}</article>
       )}
 
-      <article
-        className={`artist-show-card--discover-desktop${eventUrl ? "" : " is-disabled"}`}
-      >
+      <article className={`artist-show-card--discover-desktop${eventUrl ? "" : " is-disabled"}`}>
         {eventUrl ? (
           <a
             href={eventUrl}
@@ -236,9 +204,7 @@ const ShowCard = memo(({ show }) => {
         )}
         <div className="artist-show-card__body--discover">
           <div className="artist-show-card__body-heading">
-            <p className="artist-show-card__body-artist--discover artist-truncate">
-              {artistLabel}
-            </p>
+            <p className="artist-show-card__body-artist--discover artist-truncate">{artistLabel}</p>
             <h3 className="artist-show-card__body-title--discover">
               {eventUrl ? (
                 <a
@@ -261,11 +227,7 @@ const ShowCard = memo(({ show }) => {
             </h3>
           </div>
           <div className="artist-show-card__body-details--discover">
-            <ShowMetaDetails
-              showDate={showDate}
-              showLocation={showLocation}
-              variant="body"
-            />
+            <ShowMetaDetails showDate={showDate} showLocation={showLocation} variant="body" />
           </div>
         </div>
       </article>

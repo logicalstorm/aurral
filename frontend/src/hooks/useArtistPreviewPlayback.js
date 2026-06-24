@@ -5,13 +5,7 @@ import { normalizePreviewTrack } from "../utils/audioQueue";
 
 export function useArtistPreviewPlayback({ mbid, artistName, enabled = true } = {}) {
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
-  const {
-    playQueue,
-    togglePlayPause,
-    matchesSource,
-    isPlaying,
-    isLoading,
-  } = useAudioQueue();
+  const { playQueue, togglePlayPause, matchesSource, isPlaying, isLoading } = useAudioQueue();
 
   const source = useMemo(
     () =>

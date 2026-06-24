@@ -37,12 +37,16 @@ const ALBUM_IMAGE_KIND_RANK = {
 };
 
 const getArtistImageKindRank = (image) => {
-  const kind = String(image?.kind || image?.CoverType || "").trim().toLowerCase();
+  const kind = String(image?.kind || image?.CoverType || "")
+    .trim()
+    .toLowerCase();
   return ARTIST_IMAGE_KIND_RANK[kind] ?? 5;
 };
 
 const getAlbumImageKindRank = (image) => {
-  const kind = String(image?.kind || image?.CoverType || "").trim().toLowerCase();
+  const kind = String(image?.kind || image?.CoverType || "")
+    .trim()
+    .toLowerCase();
   return ALBUM_IMAGE_KIND_RANK[kind] ?? 3;
 };
 
@@ -50,14 +54,16 @@ const getImageUrl = (image) => image?.url || image?.Url || null;
 
 const selectBestImageByKind = (images = [], getKindRank) => {
   if (!Array.isArray(images)) return null;
-  return images
-    .filter((image) => getImageUrl(image))
-    .map((image, index) => ({ image, index }))
-    .sort((a, b) => {
-      const rankDiff = getKindRank(a.image) - getKindRank(b.image);
-      if (rankDiff !== 0) return rankDiff;
-      return a.index - b.index;
-    })[0]?.image || null;
+  return (
+    images
+      .filter((image) => getImageUrl(image))
+      .map((image, index) => ({ image, index }))
+      .sort((a, b) => {
+        const rankDiff = getKindRank(a.image) - getKindRank(b.image);
+        if (rankDiff !== 0) return rankDiff;
+        return a.index - b.index;
+      })[0]?.image || null
+  );
 };
 
 export const selectBestArtistImage = (images = []) => {
@@ -81,10 +87,7 @@ const sortArtistImages = (images = []) => {
     .map((entry) => entry.image);
 };
 
-const buildCachedArtistImagePayload = async (
-  cachedImageUrl,
-  metadataArtist = null,
-) => {
+const buildCachedArtistImagePayload = async (cachedImageUrl, metadataArtist = null) => {
   const images = [
     {
       image: cachedImageUrl,
@@ -252,9 +255,7 @@ const normalizeGetArtistImageOptions = (forceRefreshOrOptions, artistNameHint) =
   return {
     forceRefresh: !!forceRefreshOrOptions,
     artistName:
-      typeof artistNameHint === "string" && artistNameHint.trim()
-        ? artistNameHint.trim()
-        : null,
+      typeof artistNameHint === "string" && artistNameHint.trim() ? artistNameHint.trim() : null,
   };
 };
 
@@ -282,17 +283,13 @@ export const getArtistImage = async (
     const metadataArtist = await getArtistByMbid(resolvedMbid).catch(() => null);
     return {
       url: cachedImage.imageUrl,
-      images: await buildCachedArtistImagePayload(
-        cachedImage.imageUrl,
-        metadataArtist,
-      ),
+      images: await buildCachedArtistImagePayload(cachedImage.imageUrl, metadataArtist),
     };
   }
 
   if (
     !forceRefresh &&
-    ((cachedImage && cachedImage.imageUrl === "NOT_FOUND") ||
-      hasFreshNegativeCache(mbid))
+    ((cachedImage && cachedImage.imageUrl === "NOT_FOUND") || hasFreshNegativeCache(mbid))
   ) {
     const override = dbOps.getArtistOverride(mbid);
     const resolvedMbid = override?.musicbrainzId || mbid;
@@ -330,8 +327,7 @@ export const getArtistImage = async (
         }
       }
 
-      const resolvedArtistName =
-        metadataArtist?.name || artistName || null;
+      const resolvedArtistName = metadataArtist?.name || artistName || null;
       const rgCacheKey = `artist_rg:${resolvedMbid}`;
       const cachedRg = forceRefresh ? null : dbOps.getDeezerMbidCache(rgCacheKey);
       const albums = cachedRg

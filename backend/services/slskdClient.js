@@ -27,9 +27,7 @@ function getSettings() {
 export function getSlskdSearchFormatOptions() {
   const slskd = getSettings().slskd || {};
   const preferredFormat =
-    String(slskd.preferredFormat || "").toLowerCase() === "mp3"
-      ? "mp3"
-      : "flac";
+    String(slskd.preferredFormat || "").toLowerCase() === "mp3" ? "mp3" : "flac";
   return {
     preferredFormat,
     strictFormat: slskd.preferredFormatStrict === true,
@@ -94,12 +92,9 @@ export async function testSlskdWithCredentials(url, apiKey) {
     }
     const server = appRes.data?.server || {};
     const serverState = String(server.state || "");
-    const soulseekConnected =
-      server.isConnected === true || serverState.includes("Connected");
+    const soulseekConnected = server.isConnected === true || serverState.includes("Connected");
     const downloadPath =
-      optionsRes.data?.directories?.downloads ||
-      optionsRes.data?.directories?.download ||
-      null;
+      optionsRes.data?.directories?.downloads || optionsRes.data?.directories?.download || null;
     return {
       ok: true,
       configured: true,
@@ -167,38 +162,23 @@ function readSearchResponses(searchData) {
   return normalizeArrayPayload(responses);
 }
 
-function normalizeSearchFile(
-  file,
-  user,
-  response = null,
-  fromLockedList = false,
-) {
-  const filename = String(
-    readProperty(file, "filename", "Filename", "file", "File") || "",
-  ).trim();
-  const size = Number(
-    readProperty(file, "size", "Size", "length", "Length") || 0,
-  );
+function normalizeSearchFile(file, user, response = null, fromLockedList = false) {
+  const filename = String(readProperty(file, "filename", "Filename", "file", "File") || "").trim();
+  const size = Number(readProperty(file, "size", "Size", "length", "Length") || 0);
   const responseUser = readProperty(response, "username", "Username");
   const resolvedUser = String(
     user || responseUser || readProperty(file, "user", "User") || "",
   ).trim();
-  const responseSlots = readProperty(
-    response,
-    "hasFreeUploadSlot",
-    "HasFreeUploadSlot",
-  );
+  const responseSlots = readProperty(response, "hasFreeUploadSlot", "HasFreeUploadSlot");
   const locked =
-    fromLockedList ||
-    readProperty(file, "isLocked", "IsLocked", "locked", "Locked") === true;
+    fromLockedList || readProperty(file, "isLocked", "IsLocked", "locked", "Locked") === true;
   const bitRate = readProperty(file, "bitRate", "BitRate", "bitrate") ?? null;
   return {
     user: resolvedUser,
     file: filename,
     size,
     slots: Number(
-      readProperty(file, "slots", "Slots", "freeUploadSlots") ??
-        (responseSlots === true ? 1 : 0),
+      readProperty(file, "slots", "Slots", "freeUploadSlots") ?? (responseSlots === true ? 1 : 0),
     ),
     speed: Number(
       readProperty(file, "uploadSpeed", "UploadSpeed", "speed", "Speed") ??
@@ -214,9 +194,7 @@ function normalizeSearchFile(
 }
 
 function readBatchFailures(data) {
-  return normalizeArrayPayload(
-    readProperty(data, "failed", "Failed", "failures", "Failures"),
-  );
+  return normalizeArrayPayload(readProperty(data, "failed", "Failed", "failures", "Failures"));
 }
 
 function readLegacyEnqueued(data) {
@@ -227,12 +205,8 @@ function summarizeBatchFailures(failures) {
   const messages = normalizeArrayPayload(failures)
     .map((failure) => {
       if (typeof failure === "string") return failure.trim();
-      const filename = String(
-        readProperty(failure, "filename", "Filename") || "",
-      ).trim();
-      const message = String(
-        readProperty(failure, "message", "Message") || "",
-      ).trim();
+      const filename = String(readProperty(failure, "filename", "Filename") || "").trim();
+      const message = String(readProperty(failure, "message", "Message") || "").trim();
       return [filename, message].filter(Boolean).join(": ");
     })
     .filter(Boolean);
@@ -258,11 +232,7 @@ export class SlskdClient {
         message: "slskd URL and API key are required",
       };
     }
-    if (
-      !force &&
-      connectionCache.result &&
-      Date.now() - connectionCache.checkedAt < 30000
-    ) {
+    if (!force && connectionCache.result && Date.now() - connectionCache.checkedAt < 30000) {
       return connectionCache.result;
     }
     const client = buildClient();
@@ -283,12 +253,9 @@ export class SlskdClient {
       }
       const server = appRes.data?.server || {};
       const serverState = String(server.state || "");
-      const soulseekConnected =
-        server.isConnected === true || serverState.includes("Connected");
+      const soulseekConnected = server.isConnected === true || serverState.includes("Connected");
       const downloadPath =
-        optionsRes.data?.directories?.downloads ||
-        optionsRes.data?.directories?.download ||
-        null;
+        optionsRes.data?.directories?.downloads || optionsRes.data?.directories?.download || null;
       const result = {
         ok: true,
         configured: true,
@@ -338,21 +305,15 @@ export class SlskdClient {
       const id = String(options.id || randomUUID());
       const searchTimeoutMs = Math.max(
         5000,
-        Math.floor(
-          Number(options.searchTimeoutMs || DEFAULT_SEARCH_TIMEOUT_MS),
-        ),
+        Math.floor(Number(options.searchTimeoutMs || DEFAULT_SEARCH_TIMEOUT_MS)),
       );
       const body = {
         id,
         searchText: String(searchText || "").trim(),
         fileLimit: Number(options.fileLimit || DEFAULT_FILE_LIMIT),
         filterResponses: options.filterResponses !== false,
-        maximumPeerQueueLength: Number(
-          options.maximumPeerQueueLength || DEFAULT_MAX_PEER_QUEUE,
-        ),
-        minimumPeerUploadSpeed: Number(
-          options.minimumPeerUploadSpeed || DEFAULT_MIN_PEER_SPEED,
-        ),
+        maximumPeerQueueLength: Number(options.maximumPeerQueueLength || DEFAULT_MAX_PEER_QUEUE),
+        minimumPeerUploadSpeed: Number(options.minimumPeerUploadSpeed || DEFAULT_MIN_PEER_SPEED),
         minimumResponseFileCount: Number(options.minimumResponseFileCount || 1),
         responseLimit: Number(options.responseLimit || DEFAULT_RESPONSE_LIMIT),
         searchTimeout: searchTimeoutMs,
@@ -365,9 +326,7 @@ export class SlskdClient {
           return { id, searchText: body.searchText };
         }
         if (response.status === 429 && retryCount < 3) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, delaySeconds * 1000),
-          );
+          await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
           retryCount += 1;
           delaySeconds *= 2;
           continue;
@@ -402,9 +361,7 @@ export class SlskdClient {
   }
 
   async hydrateCompletedSearch(searchId, data) {
-    const responseCount = Number(
-      data?.responseCount || data?.ResponseCount || 0,
-    );
+    const responseCount = Number(data?.responseCount || data?.ResponseCount || 0);
     const fileCount = Number(data?.fileCount || data?.FileCount || 0);
     if (responseCount <= 0 && fileCount <= 0) return data;
     if (this.flattenSearchResults(data).length > 0) return data;
@@ -426,27 +383,17 @@ export class SlskdClient {
     if (responses.length > 0) {
       return { ...data, responses };
     }
-    logger.slskd(
-      "warn",
-      "slskd search completed with counts but no file payloads",
-      {
-        searchId,
-        responseCount,
-        fileCount,
-      },
-    );
+    logger.slskd("warn", "slskd search completed with counts but no file payloads", {
+      searchId,
+      responseCount,
+      fileCount,
+    });
     return data;
   }
 
-  async waitForSearch(
-    searchId,
-    timeoutMs = DEFAULT_SEARCH_TIMEOUT_MS,
-    options = {},
-  ) {
+  async waitForSearch(searchId, timeoutMs = DEFAULT_SEARCH_TIMEOUT_MS, options = {}) {
     const earlyExitWhen =
-      typeof options.earlyExitWhen === "function"
-        ? options.earlyExitWhen
-        : null;
+      typeof options.earlyExitWhen === "function" ? options.earlyExitWhen : null;
     const emptyTimeoutMs = Math.max(
       0,
       Number(options.emptyTimeoutMs ?? DEFAULT_EMPTY_SEARCH_TIMEOUT_MS),
@@ -538,9 +485,7 @@ export class SlskdClient {
     const results = [];
     const seen = new Set();
     for (const response of readSearchResponses(searchData)) {
-      const user = String(
-        readProperty(response, "username", "Username") || "",
-      ).trim();
+      const user = String(readProperty(response, "username", "Username") || "").trim();
       const fileLists = [
         {
           files: readProperty(response, "files", "Files"),
@@ -554,12 +499,7 @@ export class SlskdClient {
       for (const fileList of fileLists) {
         const files = normalizeArrayPayload(fileList.files);
         for (const file of files) {
-          const normalized = normalizeSearchFile(
-            file,
-            user,
-            response,
-            fileList.locked,
-          );
+          const normalized = normalizeSearchFile(file, user, response, fileList.locked);
           if (!normalized.user || !normalized.file) continue;
           const key = `${normalized.user}\0${normalized.file}`;
           if (seen.has(key)) continue;
@@ -599,14 +539,8 @@ export class SlskdClient {
         if ([200, 201, 207].includes(response.status)) {
           const failures = readBatchFailures(response.data);
           const transfers = readLegacyEnqueued(response.data);
-          if (
-            requests.length > 0 &&
-            failures.length >= requests.length &&
-            transfers.length === 0
-          ) {
-            throw new Error(
-              `slskd enqueue failed: ${summarizeBatchFailures(failures)}`,
-            );
+          if (requests.length > 0 && failures.length >= requests.length && transfers.length === 0) {
+            throw new Error(`slskd enqueue failed: ${summarizeBatchFailures(failures)}`);
           }
           const firstTransfer = transfers[0] || null;
           return {
@@ -619,17 +553,13 @@ export class SlskdClient {
           };
         }
         if (response.status === 429 && retryCount < 3) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, delaySeconds * 1000),
-          );
+          await new Promise((resolve) => setTimeout(resolve, delaySeconds * 1000));
           retryCount += 1;
           delaySeconds *= 2;
           continue;
         }
         throw new Error(
-          `slskd enqueue failed: HTTP ${response.status} ${String(
-            response.data || "",
-          )}`,
+          `slskd enqueue failed: HTTP ${response.status} ${String(response.data || "")}`,
         );
       }
       throw new Error("slskd enqueue busy after retries");
@@ -692,17 +622,13 @@ export class SlskdClient {
     const id = String(searchId || "").trim();
     if (!id) return false;
     const client = buildClient();
-    const response = await client.delete(
-      `/api/v0/searches/${encodeURIComponent(id)}`,
-    );
+    const response = await client.delete(`/api/v0/searches/${encodeURIComponent(id)}`);
     return [200, 204, 404].includes(response.status);
   }
 
   async removeCompletedDownloads() {
     const client = buildClient();
-    const response = await client.delete(
-      "/api/v0/transfers/downloads/all/completed",
-    );
+    const response = await client.delete("/api/v0/transfers/downloads/all/completed");
     return [200, 204, 404].includes(response.status);
   }
 
@@ -714,24 +640,16 @@ export class SlskdClient {
       let searchesRemoved = 0;
       let transfersRemoved = 0;
       const ownedOnly = options.ownedOnly !== false;
-      const explicitSearchIds = Array.isArray(options.searchIds)
-        ? options.searchIds
-        : [];
-      const explicitTransfers = Array.isArray(options.transfers)
-        ? options.transfers
-        : [];
-      let searchIds = explicitSearchIds
-        .map((entry) => String(entry || "").trim())
-        .filter(Boolean);
+      const explicitSearchIds = Array.isArray(options.searchIds) ? options.searchIds : [];
+      const explicitTransfers = Array.isArray(options.transfers) ? options.transfers : [];
+      let searchIds = explicitSearchIds.map((entry) => String(entry || "").trim()).filter(Boolean);
       let transfers = explicitTransfers;
       let markCleaned = null;
 
       if (ownedOnly && searchIds.length === 0 && transfers.length === 0) {
         try {
-          const {
-            getSlskdCleanupTargets,
-            markSlskdCleanupTargetsCleaned,
-          } = await import("./slskdTransferHistory.js");
+          const { getSlskdCleanupTargets, markSlskdCleanupTargetsCleaned } =
+            await import("./slskdTransferHistory.js");
           const targets = getSlskdCleanupTargets();
           searchIds = targets.searchIds;
           transfers = targets.transfers;
@@ -759,9 +677,7 @@ export class SlskdClient {
 
       for (const transfer of transfers) {
         const username = String(transfer?.username || "").trim();
-        const transferId = String(
-          transfer?.transferId || transfer?.id || "",
-        ).trim();
+        const transferId = String(transfer?.transferId || transfer?.id || "").trim();
         if (!username || !transferId) continue;
         if (await this.deleteTransfer(username, transferId, { remove: true })) {
           transfersRemoved += 1;

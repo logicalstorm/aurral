@@ -1,17 +1,8 @@
 import PropTypes from "prop-types";
 import { Loader, Pause, Play } from "lucide-react";
-import {
-  getTrackPlayAccessibilityLabel,
-  isLibraryPlaybackTrack,
-} from "../utils";
+import { getTrackPlayAccessibilityLabel, isLibraryPlaybackTrack } from "../utils";
 
-export function TrackPlayButton({
-  track,
-  isPlaying,
-  isLoading,
-  onClick,
-  size = "default",
-}) {
+export function TrackPlayButton({ track, isPlaying, isLoading, onClick, size = "default" }) {
   const fromLibrary = isLibraryPlaybackTrack(track);
   const playLabel = getTrackPlayAccessibilityLabel(track, isPlaying);
   const sizeClass = size === "large" ? "btn-track-play-lg" : "btn-track-play";

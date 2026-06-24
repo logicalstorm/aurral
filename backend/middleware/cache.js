@@ -11,7 +11,7 @@ export const cacheMiddleware = (maxAge, options = {}) => {
     }
 
     const cacheControl = [];
-    
+
     if (isPrivate) {
       cacheControl.push("private");
     } else {

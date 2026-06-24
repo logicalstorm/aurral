@@ -19,9 +19,6 @@ export function ActivityPartialRedirect() {
 
 export function ActivityRootRedirect() {
   return (
-    <Navigate
-      to={buildActivityPath(DEFAULT_ACTIVITY_VIEW, DEFAULT_ACTIVITY_SOURCE)}
-      replace
-    />
+    <Navigate to={buildActivityPath(DEFAULT_ACTIVITY_VIEW, DEFAULT_ACTIVITY_SOURCE)} replace />
   );
 }

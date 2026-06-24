@@ -1,11 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  getUsers,
-  createUser,
-  updateUser,
-  deleteUser,
-  changeMyPassword,
-} from "../../../utils/api";
+import { getUsers, createUser, updateUser, deleteUser, changeMyPassword } from "../../../utils/api";
 import { GRANULAR_PERMISSIONS } from "../constants";
 
 export function useSettingsUsers(authUser, showSuccess, showError, activeTab) {

@@ -1,9 +1,6 @@
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
-import {
-  buildSharedTrackIdentity,
-  flowPlaylistConfig,
-} from "./weeklyFlowPlaylistConfig.js";
+import { buildSharedTrackIdentity, flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
 import { getWeeklyFlowOperationWorkerStatus } from "./weeklyFlowOperationWorker.js";
 import { slskdClient } from "../slskdClient.js";
@@ -24,15 +21,11 @@ function formatNextRunMessage(flows) {
   const dayMs = 24 * hourMs;
   if (diff < hourMs) {
     const minutes = Math.ceil(diff / minuteMs);
-    return minutes === 1
-      ? "Next update in 1 minute"
-      : `Next update in ${minutes} minutes`;
+    return minutes === 1 ? "Next update in 1 minute" : `Next update in ${minutes} minutes`;
   }
   if (diff < dayMs) {
     const hours = Math.ceil(diff / hourMs);
-    return hours === 1
-      ? "Next update in 1 hour"
-      : `Next update in ${hours} hours`;
+    return hours === 1 ? "Next update in 1 hour" : `Next update in ${hours} hours`;
   }
   const days = Math.ceil(diff / dayMs);
   return days === 1 ? "Next update in 1 day" : `Next update in ${days} days`;
@@ -88,7 +81,10 @@ function collectPlaylistTrackIdentities(playlist, stats) {
 
 function buildOwnerMap(flows, sharedPlaylists) {
   const ownerIds = new Set();
-  for (const item of [...(Array.isArray(flows) ? flows : []), ...(Array.isArray(sharedPlaylists) ? sharedPlaylists : [])]) {
+  for (const item of [
+    ...(Array.isArray(flows) ? flows : []),
+    ...(Array.isArray(sharedPlaylists) ? sharedPlaylists : []),
+  ]) {
     const ownerUserId = Number(item?.ownerUserId);
     if (Number.isFinite(ownerUserId)) {
       ownerIds.add(ownerUserId);
@@ -111,9 +107,7 @@ export function getWeeklyFlowStatusSnapshot({
   user = null,
 } = {}) {
   const workerStatus = weeklyFlowWorker.getStatus();
-  const flows = user
-    ? flowPlaylistConfig.getFlowsForUser(user)
-    : flowPlaylistConfig.getFlows();
+  const flows = user ? flowPlaylistConfig.getFlowsForUser(user) : flowPlaylistConfig.getFlows();
   const rawSharedPlaylists = user
     ? flowPlaylistConfig.getSharedPlaylistsForUser(user)
     : flowPlaylistConfig.getSharedPlaylists();
@@ -122,8 +116,7 @@ export function getWeeklyFlowStatusSnapshot({
   const scopedStats = downloadTracker.getStatsByPlaylistType([
     ...flowIds,
     ...sharedPlaylistIds,
-  ]);
-  const sharedPlaylists = rawSharedPlaylists.map((playlist) => {
+  ]);  const sharedPlaylists = rawSharedPlaylists.map((playlist) => {
     const playlistStats = scopedStats?.[playlist.id];
     const jobTotal =
       Number(playlistStats?.pending || 0) +
@@ -144,35 +137,25 @@ export function getWeeklyFlowStatusSnapshot({
   const ownerMap = buildOwnerMap(flows, sharedPlaylists);
   const flowsWithOwners = flows.map((flow) => ({
     ...flow,
-    ownerUsername:
-      ownerMap.get(Number(flow?.ownerUserId)) || null,
+    ownerUsername: ownerMap.get(Number(flow?.ownerUserId)) || null,
   }));
   const sharedPlaylistsWithOwners = sharedPlaylists.map((playlist) => ({
     ...playlist,
-    ownerUsername:
-      ownerMap.get(Number(playlist?.ownerUserId)) || null,
+    ownerUsername: ownerMap.get(Number(playlist?.ownerUserId)) || null,
   }));
   const stats = aggregateStats(scopedStats, flowIds);
   const sharedStats = aggregateStats(scopedStats, sharedPlaylistIds);
   const nextRunMessage = formatNextRunMessage(flowsWithOwners);
   const operationQueue = weeklyFlowOperationQueue.getStatus();
   const operationWorker = getWeeklyFlowOperationWorkerStatus();
-  const queueLabel = String(
-    operationQueue?.currentLabel || operationWorker?.currentLabel || "",
-  );
+  const queueLabel = String(operationQueue?.currentLabel || operationWorker?.currentLabel || "");
   let phase = "idle";
   let message = "Idle";
   if (operationQueue?.processing || operationWorker?.currentLabel) {
     phase = "preparing";
-    if (
-      queueLabel.startsWith("enable:") ||
-      queueLabel.startsWith("scheduled:")
-    ) {
+    if (queueLabel.startsWith("enable:") || queueLabel.startsWith("scheduled:")) {
       message = "Generating playlist";
-    } else if (
-      queueLabel.startsWith("disable:") ||
-      queueLabel.startsWith("delete:")
-    ) {
+    } else if (queueLabel.startsWith("disable:") || queueLabel.startsWith("delete:")) {
       message = "Cleaning existing flow files";
     } else if (queueLabel.startsWith("reset:")) {
       message = "Resetting flow files";

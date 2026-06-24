@@ -1,15 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronDown,
-  Loader,
-  Music,
-  AlertCircle,
-  Search,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Loader, Music, AlertCircle, Search } from "lucide-react";
 import { getLibraryArtists } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
 
@@ -45,15 +37,10 @@ const sortArtists = (items, sortKey, sortDirection) =>
     if (sortKey === "name") {
       diff = getArtistName(a).localeCompare(getArtistName(b));
     } else if (sortKey === "added") {
-      diff = compareNullableNumbers(
-        getAddedTime(a),
-        getAddedTime(b),
-        sortDirection,
-      );
+      diff = compareNullableNumbers(getAddedTime(a), getAddedTime(b), sortDirection);
       if (diff !== 0) return diff;
     } else if (sortKey === "albums") {
-      diff =
-        (a.statistics?.albumCount || 0) - (b.statistics?.albumCount || 0);
+      diff = (a.statistics?.albumCount || 0) - (b.statistics?.albumCount || 0);
     }
     if (diff !== 0) return sortDirection === "asc" ? diff : -diff;
     return getArtistName(a).localeCompare(getArtistName(b));
@@ -75,8 +62,7 @@ function LibraryPage() {
 
   useDocumentTitle("Library");
 
-  const selectedSort =
-    SORT_OPTIONS.find((option) => option.value === sortKey) || SORT_OPTIONS[0];
+  const selectedSort = SORT_OPTIONS.find((option) => option.value === sortKey) || SORT_OPTIONS[0];
   const SortDirectionIcon = sortDirection === "asc" ? ArrowUp : ArrowDown;
 
   useEffect(() => {
@@ -91,9 +77,7 @@ function LibraryPage() {
         }
       } catch (err) {
         if (!controller.signal.aborted) {
-          setError(
-            err.response?.data?.message || "Failed to fetch artists from library"
-          );
+          setError(err.response?.data?.message || "Failed to fetch artists from library");
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -111,10 +95,7 @@ function LibraryPage() {
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (
-        toolbarRef.current &&
-        !toolbarRef.current.contains(event.target)
-      ) {
+      if (toolbarRef.current && !toolbarRef.current.contains(event.target)) {
         setSortMenuOpen(false);
       }
     };
@@ -145,15 +126,18 @@ function LibraryPage() {
     return () => observer.disconnect();
   }, [onSentinel, loading, error]);
 
-  const handleSortOptionClick = useCallback((option) => {
-    if (sortKey === option.value) {
-      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+  const handleSortOptionClick = useCallback(
+    (option) => {
+      if (sortKey === option.value) {
+        setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+        setSortMenuOpen(false);
+        return;
+      }
+      setSortKey(option.value);
       setSortMenuOpen(false);
-      return;
-    }
-    setSortKey(option.value);
-    setSortMenuOpen(false);
-  }, [sortKey]);
+    },
+    [sortKey],
+  );
 
   const filteredArtists = useMemo(() => {
     let filtered = artists;
@@ -161,7 +145,7 @@ function LibraryPage() {
     if (searchTerm.trim()) {
       const normalizedSearch = searchTerm.trim().toLowerCase();
       filtered = filtered.filter((artist) =>
-        getArtistName(artist).toLowerCase().includes(normalizedSearch)
+        getArtistName(artist).toLowerCase().includes(normalizedSearch),
       );
     }
 
@@ -180,7 +164,7 @@ function LibraryPage() {
         },
       });
     },
-    [navigate]
+    [navigate],
   );
 
   const artistCountLabel = loading
@@ -221,8 +205,7 @@ function LibraryPage() {
                 >
                   {SORT_OPTIONS.map((option) => {
                     const active = sortKey === option.value;
-                    const DirectionIcon =
-                      sortDirection === "asc" ? ArrowUp : ArrowDown;
+                    const DirectionIcon = sortDirection === "asc" ? ArrowUp : ArrowDown;
                     return (
                       <button
                         key={option.value}
@@ -233,9 +216,7 @@ function LibraryPage() {
                         aria-selected={active}
                       >
                         <span>{option.label}</span>
-                        <span>
-                          {active && <DirectionIcon className="artist-icon-xs" />}
-                        </span>
+                        <span>{active && <DirectionIcon className="artist-icon-xs" />}</span>
                       </button>
                     );
                   })}
@@ -256,11 +237,7 @@ function LibraryPage() {
                 autoComplete="off"
                 aria-label="Search library"
               />
-              {!searchTerm && (
-                <div className="global-search__placeholder">
-                  Search library...
-                </div>
-              )}
+              {!searchTerm && <div className="global-search__placeholder">Search library...</div>}
             </div>
           </div>
         </div>
@@ -310,8 +287,8 @@ function LibraryPage() {
         <section className="library-page__content">
           {searchTerm && (
             <p className="artist-count library-page__result-count">
-              Showing {filteredArtists.length.toLocaleString()} of{" "}
-              {artists.length.toLocaleString()} artists
+              Showing {filteredArtists.length.toLocaleString()} of {artists.length.toLocaleString()}{" "}
+              artists
             </p>
           )}
 
@@ -351,10 +328,7 @@ function LibraryPage() {
                     )}
                   </div>
 
-                  <span
-                    className="artist-release-card__title"
-                    title={artistName}
-                  >
+                  <span className="artist-release-card__title" title={artistName}>
                     {artistName}
                   </span>
                 </button>
@@ -373,27 +347,24 @@ function LibraryPage() {
         </section>
       )}
 
-      {!loading &&
-        !error &&
-        artists.length > 0 &&
-        filteredArtists.length === 0 && (
-          <div className="search-empty-panel">
-            <div className="search-empty-panel__icon" aria-hidden="true">
-              <Music className="artist-icon-lg" />
-            </div>
-            <h2 className="search-empty-panel__title">No Artists Found</h2>
-            <p className="search-empty-panel__message">
-              No artists match your search &quot;{searchTerm}&quot;
-            </p>
-            <button
-              type="button"
-              onClick={() => setSearchTerm("")}
-              className="btn btn-secondary btn--bold btn-min-h library-page__empty-action"
-            >
-              Clear Search
-            </button>
+      {!loading && !error && artists.length > 0 && filteredArtists.length === 0 && (
+        <div className="search-empty-panel">
+          <div className="search-empty-panel__icon" aria-hidden="true">
+            <Music className="artist-icon-lg" />
           </div>
-        )}
+          <h2 className="search-empty-panel__title">No Artists Found</h2>
+          <p className="search-empty-panel__message">
+            No artists match your search &quot;{searchTerm}&quot;
+          </p>
+          <button
+            type="button"
+            onClick={() => setSearchTerm("")}
+            className="btn btn-secondary btn--bold btn-min-h library-page__empty-action"
+          >
+            Clear Search
+          </button>
+        </div>
+      )}
     </div>
   );
 }

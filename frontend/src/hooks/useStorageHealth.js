@@ -23,9 +23,10 @@ export function useStorageHealth({ enabled = true, pollMs = 120000 } = {}) {
       if (cancelled) return;
     };
     load();
-    if (!pollMs || pollMs <= 0) return () => {
-      cancelled = true;
-    };
+    if (!pollMs || pollMs <= 0)
+      return () => {
+        cancelled = true;
+      };
     const interval = window.setInterval(load, pollMs);
     return () => {
       cancelled = true;

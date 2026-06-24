@@ -25,10 +25,7 @@ export function getDiscoverArtworkDirectory() {
 export function getDiscoverArtworkFilePath(presetId, style = null) {
   const resolvedStyle = style || getPlaylistArtworkStyle();
   const extension = getArtworkExtensionForStyle(resolvedStyle);
-  return path.join(
-    DISCOVER_ARTWORK_DIR,
-    `${sanitizePresetId(presetId)}${extension}`,
-  );
+  return path.join(DISCOVER_ARTWORK_DIR, `${sanitizePresetId(presetId)}${extension}`);
 }
 
 export async function ensureDiscoverArtworkDirectory() {
@@ -95,9 +92,7 @@ export async function attachArtworkToDiscoverPlaylists(playlists = []) {
 
   const style = getPlaylistArtworkStyle();
   await ensureDiscoverArtworkDirectory();
-  await pruneObsoleteDiscoverArtwork(
-    list.map((playlist) => playlist?.presetId).filter(Boolean),
-  );
+  await pruneObsoleteDiscoverArtwork(list.map((playlist) => playlist?.presetId).filter(Boolean));
 
   const enriched = [];
   for (const playlist of list) {
@@ -113,9 +108,7 @@ export async function attachArtworkToDiscoverPlaylists(playlists = []) {
         hasArtwork: true,
       });
     } catch (error) {
-      console.warn(
-        `[DiscoverArtwork] Failed for ${playlist.presetId}: ${error.message}`,
-      );
+      console.warn(`[DiscoverArtwork] Failed for ${playlist.presetId}: ${error.message}`);
       enriched.push({
         ...playlist,
         artworkStyle: style,
@@ -160,7 +153,6 @@ export async function ensureDiscoverArtworkForPreset(presetId, { user } = {}) {
   const { getListenHistoryProfile } = await import("../listeningHistory.js");
   const { getCachedDiscoverPlaylist } =
     await import("./playlistBuilder.js");
-
   const profile = user ? getListenHistoryProfile(user) : null;
   const cache = getDiscoveryCache(profile);
   const playlist = getCachedDiscoverPlaylist(cache, presetId);
@@ -170,9 +162,7 @@ export async function ensureDiscoverArtworkForPreset(presetId, { user } = {}) {
     await generateDiscoverPlaylistArtwork(playlist);
     return resolveDiscoverArtworkFile(presetId);
   } catch (error) {
-    console.warn(
-      `[DiscoverArtwork] Lazy generate failed for ${presetId}: ${error.message}`,
-    );
+    console.warn(`[DiscoverArtwork] Lazy generate failed for ${presetId}: ${error.message}`);
     return null;
   }
 }

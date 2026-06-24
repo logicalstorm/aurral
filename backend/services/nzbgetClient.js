@@ -64,8 +64,15 @@ function buildClient() {
 }
 
 function sanitizeNzbName(value) {
-  const cleaned = String(value || "aurral-download")
-    .replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")
+  const raw = String(value || "aurral-download");
+  const cleaned = Array.from(raw)
+    .map((ch) => {
+      const code = ch.codePointAt(0);
+      if (code < 0x20) return "_";
+      if ('<>:"/\\|?*'.includes(ch)) return "_";
+      return ch;
+    })
+    .join("")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 180);
@@ -223,11 +230,7 @@ export class NzbgetClient {
         message: "NZBGet URL is required",
       };
     }
-    if (
-      !force &&
-      connectionCache.result &&
-      Date.now() - connectionCache.checkedAt < 30000
-    ) {
+    if (!force && connectionCache.result && Date.now() - connectionCache.checkedAt < 30000) {
       return connectionCache.result;
     }
     try {

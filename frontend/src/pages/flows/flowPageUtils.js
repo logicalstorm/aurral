@@ -66,7 +66,11 @@ export const getNextFlowName = (flows, baseName = "Discover") => {
   const normalizedBase = String(baseName || "").trim() || "Discover";
   const existingNames = new Set(
     (Array.isArray(flows) ? flows : [])
-      .map((flow) => String(flow?.name || "").trim().toLowerCase())
+      .map((flow) =>
+        String(flow?.name || "")
+          .trim()
+          .toLowerCase(),
+      )
       .filter(Boolean),
   );
   if (!existingNames.has(normalizedBase.toLowerCase())) {
@@ -94,7 +98,9 @@ export const slugifyFilePart = (value, fallback = "flow") => {
 };
 
 export const normalizeNameKey = (value) =>
-  String(value || "").trim().toLowerCase();
+  String(value || "")
+    .trim()
+    .toLowerCase();
 
 export const reserveUniqueFlowName = (reservedNames, baseName) => {
   const normalizedBase = String(baseName || "").trim() || "Flow";
@@ -120,15 +126,11 @@ export const reserveUniqueFlowName = (reservedNames, baseName) => {
 
 export const normalizeDurationMs = (value) => {
   const numeric = Number(value);
-  return value != null && Number.isFinite(numeric)
-    ? Math.max(0, Math.round(numeric))
-    : null;
+  return value != null && Number.isFinite(numeric) ? Math.max(0, Math.round(numeric)) : null;
 };
 
 export const normalizeArtistAliases = (aliases) =>
-  Array.isArray(aliases)
-    ? aliases.map((entry) => String(entry || "").trim()).filter(Boolean)
-    : [];
+  Array.isArray(aliases) ? aliases.map((entry) => String(entry || "").trim()).filter(Boolean) : [];
 
 const parseListInput = (value) =>
   String(value ?? "")
@@ -281,11 +283,7 @@ export const buildFlowFromForm = (draft) => {
   const scheduleTime = normalizeScheduleTime(draft?.scheduleTime);
   const mix = normalizeMixPercent(draft?.mix);
   const focusEnabled = Number(mix.focus || 0) > 0;
-  if (
-    focusEnabled &&
-    includeTags.length === 0 &&
-    includeRelatedArtists.length === 0
-  ) {
+  if (focusEnabled && includeTags.length === 0 && includeRelatedArtists.length === 0) {
     throw new Error("Focus needs at least one genre tag or related artist");
   }
   return {
@@ -300,10 +298,7 @@ export const buildFlowFromForm = (draft) => {
   };
 };
 
-export const getUnavailableFlowSourceMessage = (
-  draft,
-  disabledSources = {},
-) => {
+export const getUnavailableFlowSourceMessage = (draft, disabledSources = {}) => {
   const mix = normalizeMixPercent(draft?.mix);
   for (const [source, reason] of Object.entries(disabledSources || {})) {
     if (Number(mix?.[source] || 0) > 0 && reason) {
@@ -373,30 +368,15 @@ export const buildReleaseRadarFlowFromForm = (flow, draft) => {
 export const normalizeSharedTrackEntry = (track) => {
   if (!track || typeof track !== "object" || Array.isArray(track)) return null;
   const artistName = String(
-    track.artistName ??
-      track.artist ??
-      track.artist_name ??
-      track["Artist Name(s)"] ??
-      "",
+    track.artistName ?? track.artist ?? track.artist_name ?? track["Artist Name(s)"] ?? "",
   ).trim();
   const trackName = String(
-    track.trackName ??
-      track.title ??
-      track.name ??
-      track.track ??
-      track["Track Name"] ??
-      "",
+    track.trackName ?? track.title ?? track.name ?? track.track ?? track["Track Name"] ?? "",
   ).trim();
   if (!artistName || !trackName) return null;
-  const albumName = String(
-    track.albumName ?? track.album ?? track["Album Name"] ?? "",
-  ).trim();
-  const artistMbid = String(
-    track.artistMbid ?? track.artistId ?? track.mbid ?? "",
-  ).trim();
-  const albumMbid = String(
-    track.albumMbid ?? track.releaseGroupMbid ?? track.albumId ?? "",
-  ).trim();
+  const albumName = String(track.albumName ?? track.album ?? track["Album Name"] ?? "").trim();
+  const artistMbid = String(track.artistMbid ?? track.artistId ?? track.mbid ?? "").trim();
+  const albumMbid = String(track.albumMbid ?? track.releaseGroupMbid ?? track.albumId ?? "").trim();
   const trackMbid = String(
     track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? "",
   ).trim();
@@ -423,12 +403,7 @@ export const buildTrackForPlaylistModal = (track) => {
   };
 };
 
-export const buildSharedTracklistPayload = ({
-  name,
-  sourceName,
-  sourceFlowId,
-  tracks,
-}) => ({
+export const buildSharedTracklistPayload = ({ name, sourceName, sourceFlowId, tracks }) => ({
   type: FLOW_SHARE_FILE_TYPE,
   version: FLOW_SHARE_FILE_VERSION,
   exportedAt: new Date().toISOString(),
@@ -506,10 +481,8 @@ export const parseFlowImportFile = (content) => {
       name:
         String(entry.name ?? entry.playlist?.name ?? entry.sourceName ?? "").trim() ||
         `Imported Playlist ${index + 1}`,
-      sourceName:
-        String(entry.sourceName ?? entry.source?.name ?? "").trim() || null,
-      sourceFlowId:
-        String(entry.sourceFlowId ?? entry.source?.id ?? "").trim() || null,
+      sourceName: String(entry.sourceName ?? entry.source?.name ?? "").trim() || null,
+      sourceFlowId: String(entry.sourceFlowId ?? entry.source?.id ?? "").trim() || null,
       trackCount: tracks.length,
       tracks,
     };
@@ -521,17 +494,9 @@ export const parseFlowImportFile = (content) => {
       (entry) => entry && typeof entry === "object" && !Array.isArray(entry),
     );
     entries = looksLikeTrackArray ? [parsed] : parsed;
-  } else if (
-    parsed &&
-    typeof parsed === "object" &&
-    Array.isArray(parsed.playlists)
-  ) {
+  } else if (parsed && typeof parsed === "object" && Array.isArray(parsed.playlists)) {
     entries = parsed.playlists;
-  } else if (
-    parsed &&
-    typeof parsed === "object" &&
-    Array.isArray(parsed.tracks)
-  ) {
+  } else if (parsed && typeof parsed === "object" && Array.isArray(parsed.tracks)) {
     entries = [parsed];
   } else if (
     parsed &&

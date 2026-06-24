@@ -34,21 +34,15 @@ export function registerReleaseGroup(router) {
         return res.json({ covers: {} });
       }
       const covers = await resolveReleaseGroupCoversBatch(items);
-      const hasTransientError = Object.values(covers).some(
-        (entry) => entry?.transientError,
-      );
+      const hasTransientError = Object.values(covers).some((entry) => entry?.transientError);
       if (hasTransientError) {
-        res.set(
-          "Cache-Control",
-          "public, max-age=60, stale-while-revalidate=300",
-        );
+        res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
       } else {
         res.set("Cache-Control", "public, max-age=31536000, immutable");
       }
       return res.json({ covers });
     } catch (error) {
-      logger.error("releaseGroup", "Error in release-groups covers batch route:", { message: error.message });
-      res.set("Cache-Control", "public, max-age=60");
+      logger.error("releaseGroup", "Error in release-groups covers batch route:", { message: error.message });      res.set("Cache-Control", "public, max-age=60");
       return res.json({ covers: {} });
     }
   });
@@ -79,15 +73,14 @@ export function registerReleaseGroup(router) {
           overview: album?.overview || "",
           coverUrl: coverImage,
         });
-      } catch (error) {
-        logger.error("releaseGroup", `Error in release-group details route for ${req.params.mbid}:`, { message: error.message });
-        res.status(404).json({
-          error: "Release not found",
-          message: error.message,
-        });
-      }
-    },
-  );
+    } catch (error) {
+      console.error(`Error in release-group details route for ${req.params.mbid}:`, error.message);
+      res.status(404).json({
+        error: "Release not found",
+        message: error.message,
+      });
+    }
+  });
 
   router.get("/release-group/:mbid/cover", async (req, res) => {
     try {
@@ -102,9 +95,7 @@ export function registerReleaseGroup(router) {
           : "";
 
       if (!UUID_REGEX.test(mbid)) {
-        return res
-          .status(400)
-          .json({ error: "Invalid MBID format", images: [] });
+        return res.status(400).json({ error: "Invalid MBID format", images: [] });
       }
       const cover = await fetchReleaseGroupCoverUrl(mbid, {
         artistName,
@@ -128,14 +119,10 @@ export function registerReleaseGroup(router) {
         res.set("Cache-Control", "public, max-age=3600");
         return res.json({ images: [], notFound: true, transientError: false });
       }
-      res.set(
-        "Cache-Control",
-        "public, max-age=60, stale-while-revalidate=300",
-      );
+      res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
       res.json({ images: [], notFound: false, transientError: true });
     } catch (error) {
-      logger.error("releaseGroup", `Error in release-group cover route for ${req.params.mbid}:`, { message: error.message });
-      res.set("Cache-Control", "public, max-age=60");
+      logger.error("releaseGroup", `Error in release-group cover route for ${req.params.mbid}:`, { message: error.message });      res.set("Cache-Control", "public, max-age=60");
       res.json({ images: [], notFound: false, transientError: true });
     }
   });
@@ -223,6 +210,6 @@ export function registerReleaseGroup(router) {
           message: error.message,
         });
       }
-    },
-  );
+    }
+  });
 }

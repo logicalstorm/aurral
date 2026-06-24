@@ -11,18 +11,14 @@ const compareText = (left, right) =>
     sensitivity: "base",
   });
 
-const statusRank = (status) =>
-  STATUS_SORT_ORDER[String(status || "").toLowerCase()] ?? 99;
+const statusRank = (status) => STATUS_SORT_ORDER[String(status || "").toLowerCase()] ?? 99;
 
 export function sortFlowTracks(tracks, sortKey, sortDirection) {
-  const originalIndexById = new Map(
-    tracks.map((track, index) => [track.id, index]),
-  );
+  const originalIndexById = new Map(tracks.map((track, index) => [track.id, index]));
   const direction = sortDirection === "desc" ? -1 : 1;
 
   const originalIndexDiff = (left, right) =>
-    (originalIndexById.get(left.id) ?? 0) -
-    (originalIndexById.get(right.id) ?? 0);
+    (originalIndexById.get(left.id) ?? 0) - (originalIndexById.get(right.id) ?? 0);
 
   return [...tracks].sort((left, right) => {
     let diff;
@@ -34,10 +30,7 @@ export function sortFlowTracks(tracks, sortKey, sortDirection) {
         diff = compareText(left.artistName, right.artistName);
         break;
       case "album":
-        diff = compareText(
-          left.albumName || "Unknown Album",
-          right.albumName || "Unknown Album",
-        );
+        diff = compareText(left.albumName || "Unknown Album", right.albumName || "Unknown Album");
         break;
       case "status":
         diff = statusRank(left.status) - statusRank(right.status);
@@ -60,8 +53,7 @@ export function getFlowTrackDisplayNumber(
   track,
   { tracks, sortedTracks, sortedIndex, sortKey, sortDirection },
 ) {
-  const originalNumber =
-    tracks.findIndex((item) => item.id === track.id) + 1;
+  const originalNumber = tracks.findIndex((item) => item.id === track.id) + 1;
 
   if (sortKey !== "index") {
     return originalNumber;

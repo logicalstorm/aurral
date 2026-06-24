@@ -1,11 +1,4 @@
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { ChevronRight, Loader, Plus } from "lucide-react";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
@@ -79,17 +72,12 @@ export function TrackPlaylistPickerContent({
                 disabled={saving || alreadyAdded}
                 title={alreadyAdded ? `Already in ${playlist.name}` : undefined}
                 aria-label={
-                  alreadyAdded
-                    ? `${playlist.name}, already added`
-                    : `Add to ${playlist.name}`
+                  alreadyAdded ? `${playlist.name}, already added` : `Add to ${playlist.name}`
                 }
               >
                 <span className="artist-track-title">{playlist.name}</span>
                 {alreadyAdded ? (
-                  <SearchLibraryCheck
-                    size="sm"
-                    className="artist-playlist-menu__check"
-                  />
+                  <SearchLibraryCheck size="sm" className="artist-playlist-menu__check" />
                 ) : null}
               </button>
             );
@@ -130,9 +118,7 @@ export function TrackPlaylistSubmenu({
   };
 
   return (
-    <div
-      className={`artist-menu-submenu${toggleOnClick && isOpen ? " is-open" : ""}`}
-    >
+    <div className={`artist-menu-submenu${toggleOnClick && isOpen ? " is-open" : ""}`}>
       <button
         type="button"
         className="artist-menu-item artist-menu-submenu__trigger"
@@ -216,10 +202,7 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
     const menuWidth = 256;
     setMenuPosition({
       top: rect.bottom + 8,
-      left: Math.max(
-        12,
-        Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 12),
-      ),
+      left: Math.max(12, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 12)),
     });
   };
 
@@ -262,9 +245,7 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
   const menuClassName = [
     "artist-playlist-menu",
     menuVariant === "preview-tracks" ? "artist-playlist-menu--preview-tracks" : "",
-    menuVariant === "search-suggestion"
-      ? "artist-playlist-menu--search-suggestion"
-      : "",
+    menuVariant === "search-suggestion" ? "artist-playlist-menu--search-suggestion" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -297,9 +278,7 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
                   <Plus className="artist-icon-xs" />
                 )}
               </span>
-              <span className="artist-playlist-trigger__label">
-                {triggerLabel}
-              </span>
+              <span className="artist-playlist-trigger__label">{triggerLabel}</span>
             </>
           )}
         </button>

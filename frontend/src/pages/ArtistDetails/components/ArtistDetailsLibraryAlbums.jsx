@@ -225,9 +225,7 @@ export function ArtistDetailsLibraryAlbums({
   return (
     <section className="artist-section">
       <div className="artist-heading-row">
-        <h2 className="artist-section-title">
-          Your Library
-        </h2>
+        <h2 className="artist-section-title">Your Library</h2>
         <div className="artist-row-actions">
           <div
             className="artist-segmented"
@@ -298,8 +296,7 @@ export function ArtistDetailsLibraryAlbums({
       <div ref={railRef} className="artist-library-rail">
         {visibleAlbums.map((libraryAlbum) => {
           const rgId = libraryAlbum.mbid || libraryAlbum.foreignAlbumId;
-          const { downloadStatus, isComplete, canReSearch } =
-            getAlbumState(libraryAlbum);
+          const { downloadStatus, isComplete, canReSearch } = getAlbumState(libraryAlbum);
           const coverUrl = albumCovers[rgId] || artistCoverImage;
           const hasDownloadedStatus =
             isComplete ||
@@ -437,7 +434,9 @@ export function ArtistDetailsLibraryAlbums({
                                   ) : (
                                     <RefreshCw className="artist-icon-sm" />
                                   )}
-                                  {reSearchingAlbum === libraryAlbum.id ? "Searching..." : "Re-search"}
+                                  {reSearchingAlbum === libraryAlbum.id
+                                    ? "Searching..."
+                                    : "Re-search"}
                                 </span>
                               </button>
                             </>
@@ -475,9 +474,7 @@ export function ArtistDetailsLibraryAlbums({
                   </span>
                 </span>
                 {metaItems.length > 0 && (
-                  <span className="artist-card-meta artist-truncate">
-                    {metaItems.join(" · ")}
-                  </span>
+                  <span className="artist-card-meta artist-truncate">{metaItems.join(" · ")}</span>
                 )}
               </div>
             </article>

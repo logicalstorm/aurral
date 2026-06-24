@@ -52,17 +52,11 @@ const writeStoredZip = (zipCode) => {
 const getShowGroups = (showsData) => ({
   all: Array.isArray(showsData?.shows) ? showsData.shows : [],
   library: Array.isArray(showsData?.libraryShows) ? showsData.libraryShows : [],
-  discover: Array.isArray(showsData?.recommendedShows)
-    ? showsData.recommendedShows
-    : [],
+  discover: Array.isArray(showsData?.recommendedShows) ? showsData.recommendedShows : [],
 });
 
 const getShowKey = (show, index) =>
-  [
-    show?.id || `show-${index}`,
-    show?.artistName,
-    show?.sourceType || show?.matchType || "show",
-  ]
+  [show?.id || `show-${index}`, show?.artistName, show?.sourceType || show?.matchType || "show"]
     .filter(Boolean)
     .join("-");
 
@@ -70,8 +64,7 @@ function ShowsPage() {
   const navigate = useNavigate();
   const { filter: filterParam } = useParams();
   const showFilter = normalizeShowsFilter(filterParam);
-  const shouldRedirect =
-    filterParam && normalizeShowsFilter(filterParam) !== filterParam;
+  const shouldRedirect = filterParam && normalizeShowsFilter(filterParam) !== filterParam;
 
   useDocumentTitle(
     showFilter === "all"
@@ -81,9 +74,7 @@ function ShowsPage() {
   const [showsData, setShowsData] = useState(null);
   const [showsLoading, setShowsLoading] = useState(false);
   const [showsError, setShowsError] = useState(null);
-  const [{ locationMode, appliedZip }, setLocationState] = useState(
-    readStoredLocationState,
-  );
+  const [{ locationMode, appliedZip }, setLocationState] = useState(readStoredLocationState);
   const zipModeActive = locationMode === "zip";
 
   useEffect(() => {
@@ -111,9 +102,7 @@ function ShowsPage() {
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
-        setShowsError(
-          error.response?.data?.message || "Failed to load nearby shows",
-        );
+        setShowsError(error.response?.data?.message || "Failed to load nearby shows");
       })
       .finally(() => {
         if (!controller.signal.aborted) {
@@ -128,13 +117,9 @@ function ShowsPage() {
 
   const showGroups = useMemo(() => getShowGroups(showsData), [showsData]);
   const shows = showGroups[showFilter] || showGroups.all;
-  const hasAnyShows = Object.values(showGroups).some(
-    (group) => group.length > 0,
-  );
+  const hasAnyShows = Object.values(showGroups).some((group) => group.length > 0);
   const locationLabel =
-    showsData?.location?.label ||
-    showsData?.location?.postalCode ||
-    "your area";
+    showsData?.location?.label || showsData?.location?.postalCode || "your area";
   const pageSubtitle = showsLoading
     ? "Finding Ticketmaster events matched to your library and recommendations."
     : `Upcoming concerts around ${locationLabel}.`;
@@ -205,12 +190,9 @@ function ShowsPage() {
           <div className="search-empty-panel__icon" aria-hidden="true">
             <MapPin className="artist-icon-lg" />
           </div>
-          <h2 className="search-empty-panel__title">
-            Ticketmaster not configured
-          </h2>
+          <h2 className="search-empty-panel__title">Ticketmaster not configured</h2>
           <p className="search-empty-panel__message">
-            Add a Ticketmaster Consumer Key in Settings to enable local show
-            discovery.
+            Add a Ticketmaster Consumer Key in Settings to enable local show discovery.
           </p>
           <button
             type="button"
@@ -235,9 +217,7 @@ function ShowsPage() {
           <div className="search-empty-panel__icon" aria-hidden="true">
             <MapPin className="artist-icon-lg" />
           </div>
-          <h2 className="search-empty-panel__title">
-            Enter a ZIP or postal code
-          </h2>
+          <h2 className="search-empty-panel__title">Enter a ZIP or postal code</h2>
           <p className="search-empty-panel__message">
             Open the location menu above and enter a ZIP or postal code.
           </p>
@@ -247,10 +227,7 @@ function ShowsPage() {
           {shows.length > 0 ? (
             <div className="shows-page__grid">
               {shows.map((show, index) => (
-                <div
-                  key={getShowKey(show, index)}
-                  className="shows-page__grid-item"
-                >
+                <div key={getShowKey(show, index)} className="shows-page__grid-item">
                   <ShowCard show={show} />
                 </div>
               ))}
@@ -260,9 +237,7 @@ function ShowsPage() {
               <div className="search-empty-panel__icon" aria-hidden="true">
                 <Music className="artist-icon-lg" />
               </div>
-              <h2 className="search-empty-panel__title">
-                No matches in this filter
-              </h2>
+              <h2 className="search-empty-panel__title">No matches in this filter</h2>
               <p className="search-empty-panel__message">{emptyMessage}</p>
             </div>
           )}
@@ -272,9 +247,7 @@ function ShowsPage() {
           <div className="search-empty-panel__icon" aria-hidden="true">
             <Music className="artist-icon-lg" />
           </div>
-          <h2 className="search-empty-panel__title">
-            No upcoming nearby matches
-          </h2>
+          <h2 className="search-empty-panel__title">No upcoming nearby matches</h2>
           <p className="search-empty-panel__message">{emptyMessage}</p>
         </div>
       )}

@@ -16,9 +16,7 @@ export function getStoredDownloadFolderPath() {
 function resolvePathValue(raw) {
   const trimmed = String(raw || "").trim();
   if (!trimmed) return null;
-  return path.isAbsolute(trimmed)
-    ? path.resolve(trimmed)
-    : path.resolve(process.cwd(), trimmed);
+  return path.isAbsolute(trimmed) ? path.resolve(trimmed) : path.resolve(process.cwd(), trimmed);
 }
 
 export function resolveEnvDownloadFolder() {
@@ -37,10 +35,7 @@ export function resolveDefaultPlaylistDownloadRoot() {
   if (fs.existsSync("/data")) {
     return "/data/downloads/aurral";
   }
-  return path.join(
-    path.resolve(resolveAurralDataDir(), "..", "downloads"),
-    "aurral",
-  );
+  return path.join(path.resolve(resolveAurralDataDir(), "..", "downloads"), "aurral");
 }
 
 export function getSuggestedDownloadFolderPath() {
@@ -144,10 +139,7 @@ function isPathWithinRoot(candidate, root) {
   while (current && current !== path.dirname(current)) {
     const realCurrent = resolveRealPathIfExists(current);
     if (realCurrent) {
-      return (
-        realCurrent === realRoot ||
-        realCurrent.startsWith(`${realRoot}${path.sep}`)
-      );
+      return realCurrent === realRoot || realCurrent.startsWith(`${realRoot}${path.sep}`);
     }
     current = path.dirname(current);
   }
@@ -157,14 +149,10 @@ function isPathWithinRoot(candidate, root) {
 function isRealPathWithinRoot(realTarget, realRoot) {
   if (isFilesystemRoot(realRoot)) {
     return (
-      realTarget === realRoot ||
-      (path.isAbsolute(realTarget) && realTarget.startsWith(path.sep))
+      realTarget === realRoot || (path.isAbsolute(realTarget) && realTarget.startsWith(path.sep))
     );
   }
-  return (
-    realTarget === realRoot ||
-    realTarget.startsWith(`${realRoot}${path.sep}`)
-  );
+  return realTarget === realRoot || realTarget.startsWith(`${realRoot}${path.sep}`);
 }
 
 export function resolveSafeBrowsePath(requestedPath, roots = getFilesystemBrowseRoots()) {
@@ -251,10 +239,7 @@ export function ensureDownloadFolderPath(requestedPath) {
   return { ...result, created: !existed };
 }
 
-export function resolveExistingBrowsePath(
-  requestedPath,
-  roots = getFilesystemBrowseRoots(),
-) {
+export function resolveExistingBrowsePath(requestedPath, _roots = getFilesystemBrowseRoots()) {
   const allowedRoots = getFilesystemBrowseRoots();
   if (!allowedRoots.length) {
     return null;
@@ -285,7 +270,7 @@ export function resolveExistingBrowsePath(
   return null;
 }
 
-export function listBrowseDirectory(requestedPath, roots = getFilesystemBrowseRoots()) {
+export function listBrowseDirectory(requestedPath, _roots = getFilesystemBrowseRoots()) {
   const allowedRoots = getFilesystemBrowseRoots();
   if (!allowedRoots.length) {
     throw new Error(

@@ -62,16 +62,12 @@ const ArtistImage = ({
   const triedBackendFallbackRef = useRef(false);
   const imgRef = useRef(null);
   const abortRef = useRef(null);
-  const {
-    canPlayArtistPreview,
-    isArtistPreviewActive,
-    isLoadingPreview,
-    playArtistPreview,
-  } = useArtistPreviewPlayback({
-    mbid,
-    artistName,
-    enabled: enablePreviewPlayback,
-  });
+  const { canPlayArtistPreview, isArtistPreviewActive, isLoadingPreview, playArtistPreview } =
+    useArtistPreviewPlayback({
+      mbid,
+      artistName,
+      enabled: enablePreviewPlayback,
+    });
 
   const fetchBackendCover = useCallback(
     async (mbidToFetch, nameForCover, signal, refresh = false) => {
@@ -88,9 +84,7 @@ const ArtistImage = ({
             () =>
               Promise.race([
                 getArtistCover(mbidToFetch, nameForCover, forceRefresh),
-                new Promise((_, reject) =>
-                  setTimeout(() => reject(new Error("Timeout")), 5000),
-                ),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000)),
               ]),
             signal,
           );
@@ -209,9 +203,7 @@ const ArtistImage = ({
   const previewButton = canPlayArtistPreview ? (
     <button
       type="button"
-      className={`artist-image-preview-button${
-        isArtistPreviewActive ? " is-active" : ""
-      }`}
+      className={`artist-image-preview-button${isArtistPreviewActive ? " is-active" : ""}`}
       onClick={handlePreviewClick}
       disabled={isLoadingPreview}
       aria-label={`Play ${artistName || "artist"} top tracks`}
@@ -241,16 +233,13 @@ const ArtistImage = ({
       <div
         className={`artist-image-root ${className}`}
         style={{
-          background:
-            "linear-gradient(135deg, rgba(33,31,39,1) 0%, rgba(46,43,54,1) 100%)",
+          background: "linear-gradient(135deg, rgba(33,31,39,1) 0%, rgba(46,43,54,1) 100%)",
         }}
       >
         <div className="artist-image-overlay">
           {isLoading ? (
             <Loader
-              className={`artist-image-loader${
-                showLoading ? " animate-spin is-brand" : " is-dim"
-              }`}
+              className={`artist-image-loader${showLoading ? " animate-spin is-brand" : " is-dim"}`}
             />
           ) : (
             <Music className="artist-image-icon" />
@@ -263,15 +252,9 @@ const ArtistImage = ({
   }
 
   return (
-    <div
-      className={`artist-image-root ${className}`}
-      style={{ backgroundColor: "#211f27" }}
-    >
+    <div className={`artist-image-root ${className}`} style={{ backgroundColor: "#211f27" }}>
       {isLoading && showLoading && (
-        <div
-          className="artist-image-overlay"
-          style={{ backgroundColor: "#211f27" }}
-        >
+        <div className="artist-image-overlay" style={{ backgroundColor: "#211f27" }}>
           <Loader className="artist-image-loader animate-spin is-brand" />
         </div>
       )}
@@ -280,9 +263,7 @@ const ArtistImage = ({
           ref={imgRef}
           src={currentSrc}
           alt={alt || "Artist cover"}
-          className={`artist-image-media ${
-            showLoading && isLoading ? "is-loading" : "is-loaded"
-          }`}
+          className={`artist-image-media ${showLoading && isLoading ? "is-loading" : "is-loaded"}`}
           onLoad={handleLoad}
           onError={handleError}
           loading={loading}

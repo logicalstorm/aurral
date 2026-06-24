@@ -99,9 +99,7 @@ export async function extractTwoToneGradientFromImage(src) {
       const allPixels = argbPixelsFromImageData(imageData);
       const fallback = scoreBestColor(allPixels, 0xff121212);
       const topArgb = enhanceGradientColor(scoreBestColor(top, fallback));
-      const bottomArgb = enhanceGradientColor(
-        scoreBestColor(bottom, topArgb || fallback),
-      );
+      const bottomArgb = enhanceGradientColor(scoreBestColor(bottom, topArgb || fallback));
       return {
         top: argbToCssHex(topArgb),
         bottom: argbToCssHex(bottomArgb),

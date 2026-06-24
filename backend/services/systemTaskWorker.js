@@ -13,7 +13,7 @@ const WORKER_NAME = "system-task";
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
+let _loopPromise = null;
 let idleController = null;
 
 async function processSystemTask(payload = {}) {
@@ -40,8 +40,7 @@ async function processSystemTask(payload = {}) {
     case "discovery-refresh-check": {
       const { enqueueDiscoveryRefreshIfNeeded } = await import(
         "./discovery/refreshScheduler.js"
-      );
-      await enqueueDiscoveryRefreshIfNeeded({ reason: "interval" });
+      );      await enqueueDiscoveryRefreshIfNeeded({ reason: "interval" });
       return;
     }
     case "weekly-flow-startup-check": {
@@ -52,8 +51,7 @@ async function processSystemTask(payload = {}) {
     case "discovery-bootstrap": {
       const { bootstrapDiscoveryRefresh } = await import(
         "./discovery/refreshScheduler.js"
-      );
-      await bootstrapDiscoveryRefresh();
+      );      await bootstrapDiscoveryRefresh();
       return;
     }
     case "playlist-startup-migration": {
@@ -126,7 +124,7 @@ async function runLoop() {
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
+    _loopPromise = null;
     const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startSystemTaskWorker, {
@@ -139,7 +137,7 @@ export function startSystemTaskWorker() {
   if (running || isHonkerShuttingDown()) return;
   running = true;
   stopRequested = false;
-  loopPromise = runLoop();
+  _loopPromise = runLoop();
 }
 
 export function stopSystemTaskWorker() {

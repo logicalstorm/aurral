@@ -1,5 +1,4 @@
-export const getArtistRecordId = (artist) =>
-  artist?.id || artist?.mbid || artist?.foreignArtistId;
+export const getArtistRecordId = (artist) => artist?.id || artist?.mbid || artist?.foreignArtistId;
 
 const uniqueTextList = (values) => {
   const seen = new Set();

@@ -17,23 +17,16 @@ async function withPlaylistLocks(playlistTypes, operation) {
       return operation();
     }
     const playlistType = sortedTypes[index];
-    return withHonkerLock(
-      `playlist-mutation:${playlistType}`,
-      () => runAtIndex(index + 1),
-      {
-        ttlSeconds: 180,
-        waitTimeoutMs: 15 * 60 * 1000,
-        retryDelayMs: 250,
-      },
-    );
+    return withHonkerLock(`playlist-mutation:${playlistType}`, () => runAtIndex(index + 1), {
+      ttlSeconds: 180,
+      waitTimeoutMs: 15 * 60 * 1000,
+      retryDelayMs: 250,
+    });
   };
   return runAtIndex(0);
 }
 
-export async function beginPlaylistMutation(
-  playlistTypes,
-  { clearPending = true } = {},
-) {
+export async function beginPlaylistMutation(playlistTypes, { clearPending = true } = {}) {
   const types = normalizePlaylistTypes(playlistTypes);
   for (const playlistType of types) {
     weeklyFlowWorker.blockPlaylist(playlistType);
@@ -44,9 +37,7 @@ export async function beginPlaylistMutation(
   }
   try {
     await Promise.all(
-      types.map((playlistType) =>
-        weeklyFlowWorker.waitForPlaylistIdle(playlistType),
-      ),
+      types.map((playlistType) => weeklyFlowWorker.waitForPlaylistIdle(playlistType)),
     );
   } catch (error) {
     for (const playlistType of types) {
@@ -62,11 +53,7 @@ export async function beginPlaylistMutation(
   };
 }
 
-export async function withPlaylistMutation(
-  playlistTypes,
-  operation,
-  options = {},
-) {
+export async function withPlaylistMutation(playlistTypes, operation, options = {}) {
   const types = normalizePlaylistTypes(playlistTypes);
   return withPlaylistLocks(types, async () => {
     const releaseMutation = await beginPlaylistMutation(types, options);

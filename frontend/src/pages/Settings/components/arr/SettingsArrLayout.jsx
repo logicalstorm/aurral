@@ -34,13 +34,7 @@ export function SettingsArrFormGroup({
       <div className="arr-form-control">
         {children}
         {help ? (
-          <p
-            className={`arr-form-help${
-              helpWarning ? " arr-form-help--warning" : ""
-            }`}
-          >
-            {help}
-          </p>
+          <p className={`arr-form-help${helpWarning ? " arr-form-help--warning" : ""}`}>{help}</p>
         ) : null}
       </div>
     </div>
@@ -73,9 +67,7 @@ export function SettingsArrCard({ title, subtitle, meta, status, onClick }) {
         {meta ? <span className="arr-card__meta">{meta}</span> : null}
       </span>
       {status ? (
-        <span className={`arr-card__status arr-card__status--${status.tone}`}>
-          {status.label}
-        </span>
+        <span className={`arr-card__status arr-card__status--${status.tone}`}>{status.label}</span>
       ) : null}
     </button>
   );

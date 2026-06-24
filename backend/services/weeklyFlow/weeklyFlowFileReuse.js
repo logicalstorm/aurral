@@ -14,7 +14,9 @@ const LEGACY_REUSE_MODES = new Set(["hardlink", "copy"]);
 const DEFAULT_EXISTING_FILE_MODE = "reuse";
 
 export function normalizeExistingFileMode(value) {
-  const normalized = String(value || "").trim().toLowerCase();
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
   if (EXISTING_FILE_MODES.has(normalized)) {
     return normalized;
   }
@@ -104,9 +106,7 @@ function sortReusableJobs(jobs) {
 }
 
 async function findAurralSource(track, options = {}) {
-  const weeklyFlowRoot = path.resolve(
-    options.weeklyFlowRoot || resolveWeeklyFlowRoot(),
-  );
+  const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || resolveWeeklyFlowRoot());
   const targetPlaylistType = String(options.targetPlaylistType || "").trim();
   const identity = buildSharedTrackIdentity(track);
   const excludeJobIds = new Set(
@@ -120,10 +120,7 @@ async function findAurralSource(track, options = {}) {
     if (excludeJobIds.has(String(job.id || ""))) continue;
     if (!job.finalPath || typeof job.finalPath !== "string") continue;
     if (buildSharedTrackIdentity(job) !== identity) continue;
-    if (
-      targetPlaylistType &&
-      String(job.playlistType || "") === targetPlaylistType
-    ) {
+    if (targetPlaylistType && String(job.playlistType || "") === targetPlaylistType) {
       continue;
     }
     const sourcePath = remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot);
@@ -195,8 +192,7 @@ function findMatchingTrack(tracks, track) {
   const trackKey = normalizeText(track?.trackName);
   if (!trackKey) return null;
   return (
-    tracks.find((entry) => normalizeText(entry?.trackName || entry?.title) === trackKey) ||
-    null
+    tracks.find((entry) => normalizeText(entry?.trackName || entry?.title) === trackKey) || null
   );
 }
 
@@ -231,9 +227,7 @@ async function findLidarrSource(track) {
     }
     const matchedTrack = findMatchingTrack(Array.isArray(tracks) ? tracks : [], track);
     if (!matchedTrack || matchedTrack.hasFile !== true || !matchedTrack.path) continue;
-    const sourcePath = path.resolve(
-      resolveLocalPath(matchedTrack.path, getPathMappings("lidarr")),
-    );
+    const sourcePath = path.resolve(resolveLocalPath(matchedTrack.path, getPathMappings("lidarr")));
     if (!(await fileExists(sourcePath))) {
       console.warn(
         `[WeeklyFlowReuse] Lidarr track exists but file is not accessible from Aurral: ${matchedTrack.path}`,
@@ -284,12 +278,8 @@ export async function restoreCompletedTrack(job, options = {}) {
     return { action: "skipped", reason: "Track is not completed" };
   }
 
-  const weeklyFlowRoot = path.resolve(
-    options.weeklyFlowRoot || resolveWeeklyFlowRoot(),
-  );
-  const finalPath = path.resolve(
-    remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot),
-  );
+  const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || resolveWeeklyFlowRoot());
+  const finalPath = path.resolve(remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot));
   if (await fileExists(finalPath)) {
     return { action: "ok", reason: "Playlist file exists" };
   }
@@ -379,16 +369,11 @@ export async function repairReusableTrackLinks(options = {}) {
     };
   }
 
-  const weeklyFlowRoot = path.resolve(
-    options.weeklyFlowRoot || resolveWeeklyFlowRoot(),
-  );
+  const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || resolveWeeklyFlowRoot());
   const jobs = downloadTracker
     .getAll()
     .filter((job) => job?.status === "done" && typeof job?.finalPath === "string");
-  const batchSize = Math.max(
-    1,
-    Math.floor(Number(options.batchSize) || REUSE_REPAIR_BATCH_SIZE),
-  );
+  const batchSize = Math.max(1, Math.floor(Number(options.batchSize) || REUSE_REPAIR_BATCH_SIZE));
   const cursor = Math.max(0, Math.floor(Number(options.cursor) || 0));
   const sortedJobs = [...jobs].sort((left, right) =>
     String(left?.id || "").localeCompare(String(right?.id || "")),
@@ -434,8 +419,7 @@ export async function repairReusableTrackLinks(options = {}) {
     }
   }
 
-  const nextCursor =
-    sortedJobs.length === 0 ? 0 : (cursor + batch.length) % sortedJobs.length;
+  const nextCursor = sortedJobs.length === 0 ? 0 : (cursor + batch.length) % sortedJobs.length;
   if (repaired > 0 || requeued > 0) {
     console.log(
       `[WeeklyFlowReuse] Track health sweep repaired ${repaired}, requeued ${requeued} of ${batch.length} checked tracks`,
@@ -478,9 +462,7 @@ export async function reuseTrackForPlaylist(track, playlistType, options = {}) {
   if (mode === "download") {
     return { reused: false, reason: "Existing file reuse is disabled" };
   }
-  const weeklyFlowRoot = path.resolve(
-    options.weeklyFlowRoot || resolveWeeklyFlowRoot(),
-  );
+  const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || resolveWeeklyFlowRoot());
   const { source, reason } = await resolveReusableTrackSource(track, {
     ...options,
     existingFileMode: mode,

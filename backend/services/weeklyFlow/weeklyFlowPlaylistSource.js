@@ -1,9 +1,7 @@
 import { lastfmRequest, getLastfmApiKey } from "../apiClients/index.js";
 import { getDiscoveryCache } from "../discovery/index.js";
 import { normalizeWeightMap } from "./weeklyFlowPlaylistConfig.js";
-
-const MBID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const _MBID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LASTFM_HARVEST_CONCURRENCY = 12;
 const ARTIST_TOP_TRACKS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const LIBRARY_OWNERSHIP_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -145,10 +143,7 @@ export class WeeklyFlowPlaylistSource {
       { key: "trending", value: Number(mix?.trending ?? 0) },
       { key: "focus", value: Number(mix?.focus ?? 0) },
     ];
-    const sum = weights.reduce(
-      (acc, w) => acc + (Number.isFinite(w.value) ? w.value : 0),
-      0,
-    );
+    const sum = weights.reduce((acc, w) => acc + (Number.isFinite(w.value) ? w.value : 0), 0);
     if (sum <= 0 || !Number.isFinite(sum)) {
       return { discover: 0, mix: 0, trending: 0, focus: 0 };
     }
@@ -177,9 +172,7 @@ export class WeeklyFlowPlaylistSource {
   _normalizeList(value) {
     if (value == null) return [];
     if (Array.isArray(value)) {
-      return value
-        .map((item) => String(item || "").trim())
-        .filter(Boolean);
+      return value.map((item) => String(item || "").trim()).filter(Boolean);
     }
     if (typeof value === "string") {
       const trimmed = value.trim();
@@ -205,7 +198,9 @@ export class WeeklyFlowPlaylistSource {
   }
 
   _normalizeFocusStrength(value) {
-    const strength = String(value || "").trim().toLowerCase();
+    const strength = String(value || "")
+      .trim()
+      .toLowerCase();
     if (strength === "light" || strength === "medium" || strength === "heavy") {
       return strength;
     }
@@ -220,7 +215,9 @@ export class WeeklyFlowPlaylistSource {
   }
 
   _artistKey(value) {
-    return String(value || "").trim().toLowerCase();
+    return String(value || "")
+      .trim()
+      .toLowerCase();
   }
 
   _releaseTitleKey(value) {
@@ -235,13 +232,7 @@ export class WeeklyFlowPlaylistSource {
   }
 
   _artistKeysFromArtist(artist) {
-    return [
-      artist?.id,
-      artist?.mbid,
-      artist?.foreignArtistId,
-      artist?.name,
-      artist?.artistName,
-    ]
+    return [artist?.id, artist?.mbid, artist?.foreignArtistId, artist?.name, artist?.artistName]
       .map((value) => this._artistKey(value))
       .filter(Boolean);
   }
@@ -253,14 +244,10 @@ export class WeeklyFlowPlaylistSource {
 
   _normalizeArtistKeySet(value) {
     if (value instanceof Set) {
-      return new Set(
-        [...value].map((entry) => this._artistKey(entry)).filter(Boolean),
-      );
+      return new Set([...value].map((entry) => this._artistKey(entry)).filter(Boolean));
     }
     if (Array.isArray(value)) {
-      return new Set(
-        value.map((entry) => this._artistKey(entry)).filter(Boolean),
-      );
+      return new Set(value.map((entry) => this._artistKey(entry)).filter(Boolean));
     }
     return null;
   }
@@ -330,9 +317,7 @@ export class WeeklyFlowPlaylistSource {
 
   _getRecommendedArtists(listenHistoryProfile = null) {
     const discoveryCache = getDiscoveryCache(listenHistoryProfile);
-    return Array.isArray(discoveryCache.recommendations)
-      ? discoveryCache.recommendations
-      : [];
+    return Array.isArray(discoveryCache.recommendations) ? discoveryCache.recommendations : [];
   }
 
   _getRecommendedArtistSet(listenHistoryProfile = null) {
@@ -385,8 +370,7 @@ export class WeeklyFlowPlaylistSource {
       const artistKey = this._trackArtistKey(track);
       if (!artistKey) return false;
       if (excludeSet?.has(artistKey)) return false;
-      if (includeSet && includeSet.size > 0 && !includeSet.has(artistKey))
-        return false;
+      if (includeSet && includeSet.size > 0 && !includeSet.has(artistKey)) return false;
       return true;
     });
   }
@@ -409,10 +393,7 @@ export class WeeklyFlowPlaylistSource {
     }
 
     const now = Date.now();
-    if (
-      this.libraryArtistKeysCache?.set &&
-      this.libraryArtistKeysCache.expiresAt > now
-    ) {
+    if (this.libraryArtistKeysCache?.set && this.libraryArtistKeysCache.expiresAt > now) {
       return this.libraryArtistKeysCache.set;
     }
     if (this.libraryArtistKeysCache?.promise) {
@@ -506,11 +487,7 @@ export class WeeklyFlowPlaylistSource {
         tracks.push(track);
       }
     }
-    return this._filterTracksByArtists(
-      tracks,
-      null,
-      options?.excludeArtistKeys,
-    );
+    return this._filterTracksByArtists(tracks, null, options?.excludeArtistKeys);
   }
 
   async _getTagArtists(tag, limit) {
@@ -526,9 +503,7 @@ export class WeeklyFlowPlaylistSource {
     const artists = Array.isArray(data.topartists.artist)
       ? data.topartists.artist
       : [data.topartists.artist];
-    return artists
-      .map((artist) => String(artist?.name || "").trim())
-      .filter(Boolean);
+    return artists.map((artist) => String(artist?.name || "").trim()).filter(Boolean);
   }
 
   async _getSimilarArtists(artistKey, limit = 25) {
@@ -570,12 +545,11 @@ export class WeeklyFlowPlaylistSource {
         scoreMap.set(key, current);
       }
     }
-    return [...scoreMap.values()]
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        if (a.rankSum !== b.rankSum) return a.rankSum - b.rankSum;
-        return a.name.localeCompare(b.name);
-      });
+    return [...scoreMap.values()].sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.rankSum !== b.rankSum) return a.rankSum - b.rankSum;
+      return a.name.localeCompare(b.name);
+    });
   }
 
   async _getTieredGroupTracks(groups, limit, options = {}) {
@@ -625,15 +599,11 @@ export class WeeklyFlowPlaylistSource {
         artists: await this._getTagArtists(tag, requestedArtists).catch(() => []),
       })),
     );
-    return this._getTieredGroupTracks(
-      groups,
-      limit,
-      {
-        deepDive: options?.deepDive === true,
-        reason: options?.reason || `From genres: ${tags.join(", ")}`,
-        excludeArtistKeys: options?.excludeArtistKeys,
-      },
-    ).catch(() => []);
+    return this._getTieredGroupTracks(groups, limit, {
+      deepDive: options?.deepDive === true,
+      reason: options?.reason || `From genres: ${tags.join(", ")}`,
+      excludeArtistKeys: options?.excludeArtistKeys,
+    }).catch(() => []);
   }
 
   async getRelatedArtistGroupTracks(relatedArtistsMap, limit, options = {}) {
@@ -648,21 +618,15 @@ export class WeeklyFlowPlaylistSource {
         artists: await this._getSimilarArtists(artist, 75).catch(() => []),
       })),
     );
-    return this._getTieredGroupTracks(
-      groups,
-      limit,
-      {
-        deepDive: options?.deepDive === true,
-        reason: options?.reason || `Similar to ${artists.join(", ")}`,
-        excludeArtistKeys: options?.excludeArtistKeys,
-      },
-    ).catch(() => []);
+    return this._getTieredGroupTracks(groups, limit, {
+      deepDive: options?.deepDive === true,
+      reason: options?.reason || `Similar to ${artists.join(", ")}`,
+      excludeArtistKeys: options?.excludeArtistKeys,
+    }).catch(() => []);
   }
 
   _buildWeightedSourceCounts(total, sources) {
-    const items = sources.filter(
-      (source) => Number.isFinite(source.weight) && source.weight > 0,
-    );
+    const items = sources.filter((source) => Number.isFinite(source.weight) && source.weight > 0);
     if (total <= 0 || items.length === 0) return [];
     const sum = items.reduce((acc, item) => acc + item.weight, 0);
     if (!Number.isFinite(sum) || sum <= 0) return [];
@@ -685,9 +649,7 @@ export class WeeklyFlowPlaylistSource {
   }
 
   _isMbid(value) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-      value,
-    );
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   }
 
   _sliceRange(trackList, start, end) {
@@ -701,34 +663,30 @@ export class WeeklyFlowPlaylistSource {
 
   _pickRandomTrack(trackList) {
     if (!Array.isArray(trackList) || trackList.length === 0) return null;
-    return trackList
-      .filter((track) => String(track?.name || "").trim().length > 0)
-      .sort((left, right) => {
-        const leftAlbum = String(
-          left?.album?.title || left?.album?.["#text"] || "",
-        ).trim();
-        const rightAlbum = String(
-          right?.album?.title || right?.album?.["#text"] || "",
-        ).trim();
-        if (Boolean(rightAlbum) !== Boolean(leftAlbum)) {
-          return Number(Boolean(rightAlbum)) - Number(Boolean(leftAlbum));
-        }
-        const leftPlaycount = Number(left?.playcount || left?.listeners || 0);
-        const rightPlaycount = Number(right?.playcount || right?.listeners || 0);
-        if (rightPlaycount !== leftPlaycount) {
-          return rightPlaycount - leftPlaycount;
-        }
-        return String(left?.name || "").localeCompare(String(right?.name || ""));
-      })[0] || null;
+    return (
+      trackList
+        .filter((track) => String(track?.name || "").trim().length > 0)
+        .sort((left, right) => {
+          const leftAlbum = String(left?.album?.title || left?.album?.["#text"] || "").trim();
+          const rightAlbum = String(right?.album?.title || right?.album?.["#text"] || "").trim();
+          if (Boolean(rightAlbum) !== Boolean(leftAlbum)) {
+            return Number(Boolean(rightAlbum)) - Number(Boolean(leftAlbum));
+          }
+          const leftPlaycount = Number(left?.playcount || left?.listeners || 0);
+          const rightPlaycount = Number(right?.playcount || right?.listeners || 0);
+          if (rightPlaycount !== leftPlaycount) {
+            return rightPlaycount - leftPlaycount;
+          }
+          return String(left?.name || "").localeCompare(String(right?.name || ""));
+        })[0] || null
+    );
   }
 
   _pickTrackFromRanges(trackList, ranges) {
     for (const range of ranges) {
-      const candidates = this._sliceRange(
-        trackList,
-        range.start,
-        range.end,
-      ).filter((track) => String(track?.name || "").trim().length > 0);
+      const candidates = this._sliceRange(trackList, range.start, range.end).filter(
+        (track) => String(track?.name || "").trim().length > 0,
+      );
       const pick = this._pickRandomTrack(candidates);
       if (pick) return pick;
     }
@@ -737,11 +695,7 @@ export class WeeklyFlowPlaylistSource {
 
   _pickTrackFromRangesWithOwned(trackList, ownedTitles, ranges) {
     for (const range of ranges) {
-      const candidates = this._sliceRange(
-        trackList,
-        range.start,
-        range.end,
-      ).filter((track) => {
+      const candidates = this._sliceRange(trackList, range.start, range.end).filter((track) => {
         const name = String(track?.name || "")
           .trim()
           .toLowerCase();
@@ -760,11 +714,7 @@ export class WeeklyFlowPlaylistSource {
     ranges,
   ) {
     for (const range of ranges) {
-      const candidates = this._sliceRange(
-        trackList,
-        range.start,
-        range.end,
-      ).filter((track) => {
+      const candidates = this._sliceRange(trackList, range.start, range.end).filter((track) => {
         const name = String(track?.name || "")
           .trim()
           .toLowerCase();
@@ -772,9 +722,7 @@ export class WeeklyFlowPlaylistSource {
       });
       const shuffled = [...candidates].sort(() => 0.5 - Math.random());
       for (const candidate of shuffled) {
-        const albumTitle = String(
-          candidate?.album?.title || candidate?.album?.["#text"] || "",
-        )
+        const albumTitle = String(candidate?.album?.title || candidate?.album?.["#text"] || "")
           .trim()
           .toLowerCase();
         if (!albumTitle) continue;
@@ -782,9 +730,7 @@ export class WeeklyFlowPlaylistSource {
           return {
             pick: candidate,
             albumName:
-              String(
-                candidate?.album?.title || candidate?.album?.["#text"] || "",
-              ).trim() || null,
+              String(candidate?.album?.title || candidate?.album?.["#text"] || "").trim() || null,
           };
         }
       }
@@ -802,11 +748,7 @@ export class WeeklyFlowPlaylistSource {
     let checked = 0;
     const maxChecks = 12;
     for (const range of ranges) {
-      const candidates = this._sliceRange(
-        trackList,
-        range.start,
-        range.end,
-      ).filter((track) => {
+      const candidates = this._sliceRange(trackList, range.start, range.end).filter((track) => {
         const name = String(track?.name || "")
           .trim()
           .toLowerCase();
@@ -831,8 +773,7 @@ export class WeeklyFlowPlaylistSource {
           if (!ownedAlbums.has(albumTitle)) {
             return {
               pick: candidate,
-              albumName:
-                String(info?.track?.album?.title || "").trim() || null,
+              albumName: String(info?.track?.album?.title || "").trim() || null,
             };
           }
         } catch {
@@ -1015,14 +956,10 @@ export class WeeklyFlowPlaylistSource {
           });
           curated.push(...tracks);
         } else {
-          const tracks = await this.getRelatedArtistTracks(
-            source.key,
-            source.count,
-            {
-              deepDive,
-              reason: `Similar to ${source.key}`,
-            },
-          );
+          const tracks = await this.getRelatedArtistTracks(source.key, source.count, {
+            deepDive,
+            reason: `Similar to ${source.key}`,
+          });
           curated.push(...tracks);
         }
       } catch {
@@ -1147,8 +1084,7 @@ export class WeeklyFlowPlaylistSource {
       metadataConfidence,
       downloadabilityHint,
       finalScore:
-        Number(extra.finalScore) ||
-        sourceBaseScore + metadataConfidence * 25 + downloadabilityHint,
+        Number(extra.finalScore) || sourceBaseScore + metadataConfidence * 25 + downloadabilityHint,
     };
   }
 
@@ -1165,12 +1101,8 @@ export class WeeklyFlowPlaylistSource {
         relatedCoverageRatio: 0,
       };
     }
-    const tagCoverageRatio = hasTags
-      ? Math.min(1, safeTagCoverage / totalTags)
-      : 0;
-    const relatedCoverageRatio = hasRelated
-      ? Math.min(1, safeRelatedCoverage / totalRelated)
-      : 0;
+    const tagCoverageRatio = hasTags ? Math.min(1, safeTagCoverage / totalTags) : 0;
+    const relatedCoverageRatio = hasRelated ? Math.min(1, safeRelatedCoverage / totalRelated) : 0;
 
     if (hasTags && hasRelated) {
       if (safeRelatedCoverage >= totalRelated && safeTagCoverage >= totalTags) {
@@ -1253,8 +1185,7 @@ export class WeeklyFlowPlaylistSource {
             : safeRelatedCoverage > 0
               ? "related_partial_only"
               : "none",
-        focusPriority:
-          safeRelatedCoverage >= totalRelated ? 4 : safeRelatedCoverage > 0 ? 3 : 0,
+        focusPriority: safeRelatedCoverage >= totalRelated ? 4 : safeRelatedCoverage > 0 ? 3 : 0,
         tagCoverageRatio,
         relatedCoverageRatio,
       };
@@ -1267,8 +1198,7 @@ export class WeeklyFlowPlaylistSource {
           : safeTagCoverage > 0
             ? "tag_partial_only"
             : "none",
-      focusPriority:
-        safeTagCoverage >= totalTags ? 2 : safeTagCoverage > 0 ? 1 : 0,
+      focusPriority: safeTagCoverage >= totalTags ? 2 : safeTagCoverage > 0 ? 1 : 0,
       tagCoverageRatio,
       relatedCoverageRatio,
     };
@@ -1523,9 +1453,7 @@ export class WeeklyFlowPlaylistSource {
         ? options.excludeTrackKeys
         : options?.excludeTrackKeys || [],
     );
-    const libraryArtistKeys = await this._getLibraryArtistKeySet(options).catch(
-      () => new Set(),
-    );
+    const libraryArtistKeys = await this._getLibraryArtistKeySet(options).catch(() => new Set());
     const nonLibraryExcludeArtistKeys = new Set(excludeArtistKeys);
     for (const entry of libraryArtistKeys) {
       nonLibraryExcludeArtistKeys.add(entry);
@@ -1657,10 +1585,10 @@ export class WeeklyFlowPlaylistSource {
     }
     const finalPrimary = primaryTracks
       .slice(0, targetSize)
-      .map(({ trackKey, ...track }) => track);
+      .map(({ trackKey: _trackKey, ...track }) => track);
     const finalReserve = reserveTracks
       .slice(0, reserveSize)
-      .map(({ trackKey, ...track }) => track);
+      .map(({ trackKey: _trackKey, ...track }) => track);
     return {
       primaryTracks: finalPrimary,
       reserveTracks: finalReserve,
@@ -1695,14 +1623,9 @@ export class WeeklyFlowPlaylistSource {
   async buildFlowRunPlan(flow, options = {}) {
     const requestedSize = Number(flow?.size || 0);
     const targetSize =
-      Number.isFinite(requestedSize) && requestedSize > 0
-        ? Math.round(requestedSize)
-        : 30;
+      Number.isFinite(requestedSize) && requestedSize > 0 ? Math.round(requestedSize) : 30;
     if (flow?.discoverPresetId === "release-radar") {
-      const basedOn =
-        options?.basedOn ||
-        this._resolveDiscoveryCache(options)?.basedOn ||
-        [];
+      const basedOn = options?.basedOn || this._resolveDiscoveryCache(options)?.basedOn || [];
       const primaryTracks = await this.getReleaseRadarTracks(targetSize, {
         listenHistoryProfile: options?.listenHistoryProfile || null,
         basedOn,
@@ -1717,10 +1640,10 @@ export class WeeklyFlowPlaylistSource {
       };
     }
     const mix = flow?.mix || { discover: 34, mix: 33, trending: 33, focus: 0 };
-    const sourceTargets = this._buildSourceTargets(targetSize, mix);
+    const _sourceTargets = this._buildSourceTargets(targetSize, mix);
     const { candidateMap, excludeArtistKeys } = await this._harvestFlowSources(
       flow,
-      sourceTargets,
+      _sourceTargets,
       options,
     );
     return this._assembleFlowPlan({
@@ -1728,7 +1651,7 @@ export class WeeklyFlowPlaylistSource {
       excludeArtistKeys,
       targetSize,
       reserveSize: 0,
-      sourceTargets,
+      _sourceTargets,
       reserveTargets: { discover: 0, mix: 0, trending: 0, focus: 0 },
       includeReserve: false,
     });
@@ -1737,15 +1660,13 @@ export class WeeklyFlowPlaylistSource {
   async buildFlowReservePlan(flow, primaryTracks, options = {}) {
     const requestedSize = Number(flow?.size || 0);
     const targetSize =
-      Number.isFinite(requestedSize) && requestedSize > 0
-        ? Math.round(requestedSize)
-        : 30;
+      Number.isFinite(requestedSize) && requestedSize > 0 ? Math.round(requestedSize) : 30;
     const reserveSize =
       Number.isFinite(Number(options?.reserveSize)) && Number(options.reserveSize) >= 0
         ? Math.round(Number(options.reserveSize))
         : Math.max(Math.ceil(targetSize * 0.75), 8);
     const mix = flow?.mix || { discover: 34, mix: 33, trending: 33, focus: 0 };
-    const sourceTargets = this._buildSourceTargets(targetSize, mix);
+    const _sourceTargets = this._buildSourceTargets(targetSize, mix);
     const reserveTargets = this._buildSourceTargets(reserveSize, mix);
     const { candidateMap, excludeArtistKeys } = await this._harvestFlowSources(
       flow,
@@ -1772,9 +1693,7 @@ export class WeeklyFlowPlaylistSource {
     const discoveryCache = this._resolveDiscoveryCache(options);
     const recommendations = discoveryCache.recommendations || [];
     if (!Array.isArray(recommendations) || recommendations.length === 0) {
-      throw new Error(
-        "No discovery recommendations available. Update discovery cache first.",
-      );
+      throw new Error("No discovery recommendations available. Update discovery cache first.");
     }
     return this._harvestTopTracksFromArtists(recommendations, limit, {
       ...options,
@@ -1788,14 +1707,9 @@ export class WeeklyFlowPlaylistSource {
     }
     const discoveryCache = this._resolveDiscoveryCache(options);
     const globalTop = discoveryCache.globalTop || [];
-    const candidates = this._filterArtistsByKeySet(
-      globalTop,
-      options?.excludeArtistKeys,
-    );
+    const candidates = this._filterArtistsByKeySet(globalTop, options?.excludeArtistKeys);
     if (!Array.isArray(candidates) || candidates.length === 0) {
-      throw new Error(
-        "No trending artists available. Update discovery cache first.",
-      );
+      throw new Error("No trending artists available. Update discovery cache first.");
     }
     return this._harvestTopTracksFromArtists(candidates, limit, {
       ...options,
@@ -1808,7 +1722,7 @@ export class WeeklyFlowPlaylistSource {
       throw new Error("Last.fm API key not configured");
     }
     if (!tag || limit <= 0) return [];
-    const normalizedTag = this._artistKey(tag);
+    const _normalizedTag = this._artistKey(tag);
     const requested = Math.max(limit * 3, 50);
     const trackData = await lastfmRequest("tag.getTopTracks", {
       tag,
@@ -1823,11 +1737,7 @@ export class WeeklyFlowPlaylistSource {
     const seen = new Set();
     for (const track of tracks) {
       if (result.length >= limit) break;
-      const artistName = (
-        track.artist?.name ||
-        track.artist?.["#text"] ||
-        ""
-      ).trim();
+      const artistName = (track.artist?.name || track.artist?.["#text"] || "").trim();
       const trackName = track?.name?.trim();
       if (!artistName || !trackName) continue;
       const key = artistName.toLowerCase();
@@ -1843,11 +1753,7 @@ export class WeeklyFlowPlaylistSource {
       });
       if (trackEntry) result.push(trackEntry);
     }
-    return this._filterTracksByArtists(
-      result,
-      null,
-      options?.excludeArtistKeys,
-    );
+    return this._filterTracksByArtists(result, null, options?.excludeArtistKeys);
   }
 
   async getRelatedArtistTracks(artistKey, limit, options = {}) {
@@ -1864,10 +1770,7 @@ export class WeeklyFlowPlaylistSource {
         ? similar.similarartists.artist
         : [similar.similarartists.artist]
       : [];
-    const candidates = this._filterArtistsByKeySet(
-      list,
-      options?.excludeArtistKeys,
-    );
+    const candidates = this._filterArtistsByKeySet(list, options?.excludeArtistKeys);
     return this._harvestTopTracksFromArtists(
       candidates.map((candidate) => ({
         name: String(candidate?.name || "").trim(),
@@ -1887,9 +1790,7 @@ export class WeeklyFlowPlaylistSource {
     const globalTop = discoveryCache.globalTop || [];
 
     if (recommendations.length === 0 && globalTop.length === 0) {
-      throw new Error(
-        "No discovery recommendations available. Update discovery cache first.",
-      );
+      throw new Error("No discovery recommendations available. Update discovery cache first.");
     }
 
     const includeGlobalTop = options?.includeGlobalTop !== false;
@@ -2050,10 +1951,7 @@ export class WeeklyFlowPlaylistSource {
 
   async _getLibraryAlbumMbidSet() {
     const now = Date.now();
-    if (
-      this.libraryAlbumMbidCache?.set &&
-      this.libraryAlbumMbidCache.expiresAt > now
-    ) {
+    if (this.libraryAlbumMbidCache?.set && this.libraryAlbumMbidCache.expiresAt > now) {
       return this.libraryAlbumMbidCache.set;
     }
     const set = new Set();
@@ -2062,7 +1960,9 @@ export class WeeklyFlowPlaylistSource {
       if (lidarrClient.isConfigured()) {
         const albums = await lidarrClient.request("/album");
         for (const album of Array.isArray(albums) ? albums : []) {
-          const mbid = String(album?.foreignAlbumId || "").trim().toLowerCase();
+          const mbid = String(album?.foreignAlbumId || "")
+            .trim()
+            .toLowerCase();
           if (mbid) set.add(mbid);
         }
       }
@@ -2078,9 +1978,7 @@ export class WeeklyFlowPlaylistSource {
     const entries = Array.isArray(trackList) ? trackList : [trackList];
     return [...entries]
       .map((entry) => {
-        const trackName = String(
-          entry?.name || entry?.title || entry?.trackName || "",
-        ).trim();
+        const trackName = String(entry?.name || entry?.title || entry?.trackName || "").trim();
         if (!trackName) return null;
         const rank = Number(entry?.["@attr"]?.rank ?? entry?.attr?.rank ?? NaN);
         const fallbackRank = Number(
@@ -2092,13 +1990,10 @@ export class WeeklyFlowPlaylistSource {
         );
         return {
           trackName,
-          trackMbid: String(
-            entry?.recordingId ||
-              entry?.recordingMbid ||
-              entry?.mbid ||
-              entry?.id ||
-              "",
-          ).trim() || null,
+          trackMbid:
+            String(
+              entry?.recordingId || entry?.recordingMbid || entry?.mbid || entry?.id || "",
+            ).trim() || null,
           durationMs:
             entry?.durationMs != null && Number.isFinite(Number(entry.durationMs))
               ? Math.max(0, Math.round(Number(entry.durationMs)))
@@ -2146,19 +2041,15 @@ export class WeeklyFlowPlaylistSource {
     let pick = null;
     if (albumMbid) {
       try {
-        pick = this._pickTopAlbumTrackInfo(
-          await this._getMetadataAlbumTrackList(albumMbid),
-        )[0] || null;
+        pick =
+          this._pickTopAlbumTrackInfo(await this._getMetadataAlbumTrackList(albumMbid))[0] || null;
       } catch {}
     }
 
     let trackName = pick?.trackName || null;
     try {
       if (!trackName) {
-        const data = await this._getLastfmAlbumInfo(
-          normalizedArtist,
-          normalizedAlbum,
-        );
+        const data = await this._getLastfmAlbumInfo(normalizedArtist, normalizedAlbum);
         pick = this._pickTopAlbumTrackInfo(data?.album?.tracks?.track)[0] || null;
         trackName = pick?.trackName || null;
       }
@@ -2174,9 +2065,7 @@ export class WeeklyFlowPlaylistSource {
           ).trim();
           return candidateAlbum && this._releaseTitleKey(candidateAlbum) === albumKey;
         });
-        pick = albumMatch
-          ? this._pickTopAlbumTrackInfo([albumMatch])[0] || null
-          : null;
+        pick = albumMatch ? this._pickTopAlbumTrackInfo([albumMatch])[0] || null : null;
         trackName = pick?.trackName || null;
       } catch {}
     }
@@ -2199,8 +2088,7 @@ export class WeeklyFlowPlaylistSource {
     if (limit <= 0) return [];
     const { getRecentMissingReleases } = await import(
       "./discovery/recentReleases.js"
-    );
-    const albums = await getRecentMissingReleases(limit, {
+    );    const albums = await getRecentMissingReleases(limit, {
       artists: options?.libraryArtists,
       includeFuture: false,
     });

@@ -2,10 +2,7 @@ import { useState, useRef } from "react";
 import { Plus, Trash2, GripVertical } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SettingsInput, SettingsTextarea } from "./SettingsField";
-import {
-  IntegrationCard,
-  SettingsIntegrationModal,
-} from "./SettingsIntegrationCards";
+import { IntegrationCard, SettingsIntegrationModal } from "./SettingsIntegrationCards";
 import {
   SettingsArrCardGrid,
   SettingsArrFieldSet,
@@ -106,10 +103,7 @@ export function SettingsConnectTab({
       await testGotifyConnection(url, token);
       showSuccess("Test notification sent.");
     } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        err.message;
+      const msg = err.response?.data?.message || err.response?.data?.error || err.message;
       showError(`Gotify test failed: ${msg}`);
     } finally {
       setTestingGotify(false);
@@ -133,9 +127,7 @@ export function SettingsConnectTab({
   };
 
   const updateWebhook = (index, patch) => {
-    updateWebhooks(
-      webhooks.map((wh, i) => (i === index ? { ...wh, ...patch } : wh)),
-    );
+    updateWebhooks(webhooks.map((wh, i) => (i === index ? { ...wh, ...patch } : wh)));
   };
 
   const addHeader = (whIndex) => {
@@ -156,18 +148,14 @@ export function SettingsConnectTab({
   const updateHeader = (whIndex, hIndex, patch) => {
     const wh = webhooks[whIndex];
     updateWebhook(whIndex, {
-      headers: (wh.headers || []).map((h, i) =>
-        i === hIndex ? { ...h, ...patch } : h,
-      ),
+      headers: (wh.headers || []).map((h, i) => (i === hIndex ? { ...h, ...patch } : h)),
     });
   };
 
   const handleSave = (e) => {
     const cleanedWebhooks = webhooks.map((wh) => ({
       ...wh,
-      headers: (wh.headers || []).filter(
-        (h) => (h.key || "").trim() && (h.value || "").trim(),
-      ),
+      headers: (wh.headers || []).filter((h) => (h.key || "").trim() && (h.value || "").trim()),
     }));
     const settingsToSave = {
       ...settings,
@@ -182,15 +170,10 @@ export function SettingsConnectTab({
 
   return (
     <div className="arr-page">
-      <form
-        onSubmit={handleSave}
-        className="arr-form"
-        autoComplete="off"
-      >
+      <form onSubmit={handleSave} className="arr-form" autoComplete="off">
         <SettingsArrFieldSet legend="Connections">
           <div className="arr-info">
-            External services Aurral integrates with for notifications and
-            discovery data.
+            External services Aurral integrates with for notifications and discovery data.
           </div>
           <SettingsArrCardGrid>
             <IntegrationCard
@@ -233,8 +216,7 @@ export function SettingsConnectTab({
         >
           {!webhooks.length ? (
             <p className="arr-form-help">
-              No webhooks configured. Click &ldquo;Add webhook&rdquo; to create
-              one.
+              No webhooks configured. Click &ldquo;Add webhook&rdquo; to create one.
             </p>
           ) : null}
 
@@ -260,9 +242,7 @@ export function SettingsConnectTab({
                 setDragIdx(null);
                 allowDragRef.current = null;
               }}
-              className={`arr-webhook-card${
-                dragIdx === index ? " is-dragging" : ""
-              }`}
+              className={`arr-webhook-card${dragIdx === index ? " is-dragging" : ""}`}
             >
               <div className="arr-webhook-card__header">
                 <div className="arr-webhook-card__title">
@@ -287,11 +267,7 @@ export function SettingsConnectTab({
                 </button>
               </div>
 
-              <SettingsArrFormGroup
-                label="URL"
-                labelFor={`webhook-url-${index}`}
-                size="large"
-              >
+              <SettingsArrFormGroup label="URL" labelFor={`webhook-url-${index}`} size="large">
                 <SettingsInput
                   id={`webhook-url-${index}`}
                   type="url"
@@ -325,9 +301,7 @@ export function SettingsConnectTab({
                       rows={3}
                       maxLength={1000}
                       value={wh.body || ""}
-                      onChange={(e) =>
-                        updateWebhook(index, { body: e.target.value })
-                      }
+                      onChange={(e) => updateWebhook(index, { body: e.target.value })}
                       spellCheck={false}
                       autoComplete="off"
                     />
@@ -346,10 +320,7 @@ export function SettingsConnectTab({
                 {(wh.headers || []).length > 0 ? (
                   <div className="arr-webhook-card__header-rows">
                     {(wh.headers || []).map((header, hIndex) => (
-                      <div
-                        key={hIndex}
-                        className="arr-webhook-card__header-row"
-                      >
+                      <div key={hIndex} className="arr-webhook-card__header-row">
                         <SettingsInput
                           className="settings-page__mono-input"
                           placeholder="Header-Name"
@@ -422,17 +393,13 @@ export function SettingsConnectTab({
           <SettingsArrFormGroup label="Gotify: Discover updated">
             <PillToggle
               checked={gotify.notifyDiscoveryUpdated || false}
-              onChange={(e) =>
-                updateGotify({ notifyDiscoveryUpdated: e.target.checked })
-              }
+              onChange={(e) => updateGotify({ notifyDiscoveryUpdated: e.target.checked })}
             />
           </SettingsArrFormGroup>
           <SettingsArrFormGroup label="Gotify: Weekly flow finished">
             <PillToggle
               checked={gotify.notifyWeeklyFlowDone || false}
-              onChange={(e) =>
-                updateGotify({ notifyWeeklyFlowDone: e.target.checked })
-              }
+              onChange={(e) => updateGotify({ notifyWeeklyFlowDone: e.target.checked })}
             />
           </SettingsArrFormGroup>
         </SettingsArrFieldSet>
@@ -477,13 +444,9 @@ export function SettingsConnectTab({
       )}
 
       {activeModal === "lastfm" && (
-        <SettingsIntegrationModal
-          title="Last.fm"
-          onClose={() => setActiveModal(null)}
-        >
+        <SettingsIntegrationModal title="Last.fm" onClose={() => setActiveModal(null)}>
           <SettingsModalIntro>
-            Admin default API key and username. Users can override listening
-            history in{" "}
+            Admin default API key and username. Users can override listening history in{" "}
             <Link to="/profile" className="settings-page__link">
               Profile
             </Link>
@@ -513,10 +476,7 @@ export function SettingsConnectTab({
       )}
 
       {activeModal === "ticketmaster" && (
-        <SettingsIntegrationModal
-          title="Ticketmaster"
-          onClose={() => setActiveModal(null)}
-        >
+        <SettingsIntegrationModal title="Ticketmaster" onClose={() => setActiveModal(null)}>
           <SettingsModalCallout>
             <a
               href="https://developer-acct.ticketmaster.com/user/login"
@@ -558,9 +518,7 @@ export function SettingsConnectTab({
             <SettingsModalToggleGroup>
               <SettingsModalToggle
                 label="Include recommended artists in local shows"
-                checked={
-                  ticketmaster.localDiscoveryIncludeRecommendations !== false
-                }
+                checked={ticketmaster.localDiscoveryIncludeRecommendations !== false}
                 onChange={(e) =>
                   updateTicketmaster({
                     localDiscoveryIncludeRecommendations: e.target.checked,

@@ -13,9 +13,7 @@ export const normalizeDiscoveryFeedbackList = (value) => {
 };
 
 const getArtistMatchKeys = (artist) => {
-  const artistId = String(
-    artist?.id || artist?.mbid || artist?.foreignArtistId || "",
-  )
+  const artistId = String(artist?.id || artist?.mbid || artist?.foreignArtistId || "")
     .trim()
     .toLowerCase();
   const artistName = String(artist?.name || artist?.artistName || "")
@@ -29,8 +27,12 @@ const getArtistMatchKeys = (artist) => {
 
 const entryMatchesArtist = (entry, artist) => {
   const artistKeys = new Set(getArtistMatchKeys(artist));
-  const entryId = String(entry?.artistId || "").trim().toLowerCase();
-  const entryName = String(entry?.artistName || "").trim().toLowerCase();
+  const entryId = String(entry?.artistId || "")
+    .trim()
+    .toLowerCase();
+  const entryName = String(entry?.artistName || "")
+    .trim()
+    .toLowerCase();
   if (entryId && artistKeys.has(`id:${entryId}`)) return true;
   if (entryName && artistKeys.has(`name:${entryName}`)) return true;
   return false;
@@ -57,8 +59,12 @@ export const buildArtistFeedbackLookup = (feedbackList) => {
   for (const entry of normalizeDiscoveryFeedbackList(feedbackList)) {
     const action = String(entry?.action || "").trim();
     if (!RATING_FEEDBACK_ACTIONS.has(action)) continue;
-    const artistId = String(entry?.artistId || "").trim().toLowerCase();
-    const artistName = String(entry?.artistName || "").trim().toLowerCase();
+    const artistId = String(entry?.artistId || "")
+      .trim()
+      .toLowerCase();
+    const artistName = String(entry?.artistName || "")
+      .trim()
+      .toLowerCase();
     const keys = [];
     if (artistId) keys.push(`id:${artistId}`);
     if (artistName) keys.push(`name:${artistName}`);
@@ -83,8 +89,7 @@ export const getArtistFeedbackFlags = (lookup, artist) => {
   };
 };
 
-export const getDiscoveryFeedbackLabel = (action) =>
-  DISCOVERY_FEEDBACK_LABELS[action] || "";
+export const getDiscoveryFeedbackLabel = (action) => DISCOVERY_FEEDBACK_LABELS[action] || "";
 
 export const applyArtistDiscoveryFeedback = async ({
   feedbackList,
@@ -114,8 +119,6 @@ export const applyArtistDiscoveryFeedback = async ({
 
   const response = await addDiscoveryFeedback(payload);
   return {
-    feedbackList: normalizeDiscoveryFeedbackList(
-      response?.feedbackList || response,
-    ),
+    feedbackList: normalizeDiscoveryFeedbackList(response?.feedbackList || response),
   };
 };

@@ -74,10 +74,7 @@ function getSettings() {
     url: normalizeBaseUrl(prowlarr.url),
     apiKey: String(prowlarr.apiKey || "").trim(),
     categories: normalizeCategoryList(prowlarr.categories),
-    maxResults: normalizePositiveInteger(
-      prowlarr.maxResults,
-      DEFAULT_MAX_RESULTS,
-    ),
+    maxResults: normalizePositiveInteger(prowlarr.maxResults, DEFAULT_MAX_RESULTS),
     indexers: normalizeIndexerOverrides(prowlarr.indexers),
   };
 }
@@ -105,7 +102,9 @@ function buildClient() {
 }
 
 function normalizeProtocol(value) {
-  const protocol = String(value || "").trim().toLowerCase();
+  const protocol = String(value || "")
+    .trim()
+    .toLowerCase();
   return protocol;
 }
 
@@ -135,9 +134,7 @@ function hasMusicCategory(indexer, configuredCategories = DEFAULT_MUSIC_CATEGORI
 function normalizeIndexer(indexer, settings = getSettings()) {
   const id = normalizeInteger(indexer?.id, null);
   const override = id != null ? settings.indexers[String(id)] : null;
-  const priority =
-    override?.priority ??
-    normalizePositiveInteger(indexer?.priority, 25);
+  const priority = override?.priority ?? normalizePositiveInteger(indexer?.priority, 25);
   return {
     id,
     name: String(indexer?.name || indexer?.definitionName || `Indexer ${id}`).trim(),
@@ -210,14 +207,7 @@ function formatHttpErrorBody(data) {
   return String(data).trim().slice(0, 500);
 }
 
-function buildSearchParams({
-  query,
-  indexerIds,
-  categories,
-  type = "search",
-  limit,
-  offset = 0,
-}) {
+function buildSearchParams({ query, indexerIds, categories, type = "search", limit, offset = 0 }) {
   const params = new URLSearchParams();
   params.set("query", String(query || "").trim());
   params.set("type", type);
@@ -270,11 +260,7 @@ export class ProwlarrClient {
         message: "Prowlarr URL and API key are required",
       };
     }
-    if (
-      !force &&
-      connectionCache.result &&
-      Date.now() - connectionCache.checkedAt < 30000
-    ) {
+    if (!force && connectionCache.result && Date.now() - connectionCache.checkedAt < 30000) {
       return connectionCache.result;
     }
     const client = buildClient();
@@ -382,12 +368,7 @@ export class ProwlarrClient {
     }
     return (Array.isArray(response.data) ? response.data : [])
       .map(normalizeRelease)
-      .filter(
-        (release) =>
-          release.protocol === "usenet" &&
-          release.downloadUrl &&
-          release.title,
-      );
+      .filter((release) => release.protocol === "usenet" && release.downloadUrl && release.title);
   }
 }
 

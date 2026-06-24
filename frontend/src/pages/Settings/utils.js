@@ -5,7 +5,9 @@ export const DEFAULT_METADATA_BASE_URL = "https://lidarrapi.brainzmash.cc";
 export const DEFAULT_SEARCH_URL = "https://search.aurral.org";
 
 export const normalizeMetadataBaseUrl = (baseUrl) => {
-  const trimmed = String(baseUrl || "").trim().replace(/\/+$/, "");
+  const trimmed = String(baseUrl || "")
+    .trim()
+    .replace(/\/+$/, "");
   return trimmed === LEGACY_METADATA_BASE_URL ? DEFAULT_METADATA_BASE_URL : trimmed;
 };
 
@@ -16,18 +18,11 @@ export const normalizeSettings = (savedSettings) => {
   const metadata = savedSettings.integrations?.metadata || {};
   const search = savedSettings.integrations?.search || {};
   const parsedAutoRefreshHours = parseInt(lastfm.discoveryAutoRefreshHours, 10);
-  const normalizedAutoRefreshHours = [24, 168, 720].includes(
-    parsedAutoRefreshHours,
-  )
+  const normalizedAutoRefreshHours = [24, 168, 720].includes(parsedAutoRefreshHours)
     ? parsedAutoRefreshHours
     : 168;
-  const parsedRecommendationsPerRefresh = parseInt(
-    lastfm.discoveryRecommendationsPerRefresh,
-    10,
-  );
-  const normalizedRecommendationsPerRefresh = Number.isFinite(
-    parsedRecommendationsPerRefresh,
-  )
+  const parsedRecommendationsPerRefresh = parseInt(lastfm.discoveryRecommendationsPerRefresh, 10);
+  const normalizedRecommendationsPerRefresh = Number.isFinite(parsedRecommendationsPerRefresh)
     ? Math.min(500, Math.max(50, parsedRecommendationsPerRefresh))
     : 200;
   const parsedFlowsPerRefresh = parseInt(lastfm.discoveryFlowsPerRefresh, 10);
@@ -42,9 +37,7 @@ export const normalizeSettings = (savedSettings) => {
   return {
     ...savedSettings,
     downloadFolderPath: String(savedSettings.downloadFolderPath || "").trim(),
-    pathMappings: Array.isArray(savedSettings.pathMappings)
-      ? savedSettings.pathMappings
-      : [],
+    pathMappings: Array.isArray(savedSettings.pathMappings) ? savedSettings.pathMappings : [],
     playlistArtwork: {
       ...playlistArtwork,
       style: playlistArtworkStyle,
@@ -66,15 +59,10 @@ export const normalizeSettings = (savedSettings) => {
         defaultMonitorOption: "none",
         ...lidarr,
         qualityProfileId:
-          lidarr.qualityProfileId != null
-            ? parseInt(lidarr.qualityProfileId, 10)
-            : null,
+          lidarr.qualityProfileId != null ? parseInt(lidarr.qualityProfileId, 10) : null,
         metadataProfileId:
-          lidarr.metadataProfileId != null
-            ? parseInt(lidarr.metadataProfileId, 10)
-            : null,
-        tagId:
-          lidarr.tagId != null ? parseInt(lidarr.tagId, 10) : null,
+          lidarr.metadataProfileId != null ? parseInt(lidarr.metadataProfileId, 10) : null,
+        tagId: lidarr.tagId != null ? parseInt(lidarr.tagId, 10) : null,
       },
       navidrome: {
         url: "",
@@ -82,12 +70,8 @@ export const normalizeSettings = (savedSettings) => {
         password: "",
         ...(savedSettings.integrations?.navidrome || {}),
         m3uPathMode:
-          savedSettings.integrations?.navidrome?.m3uPathMode === "remote"
-            ? "remote"
-            : "local",
-        pathMappings: Array.isArray(
-          savedSettings.integrations?.navidrome?.pathMappings,
-        )
+          savedSettings.integrations?.navidrome?.m3uPathMode === "remote" ? "remote" : "local",
+        pathMappings: Array.isArray(savedSettings.integrations?.navidrome?.pathMappings)
           ? savedSettings.integrations.navidrome.pathMappings
           : [],
       },

@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowRight,
@@ -29,17 +23,11 @@ const LIBRARY_CREATE_MENU_WIDTH = 296;
 const LIBRARY_CREATE_MENU_GAP = 10;
 
 const getMainContentPortalRoot = () =>
-  typeof document === "undefined"
-    ? null
-    : document.querySelector(MAIN_CONTENT_PORTAL_SELECTOR);
+  typeof document === "undefined" ? null : document.querySelector(MAIN_CONTENT_PORTAL_SELECTOR);
 
 export function LibrarySidebarToggleIcon({ collapsed = false }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      className="flow-page__library-collapse-icon"
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" className="flow-page__library-collapse-icon" aria-hidden="true">
       <rect
         x="3.5"
         y="3.5"
@@ -98,10 +86,7 @@ export function FlowLibraryCreateMenu({
     const menuWidth = menuRef.current?.offsetWidth || LIBRARY_CREATE_MENU_WIDTH;
     const inset = 12;
     const maxLeft = Math.max(wrapRect.width - menuWidth - inset, inset);
-    const left = Math.min(
-      Math.max(rect.right - wrapRect.left - menuWidth, inset),
-      maxLeft,
-    );
+    const left = Math.min(Math.max(rect.right - wrapRect.left - menuWidth, inset), maxLeft);
     const top = rect.bottom - wrapRect.top + LIBRARY_CREATE_MENU_GAP;
     setMenuPosition((prev) => {
       if (prev && prev.top === top && prev.left === left) {
@@ -114,10 +99,7 @@ export function FlowLibraryCreateMenu({
   useEffect(() => {
     if (!isOpen || typeof document === "undefined") return undefined;
     const handleClickOutside = (event) => {
-      if (
-        buttonRef.current?.contains(event.target) ||
-        menuRef.current?.contains(event.target)
-      ) {
+      if (buttonRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) {
         return;
       }
       setIsOpen(false);
@@ -164,11 +146,7 @@ export function FlowLibraryCreateMenu({
     <div
       ref={menuRef}
       className="flow-page__library-create-menu flow-page__library-create-menu--portaled"
-      style={
-        menuPosition
-          ? { top: menuPosition.top, left: menuPosition.left }
-          : undefined
-      }
+      style={menuPosition ? { top: menuPosition.top, left: menuPosition.left } : undefined}
       role="menu"
       aria-label="Create and import"
     >
@@ -184,10 +162,7 @@ export function FlowLibraryCreateMenu({
             close();
           }}
         >
-          <span
-            className="flow-page__library-create-action-icon"
-            aria-hidden="true"
-          >
+          <span className="flow-page__library-create-action-icon" aria-hidden="true">
             <ListMusic className="flow-page__library-create-action-glyph" />
           </span>
           <span className="flow-page__library-create-action-copy">
@@ -281,9 +256,7 @@ export function FlowLibraryCreateMenu({
             onClick={close}
             aria-label="Close menu"
           />
-          {portalRoot && menuPosition
-            ? createPortal(menu, portalRoot)
-            : null}
+          {portalRoot && menuPosition ? createPortal(menu, portalRoot) : null}
         </>
       ) : null}
     </div>
@@ -307,11 +280,7 @@ export function PlaylistLibraryItem({
       : getSharedPlaylistTrackCount(entry, stats);
   const trackLabel = formatTrackCountLabel(trackCount, stats);
   const typeLabel =
-    entry.kind === "flow"
-      ? entry.enabled === true
-        ? "Flow"
-        : "Flow draft"
-      : "Playlist";
+    entry.kind === "flow" ? (entry.enabled === true ? "Flow" : "Flow draft") : "Playlist";
 
   return (
     <div
@@ -343,10 +312,7 @@ export function PlaylistLibraryItem({
                 title={activityHint}
                 aria-label={activityHint}
               >
-                <Loader2
-                  className="artist-icon-xs animate-spin"
-                  aria-hidden="true"
-                />
+                <Loader2 className="artist-icon-xs animate-spin" aria-hidden="true" />
               </span>
             ) : null}
           </div>
@@ -358,9 +324,7 @@ export function PlaylistLibraryItem({
           </span>
         </div>
       </button>
-      {trailing ? (
-        <div className="flow-page__library-item-trailing">{trailing}</div>
-      ) : null}
+      {trailing ? <div className="flow-page__library-item-trailing">{trailing}</div> : null}
     </div>
   );
 }
@@ -378,10 +342,7 @@ function FlowDetailMeta({ meta }) {
     parts.push(
       <span key="run" className="flow-page__detail-meta-run">
         {meta.lastRunShort ? (
-          <span
-            className="flow-page__detail-meta-chip"
-            title={meta.lastRunTitle || undefined}
-          >
+          <span className="flow-page__detail-meta-chip" title={meta.lastRunTitle || undefined}>
             <Clock className="artist-icon-xs" aria-hidden="true" />
             {meta.lastRunShort}
           </span>
@@ -435,11 +396,7 @@ export function PlaylistDetailHero({
   moreMenu,
 }) {
   const isFlow = entry.kind === "flow";
-  const typeLabel = isFlow
-    ? enabled
-      ? "Flow"
-      : "Flow draft"
-    : "Playlist";
+  const typeLabel = isFlow ? (enabled ? "Flow" : "Flow draft") : "Playlist";
 
   return (
     <div className="flow-page__detail-hero">
@@ -470,10 +427,7 @@ export function PlaylistDetailHero({
             ) : null}
             {activityHint ? (
               <p className="flow-page__detail-meta flow-page__detail-activity">
-                <Loader2
-                  className="artist-icon-xs animate-spin"
-                  aria-hidden="true"
-                />
+                <Loader2 className="artist-icon-xs animate-spin" aria-hidden="true" />
                 <span>{activityHint}</span>
               </p>
             ) : null}

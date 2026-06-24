@@ -54,12 +54,8 @@ export function DiscoverRail({
       <div className={`artist-discover-rail__header ${headerClassName}`}>
         <div className="artist-discover-rail__title-group">
           <h2 className="artist-section-title--discover">
-            <span className="artist-section-title--discover-mobile">
-              {mobileTitle || title}
-            </span>
-            <span className="artist-section-title--discover-desktop">
-              {title}
-            </span>
+            <span className="artist-section-title--discover-mobile">{mobileTitle || title}</span>
+            <span className="artist-section-title--discover-desktop">{title}</span>
           </h2>
           {onViewAll ? (
             <button

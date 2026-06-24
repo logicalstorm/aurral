@@ -68,15 +68,10 @@ function GlobalPlayerBar() {
 
   const volumePercent = Math.round(volume * 100);
   const progress = duration > 0 ? Math.min((position / duration) * 100, 100) : 0;
-  const subtitle = [currentTrack.artist, currentTrack.album]
-    .filter(Boolean)
-    .join(" · ");
+  const subtitle = [currentTrack.artist, currentTrack.album].filter(Boolean).join(" · ");
 
   const handleVolumeChange = (event) => {
-    const nextVolume = Math.min(
-      Math.max(Number(event.target.value) || 0, 0),
-      100,
-    );
+    const nextVolume = Math.min(Math.max(Number(event.target.value) || 0, 0), 100);
     if (nextVolume > 0) {
       lastVolumeRef.current = nextVolume / 100;
     }
@@ -85,8 +80,7 @@ function GlobalPlayerBar() {
 
   const handleToggleMute = () => {
     if (volume <= 0) {
-      const restored =
-        lastVolumeRef.current > 0 ? lastVolumeRef.current : 0.7;
+      const restored = lastVolumeRef.current > 0 ? lastVolumeRef.current : 0.7;
       setVolume(restored);
       return;
     }
@@ -97,10 +91,7 @@ function GlobalPlayerBar() {
   const handleSeek = (event) => {
     if (!duration) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(
-      Math.max((event.clientX - rect.left) / rect.width, 0),
-      1,
-    );
+    const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
     const nextPosition = ratio * duration;
     seek(nextPosition);
     setPosition(nextPosition);
@@ -115,10 +106,7 @@ function GlobalPlayerBar() {
           onClick={handleSeek}
           aria-label="Seek"
         >
-          <span
-            className="global-player__progress-fill"
-            style={{ width: `${progress}%` }}
-          />
+          <span className="global-player__progress-fill" style={{ width: `${progress}%` }} />
         </button>
       </div>
 
@@ -128,9 +116,7 @@ function GlobalPlayerBar() {
             <div className="global-player__title-row">
               <span className="global-player__title">{currentTrack.title}</span>
             </div>
-            {subtitle ? (
-              <span className="global-player__subtitle">{subtitle}</span>
-            ) : null}
+            {subtitle ? <span className="global-player__subtitle">{subtitle}</span> : null}
           </div>
         </div>
 
@@ -150,11 +136,7 @@ function GlobalPlayerBar() {
             aria-label={isPlaying ? "Pause" : "Play"}
             disabled={isLoading}
           >
-            {isPlaying ? (
-              <Pause className="artist-icon-sm" />
-            ) : (
-              <Play className="artist-icon-sm" />
-            )}
+            {isPlaying ? <Pause className="artist-icon-sm" /> : <Play className="artist-icon-sm" />}
           </button>
           <button
             type="button"

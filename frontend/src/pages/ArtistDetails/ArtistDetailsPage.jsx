@@ -41,8 +41,7 @@ import {
 } from "./utils";
 import { useArtistTasteFeedback } from "../../hooks/useArtistTasteFeedback";
 
-const MBID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MBID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function ArtistDetailsPage() {
   const { mbid } = useParams();
@@ -52,9 +51,7 @@ function ArtistDetailsPage() {
   const initialLibraryHint = useMemo(
     () => ({
       existsInLibrary:
-        typeof locationState?.inLibrary === "boolean"
-          ? locationState.inLibrary
-          : undefined,
+        typeof locationState?.inLibrary === "boolean" ? locationState.inLibrary : undefined,
       libraryArtist: locationState?.libraryArtist || null,
     }),
     [locationState?.inLibrary, locationState?.libraryArtist],
@@ -74,31 +71,27 @@ function ArtistDetailsPage() {
   const [playlistModalLoading, setPlaylistModalLoading] = useState(false);
   const [playlistModalError, setPlaylistModalError] = useState("");
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
-  const [visibleReleaseGroupCoverIds, setVisibleReleaseGroupCoverIds] = useState(
-    [],
-  );
+  const [visibleReleaseGroupCoverIds, setVisibleReleaseGroupCoverIds] = useState([]);
   const [visibleAppearsOnCoverIds, setVisibleAppearsOnCoverIds] = useState([]);
   const [visibleLibraryCoverIds, setVisibleLibraryCoverIds] = useState([]);
 
   const selectedReleaseTypes = allReleaseTypes;
 
-  const stream = useArtistDetailsStream(
-    mbid,
-    artistNameFromNav,
-    selectedReleaseTypes,
-    {
-      visibleCoverIds: [
-        ...visibleReleaseGroupCoverIds,
-        ...visibleAppearsOnCoverIds,
-        ...visibleLibraryCoverIds,
-      ],
-      initialLibraryHint,
-      appearsOnLimit: ARTIST_DETAILS_APPEARS_ON_LIMIT,
-    },
-  );
+  const stream = useArtistDetailsStream(mbid, artistNameFromNav, selectedReleaseTypes, {
+    visibleCoverIds: [
+      ...visibleReleaseGroupCoverIds,
+      ...visibleAppearsOnCoverIds,
+      ...visibleLibraryCoverIds,
+    ],
+    initialLibraryHint,
+    appearsOnLimit: ARTIST_DETAILS_APPEARS_ON_LIMIT,
+  });
   const canAddArtist = hasPermission("addArtist");
-  const { lookup: artistFeedbackLookup, getFeedbackFlags, submitFeedback } =
-    useArtistTasteFeedback();
+  const {
+    lookup: artistFeedbackLookup,
+    getFeedbackFlags,
+    submitFeedback,
+  } = useArtistTasteFeedback();
   const [tasteActionPending, setTasteActionPending] = useState(null);
   const canAddAlbum = hasPermission("addAlbum");
   const canChangeMonitoring = hasPermission("changeMonitoring");
@@ -252,7 +245,7 @@ function ArtistDetailsPage() {
         err.response?.data?.message ||
           err.response?.data?.error ||
           err.message ||
-          "Failed to load artist IDs"
+          "Failed to load artist IDs",
       );
     } finally {
       setIdsLoading(false);
@@ -304,7 +297,7 @@ function ArtistDetailsPage() {
         err.response?.data?.message ||
           err.response?.data?.error ||
           err.message ||
-          "Failed to update artist IDs"
+          "Failed to update artist IDs",
       );
     } finally {
       setLoadingCover(false);
@@ -332,9 +325,7 @@ function ArtistDetailsPage() {
     setPlaylistModalLoading(true);
     try {
       const data = await getFlowStatus();
-      const playlists = Array.isArray(data?.sharedPlaylists)
-        ? data.sharedPlaylists
-        : [];
+      const playlists = Array.isArray(data?.sharedPlaylists) ? data.sharedPlaylists : [];
       setSharedPlaylists(playlists);
       return playlists;
     } catch (err) {
@@ -396,17 +387,12 @@ function ArtistDetailsPage() {
       if (target?.mode === "new") {
         const name =
           String(target?.name || "").trim() ||
-          reserveUniquePlaylistName(
-            sharedPlaylists,
-            `${trackPayload.artistName} Picks`,
-          );
+          reserveUniquePlaylistName(sharedPlaylists, `${trackPayload.artistName} Picks`);
         const response = await createSharedPlaylist({
           name,
           tracks: [trackPayload],
         });
-        showSuccess(
-          `Track saved to ${response?.playlist?.name || name}`,
-        );
+        showSuccess(`Track saved to ${response?.playlist?.name || name}`);
       } else {
         const targetPlaylist = sharedPlaylists.find(
           (playlist) => playlist.id === target?.playlistId,
@@ -414,9 +400,7 @@ function ArtistDetailsPage() {
         await addSharedPlaylistTracks(target.playlistId, {
           tracks: [trackPayload],
         });
-        showSuccess(
-          `Track added to ${targetPlaylist?.name || "playlist"}`,
-        );
+        showSuccess(`Track added to ${targetPlaylist?.name || "playlist"}`);
       }
       const nextPlaylists = await loadSharedPlaylists();
       if (nextPlaylists) {
@@ -460,12 +444,8 @@ function ArtistDetailsPage() {
       <div className="artist-error-panel">
         <div>
           <Music className="artist-error-icon" />
-          <h3 className="artist-error-title">
-            Error Loading Artist
-          </h3>
-          <p className="artist-error-copy">
-            {error}
-          </p>
+          <h3 className="artist-error-title">Error Loading Artist</h3>
+          <p className="artist-error-copy">{error}</p>
           <button
             onClick={() => navigate("/search")}
             className="btn btn-primary artist-hidden-mobile"
@@ -590,8 +570,7 @@ function ArtistDetailsPage() {
         />
       )}
 
-      {(loadingReleases ||
-        (artist["release-groups"] && artist["release-groups"].length > 0)) && (
+      {(loadingReleases || (artist["release-groups"] && artist["release-groups"].length > 0)) && (
         <ArtistDetailsReleaseGroups
           artist={artist}
           loadingReleases={loadingReleases}
@@ -614,24 +593,24 @@ function ArtistDetailsPage() {
       {(loadingAppearsOn ||
         (artist["appears-on-release-groups"] &&
           artist["appears-on-release-groups"].length > 0)) && (
-          <ArtistDetailsAppearsOn
-            artist={artist}
-            loadingAppearsOn={loadingAppearsOn}
-            albumCovers={albumCovers}
-            artistCoverImage={artistCoverImage}
-            getAlbumStatus={library.getAlbumStatus}
-            canAddAlbum={canAddAlbum}
-            handleRequestAlbum={library.handleRequestAlbum}
-            requestingAlbum={library.requestingAlbum}
-            artistName={artistDisplayName}
-            onVisibleCoverIdsChange={setVisibleAppearsOnCoverIds}
-            onViewAll={() =>
-              navigate(`/artist/${artist.id}/appears-on`, {
-                state: { artistName: artist.name, inLibrary: existsInLibrary },
-              })
-            }
-          />
-        )}
+        <ArtistDetailsAppearsOn
+          artist={artist}
+          loadingAppearsOn={loadingAppearsOn}
+          albumCovers={albumCovers}
+          artistCoverImage={artistCoverImage}
+          getAlbumStatus={library.getAlbumStatus}
+          canAddAlbum={canAddAlbum}
+          handleRequestAlbum={library.handleRequestAlbum}
+          requestingAlbum={library.requestingAlbum}
+          artistName={artistDisplayName}
+          onVisibleCoverIdsChange={setVisibleAppearsOnCoverIds}
+          onViewAll={() =>
+            navigate(`/artist/${artist.id}/appears-on`, {
+              state: { artistName: artist.name, inLibrary: existsInLibrary },
+            })
+          }
+        />
+      )}
 
       <ArtistDetailsAbout
         artist={artist}
@@ -710,7 +689,6 @@ function ArtistDetailsPage() {
         onClose={() => setShowEditIdsModal(false)}
         onSave={handleSaveIds}
       />
-
     </div>
   );
 }
@@ -730,18 +708,10 @@ function EditArtistIdsModal({
 }) {
   if (!show) return null;
   return (
-    <div
-      className="artist-modal-backdrop"
-      onClick={onClose}
-    >
-      <div
-        className="artist-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="artist-modal-backdrop" onClick={onClose}>
+      <div className="artist-modal" onClick={(e) => e.stopPropagation()}>
         <div className="artist-modal__header">
-          <h3 className="artist-modal__title">
-            Edit Artist IDs
-          </h3>
+          <h3 className="artist-modal__title">Edit Artist IDs</h3>
           <button
             type="button"
             className="btn btn-surface btn-icon-square"
@@ -757,9 +727,7 @@ function EditArtistIdsModal({
         </p>
         <div className="artist-modal__fields">
           <div>
-            <label className="artist-field-label">
-              MusicBrainz ID
-            </label>
+            <label className="artist-field-label">MusicBrainz ID</label>
             <input
               type="text"
               value={values.musicbrainzId}
@@ -775,9 +743,7 @@ function EditArtistIdsModal({
             />
           </div>
           <div>
-            <label className="artist-field-label">
-              Deezer Artist ID
-            </label>
+            <label className="artist-field-label">Deezer Artist ID</label>
             <input
               type="text"
               value={values.deezerArtistId}
@@ -792,22 +758,11 @@ function EditArtistIdsModal({
               className="artist-input"
             />
           </div>
-          <p className="artist-subtext">
-            Leave both fields blank to clear overrides.
-          </p>
-          {error && (
-            <div className="artist-error-text">
-              {error}
-            </div>
-          )}
+          <p className="artist-subtext">Leave both fields blank to clear overrides.</p>
+          {error && <div className="artist-error-text">{error}</div>}
         </div>
         <div className="artist-modal__actions">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={onClose}
-            disabled={saving}
-          >
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
             Cancel
           </button>
           <button

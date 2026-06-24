@@ -7,8 +7,7 @@ import { logger } from "./logger.js";
 import {
   buildFlowSearchTiers,
   validateDownloadedTrack,
-} from "./weeklyFlow/weeklyFlowSoulseekMatcher.js";
-import {
+} from "./weeklyFlow/weeklyFlowSoulseekMatcher.js";import {
   isAudioFile,
   rankUsenetReleases,
   selectRankedUsenetCandidates,
@@ -36,9 +35,8 @@ const MAX_POLL_ATTEMPTS = 720;
 
 function hasEnoughCandidates(aggregated, resolvedTrack) {
   return (
-    rankUsenetReleases(aggregated, resolvedTrack).filter(
-      (entry) => entry.preDownloadValid,
-    ).length >= MIN_USENET_CANDIDATES
+    rankUsenetReleases(aggregated, resolvedTrack).filter((entry) => entry.preDownloadValid)
+      .length >= MIN_USENET_CANDIDATES
   );
 }
 
@@ -187,10 +185,7 @@ async function handleUsenetSearch(payload, helpers) {
     }
   }
   const ranked = rankUsenetReleases(aggregated, resolvedTrack);
-  const candidates = selectRankedUsenetCandidates(
-    ranked,
-    MAX_DOWNLOAD_CANDIDATES,
-  ).map((entry) => ({
+  const candidates = selectRankedUsenetCandidates(ranked, MAX_DOWNLOAD_CANDIDATES).map((entry) => ({
     raw: entry.raw,
     score: entry.score,
     scores: entry.scores,
@@ -222,9 +217,7 @@ async function handleUsenetDownload(payload, helpers) {
   const job = downloadTracker.getJob(payload.jobId);
   if (!job) return null;
   if (job.status === "failed" || job.status === "done") return null;
-  const candidates = Array.isArray(payload.candidates)
-    ? payload.candidates
-    : [];
+  const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
   const index = Number(payload.candidateIndex || 0);
   const candidate = candidates[index];
   const release = candidate?.raw?.release;
@@ -333,8 +326,7 @@ async function handleUsenetFinalize(payload, helpers) {
     const reason =
       found.validation?.reason ||
       "NZBGet completed, but no matching audio file was found";
-    if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload, { nzbId: null, history: null });
-    return helpers.failOrTryNextSource(payload, job, reason);
+    if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload, { nzbId: null, history: null });    return helpers.failOrTryNextSource(payload, job, reason);
   }
 
   import("./aurralHistoryService.js")
@@ -352,8 +344,7 @@ async function handleUsenetFinalize(payload, helpers) {
   );
   return finalizePipelineJobSuccess({
     downloadTracker,
-    job,
-    committedFinalPath,
+    job,    committedFinalPath,
     album: candidate?.resolvedAlbumName || job.albumName,
   });
 }

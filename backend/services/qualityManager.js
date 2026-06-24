@@ -81,10 +81,7 @@ export class QualityManager {
     }
 
     if (preset.preferCD && lowerFilename.includes("cd")) return true;
-    if (
-      preset.preferWEB &&
-      (lowerFilename.includes("web") || lowerFilename.includes("digital"))
-    )
+    if (preset.preferWEB && (lowerFilename.includes("web") || lowerFilename.includes("digital")))
       return true;
 
     return true;
@@ -114,10 +111,7 @@ export class QualityManager {
     }
 
     if (preset.preferCD && lowerFilename.includes("cd")) score += 1;
-    if (
-      preset.preferWEB &&
-      (lowerFilename.includes("web") || lowerFilename.includes("digital"))
-    )
+    if (preset.preferWEB && (lowerFilename.includes("web") || lowerFilename.includes("digital")))
       score += 1;
     if (
       preset.avoidVinyl &&

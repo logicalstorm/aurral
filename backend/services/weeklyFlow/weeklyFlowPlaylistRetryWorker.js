@@ -13,7 +13,7 @@ const WORKER_NAME = "playlist-retry";
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
+let _loopPromise = null;
 let idleController = null;
 
 async function runLoop() {
@@ -72,7 +72,7 @@ async function runLoop() {
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
+    _loopPromise = null;
     const intentional = stopRequested || idleStopped;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startWeeklyFlowPlaylistRetryWorker, {
@@ -85,7 +85,7 @@ export function startWeeklyFlowPlaylistRetryWorker() {
   if (running || isHonkerShuttingDown()) return;
   running = true;
   stopRequested = false;
-  loopPromise = runLoop();
+  _loopPromise = runLoop();
 }
 
 export function stopWeeklyFlowPlaylistRetryWorker() {

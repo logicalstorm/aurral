@@ -5,8 +5,7 @@ import {
 import {
   isRemoteSearchConfigured,
   searchRemoteCatalog,
-} from "../aurralSearchClient.js";
-import {
+} from "../aurralSearchClient.js";import {
   getArtistByMbid,
   getAlbumByMbid,
   listArtistAlbums,
@@ -59,8 +58,7 @@ function scoreTextMatch(left, right) {
   for (const word of leftWords) {
     if (rightWords.has(word)) overlap += 1;
   }
-  const ratio =
-    (2 * overlap) / Math.max(1, leftWords.size + rightWords.size);
+  const ratio = (2 * overlap) / Math.max(1, leftWords.size + rightWords.size);
   return Math.round(ratio * 100);
 }
 
@@ -86,9 +84,7 @@ function pickBestCatalogAlbum(albums, albumName, artistName, artistMbid) {
       .map((album) => {
         let score = scoreTextMatch(album.title, albumName);
         if (artistName) {
-          score = Math.round(
-            score * 0.65 + scoreTextMatch(album.artistName, artistName) * 0.35,
-          );
+          score = Math.round(score * 0.65 + scoreTextMatch(album.artistName, artistName) * 0.35);
         }
         if (artistMbid && album.artistMbid === artistMbid) {
           score += 12;
@@ -102,10 +98,7 @@ function pickBestCatalogAlbum(albums, albumName, artistName, artistMbid) {
   );
 }
 
-function pickBestCatalogTrack(
-  tracks,
-  { trackName, artistName, albumName, artistMbid, albumMbid },
-) {
+function pickBestCatalogTrack(tracks, { trackName, artistName, albumName, artistMbid, albumMbid }) {
   const list = Array.isArray(tracks) ? tracks : [];
   if (!list.length || !trackName) return null;
   return (
@@ -113,14 +106,10 @@ function pickBestCatalogTrack(
       .map((track) => {
         let score = scoreTextMatch(track.title, trackName);
         if (artistName) {
-          score = Math.round(
-            score * 0.7 + scoreTextMatch(track.artistName, artistName) * 0.3,
-          );
+          score = Math.round(score * 0.7 + scoreTextMatch(track.artistName, artistName) * 0.3);
         }
         if (albumName && track.albumTitle) {
-          score = Math.round(
-            score * 0.8 + scoreTextMatch(track.albumTitle, albumName) * 0.2,
-          );
+          score = Math.round(score * 0.8 + scoreTextMatch(track.albumTitle, albumName) * 0.2);
         }
         if (artistMbid && track.artistMbid === artistMbid) {
           score += 12;
@@ -152,26 +141,17 @@ async function resolveArtistMbidFromCatalog(artistName) {
   }
 }
 
-async function resolveReleaseGroupFromCatalog(
-  artistName,
-  artistMbid,
-  albumName,
-) {
+async function resolveReleaseGroupFromCatalog(artistName, artistMbid, albumName) {
   const safeAlbum = String(albumName || "").trim();
   const safeArtist = String(artistName || "").trim();
   const safeMbid = String(artistMbid || "").trim();
   if (!safeAlbum || !isRemoteSearchConfigured()) return null;
   try {
-    const catalog = await searchRemoteCatalog(
-      [safeArtist, safeAlbum].filter(Boolean).join(" "),
-      { mode: "suggest", limit: CATALOG_RESOLVE_LIMIT },
-    );
-    const match = pickBestCatalogAlbum(
-      catalog?.albums,
-      safeAlbum,
-      safeArtist,
-      safeMbid,
-    );
+    const catalog = await searchRemoteCatalog([safeArtist, safeAlbum].filter(Boolean).join(" "), {
+      mode: "suggest",
+      limit: CATALOG_RESOLVE_LIMIT,
+    });
+    const match = pickBestCatalogAlbum(catalog?.albums, safeAlbum, safeArtist, safeMbid);
     if (!match?.id) return null;
     return {
       id: String(match.id),
@@ -217,10 +197,7 @@ function pickBestCandidate(candidates, expectedTitle, expectedYear = null) {
   return [...list]
     .map((candidate) => {
       const title =
-        candidate?.title ||
-        candidate?.["title"] ||
-        candidate?.["release-group"]?.title ||
-        "";
+        candidate?.title || candidate?.["title"] || candidate?.["release-group"]?.title || "";
       const year =
         candidate?.["first-release-date"] ||
         candidate?.date ||
@@ -228,11 +205,7 @@ function pickBestCandidate(candidates, expectedTitle, expectedYear = null) {
         null;
       const titleScore = scoreTextMatch(title, expectedTitle);
       const yearScore =
-        targetYear && getYear(year) === targetYear
-          ? 10
-          : targetYear && getYear(year)
-            ? -5
-            : 0;
+        targetYear && getYear(year) === targetYear ? 10 : targetYear && getYear(year) ? -5 : 0;
       return {
         candidate,
         score: titleScore + yearScore,
@@ -251,9 +224,7 @@ async function fetchArtistAliases(artistMbid) {
     try {
       const artist = await getArtistByMbid(key);
       const aliases = Array.isArray(artist?.aliases)
-        ? artist.aliases
-            .map((entry) => String(entry || "").trim())
-            .filter(Boolean)
+        ? artist.aliases.map((entry) => String(entry || "").trim()).filter(Boolean)
         : [];
       return [...new Set(aliases)].slice(0, 8);
     } catch {
@@ -276,11 +247,7 @@ async function resolveReleaseGroup(artistName, artistMbid, albumName, releaseYea
     return releaseGroupSearchCache.get(cacheKey);
   }
   const promise = (async () => {
-    const catalogMatch = await resolveReleaseGroupFromCatalog(
-      safeArtist,
-      safeMbid,
-      safeAlbum,
-    );
+    const catalogMatch = await resolveReleaseGroupFromCatalog(safeArtist, safeMbid, safeAlbum);
     if (catalogMatch?.id) {
       const album = await getAlbumByMbid(catalogMatch.id).catch(() => null);
       return {
@@ -324,20 +291,14 @@ async function resolveReleaseGroup(artistName, artistMbid, albumName, releaseYea
   return resolved;
 }
 
-function flattenReleaseTracks(releaseData) {
+function _flattenReleaseTracks(releaseData) {
   const media = Array.isArray(releaseData?.media) ? releaseData.media : [];
   const tracks = [];
   for (const medium of media) {
     const mediumTracks = Array.isArray(medium?.tracks) ? medium.tracks : [];
     for (const track of mediumTracks) {
       const recording = track?.recording || null;
-      const trackTitle =
-        String(
-          recording?.title ||
-            track?.title ||
-            track?.name ||
-            "",
-        ).trim();
+      const trackTitle = String(recording?.title || track?.title || track?.name || "").trim();
       if (!trackTitle) continue;
       tracks.push({
         title: trackTitle,
@@ -361,12 +322,14 @@ function flattenReleaseTracks(releaseData) {
 function matchTrackByTitle(tracks, trackName) {
   const safeTrackName = String(trackName || "").trim();
   if (!safeTrackName) return null;
-  return [...(Array.isArray(tracks) ? tracks : [])]
-    .map((track) => ({
-      ...track,
-      _score: scoreTextMatch(track?.title, safeTrackName),
-    }))
-    .sort((left, right) => right._score - left._score)[0] || null;
+  return (
+    [...(Array.isArray(tracks) ? tracks : [])]
+      .map((track) => ({
+        ...track,
+        _score: scoreTextMatch(track?.title, safeTrackName),
+      }))
+      .sort((left, right) => right._score - left._score)[0] || null
+  );
 }
 
 async function fetchReleaseContext(albumMbid) {
@@ -401,9 +364,7 @@ async function fetchReleaseContext(albumMbid) {
           }))
         : [];
       return {
-        releaseYear:
-          getYear(pickedRelease?.releaseDate) ||
-          getYear(album?.releaseDate),
+        releaseYear: getYear(pickedRelease?.releaseDate) || getYear(album?.releaseDate),
         albumTrackCount: tracks.length > 0 ? tracks.length : null,
         albumTrackTitles: tracks.map((track) => track.title),
         tracks,
@@ -433,11 +394,7 @@ async function fetchLastfmTrackInfo(track) {
   }
 }
 
-export {
-  pickBestCatalogAlbum,
-  pickBestCatalogArtist,
-  pickBestCatalogTrack,
-};
+export { pickBestCatalogAlbum, pickBestCatalogArtist, pickBestCatalogTrack };
 
 export async function resolveWeeklyFlowTrackContext(track) {
   const base = {
@@ -532,8 +489,7 @@ export async function resolveWeeklyFlowTrackContext(track) {
         base.durationMs = matchedTrack.durationMs;
       }
       base.trackNumber =
-        matchedTrack.trackNumber != null &&
-        Number.isFinite(Number(matchedTrack.trackNumber))
+        matchedTrack.trackNumber != null && Number.isFinite(Number(matchedTrack.trackNumber))
           ? Number(matchedTrack.trackNumber)
           : null;
     }

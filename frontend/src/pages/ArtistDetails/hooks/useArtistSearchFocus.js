@@ -24,11 +24,5 @@ export function useArtistSearchFocus({ navigate, mbid, locationState }) {
         focusTrackTitle: locationState?.focusTrackTitle,
       },
     });
-  }, [
-    focusReleaseGroupMbid,
-    focusTrackMbid,
-    locationState,
-    mbid,
-    navigate,
-  ]);
+  }, [focusReleaseGroupMbid, focusTrackMbid, locationState, mbid, navigate]);
 }

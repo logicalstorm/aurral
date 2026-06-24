@@ -40,17 +40,12 @@ export function toNormalizedArtistLink(link) {
 }
 
 export function toNormalizedArtist(raw) {
-  const images = normalizeArray(raw?.images)
-    .map(toNormalizedArtistImage)
-    .filter(Boolean);
-  const links = normalizeArray(raw?.links)
-    .map(toNormalizedArtistLink)
-    .filter(Boolean);
+  const images = normalizeArray(raw?.images).map(toNormalizedArtistImage).filter(Boolean);
+  const links = normalizeArray(raw?.links).map(toNormalizedArtistLink).filter(Boolean);
   return {
     id: normalizeString(raw?.id),
     name: normalizeString(raw?.artistname || raw?.name),
-    sortName:
-      normalizeString(raw?.sortname || raw?.sortName || raw?.artistname || raw?.name),
+    sortName: normalizeString(raw?.sortname || raw?.sortName || raw?.artistname || raw?.name),
     type: normalizeString(raw?.type) || null,
     status: normalizeString(raw?.status) || null,
     disambiguation: normalizeString(raw?.disambiguation) || "",
@@ -137,12 +132,8 @@ export function toNormalizedAlbum(raw) {
   const artists = normalizeArray(raw?.artists)
     .map(toNormalizedArtist)
     .filter((artist) => artist?.id);
-  const images = normalizeArray(raw?.images)
-    .map(toNormalizedArtistImage)
-    .filter(Boolean);
-  const links = normalizeArray(raw?.links)
-    .map(toNormalizedArtistLink)
-    .filter(Boolean);
+  const images = normalizeArray(raw?.images).map(toNormalizedArtistImage).filter(Boolean);
+  const links = normalizeArray(raw?.links).map(toNormalizedArtistLink).filter(Boolean);
   const releases = normalizeArray(raw?.releases)
     .map(toNormalizedRelease)
     .filter((release) => release?.id);
@@ -221,11 +212,7 @@ export function toLegacyArtist(normalizedArtist) {
   };
 }
 
-export function toLegacyReleaseGroupSummary(
-  album,
-  artist = null,
-  { score = 0 } = {},
-) {
+export function toLegacyReleaseGroupSummary(album, artist = null, { score = 0 } = {}) {
   const artistName = artist?.name || album?.artistName || "";
   const artistId = artist?.id || album?.artistId || null;
   return {
@@ -275,8 +262,7 @@ export function toLegacyRelease(release) {
           title: track.title,
           length: track.durationMs,
           position: track.trackPosition || track.trackNumber || 0,
-          number:
-            track.trackNumber != null ? String(track.trackNumber) : null,
+          number: track.trackNumber != null ? String(track.trackNumber) : null,
           recording: {
             id: track.recordingId || track.id,
             title: track.title,

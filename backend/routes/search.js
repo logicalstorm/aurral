@@ -1,10 +1,6 @@
 import express from "express";
 import { noCache } from "../middleware/cache.js";
-import {
-  searchAlbums,
-  searchArtists,
-  searchTags,
-} from "../services/searchService.js";
+import { searchAlbums, searchArtists, searchTags } from "../services/searchService.js";
 import { searchUnified } from "../services/unifiedSearchService.js";
 
 const router = express.Router();

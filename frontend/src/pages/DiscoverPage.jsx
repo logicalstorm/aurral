@@ -6,8 +6,7 @@ import {
   Sparkles,
   Clock,
   LayoutTemplate,
-} from "lucide-react";
-import { useDocumentTitle } from "../hooks/useDocumentTitle";
+} from "lucide-react";import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuth } from "../contexts/AuthContext";
 import { getArtistFeedbackFlags } from "../utils/discoveryFeedback";
 import { getArtistRecordId } from "../utils/artistTaste";
@@ -125,9 +124,7 @@ function DiscoverPage() {
         if (artistId && usedArtistIds.has(artistId)) return false;
 
         const artistTags = artist.matchedTags || artist.tags || [];
-        return artistTags.some((tag) =>
-          tag.toLowerCase().includes(genre.toLowerCase()),
-        );
+        return artistTags.some((tag) => tag.toLowerCase().includes(genre.toLowerCase()));
       });
 
       if (genreArtists.length >= 4) {
@@ -136,9 +133,7 @@ function DiscoverPage() {
             const leftScore = Number(left.scoreTotal || left.score || 0);
             const rightScore = Number(right.scoreTotal || right.score || 0);
             if (rightScore !== leftScore) return rightScore - leftScore;
-            return String(left.name || "").localeCompare(
-              String(right.name || ""),
-            );
+            return String(left.name || "").localeCompare(String(right.name || ""));
           })
           .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT);
 
@@ -186,19 +181,14 @@ function DiscoverPage() {
 
   const nearbyShows = nearbyShowsData?.shows || [];
   const nearbyLocationLabel =
-    nearbyShowsData?.location?.label ||
-    nearbyShowsData?.location?.postalCode ||
-    "your area";
+    nearbyShowsData?.location?.label || nearbyShowsData?.location?.postalCode || "your area";
   const displayDiscoverPlaylists = useMemo(
     () =>
       discoverPlaylists.map((playlist) => ({
         ...playlist,
-        adoptedFlowId:
-          playlist.adoptedFlowId || adoptedFlowIds[playlist.presetId] || null,
+        adoptedFlowId: playlist.adoptedFlowId || adoptedFlowIds[playlist.presetId] || null,
         adoptedPlaylistId:
-          playlist.adoptedPlaylistId ||
-          adoptedStaticPlaylistIds[playlist.presetId] ||
-          null,
+          playlist.adoptedPlaylistId || adoptedStaticPlaylistIds[playlist.presetId] || null,
       })),
     [adoptedFlowIds, adoptedStaticPlaylistIds, discoverPlaylists],
   );
@@ -293,13 +283,9 @@ function DiscoverPage() {
   );
 
   const displayDiscoverSections = useMemo(() => {
-    const sectionsById = new Map(
-      discoverSections.map((item) => [item.id, item]),
-    );
+    const sectionsById = new Map(discoverSections.map((item) => [item.id, item]));
     if (!isListenBrainzFallback) {
-      return discoverSections.filter(
-        (item) => !getFallbackGenreFromSectionId(item.id),
-      );
+      return discoverSections.filter((item) => !getFallbackGenreFromSectionId(item.id));
     }
 
     const dynamicGenresById = new Map(
@@ -370,9 +356,7 @@ function DiscoverPage() {
   const navigateToBasedOnArtist = useCallback(
     (artist) => {
       const routeId =
-        artist?.id ||
-        artist?.mbid ||
-        (artist?.name ? encodeURIComponent(artist.name) : "");
+        artist?.id || artist?.mbid || (artist?.name ? encodeURIComponent(artist.name) : "");
       if (!routeId) return;
       navigate(`/artist/${routeId}`, {
         state: { artistName: artist.name },
@@ -454,9 +438,7 @@ function DiscoverPage() {
   const renderSection = (id) => {
     const fallbackGenre = getFallbackGenreFromSectionId(id);
     if (fallbackGenre) {
-      const section = genreSections.find(
-        (item) => item.genre === fallbackGenre,
-      );
+      const section = genreSections.find((item) => item.genre === fallbackGenre);
       if (!section || section.artists.length === 0) return null;
       return (
         <DiscoverRail
@@ -464,39 +446,27 @@ function DiscoverPage() {
           title={`Top ${section.genre} Artists`}
           mobileTitle={section.genre}
           onViewAll={() =>
-            navigate(
-              `/search?q=${encodeURIComponent(`#${section.genre}`)}&type=tag`,
-            )
+            navigate(`/search?q=${encodeURIComponent(`#${section.genre}`)}&type=tag`)
           }
         >
           <>
-            {section.artists
-              .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
-              .map((artist) => (
-                <div
-                  key={`${section.genre}-${artist.id}`}
-                  className="artist-discover-shelf-card"
-                >
-                  <ArtistCard
-                    artist={artist}
-                    isInLibrary={!!libraryLookup[getArtistId(artist)]}
-                    canAddArtist={canAddArtist}
-                    onNavigate={navigate}
-                    onAddToLibrary={handleAddArtistToLibrary}
-                    onFeedback={handleDiscoveryFeedback}
-                    feedbackUsed={getArtistFeedbackFlags(
-                      artistFeedbackLookup,
-                      artist,
-                    )}
-                  />
-                </div>
-              ))}
+            {section.artists.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((artist) => (
+              <div key={`${section.genre}-${artist.id}`} className="artist-discover-shelf-card">
+                <ArtistCard
+                  artist={artist}
+                  isInLibrary={!!libraryLookup[getArtistId(artist)]}
+                  canAddArtist={canAddArtist}
+                  onNavigate={navigate}
+                  onAddToLibrary={handleAddArtistToLibrary}
+                  onFeedback={handleDiscoveryFeedback}
+                  feedbackUsed={getArtistFeedbackFlags(artistFeedbackLookup, artist)}
+                />
+              </div>
+            ))}
             <div className="artist-discover-shelf-card">
               <ViewAllCard
                 onClick={() =>
-                  navigate(
-                    `/search?q=${encodeURIComponent(`#${section.genre}`)}&type=tag`,
-                  )
+                  navigate(`/search?q=${encodeURIComponent(`#${section.genre}`)}&type=tag`)
                 }
               />
             </div>
@@ -510,35 +480,29 @@ function DiscoverPage() {
       return (
         <DiscoverRail key="recentlyAdded" title="Recently Added">
           <>
-            {recentlyAdded
-              .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
-              .map((artist) => {
-                const artistId =
-                  artist.foreignArtistId || artist.mbid || artist.id;
-                return (
-                  <div
-                    key={`artist-${artist.id}`}
-                    className="artist-discover-shelf-card"
-                  >
-                    <ArtistCard
-                      status="available"
-                      isInLibrary={!!libraryLookup[artistId]}
-                      canAddArtist={false}
-                      onNavigate={navigate}
-                      artist={{
-                        id: artistId,
-                        name: artist.artistName,
-                        image: getLibraryArtistImage(artist),
-                        type: "Artist",
-                        metaText: "",
-                        subtitle: `Added ${new Date(
-                          artist.added || artist.addedAt,
-                        ).toLocaleDateString()}`,
-                      }}
-                    />
-                  </div>
-                );
-              })}
+            {recentlyAdded.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((artist) => {
+              const artistId = artist.foreignArtistId || artist.mbid || artist.id;
+              return (
+                <div key={`artist-${artist.id}`} className="artist-discover-shelf-card">
+                  <ArtistCard
+                    status="available"
+                    isInLibrary={!!libraryLookup[artistId]}
+                    canAddArtist={false}
+                    onNavigate={navigate}
+                    artist={{
+                      id: artistId,
+                      name: artist.artistName,
+                      image: getLibraryArtistImage(artist),
+                      type: "Artist",
+                      metaText: "",
+                      subtitle: `Added ${new Date(
+                        artist.added || artist.addedAt,
+                      ).toLocaleDateString()}`,
+                    }}
+                  />
+                </div>
+              );
+            })}
           </>
         </DiscoverRail>
       );
@@ -565,24 +529,22 @@ function DiscoverPage() {
       return (
         <DiscoverRail key="recentReleases" title="Recent & Upcoming Releases">
           <>
-            {recentReleases
-              .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
-              .map((album) => (
-                <div
-                  key={album.id || album.mbid || album.foreignAlbumId}
-                  className="artist-discover-shelf-card"
-                >
-                  <AlbumCard
-                    album={album}
-                    releaseCovers={releaseCovers}
-                    artistCovers={artistCovers}
-                    onNavigate={navigate}
-                    canAddAlbum={canAddAlbum}
-                    isPending={!!pendingRecentReleaseIds[getRecentReleaseKey(album)]}
-                    onAlbumAction={handleRecentReleaseAlbumAction}
-                  />
-                </div>
-              ))}
+            {recentReleases.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((album) => (
+              <div
+                key={album.id || album.mbid || album.foreignAlbumId}
+                className="artist-discover-shelf-card"
+              >
+                <AlbumCard
+                  album={album}
+                  releaseCovers={releaseCovers}
+                  artistCovers={artistCovers}
+                  onNavigate={navigate}
+                  canAddAlbum={canAddAlbum}
+                  isPending={!!pendingRecentReleaseIds[getRecentReleaseKey(album)]}
+                  onAlbumAction={handleRecentReleaseAlbumAction}
+                />
+              </div>
+            ))}
           </>
         </DiscoverRail>
       );
@@ -598,28 +560,21 @@ function DiscoverPage() {
             onViewAll={() => navigate("/search?type=recommended")}
           >
             <>
-              {recommendations
-                .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
-                .map((artist) => (
-                  <div key={artist.id} className="artist-discover-shelf-card">
-                    <ArtistCard
-                      artist={artist}
-                      isInLibrary={!!libraryLookup[getArtistId(artist)]}
-                      canAddArtist={canAddArtist}
-                      onNavigate={navigate}
-                      onAddToLibrary={handleAddArtistToLibrary}
-                      onFeedback={handleDiscoveryFeedback}
-                      feedbackUsed={getArtistFeedbackFlags(
-                        artistFeedbackLookup,
-                        artist,
-                      )}
-                    />
-                  </div>
-                ))}
+              {recommendations.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((artist) => (
+                <div key={artist.id} className="artist-discover-shelf-card">
+                  <ArtistCard
+                    artist={artist}
+                    isInLibrary={!!libraryLookup[getArtistId(artist)]}
+                    canAddArtist={canAddArtist}
+                    onNavigate={navigate}
+                    onAddToLibrary={handleAddArtistToLibrary}
+                    onFeedback={handleDiscoveryFeedback}
+                    feedbackUsed={getArtistFeedbackFlags(artistFeedbackLookup, artist)}
+                  />
+                </div>
+              ))}
               <div className="artist-discover-shelf-card">
-                <ViewAllCard
-                  onClick={() => navigate("/search?type=recommended")}
-                />
+                <ViewAllCard onClick={() => navigate("/search?type=recommended")} />
               </div>
             </>
           </DiscoverRail>
@@ -628,12 +583,8 @@ function DiscoverPage() {
       return (
         <section key="recommended" className="artist-discover-section">
           <h2 className="artist-section-title--discover discover-recommended-status__title">
-            <span className="artist-section-title--discover-mobile">
-              Recommended
-            </span>
-            <span className="artist-section-title--discover-desktop">
-              Recommended for You
-            </span>
+            <span className="artist-section-title--discover-mobile">Recommended</span>
+            <span className="artist-section-title--discover-desktop">Recommended for You</span>
           </h2>
           <div
             className={`discover-recommended-status${isUpdating ? " discover-recommended-status--loading" : ""}`}
@@ -641,10 +592,7 @@ function DiscoverPage() {
             {isUpdating ? (
               <Loader className="discover-recommended-status__spinner animate-spin" />
             ) : (
-              <div
-                className="discover-recommended-status__icon"
-                aria-hidden="true"
-              >
+              <div className="discover-recommended-status__icon" aria-hidden="true">
                 <Music className="artist-icon-lg" />
               </div>
             )}
@@ -660,8 +608,7 @@ function DiscoverPage() {
                 : provider === "lastfm"
                   ? "Add artists to your library or keep scrobbling on Last.fm. Recommendations improve as Aurral learns your taste."
                   : "Add artists to your library or connect Last.fm in Settings to unlock personalized recommendations."}
-            </p>
-            {!isUpdating ? (
+            </p>            {!isUpdating ? (
               <div className="discover-recommended-status__actions">
                 <button
                   type="button"
@@ -719,12 +666,10 @@ function DiscoverPage() {
         return (
           <section key="recommendedShows" className="artist-discover-section">
             <div className="artist-nearby-status">
-              <h3 className="artist-nearby-status__title">
-                Ticketmaster not configured
-              </h3>
+              <h3 className="artist-nearby-status__title">Ticketmaster not configured</h3>
               <p className="artist-nearby-status__text">
-                Add a Ticketmaster Consumer Key in Settings to enable local show
-                discovery on this page.
+                Add a Ticketmaster Consumer Key in Settings to enable local show discovery on this
+                page.
               </p>
               <button
                 type="button"
@@ -753,9 +698,7 @@ function DiscoverPage() {
         return (
           <section key="recommendedShows" className="artist-discover-section">
             <div className="artist-nearby-status">
-              <h3 className="artist-nearby-status__title">
-                Unable to load nearby shows
-              </h3>
+              <h3 className="artist-nearby-status__title">Unable to load nearby shows</h3>
               <p className="artist-nearby-status__text">{nearbyShowsError}</p>
             </div>
           </section>
@@ -773,8 +716,7 @@ function DiscoverPage() {
             <div className="artist-nearby-status">
               <h3 className="artist-nearby-status__title">Location not set</h3>
               <p className="artist-nearby-status__text">
-                Open the location menu and enter a ZIP or postal code, or choose
-                Your location.
+                Open the location menu and enter a ZIP or postal code, or choose Your location.
               </p>
             </div>
           </DiscoverRail>
@@ -806,12 +748,10 @@ function DiscoverPage() {
       return (
         <section key="recommendedShows" className="artist-discover-section">
           <div className="artist-nearby-status">
-            <h3 className="artist-nearby-status__title">
-              No upcoming nearby matches
-            </h3>
+            <h3 className="artist-nearby-status__title">No upcoming nearby matches</h3>
             <p className="artist-nearby-status__text">
-              We could not find local Ticketmaster shows tied to your library or
-              current recommendations around {nearbyLocationLabel}.
+              We could not find local Ticketmaster shows tied to your library or current
+              recommendations around {nearbyLocationLabel}.
             </p>
           </div>
         </section>
@@ -839,10 +779,7 @@ function DiscoverPage() {
                   onNavigate={navigate}
                   onAddToLibrary={handleAddArtistToLibrary}
                   onFeedback={handleDiscoveryFeedback}
-                  feedbackUsed={getArtistFeedbackFlags(
-                    artistFeedbackLookup,
-                    artist,
-                  )}
+                  feedbackUsed={getArtistFeedbackFlags(artistFeedbackLookup, artist)}
                 />
               </div>
             ))}
@@ -868,39 +805,27 @@ function DiscoverPage() {
               }
               mobileTitle={section.genre}
               onViewAll={() =>
-                navigate(
-                  `/search?q=${encodeURIComponent(`#${section.genre}`)}&type=tag`,
-                )
+                navigate(`/search?q=${encodeURIComponent(`#${section.genre}`)}&type=tag`)
               }
             >
               <>
-                {section.artists
-                  .slice(0, DISCOVER_PREVIEW_ITEM_LIMIT)
-                  .map((artist) => (
-                    <div
-                      key={`${section.genre}-${artist.id}`}
-                      className="artist-discover-shelf-card"
-                    >
-                      <ArtistCard
-                        artist={artist}
-                        isInLibrary={!!libraryLookup[getArtistId(artist)]}
-                        canAddArtist={canAddArtist}
-                        onNavigate={navigate}
-                        onAddToLibrary={handleAddArtistToLibrary}
-                        onFeedback={handleDiscoveryFeedback}
-                        feedbackUsed={getArtistFeedbackFlags(
-                          artistFeedbackLookup,
-                          artist,
-                        )}
-                      />
-                    </div>
-                  ))}
+                {section.artists.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((artist) => (
+                  <div key={`${section.genre}-${artist.id}`} className="artist-discover-shelf-card">
+                    <ArtistCard
+                      artist={artist}
+                      isInLibrary={!!libraryLookup[getArtistId(artist)]}
+                      canAddArtist={canAddArtist}
+                      onNavigate={navigate}
+                      onAddToLibrary={handleAddArtistToLibrary}
+                      onFeedback={handleDiscoveryFeedback}
+                      feedbackUsed={getArtistFeedbackFlags(artistFeedbackLookup, artist)}
+                    />
+                  </div>
+                ))}
                 <div className="artist-discover-shelf-card">
                   <ViewAllCard
                     onClick={() =>
-                      navigate(
-                        `/search?q=${encodeURIComponent(`#${section.genre}`)}&type=tag`,
-                      )
+                      navigate(`/search?q=${encodeURIComponent(`#${section.genre}`)}&type=tag`)
                     }
                   />
                 </div>
@@ -920,12 +845,8 @@ function DiscoverPage() {
     return (
       <div className="artist-loading--discover">
         <Loader className="artist-spinner--discover animate-spin" />
-        <h2 className="artist-error-title--discover">
-          Loading recommendations...
-        </h2>
-        <p className="artist-error-copy--discover">
-          Recommendations will appear as they load.
-        </p>
+        <h2 className="artist-error-title--discover">Loading recommendations...</h2>
+        <p className="artist-error-copy--discover">Recommendations will appear as they load.</p>
       </div>
     );
   }
@@ -952,26 +873,16 @@ function DiscoverPage() {
     return (
       <div className="artist-error-panel--discover">
         <Sparkles className="artist-error-icon--discover" />
-        <h2 className="artist-error-title--discover">
-          Unable to load discovery
-        </h2>
+        <h2 className="artist-error-title--discover">Unable to load discovery</h2>
         <p className="artist-empty-message--discover">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="btn btn-primary"
-        >
+        <button onClick={() => window.location.reload()} className="btn btn-primary">
           Try Again
         </button>
       </div>
     );
   }
 
-  if (
-    configured === false &&
-    !recommendations.length &&
-    !globalTop.length &&
-    !topGenres.length
-  ) {
+  if (configured === false && !recommendations.length && !globalTop.length && !topGenres.length) {
     return (
       <div className="artist-empty-panel--discover-not-configured">
         <div className="artist-error-icon">
@@ -991,10 +902,7 @@ function DiscoverPage() {
             <span>Configure Last.fm (API key and username) in Settings</span>
           </li>
         </ul>
-        <button
-          onClick={() => navigate("/settings")}
-          className="btn btn-primary"
-        >
+        <button onClick={() => navigate("/settings")} className="btn btn-primary">
           Go to Settings
         </button>
       </div>
@@ -1030,9 +938,7 @@ function DiscoverPage() {
               </p>
               {heroBasedOn.length > 0 && (
                 <div className="artist-discover-hero__based-on">
-                  <div className="artist-discover-hero__based-on-intro">
-                    Based on:
-                  </div>
+                  <div className="artist-discover-hero__based-on-intro">Based on:</div>
                   {showFullBasedOnList ? (
                     <div className="artist-discover-hero__artists-expanded">
                       {heroBasedOn.map((artist, index) => (
@@ -1055,9 +961,7 @@ function DiscoverPage() {
                     <div className="artist-discover-hero__artists-collapsed">
                       {heroBasedOn.length === 1 ? (
                         <button
-                          onClick={() =>
-                            navigateToBasedOnArtist(heroBasedOn[0])
-                          }
+                          onClick={() => navigateToBasedOnArtist(heroBasedOn[0])}
                           className="artist-discover-hero__artist-tag"
                         >
                           {heroBasedOn[0].name}
@@ -1080,8 +984,7 @@ function DiscoverPage() {
                             >
                               +{heroBasedOn.length - 4} more
                             </button>
-                          )}
-                        </>
+                          )}                        </>
                       )}
                     </div>
                   )}
@@ -1102,17 +1005,13 @@ function DiscoverPage() {
           <div className="artist-discover-hero__tags-section">
             {topGenres.length > 0 && (
               <div>
-                <h3 className="artist-discover-hero__tags-section-title">
-                  Top tags:
-                </h3>
+                <h3 className="artist-discover-hero__tags-section-title">Top tags:</h3>
                 <div className="artist-tag-list--discover">
                   {topGenres.slice(0, 30).map((genre, i) => (
                     <button
                       key={i}
                       onClick={() =>
-                        navigate(
-                          `/search?q=${encodeURIComponent(`#${genre}`)}&type=tag`,
-                        )
+                        navigate(`/search?q=${encodeURIComponent(`#${genre}`)}&type=tag`)
                       }
                       className="artist-tag--discover"
                       style={{

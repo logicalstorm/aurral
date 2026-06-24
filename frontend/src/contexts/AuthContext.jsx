@@ -20,9 +20,7 @@ const resetClientCache = async () => {
   const cacheKeys = globalThis?.caches ? await globalThis.caches.keys() : [];
 
   await Promise.allSettled(registrations.map((registration) => registration.unregister()));
-  await Promise.allSettled(
-    cacheKeys.map((cacheKey) => globalThis.caches.delete(cacheKey)),
-  );
+  await Promise.allSettled(cacheKeys.map((cacheKey) => globalThis.caches.delete(cacheKey)));
 
   return registrations.length > 0 || cacheKeys.length > 0;
 };
@@ -70,7 +68,7 @@ export const AuthProvider = ({ children }) => {
               deleteArtist: true,
               deleteAlbum: true,
             },
-          }
+          },
         );
         setIsAuthenticated(true);
         setIsLoading(false);
@@ -116,8 +114,7 @@ export const AuthProvider = ({ children }) => {
       const hadClientCache = await resetClientCache();
       if (cancelled) return;
 
-      const hasReloaded =
-        globalThis?.sessionStorage?.getItem(AUTH_RECOVERY_RELOAD_KEY) === "1";
+      const hasReloaded = globalThis?.sessionStorage?.getItem(AUTH_RECOVERY_RELOAD_KEY) === "1";
 
       if (hadClientCache && !hasReloaded && typeof window !== "undefined") {
         globalThis.sessionStorage?.setItem(AUTH_RECOVERY_RELOAD_KEY, "1");

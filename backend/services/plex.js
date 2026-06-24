@@ -37,14 +37,10 @@ export class PlexClient {
   }
 
   static async generatePin(clientId) {
-    const { data } = await axios.post(
-      `${PLEX_TV}/api/v2/pins`,
-      null,
-      {
-        params: { strong: true },
-        headers: PlexClient.plexHeaders(clientId),
-      },
-    );
+    const { data } = await axios.post(`${PLEX_TV}/api/v2/pins`, null, {
+      params: { strong: true },
+      headers: PlexClient.plexHeaders(clientId),
+    });
     return { id: data.id, code: data.code };
   }
 
@@ -85,8 +81,7 @@ export class PlexClient {
     // v2 returns a JSON array; tolerate XML-shaped responses too.
     let list = [];
     if (Array.isArray(data)) list = data;
-    else if (Array.isArray(data?.MediaContainer?.Device))
-      list = data.MediaContainer.Device;
+    else if (Array.isArray(data?.MediaContainer?.Device)) list = data.MediaContainer.Device;
     else if (data?.MediaContainer?.Device) list = [data.MediaContainer.Device];
 
     const servers = list
@@ -168,11 +163,8 @@ export class PlexClient {
     if (existing) {
       // Reconcile name + folder so a rename or a changed downloads-path setting
       // actually takes effect (Plex keeps the originals otherwise).
-      const currentLocations = (existing.Location || [])
-        .map((loc) => loc.path)
-        .filter(Boolean);
-      const locationOk =
-        currentLocations.length === 1 && currentLocations[0] === libraryPath;
+      const currentLocations = (existing.Location || []).map((loc) => loc.path).filter(Boolean);
+      const locationOk = currentLocations.length === 1 && currentLocations[0] === libraryPath;
       const nameOk = existing.title === name;
       if (!locationOk || !nameOk) {
         try {
@@ -293,9 +285,7 @@ export class PlexClient {
   }
 
   _metadataUri(machineId, ratingKeys) {
-    const keys = (Array.isArray(ratingKeys) ? ratingKeys : [ratingKeys]).join(
-      ",",
-    );
+    const keys = (Array.isArray(ratingKeys) ? ratingKeys : [ratingKeys]).join(",");
     return `server://${machineId}/com.plexapp.plugins.library/library/metadata/${keys}`;
   }
 
@@ -303,9 +293,7 @@ export class PlexClient {
     const machineId = await this.getMachineIdentifier();
     if (!machineId) throw new Error("Could not resolve Plex machineIdentifier");
 
-    const existing = (await this.getPlaylists()).find(
-      (p) => p.title === title,
-    );
+    const existing = (await this.getPlaylists()).find((p) => p.title === title);
 
     if (existing && replace) {
       // Skip delete+recreate when the track set already matches (order-insensitive).
@@ -313,8 +301,7 @@ export class PlexClient {
       const desiredSet = new Set((ratingKeys || []).map(String));
       const currentSet = new Set(current.map(String));
       const unchanged =
-        desiredSet.size === currentSet.size &&
-        [...desiredSet].every((k) => currentSet.has(k));
+        desiredSet.size === currentSet.size && [...desiredSet].every((k) => currentSet.has(k));
       if (unchanged) return existing;
       await this.deletePlaylist(existing.ratingKey);
     } else if (existing && !replace) {

@@ -60,26 +60,18 @@ export function buildSlskdSearchTierGroups(resolvedTrack) {
   return buildFlowSearchTiers(resolvedTrack);
 }
 
-export function hasSlskdSearchCandidates(
-  aggregated,
-  resolvedTrack,
-  searchOptions,
-) {
+export function hasSlskdSearchCandidates(aggregated, resolvedTrack, searchOptions) {
   return (
     countPreDownloadValidCandidates(aggregated, resolvedTrack, searchOptions) >=
     MIN_SEARCH_CANDIDATES
   );
 }
 
-export function shouldStopSlskdSearching(
-  aggregated,
-  resolvedTrack,
-  searchOptions,
-) {
+export function shouldStopSlskdSearching(aggregated, resolvedTrack, searchOptions) {
   return hasSlskdSearchCandidates(aggregated, resolvedTrack, searchOptions);
 }
 
-const MAX_EMPTY_POLL_ATTEMPTS = 60;
+const _MAX_EMPTY_POLL_ATTEMPTS = 60;
 const MAX_POLL_ATTEMPTS = 600;
 
 async function getWorkerSearchOptions() {
@@ -122,11 +114,7 @@ function readTransferState(transfer) {
 
 function readTransferId(transfer) {
   return String(
-    transfer?.id ||
-      transfer?.Id ||
-      transfer?.transferId ||
-      transfer?.TransferId ||
-      "",
+    transfer?.id || transfer?.Id || transfer?.transferId || transfer?.TransferId || "",
   ).trim();
 }
 
@@ -139,9 +127,7 @@ function getPayloadSearchIds(payload) {
 
 function getCandidateRetryCount(payload, candidateIndex = null) {
   const index =
-    candidateIndex == null
-      ? Number(payload?.candidateIndex || 0)
-      : Number(candidateIndex || 0);
+    candidateIndex == null ? Number(payload?.candidateIndex || 0) : Number(candidateIndex || 0);
   const counts =
     payload?.candidateRetryCounts && typeof payload.candidateRetryCounts === "object"
       ? payload.candidateRetryCounts
@@ -185,12 +171,16 @@ function readEventData(record) {
 }
 
 function normalizeRemotePath(value) {
-  return String(value || "").replace(/\\/g, "/").toLowerCase();
+  return String(value || "")
+    .replace(/\\/g, "/")
+    .toLowerCase();
 }
 
 function eventMatchesCandidate(record, candidate) {
   const raw = candidate?.raw || {};
-  const expectedUser = String(raw.user || "").trim().toLowerCase();
+  const expectedUser = String(raw.user || "")
+    .trim()
+    .toLowerCase();
   const expectedFile = normalizeRemotePath(raw.file);
   if (!expectedUser || !expectedFile) return false;
   const data = readEventData(record);
@@ -229,17 +219,11 @@ async function pollSlskdEventsForCandidate(payload) {
   }
   const result = await slskdClient.getEvents(offset, 50);
   const events = Array.isArray(result?.events) ? result.events : [];
-  const nextOffset = Math.max(
-    offset + events.length,
-    Number(result?.totalCount || 0),
-  );
+  const nextOffset = Math.max(offset + events.length, Number(result?.totalCount || 0));
   let completionTransfer = null;
   for (const event of events) {
     const type = String(event?.type || event?.Type || "");
-    if (
-      !type.includes("DownloadFileComplete") &&
-      !type.includes("DownloadDirectoryComplete")
-    ) {
+    if (!type.includes("DownloadFileComplete") && !type.includes("DownloadDirectoryComplete")) {
       continue;
     }
     if (!eventMatchesCandidate(event, candidate)) continue;
@@ -295,9 +279,7 @@ async function failJob(job, message) {
   try {
     const { weeklyFlowWorker } = await import("./weeklyFlow/weeklyFlowWorker.js");
     weeklyFlowWorker.wake(0);
-    await weeklyFlowWorker.checkPlaylistComplete(
-      job.playlistId || job.playlistType,
-    );
+    await weeklyFlowWorker.checkPlaylistComplete(job.playlistId || job.playlistType);
   } catch (error) {
     logger.slskd("warn", "Failed to run post-failure playlist checks", {
       jobId: job.id,
@@ -313,12 +295,8 @@ function isSourceConfigured(sourceId) {
 function buildNextSourcePayload(payload, failedSource = null, reason = null) {
   const sources = getEnabledDownloadSources();
   if (sources.length === 0) return null;
-  const tried = new Set(
-    Array.isArray(payload?.triedSources) ? payload.triedSources : [],
-  );
-  const sourceErrors = Array.isArray(payload?.sourceErrors)
-    ? [...payload.sourceErrors]
-    : [];
+  const tried = new Set(Array.isArray(payload?.triedSources) ? payload.triedSources : []);
+  const sourceErrors = Array.isArray(payload?.sourceErrors) ? [...payload.sourceErrors] : [];
   if (failedSource) {
     tried.add(failedSource);
     if (reason) {
@@ -351,9 +329,7 @@ function buildNextSourcePayload(payload, failedSource = null, reason = null) {
 }
 
 function summarizeSourceErrors(payload, message) {
-  const errors = Array.isArray(payload?.sourceErrors)
-    ? [...payload.sourceErrors]
-    : [];
+  const errors = Array.isArray(payload?.sourceErrors) ? [...payload.sourceErrors] : [];
   const source = String(payload?.source || "").trim();
   if (source && message) {
     errors.push({ source, message: String(message || "").trim() });
@@ -370,11 +346,7 @@ function summarizeSourceErrors(payload, message) {
 }
 
 async function failOrTryNextSource(payload, job, message, logDetails = {}) {
-  const nextPayload = buildNextSourcePayload(
-    payload,
-    payload?.source || "slskd",
-    message,
-  );
+  const nextPayload = buildNextSourcePayload(payload, payload?.source || "slskd", message);
   if (nextPayload) {
     logger.slskd("info", "Trying next download source", {
       jobId: job?.id,
@@ -401,7 +373,9 @@ export async function failPipelineJob(payload, message) {
 }
 
 export function parseSlskdRemoteFile(remoteFile) {
-  const normalized = String(remoteFile || "").replace(/\\/g, "/").trim();
+  const normalized = String(remoteFile || "")
+    .replace(/\\/g, "/")
+    .trim();
   const parts = normalized.split("/").filter(Boolean);
   if (parts.length === 0) {
     return { fileName: "", parentDir: "" };
@@ -433,11 +407,7 @@ export function predictSlskdLocalPathCandidates(root, remoteFile) {
 
 function readTransferFilename(transfer) {
   return String(
-    transfer?.filename ||
-      transfer?.Filename ||
-      transfer?.file ||
-      transfer?.File ||
-      "",
+    transfer?.filename || transfer?.Filename || transfer?.file || transfer?.File || "",
   ).trim();
 }
 
@@ -452,10 +422,7 @@ function resolveTransferLocalPath(transferFilename, slskdRoot) {
   const slskdBase = String(slskdRoot || "").trim();
   if (!slskdBase) return null;
   const resolvedBase = path.resolve(slskdBase);
-  if (
-    normalized === resolvedBase ||
-    normalized.startsWith(`${resolvedBase}${path.sep}`)
-  ) {
+  if (normalized === resolvedBase || normalized.startsWith(`${resolvedBase}${path.sep}`)) {
     return path.resolve(normalized);
   }
   return path.resolve(resolvedBase, normalized);
@@ -473,13 +440,7 @@ async function statMatchingFile(filePath, expectedSizeBytes) {
   }
 }
 
-async function findFileRecursive(
-  dir,
-  fileName,
-  expectedSizeBytes,
-  depth = 0,
-  matches = null,
-) {
+async function findFileRecursive(dir, fileName, expectedSizeBytes, depth = 0, matches = null) {
   if (depth > 8) return matches;
   const collected = matches || [];
   let entries = [];
@@ -518,8 +479,7 @@ function pickBestFileMatch(matches, expectedSizeBytes) {
     const sizeMatches = matches.filter((entry) => entry.size === expected);
     if (sizeMatches.length === 1) return sizeMatches[0].path;
     if (sizeMatches.length > 1) {
-      return sizeMatches.sort((left, right) => right.mtimeMs - left.mtimeMs)[0]
-        .path;
+      return sizeMatches.sort((left, right) => right.mtimeMs - left.mtimeMs)[0].path;
     }
     return null;
   }
@@ -527,20 +487,12 @@ function pickBestFileMatch(matches, expectedSizeBytes) {
   return matches.sort((left, right) => right.mtimeMs - left.mtimeMs)[0].path;
 }
 
-export async function locateCompletedDownload(
-  slskdRoot,
-  playlistRoot,
-  remoteFile,
-  options = {},
-) {
+export async function locateCompletedDownload(slskdRoot, playlistRoot, remoteFile, options = {}) {
   const expectedSizeBytes = Number(options.expectedSizeBytes || 0);
   const transferFilename = readTransferFilename(options.transfer);
   const transferPath = resolveTransferLocalPath(transferFilename, slskdRoot);
   if (transferPath) {
-    const directTransfer = await statMatchingFile(
-      transferPath,
-      expectedSizeBytes,
-    );
+    const directTransfer = await statMatchingFile(transferPath, expectedSizeBytes);
     if (directTransfer) return directTransfer;
   }
 
@@ -564,7 +516,11 @@ export async function locateCompletedDownload(
   }
 
   for (const root of searchRoots) {
-    const found = await findFileRecursive(root, parseSlskdRemoteFile(remoteFile).fileName, expectedSizeBytes);
+    const found = await findFileRecursive(
+      root,
+      parseSlskdRemoteFile(remoteFile).fileName,
+      expectedSizeBytes,
+    );
     if (found) return found;
   }
   return null;
@@ -578,14 +534,11 @@ async function cleanupRejectedDownload({
   username,
 } = {}) {
   const transferId = readTransferId(transfer);
-  const transferUser = String(
-    username || transfer?.username || transfer?.Username || "",
-  ).trim();
+  const transferUser = String(username || transfer?.username || transfer?.Username || "").trim();
   if (transferUser && transferId) {
     await slskdClient
       .deleteTransfer(transferUser, transferId, { remove: true })
-      .catch((err) => { logger.slskd("warn", "Failed to clean up transfer", { transferId, error: err?.message || String(err) }); });
-  }
+      .catch((err) => { logger.slskd("warn", "Failed to clean up transfer", { transferId, error: err?.message || String(err) }); });  }
   const safeSource = String(sourcePath || "").trim();
   const safeSlskdRoot = String(slskdRoot || "").trim();
   const safePlaylistRoot = String(playlistRoot || "").trim();
@@ -598,8 +551,7 @@ async function cleanupRejectedDownload({
     await fs.rm(safeSource, { force: true }).catch((err) => { logger.slskd("warn", "Failed to remove rejected download file", { sourcePath: safeSource, error: err?.message || String(err) }); });
     await cleanupEmptyAncestors(path.dirname(safeSource), safeSlskdRoot).catch(
       () => {},
-    );
-  }
+    );  }
 }
 
 async function cleanupTransferForPayload(payload, transfer) {
@@ -607,16 +559,12 @@ async function cleanupTransferForPayload(payload, transfer) {
   if (!transferId) return;
   const candidate = getPayloadCandidate(payload);
   const username = String(
-    transfer?.username ||
-      transfer?.Username ||
-      candidate?.raw?.user ||
-      "",
+    transfer?.username || transfer?.Username || candidate?.raw?.user || "",
   ).trim();
   if (!username) return;
   await slskdClient
     .deleteTransfer(username, transferId, { remove: true })
-    .catch((err) => { logger.slskd("warn", "Failed to clean up transfer for payload", { transferId, error: err?.message || String(err) }); });
-}
+    .catch((err) => { logger.slskd("warn", "Failed to clean up transfer for payload", { transferId, error: err?.message || String(err) }); });}
 
 async function cleanupSuccessfulRunArtifacts(payload, transfer) {
   if (!isSlskdCleanupAfterRunsEnabled()) return;
@@ -624,10 +572,7 @@ async function cleanupSuccessfulRunArtifacts(payload, transfer) {
   const transferId = readTransferId(transfer);
   const candidate = getPayloadCandidate(payload);
   const username = String(
-    transfer?.username ||
-      transfer?.Username ||
-      candidate?.raw?.user ||
-      "",
+    transfer?.username || transfer?.Username || candidate?.raw?.user || "",
   ).trim();
   const transfers =
     username && transferId
@@ -639,15 +584,13 @@ async function cleanupSuccessfulRunArtifacts(payload, transfer) {
         ]
       : [];
   if (searchIds.length === 0 && transfers.length === 0) return;
-  await slskdClient
-    .cleanupAfterRun({ searchIds, transfers })
-    .catch((error) =>
-      logger.slskd("warn", "Failed to clean up successful slskd run", {
-        error: error?.message || String(error),
-        searchIds,
-        transferCount: transfers.length,
-      }),
-    );
+  await slskdClient.cleanupAfterRun({ searchIds, transfers }).catch((error) =>
+    logger.slskd("warn", "Failed to clean up successful slskd run", {
+      error: error?.message || String(error),
+      searchIds,
+      transferCount: transfers.length,
+    }),
+  );
 }
 
 async function cleanupEmptyAncestors(dir, rootBoundary) {
@@ -738,11 +681,7 @@ async function runSearchQuery(
   const completed = await slskdClient.waitForSearch(created.id, undefined, {
     earlyExitWhen: (data) =>
       shouldStopSlskdSearching(
-        probeAggregatedResults(
-          aggregated,
-          slskdClient.flattenSearchResults(data),
-          seen,
-        ),
+        probeAggregatedResults(aggregated, slskdClient.flattenSearchResults(data), seen),
         resolvedTrack,
         searchOptions,
       ),
@@ -804,11 +743,7 @@ async function handleSearch(payload) {
     updateSlskdMetaStmt.run(searchIdRef.value, null, null, null, job.id);
     job.slskdSearchId = searchIdRef.value;
   }
-  const ranked = rankFlowSearchResults(
-    aggregated,
-    resolvedTrack,
-    searchOptions,
-  );
+  const ranked = rankFlowSearchResults(aggregated, resolvedTrack, searchOptions);
   const eligible = ranked.filter((entry) => entry.preDownloadValid);
   const eligibleKeys = new Set(
     eligible.map((entry) => `${entry.raw?.user || ""}\0${entry.raw?.file || ""}`),
@@ -819,12 +754,14 @@ async function handleSearch(payload) {
       (entry) => !eligibleKeys.has(`${entry.raw?.user || ""}\0${entry.raw?.file || ""}`),
     ),
   ];
-  const candidates = selectRankedMatchAttempts(candidatePool, MAX_DOWNLOAD_CANDIDATES).map((entry) => ({
-    raw: entry.raw,
-    score: entry.score,
-    resolvedAlbumName: entry.resolvedAlbumName,
-    preDownloadValid: entry.preDownloadValid === true,
-  }));
+  const candidates = selectRankedMatchAttempts(candidatePool, MAX_DOWNLOAD_CANDIDATES).map(
+    (entry) => ({
+      raw: entry.raw,
+      score: entry.score,
+      resolvedAlbumName: entry.resolvedAlbumName,
+      preDownloadValid: entry.preDownloadValid === true,
+    }),
+  );
   if (candidates.length === 0) {
     logger.slskd("warn", "No slskd download candidates after search", {
       jobId: job.id,
@@ -838,8 +775,7 @@ async function handleSearch(payload) {
     if (searchIds.length > 0) {
       await slskdClient
         .cleanupAfterRun({ searchIds, transfers: [] })
-        .catch((err) => { logger.slskd("warn", "Failed to clean up slskd run after empty search", { error: err?.message || String(err) }); });
-    }
+        .catch((err) => { logger.slskd("warn", "Failed to clean up slskd run after empty search", { error: err?.message || String(err) }); });    }
     return failOrTryNextSource(payload, job, "No suitable slskd search results", {
       queryCount: queries.length,
       rawResultCount: aggregated.length,
@@ -867,20 +803,13 @@ async function handleDownload(payload) {
     .catch((err) => { logger.slskd("warn", "Failed to record track job downloading", { jobId: job.id, error: err?.message || String(err) }); });
   const candidates = Array.isArray(payload.candidates)
     ? payload.candidates
-    : [];
-  const index = Number(payload.candidateIndex || 0);
+    : [];  const index = Number(payload.candidateIndex || 0);
   const candidate = candidates[index];
   if (!candidate?.raw?.user || !candidate?.raw?.file) {
     return failOrTryNextSource(payload, job, "No download candidate available");
   }
   const searchId = payload.searchId || null;
-  updateSlskdMetaStmt.run(
-    searchId,
-    null,
-    candidate.raw.user,
-    candidate.raw.file,
-    job.id,
-  );
+  updateSlskdMetaStmt.run(searchId, null, candidate.raw.user, candidate.raw.file, job.id);
   downloadTracker.updateDownloadMetadata(job.id, {
     downloadSource: "slskd",
     downloadClient: "slskd",
@@ -904,13 +833,7 @@ async function handleDownload(payload) {
     });
   } catch (error) {
     const message = error?.message || String(error);
-    recordPayloadOutcome(
-      job,
-      { ...payload, candidate },
-      "enqueue_failed",
-      message,
-      { candidate },
-    );
+    recordPayloadOutcome(job, { ...payload, candidate }, "enqueue_failed", message, { candidate });
     logger.slskd("warn", "slskd batch enqueue failed for candidate", {
       jobId: job.id,
       username: candidate.raw.user,
@@ -1041,28 +964,18 @@ async function handleFinalize(payload) {
   const candidateIndex = Number(payload.candidateIndex || 0);
   const candidate =
     payload.candidate ||
-    (Array.isArray(payload.candidates)
-      ? payload.candidates[candidateIndex]
-      : null);
+    (Array.isArray(payload.candidates) ? payload.candidates[candidateIndex] : null);
   const remoteFile = String(candidate?.raw?.file || "");
   const { fileName } = parseSlskdRemoteFile(remoteFile);
   const transfers = readBatchTransfers(payload.batch);
   const transfer = transfers[0] || null;
-  const sourcePath = await locateCompletedDownload(
-    slskdRoot,
-    playlistRoot,
-    remoteFile,
-    {
-      expectedSizeBytes: Number(candidate?.raw?.size || 0),
-      transfer,
-    },
-  );
+  const sourcePath = await locateCompletedDownload(slskdRoot, playlistRoot, remoteFile, {
+    expectedSizeBytes: Number(candidate?.raw?.size || 0),
+    transfer,
+  });
   if (!sourcePath) {
     const searchRoot = slskdRoot || playlistRoot;
-    const [predictedPath] = predictSlskdLocalPathCandidates(
-      searchRoot,
-      remoteFile,
-    );
+    const [predictedPath] = predictSlskdLocalPathCandidates(searchRoot, remoteFile);
     const expectedPath = predictedPath || fileName;
     const nextPayload = retrySameCandidateOrNext(
       payload,
@@ -1112,13 +1025,8 @@ async function handleFinalize(payload) {
     });
     const nextPayload = hasNextCandidate(payload)
       ? buildNextCandidatePayload(payload, { batchId: null, legacyTransfer: null })
-      : null;
-    if (nextPayload) return nextPayload;
-    return failOrTryNextSource(
-      payload,
-      job,
-      validation.reason || "Download validation failed",
-    );
+      : null;    if (nextPayload) return nextPayload;
+    return failOrTryNextSource(payload, job, validation.reason || "Download validation failed");
   }
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobMoving }) => recordTrackJobMoving(job))
@@ -1126,11 +1034,8 @@ async function handleFinalize(payload) {
   const committedFinalPath = await commitImportToPlaylistLibrary(
     sourcePath,
     finalPath,
-  );
-  if (slskdRoot) {
-    await cleanupEmptyAncestors(path.dirname(sourcePath), slskdRoot).catch(
-      () => {},
-    );
+  );  if (slskdRoot) {
+    await cleanupEmptyAncestors(path.dirname(sourcePath), slskdRoot).catch(() => {});
   }
   recordPayloadOutcome(job, payload, "success", null, {
     transfer,
@@ -1170,27 +1075,19 @@ export async function processPipelinePayload(payload) {
   if (payload.source === "usenet") {
     if (!isSourceConfigured("usenet")) {
       const job = downloadTracker.getJob(payload.jobId);
-      return job
-        ? failOrTryNextSource(payload, job, "Usenet is not configured")
-        : null;
+      return job ? failOrTryNextSource(payload, job, "Usenet is not configured") : null;
     }
     return processUsenetPipelinePayload(payload, { failOrTryNextSource });
   }
   if (payload.source !== "slskd") {
     const job = downloadTracker.getJob(payload.jobId);
     return job
-      ? failOrTryNextSource(
-          payload,
-          job,
-          `Unknown download source: ${payload.source}`,
-        )
+      ? failOrTryNextSource(payload, job, `Unknown download source: ${payload.source}`)
       : null;
   }
   if (!slskdClient.isConfigured() || !isSourceConfigured("slskd")) {
     const job = downloadTracker.getJob(payload.jobId);
-    return job
-      ? failOrTryNextSource(payload, job, SLSKD_NOT_CONFIGURED_MESSAGE)
-      : null;
+    return job ? failOrTryNextSource(payload, job, SLSKD_NOT_CONFIGURED_MESSAGE) : null;
   }
   switch (payload.phase) {
     case "search":

@@ -1,10 +1,7 @@
 import PropTypes from "prop-types";
 import { Music } from "lucide-react";
 import ArtistImage from "./ArtistImage";
-import {
-  getSearchResultKey,
-  navigateFromSearchResult,
-} from "../utils/searchNavigation";
+import { getSearchResultKey, navigateFromSearchResult } from "../utils/searchNavigation";
 import { getSearchPlaylistArtworkUrl } from "../utils/playlistArtworkUrls";
 import { getArtistRecordId } from "../utils/artistTaste";
 
@@ -135,17 +132,11 @@ function SearchMixedResultList({
                   albumCovers={albumCovers}
                 />
                 <span className="search-mixed-results__copy">
-                  <span
-                    className="search-mixed-results__title"
-                    title={primaryLabel}
-                  >
+                  <span className="search-mixed-results__title" title={primaryLabel}>
                     {primaryLabel}
                   </span>
                   {secondaryLabel ? (
-                    <span
-                      className="search-mixed-results__subtitle"
-                      title={secondaryLabel}
-                    >
+                    <span className="search-mixed-results__subtitle" title={secondaryLabel}>
                       {secondaryLabel}
                     </span>
                   ) : null}

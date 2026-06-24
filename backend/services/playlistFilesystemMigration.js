@@ -1,9 +1,6 @@
 import fs from "fs";
 import path from "path";
-import {
-  PLAYLIST_LIBRARY_DIR,
-  resolvePlaylistRoot,
-} from "./playlistPaths.js";
+import { PLAYLIST_LIBRARY_DIR, resolvePlaylistRoot } from "./playlistPaths.js";
 
 const PLAYLIST_SIDECAR_EXT = new Set([".m3u", ".nsp", ".webp", ".png"]);
 

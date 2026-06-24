@@ -25,13 +25,13 @@ Output is written to `docs/dist/`.
 
 Create a second Cloudflare Pages project for `docs.aurral.org`:
 
-| Setting | Value |
-| --- | --- |
-| Production branch | `main` |
-| Root directory | `docs` |
-| Build command | `npm install && npm run build` |
-| Build output directory | `dist` |
-| Node version | `20` or newer |
+| Setting                | Value                          |
+| ---------------------- | ------------------------------ |
+| Production branch      | `main`                         |
+| Root directory         | `docs`                         |
+| Build command          | `npm install && npm run build` |
+| Build output directory | `dist`                         |
+| Node version           | `20` or newer                  |
 
 Add a custom domain:
 

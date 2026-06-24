@@ -31,11 +31,7 @@ function ReloadPrompt() {
           >
             Reload
           </button>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm btn--grow"
-            onClick={close}
-          >
+          <button type="button" className="btn btn-secondary btn-sm btn--grow" onClick={close}>
             Close
           </button>
         </div>

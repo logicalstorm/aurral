@@ -23,11 +23,7 @@ const formatReleaseStatus = (releaseDate) => {
   const date = parseCalendarDate(releaseDate);
   if (!date) return null;
   const today = new Date();
-  const todayStart = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate(),
-  );
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const formattedDate = date.toLocaleDateString();
   if (date.getTime() === todayStart.getTime()) {
     return "Released today";
@@ -64,9 +60,7 @@ const getRecommendationReason = (artist) => {
   if (artist?.sourceArtist) {
     return `Similar to ${artist.sourceArtist}`;
   }
-  return artist?.discoveryTier === "deeper"
-    ? "A deeper discovery pick"
-    : "Picked for your profile";
+  return artist?.discoveryTier === "deeper" ? "A deeper discovery pick" : "Picked for your profile";
 };
 
 const handleCoverKeyDown = (event, onClick) => {
@@ -86,8 +80,7 @@ export const ArtistCard = memo(
     feedbackUsed = {},
   }) => {
     const navigateTo = artist.navigateTo || artist.id;
-    const hasValidMbid =
-      navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
+    const hasValidMbid = navigateTo && navigateTo !== "null" && navigateTo !== "undefined";
     const artistMetaText = getRecommendationReason(artist);
     const handleClick = useCallback(() => {
       if (hasValidMbid) {
@@ -137,10 +130,7 @@ export const ArtistCard = memo(
               {isInLibrary && <SearchLibraryCheck size="discover" />}
             </div>
             {artistMetaText ? (
-              <p
-                className="artist-card-meta--discover"
-                title={artistMetaText || undefined}
-              >
+              <p className="artist-card-meta--discover" title={artistMetaText || undefined}>
                 {artistMetaText}
               </p>
             ) : null}
@@ -170,15 +160,12 @@ export const ArtistCard = memo(
       prevProps.artist.name === nextProps.artist.name &&
       prevProps.artist.navigateTo === nextProps.artist.navigateTo &&
       prevProps.artist.subtitle === nextProps.artist.subtitle &&
-      getRecommendationReason(prevProps.artist) ===
-        getRecommendationReason(nextProps.artist) &&
+      getRecommendationReason(prevProps.artist) === getRecommendationReason(nextProps.artist) &&
       prevProps.status === nextProps.status &&
       prevProps.isInLibrary === nextProps.isInLibrary &&
       prevProps.canAddArtist === nextProps.canAddArtist &&
-      prevProps.feedbackUsed?.more_like_this ===
-        nextProps.feedbackUsed?.more_like_this &&
-      prevProps.feedbackUsed?.less_like_this ===
-        nextProps.feedbackUsed?.less_like_this &&
+      prevProps.feedbackUsed?.more_like_this === nextProps.feedbackUsed?.more_like_this &&
+      prevProps.feedbackUsed?.less_like_this === nextProps.feedbackUsed?.less_like_this &&
       prevProps.onNavigate === nextProps.onNavigate &&
       prevProps.onAddToLibrary === nextProps.onAddToLibrary &&
       prevProps.onFeedback === nextProps.onFeedback
@@ -328,10 +315,7 @@ export const AlbumCard = memo(
               {albumArtistText}
             </p>
             {albumReleaseText && (
-              <p
-                className="artist-card-meta--discover"
-                title={albumReleaseText}
-              >
+              <p className="artist-card-meta--discover" title={albumReleaseText}>
                 {albumReleaseText}
               </p>
             )}
@@ -349,8 +333,7 @@ export const AlbumCard = memo(
       prevProps.album.artistName === nextProps.album.artistName &&
       prevProps.album.coverUrl === nextProps.album.coverUrl &&
       prevProps.album.releaseDate === nextProps.album.releaseDate &&
-      prevProps.album.statistics?.percentOfTracks ===
-        nextProps.album.statistics?.percentOfTracks &&
+      prevProps.album.statistics?.percentOfTracks === nextProps.album.statistics?.percentOfTracks &&
       prevProps.canAddAlbum === nextProps.canAddAlbum &&
       prevProps.isPending === nextProps.isPending &&
       prevProps.onNavigate === nextProps.onNavigate &&
@@ -384,11 +367,7 @@ AlbumCard.propTypes = {
 
 export const ViewAllCard = memo(({ onClick, label = "View All" }) => {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="artist-view-all-card--discover"
-    >
+    <button type="button" onClick={onClick} className="artist-view-all-card--discover">
       <div className="artist-media-cell">
         <span className="artist-card-title">{label}</span>
       </div>

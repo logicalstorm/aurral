@@ -81,20 +81,13 @@ export function useFlowStatus() {
   useEffect(() => {
     const workerRunning = status?.worker?.running === true;
     const hintPhase = status?.hint?.phase;
-    const inTransition =
-      hintPhase === "preparing" || hintPhase === "downloading";
+    const inTransition = hintPhase === "preparing" || hintPhase === "downloading";
     if (!workerRunning && !inTransition) return;
-    const hasRecentWsUpdate =
-      Date.now() - lastFlowWsMessageAtRef.current < 20000;
+    const hasRecentWsUpdate = Date.now() - lastFlowWsMessageAtRef.current < 20000;
     if (isFlowSocketConnected && hasRecentWsUpdate) return;
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
-  }, [
-    status?.worker?.running,
-    status?.hint?.phase,
-    isFlowSocketConnected,
-    fetchStatus,
-  ]);
+  }, [status?.worker?.running, status?.hint?.phase, isFlowSocketConnected, fetchStatus]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -112,8 +105,7 @@ export function useFlowStatus() {
     if (!activeItems.length) return "";
     const activeIds = activeItems
       .filter((flow) => {
-        const stats =
-          status.flowStats?.[flow.id] || status.sharedPlaylistStats?.[flow.id];
+        const stats = status.flowStats?.[flow.id] || status.sharedPlaylistStats?.[flow.id];
         return (stats?.pending || 0) > 0 || (stats?.downloading || 0) > 0;
       })
       .map((flow) => flow.id)
@@ -140,12 +132,10 @@ export function useFlowStatus() {
       try {
         const results = await Promise.all(
           activeFlowIds.map((flowId) =>
-            getFlowJobs(flowId, 200, { signal: controller.signal }).then(
-              (jobs) => ({
-                flowId,
-                stats: buildFlowStatsFromJobs(jobs),
-              }),
-            ),
+            getFlowJobs(flowId, 200, { signal: controller.signal }).then((jobs) => ({
+              flowId,
+              stats: buildFlowStatsFromJobs(jobs),
+            })),
           ),
         );
         if (controller.signal.aborted) return;
@@ -200,11 +190,7 @@ export function useFlowStatus() {
           flowStatsById[flowId] ||
           EMPTY_FLOW_STATS,
       ),
-    [
-      status?.flowStats,
-      status?.sharedPlaylistStats,
-      flowStatsById,
-    ],
+    [status?.flowStats, status?.sharedPlaylistStats, flowStatsById],
   );
 
   const getPlaylistState = useCallback(
@@ -212,10 +198,7 @@ export function useFlowStatus() {
     [getPlaylistStats],
   );
 
-  const sharedPlaylists = useMemo(
-    () => status?.sharedPlaylists || [],
-    [status?.sharedPlaylists],
-  );
+  const sharedPlaylists = useMemo(() => status?.sharedPlaylists || [], [status?.sharedPlaylists]);
 
   const flows = useMemo(() => status?.flows || [], [status?.flows]);
 

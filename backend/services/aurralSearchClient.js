@@ -10,17 +10,13 @@ export function getSearchBaseUrl() {
   if (search.url === "") {
     return "";
   }
-  return String(
-    process.env.AURRAL_SEARCH_URL || search.url || DEFAULT_SEARCH_URL,
-  )
+  return String(process.env.AURRAL_SEARCH_URL || search.url || DEFAULT_SEARCH_URL)
     .trim()
     .replace(/\/+$/, "");
 }
 
 function getSearchApiKey() {
-  return String(
-    process.env.AURRAL_SEARCH_API_KEY || getSettingsSearch().apiKey || "",
-  ).trim();
+  return String(process.env.AURRAL_SEARCH_API_KEY || getSettingsSearch().apiKey || "").trim();
 }
 
 export function isRemoteSearchConfigured() {
@@ -31,9 +27,7 @@ const DEFAULT_TIMEOUT_MS = 10000;
 const FULL_TIMEOUT_MS = 15000;
 
 function getRemoteTimeoutMs(mode) {
-  return String(mode || "").trim() === "full"
-    ? FULL_TIMEOUT_MS
-    : DEFAULT_TIMEOUT_MS;
+  return String(mode || "").trim() === "full" ? FULL_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
 }
 
 export async function searchRemoteCatalog(query, { mode = "suggest", limit } = {}) {
@@ -74,10 +68,7 @@ export async function searchRemoteCatalog(query, { mode = "suggest", limit } = {
       tracks: Array.isArray(catalog?.tracks) ? catalog.tracks : [],
     };
   } catch (error) {
-    console.warn(
-      `[AurralSearch] Remote catalog search failed (${baseUrl}):`,
-      error.message,
-    );
+    console.warn(`[AurralSearch] Remote catalog search failed (${baseUrl}):`, error.message);
     return null;
   } finally {
     clearTimeout(timeout);

@@ -7,10 +7,7 @@ import {
   DEFAULT_METADATA_BASE_URL,
   MUSICBRAINZ_API,
 } from "../../config/constants.js";
-import {
-  rankAlbumCandidates,
-  rankArtistCandidates,
-} from "./brainzmashRanking.js";
+import { rankAlbumCandidates, rankArtistCandidates } from "./brainzmashRanking.js";
 import {
   matchesGenreQuery,
   toLegacyArtist,
@@ -54,9 +51,7 @@ function isNarrowFallbacksEnabled() {
 export function getMetadataBaseUrl() {
   const metadata = getSettingsMetadata();
   const raw = String(
-    metadata.baseUrl ||
-      process.env.BRAINZMASH_BASE_URL ||
-      DEFAULT_METADATA_BASE_URL,
+    metadata.baseUrl || process.env.BRAINZMASH_BASE_URL || DEFAULT_METADATA_BASE_URL,
   ).trim();
   try {
     const parsed = new URL(raw);
@@ -134,9 +129,7 @@ function selectedReleaseForAlbum(album) {
         Array.isArray(release?.tracks) &&
         release.tracks.length > 0,
     ) ||
-    releases.find(
-      (release) => Array.isArray(release?.tracks) && release.tracks.length > 0,
-    ) ||
+    releases.find((release) => Array.isArray(release?.tracks) && release.tracks.length > 0) ||
     releases[0] ||
     null
   );
@@ -147,8 +140,7 @@ function storeAlbumReleaseMappings(album) {
     releaseCache.set(
       release.id,
       structuredClone({ albumId: album.id, release }),
-    );
-  }
+    );  }
 }
 
 export async function getArtistByMbid(mbid) {
@@ -242,20 +234,15 @@ export async function searchAlbums(
       ? response.data["release-groups"]
       : [];
     items = source.map((entry, index) => {
-      const artistCredit = Array.isArray(entry?.["artist-credit"])
-        ? entry["artist-credit"]
-        : [];
+      const artistCredit = Array.isArray(entry?.["artist-credit"]) ? entry["artist-credit"] : [];
       const primaryArtist = artistCredit[0]?.artist || {};
       return {
         id: entry?.id,
         title: entry?.title || "Untitled Release",
-        artistName:
-          artistCredit[0]?.name || primaryArtist?.name || artistName || "Unknown Artist",
+        artistName: artistCredit[0]?.name || primaryArtist?.name || artistName || "Unknown Artist",
         artistId: primaryArtist?.id || null,
         type: entry?.["primary-type"] || "Album",
-        secondaryTypes: Array.isArray(entry?.["secondary-types"])
-          ? entry["secondary-types"]
-          : [],
+        secondaryTypes: Array.isArray(entry?.["secondary-types"]) ? entry["secondary-types"] : [],
         releaseDate: entry?.["first-release-date"] || null,
         coverUrl: null,
         images: [],
@@ -271,14 +258,16 @@ export async function searchAlbums(
   if (sort === "relevance") {
     items = rankAlbumCandidates(query, items, { artistName });
   } else if (sort === "artistAsc") {
-    items.sort((left, right) =>
-      String(left.artistName || "").localeCompare(String(right.artistName || "")) ||
-      String(left.title || "").localeCompare(String(right.title || "")),
+    items.sort(
+      (left, right) =>
+        String(left.artistName || "").localeCompare(String(right.artistName || "")) ||
+        String(left.title || "").localeCompare(String(right.title || "")),
     );
   } else if (sort === "titleAsc") {
-    items.sort((left, right) =>
-      String(left.title || "").localeCompare(String(right.title || "")) ||
-      String(left.artistName || "").localeCompare(String(right.artistName || "")),
+    items.sort(
+      (left, right) =>
+        String(left.title || "").localeCompare(String(right.title || "")) ||
+        String(left.artistName || "").localeCompare(String(right.artistName || "")),
     );
   } else if (sort === "dateDesc") {
     items.sort(

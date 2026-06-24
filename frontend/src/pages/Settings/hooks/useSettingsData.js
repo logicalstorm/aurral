@@ -140,8 +140,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const [lidarrProfiles, setLidarrProfiles] = useState([]);
   const [loadingLidarrProfiles, setLoadingLidarrProfiles] = useState(false);
   const [lidarrMetadataProfiles, setLidarrMetadataProfiles] = useState([]);
-  const [loadingLidarrMetadataProfiles, setLoadingLidarrMetadataProfiles] =
-    useState(false);
+  const [loadingLidarrMetadataProfiles, setLoadingLidarrMetadataProfiles] = useState(false);
   const [lidarrTags, setLidarrTags] = useState([]);
   const [loadingLidarrTags, setLoadingLidarrTags] = useState(false);
   const [testingLidarr, setTestingLidarr] = useState(false);
@@ -155,8 +154,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     if (healthData?.discovery?.isUpdating) {
       setRefreshingDiscovery(true);
       setDiscoveryProgressMessage(
-        healthData.discovery.updateProgressMessage ||
-          "Discovery refresh is running",
+        healthData.discovery.updateProgressMessage || "Discovery refresh is running",
       );
       if (typeof healthData.discovery.updateProgress === "number") {
         setDiscoveryProgress(healthData.discovery.updateProgress);
@@ -183,9 +181,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     if (msg.phase === "error") {
       setRefreshingDiscovery(false);
       setDiscoveryProgress(null);
-      setDiscoveryProgressMessage(
-        msg.progressMessage || "Discovery refresh failed",
-      );
+      setDiscoveryProgressMessage(msg.progressMessage || "Discovery refresh failed");
       return;
     }
 
@@ -203,9 +199,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     if (msg.phase === "completed" || Array.isArray(msg.recommendations)) {
       setRefreshingDiscovery(false);
       setDiscoveryProgress(100);
-      setDiscoveryProgressMessage(
-        msg.progressMessage || "Discovery refresh completed",
-      );
+      setDiscoveryProgressMessage(msg.progressMessage || "Discovery refresh completed");
       refreshHealth();
       return;
     }
@@ -214,10 +208,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const fetchSettings = useCallback(async () => {
     comparisonEnabledRef.current = false;
     try {
-      const [, savedSettings] = await Promise.all([
-        refreshHealth(),
-        getAppSettings(),
-      ]);
+      const [, savedSettings] = await Promise.all([refreshHealth(), getAppSettings()]);
       const updatedSettings = normalizeSettings(savedSettings);
       setSettingsState(updatedSettings);
       setOriginalSettings(structuredClone(updatedSettings));
@@ -261,9 +252,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       try {
         const healthData = await refreshHealth();
         if (!healthData?.discovery?.isUpdating) {
-          setDiscoveryProgressMessage(
-            (current) => current || "Discovery refresh completed",
-          );
+          setDiscoveryProgressMessage((current) => current || "Discovery refresh completed");
         }
       } catch {}
     };
@@ -323,9 +312,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       setDiscoveryProgressMessage("");
       showError(
         "Failed to start refresh: " +
-          (err.response?.data?.message ||
-            err.response?.data?.error ||
-            err.message),
+          (err.response?.data?.message || err.response?.data?.error || err.message),
       );
     }
   }, [refreshingDiscovery, showInfo, showError, refreshHealth]);
@@ -345,9 +332,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     } catch (err) {
       showError(
         "Failed to clear cache: " +
-          (err.response?.data?.message ||
-            err.response?.data?.error ||
-            err.message),
+          (err.response?.data?.message || err.response?.data?.error || err.message),
       );
     } finally {
       setClearingCache(false);
@@ -379,9 +364,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
                 },
               },
             });
-            showInfo(
-              `Default quality profile set to '${result.results.qualityProfile.name}'`,
-            );
+            showInfo(`Default quality profile set to '${result.results.qualityProfile.name}'`);
           }
         } catch {
         } finally {
@@ -406,9 +389,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
                 },
               },
             });
-            showInfo(
-              `Default metadata profile set to '${result.results.metadataProfile.name}'`,
-            );
+            showInfo(`Default metadata profile set to '${result.results.metadataProfile.name}'`);
           }
         } catch {
         } finally {
@@ -416,8 +397,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
         }
       }
     } catch (err) {
-      const errorMsg =
-        err.response?.data?.message || err.response?.data?.error || err.message;
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
       showError(`Failed to apply community guide: ${errorMsg}`);
     } finally {
       setApplyingCommunityGuide(false);

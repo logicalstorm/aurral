@@ -1,12 +1,10 @@
 import createHonkerWorker from "./honkerWorkerFactory.js";
-import { getDiscoveryPlaylistBuildQueue } from "./honkerDb.js";
-import {
+import { getDiscoveryPlaylistBuildQueue } from "./honkerDb.js";import {
   emitDiscoverPlaylistBuildFailure,
   runQueuedDiscoverPlaylistBuild,
 } from "./discovery/index.js";
 
-const {
-  start: startDiscoveryPlaylistBuildWorker,
+const {  start: startDiscoveryPlaylistBuildWorker,
   stop: stopDiscoveryPlaylistBuildWorker,
   isRunning: isDiscoveryPlaylistBuildWorkerRunning,
 } = createHonkerWorker({

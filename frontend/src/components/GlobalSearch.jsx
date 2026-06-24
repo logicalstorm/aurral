@@ -42,7 +42,6 @@ import {
   isSuggestionInLibrary,
   buildTrackPlaylistPayload,
 } from "../utils/globalSearchUtils";
-
 function GlobalSearch() {
   const [searchQuery, setSearchQuery] = useState("");
   const [lastfmConfigured, setLastfmConfigured] = useState(true);
@@ -82,13 +81,7 @@ function GlobalSearch() {
       recentSearches.length > 0 &&
       !loadingSuggestions &&
       suggestionRows.length === 0,
-    [
-      inputFocused,
-      loadingSuggestions,
-      recentSearches.length,
-      searchQuery,
-      suggestionRows.length,
-    ],
+    [inputFocused, loadingSuggestions, recentSearches.length, searchQuery, suggestionRows.length],
   );
 
   const recentSelectableRows = useMemo(
@@ -143,13 +136,7 @@ function GlobalSearch() {
 
   useEffect(() => {
     const handleGlobalKeyDown = (event) => {
-      if (
-        event.key !== "/" ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        event.shiftKey
-      ) {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
         return;
       }
       if (isEditableTarget(event.target)) return;
@@ -277,10 +264,7 @@ function GlobalSearch() {
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (
-        searchContainerRef.current &&
-        !searchContainerRef.current.contains(event.target)
-      ) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
         closeAutocomplete();
       }
     };
@@ -321,9 +305,7 @@ function GlobalSearch() {
 
       if (selection.kind === "tag") {
         rememberSearch(`#${selection.tagName}`);
-        navigate(
-          `/search?q=${encodeURIComponent(selection.tagName)}&type=tag`,
-        );
+        navigate(`/search?q=${encodeURIComponent(selection.tagName)}&type=tag`);
         setSearchQuery("");
         closeAutocomplete();
         setInputFocused(false);
@@ -358,8 +340,7 @@ function GlobalSearch() {
         if (row.kind !== "item" || row.item?.type !== targetType) return row;
         const currentId = getSuggestionItemId(row.item);
         if (!targetId || currentId !== targetId) return row;
-        const patch =
-          typeof updates === "function" ? updates(row.item) : updates || {};
+        const patch = typeof updates === "function" ? updates(row.item) : updates || {};
         return {
           ...row,
           item: {
@@ -376,9 +357,7 @@ function GlobalSearch() {
     setPlaylistModalError("");
     try {
       const data = await getFlowStatus();
-      const playlists = Array.isArray(data?.sharedPlaylists)
-        ? data.sharedPlaylists
-        : [];
+      const playlists = Array.isArray(data?.sharedPlaylists) ? data.sharedPlaylists : [];
       setSharedPlaylists(playlists);
       return playlists;
     } catch (err) {
@@ -590,9 +569,7 @@ function GlobalSearch() {
     if (keyboardRows.length === 0) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setSuggestionIndex((current) =>
-        current < keyboardRows.length - 1 ? current + 1 : current,
-      );
+      setSuggestionIndex((current) => (current < keyboardRows.length - 1 ? current + 1 : current));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setSuggestionIndex((current) => (current > 0 ? current - 1 : -1));
@@ -604,9 +581,7 @@ function GlobalSearch() {
 
   let selectableCursor = -1;
   const emptySearchPlaceholder = inputFocused ? (
-    <span className="global-search__scope-label--full">
-      Search music, artists, or #rock
-    </span>
+    <span className="global-search__scope-label--full">Search music, artists, or #rock</span>
   ) : (
     <>
       <span className="global-search__scope-label--short">Search...</span>
@@ -617,11 +592,7 @@ function GlobalSearch() {
   );
 
   return (
-    <form
-      ref={searchContainerRef}
-      onSubmit={handleSubmit}
-      className="global-search"
-    >
+    <form ref={searchContainerRef} onSubmit={handleSubmit} className="global-search">
       <div className="global-search__box global-search__box--unified">
         <div className="global-search__input-wrap global-search__input-wrap--unified">
           <Search className="global-search__icon" />
@@ -643,9 +614,7 @@ function GlobalSearch() {
             autoComplete="off"
           />
           {!searchQuery && (
-            <div className="global-search__placeholder">
-              {emptySearchPlaceholder}
-            </div>
+            <div className="global-search__placeholder">{emptySearchPlaceholder}</div>
           )}
           {loadingSuggestions && (
             <div className="global-search__loader">
@@ -660,12 +629,9 @@ function GlobalSearch() {
         !localSearchConfigured &&
         searchQuery.trim().length >= 2 && (
           <div className="global-search__suggestions global-search__suggestions--grouped">
-            <div className="global-search__suggestion-group">
-              Search not configured
-            </div>
+            <div className="global-search__suggestion-group">Search not configured</div>
             <div className="global-search__suggestion global-search__suggestion--message">
-              Configure the search server in Settings to search artists,
-              releases, and tracks.
+              Configure the search server in Settings to search artists, releases, and tracks.
             </div>
           </div>
         )}
@@ -736,14 +702,8 @@ function GlobalSearch() {
                       className="global-search__suggestion-main"
                     >
                       <span className="global-search__suggestion-copy">
-                        <span className="global-search__suggestion-title">
-                          {label}
-                        </span>
-                        {meta && (
-                          <span className="global-search__suggestion-meta">
-                            {meta}
-                          </span>
-                        )}
+                        <span className="global-search__suggestion-title">{label}</span>
+                        {meta && <span className="global-search__suggestion-meta">{meta}</span>}
                       </span>
                     </button>
                     {action && (

@@ -1,11 +1,6 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
-import { useAudioPlayerContext } from "react-use-audio-player";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";import { useAudioPlayerContext } from "react-use-audio-player";
 import { useSharedVolume } from "../hooks/useSharedVolume";
-import {
-  getFormatLoadAttempts,
-  getHowlerFormat,
-  normalizeQueueTrack,
-} from "../utils/audioQueue";
+import { getFormatLoadAttempts, getHowlerFormat, normalizeQueueTrack } from "../utils/audioQueue";
 import { AudioQueueContext } from "./audioQueueContext";
 
 function shuffleIds(ids) {
@@ -120,8 +115,7 @@ export function AudioQueueProvider({ children }) {
     const s = stateRef.current;
     const queueIndex = s.playbackOrder[playbackIndex];
     const track = queueIndex == null ? null : s.queue[queueIndex] ?? null;
-    if (!track?.src) return;
-    const formatAttempts = getFormatLoadAttempts(track);
+    if (!track?.src) return;    const formatAttempts = getFormatLoadAttempts(track);
     const formatKey = formatAttempts[formatAttemptIndex];
     if (!formatKey) return;
     const signature = `${s.queueRevision}:${queueIndex}:${track.src}:${formatKey}`;
@@ -169,7 +163,6 @@ export function AudioQueueProvider({ children }) {
   }, []);
 
   loadTrackAtIndexRef.current = loadTrackAtIndex;
-
   useEffect(() => {
     if (state.currentIndex < 0) {
       loadedSignatureRef.current = null;
@@ -248,7 +241,6 @@ export function AudioQueueProvider({ children }) {
       updateShufflePreference: options.updateShufflePreference ?? false,
     });
   }, [playQueue]);
-
   const togglePlayPause = useCallback(() => {
     if (stateRef.current.queue.length === 0) return;
     const activePlayer = playerRef.current;
@@ -277,8 +269,7 @@ export function AudioQueueProvider({ children }) {
         shuffle: s.isShuffleEnabled,
         updateShufflePreference: false,
         source: s.source,
-      });
-      return;
+      });      return;
     }
     const nextIndex = s.currentIndex + 1;
     if (nextIndex < s.playbackOrder.length) {
@@ -307,8 +298,7 @@ export function AudioQueueProvider({ children }) {
         shuffle: s.isShuffleEnabled,
         updateShufflePreference: false,
         source: s.source,
-      });
-      return;
+      });      return;
     }
     const prevIndex = s.currentIndex - 1;
     if (prevIndex >= 0) {
@@ -330,7 +320,6 @@ export function AudioQueueProvider({ children }) {
   }, []);
 
   const currentTrack = state.currentIndex >= 0 ? getTrackAt(state.currentIndex) : null;
-
   const isActive = state.queue.length > 0 && state.currentIndex >= 0;
 
   const matchesSource = useCallback(
@@ -400,9 +389,5 @@ export function AudioQueueProvider({ children }) {
     ],
   );
 
-  return (
-    <AudioQueueContext.Provider value={value}>
-      {children}
-    </AudioQueueContext.Provider>
-  );
+  return <AudioQueueContext.Provider value={value}>{children}</AudioQueueContext.Provider>;
 }

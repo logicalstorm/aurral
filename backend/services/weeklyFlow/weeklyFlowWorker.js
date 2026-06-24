@@ -30,9 +30,7 @@ const WORKER_STOPPED_CODE = "WORKER_STOPPED";
 const PLAYLIST_MUTATION_CODE = "PLAYLIST_MUTATION_IN_PROGRESS";
 const RETRY_JOB_REGISTRY_KEY = "weeklyFlowIncompleteRetryJobs";
 export class WeeklyFlowWorker {
-  constructor(
-    weeklyFlowRoot = resolveWeeklyFlowRoot(),
-  ) {
+  constructor(weeklyFlowRoot = resolveWeeklyFlowRoot()) {
     this.weeklyFlowRoot = resolveWeeklyFlowRoot(weeklyFlowRoot);
     this.running = false;
     this.activeCount = 0;
@@ -61,21 +59,12 @@ export class WeeklyFlowWorker {
 
   _recordCompletedTrack(elapsedMs, attempts) {
     this.downloadMetrics.completedTracks += 1;
-    this.downloadMetrics.completedTrackLatencyMs += Math.max(
-      0,
-      Math.round(Number(elapsedMs) || 0),
-    );
-    this.downloadMetrics.completedTrackAttempts += Math.max(
-      1,
-      Math.round(Number(attempts) || 1),
-    );
+    this.downloadMetrics.completedTrackLatencyMs += Math.max(0, Math.round(Number(elapsedMs) || 0));
+    this.downloadMetrics.completedTrackAttempts += Math.max(1, Math.round(Number(attempts) || 1));
   }
 
   _scheduleProcessIn(delayMs = JOB_COOLDOWN_MS) {
-    const waitMs = Math.max(
-      250,
-      Math.floor(Number(delayMs) || JOB_COOLDOWN_MS),
-    );
+    const waitMs = Math.max(250, Math.floor(Number(delayMs) || JOB_COOLDOWN_MS));
     if (!this.running || this.processTimer) return;
     this.processTimer = setTimeout(() => {
       this.processTimer = null;
@@ -112,10 +101,7 @@ export class WeeklyFlowWorker {
       throw this._createControlFlowError(WORKER_STOPPED_CODE, "Worker stopped");
     }
     if (this._isPlaylistBlocked(job?.playlistType)) {
-      throw this._createControlFlowError(
-        PLAYLIST_MUTATION_CODE,
-        "Playlist mutation in progress",
-      );
+      throw this._createControlFlowError(PLAYLIST_MUTATION_CODE, "Playlist mutation in progress");
     }
   }
 
@@ -155,9 +141,7 @@ export class WeeklyFlowWorker {
 
   async waitForIdle() {
     while (true) {
-      const active = [...this.activeJobs.values()]
-        .map((entry) => entry?.promise)
-        .filter(Boolean);
+      const active = [...this.activeJobs.values()].map((entry) => entry?.promise).filter(Boolean);
       if (active.length === 0) {
         return;
       }
@@ -218,9 +202,7 @@ export class WeeklyFlowWorker {
     if (!id) return false;
     const current = dbOps.getSettings();
     const worker = current?.playlistWorker || {};
-    const pausedIds = new Set(
-      this._normalizeRetryPausedPlaylistIds(worker.retryPausedPlaylistIds),
-    );
+    const pausedIds = new Set(this._normalizeRetryPausedPlaylistIds(worker.retryPausedPlaylistIds));
     if (paused) {
       pausedIds.add(id);
       this.clearIncompleteRetry(id);
@@ -265,10 +247,7 @@ export class WeeklyFlowWorker {
   _normalizeConcurrency(value) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return DEFAULT_CONCURRENCY;
-    return Math.min(
-      MAX_CONCURRENCY,
-      Math.max(MIN_CONCURRENCY, Math.floor(parsed)),
-    );
+    return Math.min(MAX_CONCURRENCY, Math.max(MIN_CONCURRENCY, Math.floor(parsed)));
   }
 
   _normalizeExistingFileMode(value) {
@@ -288,9 +267,7 @@ export class WeeklyFlowWorker {
     return {
       concurrency: this._normalizeConcurrency(raw.concurrency),
       retryCycleMinutes: DEFAULT_RETRY_CYCLE_MINUTES,
-      retryPausedPlaylistIds: this._normalizeRetryPausedPlaylistIds(
-        raw.retryPausedPlaylistIds,
-      ),
+      retryPausedPlaylistIds: this._normalizeRetryPausedPlaylistIds(raw.retryPausedPlaylistIds),
       existingFileMode: this._normalizeExistingFileMode(raw.existingFileMode),
     };
   }
@@ -304,9 +281,7 @@ export class WeeklyFlowWorker {
           ? base.concurrency
           : this._normalizeConcurrency(nextSettings.concurrency),
       retryCycleMinutes: DEFAULT_RETRY_CYCLE_MINUTES,
-      retryPausedPlaylistIds: this._normalizeRetryPausedPlaylistIds(
-        base.retryPausedPlaylistIds,
-      ),
+      retryPausedPlaylistIds: this._normalizeRetryPausedPlaylistIds(base.retryPausedPlaylistIds),
       existingFileMode:
         nextSettings.existingFileMode === undefined
           ? base.existingFileMode
@@ -327,9 +302,7 @@ export class WeeklyFlowWorker {
     const key = String(playlistType || "").trim();
     const flow = flowPlaylistConfig.getFlow(key);
     const sharedPlaylist = flowPlaylistConfig.getSharedPlaylist(key);
-    const achievedPrimary = Number(
-      this.playlistRunDiagnostics.get(key)?.achieved?.primary,
-    );
+    const achievedPrimary = Number(this.playlistRunDiagnostics.get(key)?.achieved?.primary);
     if (Number.isFinite(achievedPrimary) && achievedPrimary > 0) {
       return Math.max(1, Math.floor(achievedPrimary));
     }
@@ -388,19 +361,14 @@ export class WeeklyFlowWorker {
   _normalizeReserveTracks(tracks = []) {
     return (Array.isArray(tracks) ? tracks : []).filter(
       (track) =>
-        track &&
-        String(track?.artistName || "").trim() &&
-        String(track?.trackName || "").trim(),
+        track && String(track?.artistName || "").trim() && String(track?.trackName || "").trim(),
     );
   }
 
   setPlaylistRunPlan(playlistType, plan = {}) {
     const key = String(playlistType || "").trim();
     if (!key) return;
-    this.playlistReservePools.set(
-      key,
-      this._normalizeReserveTracks(plan?.reserveTracks || []),
-    );
+    this.playlistReservePools.set(key, this._normalizeReserveTracks(plan?.reserveTracks || []));
     this.playlistRunDiagnostics.set(key, plan?.diagnostics || null);
     this.playlistFinalizing.delete(key);
     this._getPlaylistFailureState(key);
@@ -434,7 +402,7 @@ export class WeeklyFlowWorker {
     return { skipped: true };
   }
 
-  async seedFlowRunWithTracks(playlistType, flow, tracks, options = {}) {
+  async seedFlowRunWithTracks(playlistType, flow, tracks, _options = {}) {
     const key = String(playlistType || "").trim();
     if (!key || !flow) {
       return { tracksQueued: 0, jobIds: [], reserveTracks: 0 };
@@ -477,9 +445,7 @@ export class WeeklyFlowWorker {
     );
     this.clearPlaylistRunState(key);
     this.setPlaylistRunPlan(key, plan);
-    const primaryTracks = Array.isArray(plan?.primaryTracks)
-      ? plan.primaryTracks
-      : [];
+    const primaryTracks = Array.isArray(plan?.primaryTracks) ? plan.primaryTracks : [];
     flowPlaylistConfig.markLastRunAt(key);
     const jobIds = downloadTracker.addJobs(primaryTracks, key);
     return {
@@ -559,9 +525,7 @@ export class WeeklyFlowWorker {
     for (const job of jobs) {
       if (job.status !== "failed") continue;
       const priorError = String(job?.error || "").trim();
-      const retryReason = [String(reason || "").trim(), priorError]
-        .filter(Boolean)
-        .join(" • ");
+      const retryReason = [String(reason || "").trim(), priorError].filter(Boolean).join(" • ");
       if (
         downloadTracker.setPending(job.id, retryReason || null, {
           asRetryCycle: true,
@@ -573,10 +537,7 @@ export class WeeklyFlowWorker {
     return requeued;
   }
 
-  _scheduleIncompleteRetry(
-    playlistType,
-    delayMs = this._getIncompleteRetryDelayMs(),
-  ) {
+  _scheduleIncompleteRetry(playlistType, delayMs = this._getIncompleteRetryDelayMs()) {
     if (!playlistType) return;
     if (this._isRetryCyclePaused(playlistType)) {
       this.clearIncompleteRetry(playlistType);
@@ -590,10 +551,7 @@ export class WeeklyFlowWorker {
       return;
     }
     if (this.getScheduledRetryJobId(playlistType) != null) return;
-    const waitMs = Math.max(
-      1000,
-      Math.floor(Number(delayMs) || this._getIncompleteRetryDelayMs()),
-    );
+    const waitMs = Math.max(1000, Math.floor(Number(delayMs) || this._getIncompleteRetryDelayMs()));
     const jobId = enqueuePlaylistRetryJob(
       {
         playlistType,
@@ -662,10 +620,7 @@ export class WeeklyFlowWorker {
       return 0;
     }
 
-    const changed = this._requeueFailedJobs(
-      playlistType,
-      "Retrying incomplete playlist",
-    );
+    const changed = this._requeueFailedJobs(playlistType, "Retrying incomplete playlist");
 
     if (changed > 0) {
       if (this.running) {
@@ -705,9 +660,7 @@ export class WeeklyFlowWorker {
     if (this.reuseRepairInFlight) return;
     this.reuseRepairInFlight = this.repairReusableLinks(force)
       .catch((error) => {
-        console.warn(
-          `[WeeklyFlowWorker] Reuse link repair failed: ${error?.message || error}`,
-        );
+        console.warn(`[WeeklyFlowWorker] Reuse link repair failed: ${error?.message || error}`);
       })
       .finally(() => {
         this.reuseRepairInFlight = null;
@@ -728,9 +681,7 @@ export class WeeklyFlowWorker {
       if (!this.running) return;
       const { concurrency } = this.getWorkerSettings();
       while (this.activeCount < concurrency) {
-        const job = this._getNextReadyPendingJob(
-          this.lastDequeuedPlaylistType,
-        );
+        const job = this._getNextReadyPendingJob(this.lastDequeuedPlaylistType);
         if (!job) {
           break;
         }
@@ -740,13 +691,9 @@ export class WeeklyFlowWorker {
           continue;
         }
         if (this._isPlaylistBlocked(job.playlistType)) {
-          downloadTracker.deferPendingToBack(
-            job.id,
-            "Playlist mutation in progress",
-            {
-              keepRetryTier: true,
-            },
-          );
+          downloadTracker.deferPendingToBack(job.id, "Playlist mutation in progress", {
+            keepRetryTier: true,
+          });
           this._scheduleProcessIn(JOB_COOLDOWN_MS);
           break;
         }
@@ -770,10 +717,7 @@ export class WeeklyFlowWorker {
             ) {
               return;
             }
-            console.error(
-              `[WeeklyFlowWorker] Error processing job ${job.id}:`,
-              error.message,
-            );
+            console.error(`[WeeklyFlowWorker] Error processing job ${job.id}:`, error.message);
             this._recordPlaylistTerminalFailure(job.playlistType, job);
             downloadTracker.setFailed(job.id, error.message);
             await this.checkPlaylistComplete(job.playlistType);
@@ -862,15 +806,11 @@ export class WeeklyFlowWorker {
         });
         if (reuse.reused) {
           this._dropOverflowPendingJobs(job.playlistType);
-          this._recordCompletedTrack(
-            Number(process.hrtime.bigint() - perfStartHr) / 1e6,
-            0,
-          );
+          this._recordCompletedTrack(Number(process.hrtime.bigint() - perfStartHr) / 1e6, 0);
           phaseStart = process.hrtime.bigint();
           this._assertJobCanContinue(job, runGeneration);
           await this.checkPlaylistComplete(job.playlistType);
-          timingsMs.completionCheck +=
-            Number(process.hrtime.bigint() - phaseStart) / 1e6;
+          timingsMs.completionCheck += Number(process.hrtime.bigint() - phaseStart) / 1e6;
           const cpuDelta = process.cpuUsage(perfStartCpu);
           const elapsedMs = Number(process.hrtime.bigint() - perfStartHr) / 1e6;
           this.lastJobMetrics = {
@@ -954,19 +894,14 @@ export class WeeklyFlowWorker {
 
             const flow = flowPlaylistConfig.getFlow(playlistType);
             const completed = done;
-            const { notifyWeeklyFlowDone } = await import(
-              "./notificationService.js"
-            );
+            const { notifyWeeklyFlowDone } = await import("./notificationService.js");
             notifyWeeklyFlowDone(
               playlistType,
               { completed, failed },
               path.join(playlistManager.libraryRoot, playlistType),
               flow ? flow.name : playlistType,
             ).catch((err) =>
-              console.warn(
-                "[WeeklyFlowWorker] Gotify notification failed:",
-                err.message,
-              ),
+              console.warn("[WeeklyFlowWorker] Gotify notification failed:", err.message),
             );
             import("../slskdClient.js")
               .then(({ slskdClient, isSlskdCleanupAfterRunsEnabled }) => {
@@ -978,10 +913,7 @@ export class WeeklyFlowWorker {
                 return slskdClient.cleanupAfterRun();
               })
               .catch((err) =>
-                console.warn(
-                  "[WeeklyFlowWorker] slskd cleanup failed:",
-                  err?.message || err,
-                ),
+                console.warn("[WeeklyFlowWorker] slskd cleanup failed:", err?.message || err),
               );
           },
           {
@@ -1052,17 +984,11 @@ export class WeeklyFlowWorker {
         completedTracks,
         avgAttemptsPerTrack:
           completedTracks > 0
-            ? Number(
-                (
-                  this.downloadMetrics.completedTrackAttempts / completedTracks
-                ).toFixed(2),
-              )
+            ? Number((this.downloadMetrics.completedTrackAttempts / completedTracks).toFixed(2))
             : 0,
         avgSuccessLatencyMs:
           completedTracks > 0
-            ? Math.round(
-                this.downloadMetrics.completedTrackLatencyMs / completedTracks,
-              )
+            ? Math.round(this.downloadMetrics.completedTrackLatencyMs / completedTracks)
             : 0,
       },
       playlistRuns,

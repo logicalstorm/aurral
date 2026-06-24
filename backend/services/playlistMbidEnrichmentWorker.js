@@ -1,6 +1,5 @@
 import createHonkerWorker from "./honkerWorkerFactory.js";
-import { getPlaylistMbidEnrichmentQueue } from "./honkerDb.js";
-import {
+import { getPlaylistMbidEnrichmentQueue } from "./honkerDb.js";import {
   enrichSharedPlaylistMbids,
   schedulePlaylistMbidEnrichmentForMissingPlaylists,
 } from "./playlistMbidEnrichmentService.js";
@@ -22,14 +21,11 @@ async function processPlaylistMbidEnrichment(payload = {}) {
       };
     }
     default:
-      throw new Error(
-        `Unknown playlist MBID enrichment task: ${kind || "unknown"}`,
-      );
+      throw new Error(`Unknown playlist MBID enrichment task: ${kind || "unknown"}`);
   }
 }
 
-const {
-  start: startPlaylistMbidEnrichmentWorker,
+const {  start: startPlaylistMbidEnrichmentWorker,
   stop: stopPlaylistMbidEnrichmentWorker,
   isRunning: isPlaylistMbidEnrichmentWorkerRunning,
 } = createHonkerWorker({

@@ -7,11 +7,8 @@ import {
   recordFlowTracksGenerated,
   recordPlaylistTracksAdded,
 } from "../aurralHistoryService.js";
-import { PLAYLIST_LIBRARY_DIR, isPathInsideRoot } from "../playlistPaths.js";
-import {
-  remapLegacyWeeklyFlowPath,
-} from "./weeklyFlowPaths.js";
-import {
+import { PLAYLIST_LIBRARY_DIR, isPathInsideRoot } from "../playlistPaths.js";import {
+  buildSharedTrackIdentity,
   dedupeSharedTracks,
   filterMissingSharedTracks,
   flowPlaylistConfig,
@@ -80,10 +77,7 @@ const getPlaylistLibraryRoot = (playlistType) =>
 const removePlaylistLocalTrackFile = async (job, playlistId) => {
   if (!job || typeof job.finalPath !== "string") return;
   const playlistRoot = getPlaylistLibraryRoot(playlistId);
-  const safeFinalPath = remapLegacyWeeklyFlowPath(
-    job.finalPath,
-    weeklyFlowWorker.weeklyFlowRoot,
-  );
+  const safeFinalPath = remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowWorker.weeklyFlowRoot);
   if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
     await fs.rm(safeFinalPath, { force: true });
   }
@@ -153,9 +147,7 @@ export async function reconcileSharedPlaylistJobs(playlistId) {
     for (const dupe of dupes) {
       if (dupe.status === "done" && typeof dupe.finalPath === "string") {
         const keptPath =
-          kept?.status === "done" && typeof kept.finalPath === "string"
-            ? kept.finalPath
-            : null;
+          kept?.status === "done" && typeof kept.finalPath === "string" ? kept.finalPath : null;
         if (!keptPath || dupe.finalPath !== keptPath) {
           const safeFinalPath = remapLegacyWeeklyFlowPath(
             dupe.finalPath,
@@ -171,9 +163,7 @@ export async function reconcileSharedPlaylistJobs(playlistId) {
     }
   }
 
-  const tracksFromJobs = keptJobs
-    .map((job) => jobToSharedTrack(job))
-    .filter(Boolean);
+  const tracksFromJobs = keptJobs.map((job) => jobToSharedTrack(job)).filter(Boolean);
   const configInSync = sharedPlaylistTracksMatchJobs(playlist, keptJobs);
   const changed = removedJobIds.length > 0 || !configInSync;
   let updatedPlaylist = playlist;
@@ -246,10 +236,7 @@ const filterTracksMissingDownloadJobs = (tracks, playlistId) => {
   return missing;
 };
 
-const recordPlaylistHistory = (
-  playlistId,
-  { tracksQueued = 0, tracksReused = 0 } = {},
-) => {
+const recordPlaylistHistory = (playlistId, { tracksQueued = 0, tracksReused = 0 } = {}) => {
   if (tracksQueued + tracksReused <= 0) return;
   recordPlaylistTracksAdded({
     playlistId,
@@ -260,10 +247,7 @@ const recordPlaylistHistory = (
 
 async function seedSharedPlaylistTracks(playlistId, tracks) {
   const missingTracks = filterTracksMissingDownloadJobs(tracks, playlistId);
-  const { reusedJobIds, tracksToQueue } = await reuseTracksForPlaylist(
-    missingTracks,
-    playlistId,
-  );
+  const { reusedJobIds, tracksToQueue } = await reuseTracksForPlaylist(missingTracks, playlistId);
   const jobIds = downloadTracker.addJobs(tracksToQueue, playlistId);
   playlistManager.updateConfig(false);
   await playlistManager.ensureSmartPlaylists();
@@ -470,20 +454,14 @@ async function createSharedPlaylist({
   };
 }
 
-async function appendSharedPlaylistTracks({
-  playlistId,
-  tracks = [],
-} = {}) {
+async function appendSharedPlaylistTracks({ playlistId, tracks = [] } = {}) {
   const safePlaylistId = String(playlistId || "").trim();
   const playlist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
   if (!playlist) return { missing: true };
   const tracksToAdd = filterMissingSharedTracks(playlist.tracks, tracks);
   const updatedPlaylist =
     tracksToAdd.length > 0
-      ? flowPlaylistConfig.appendSharedPlaylistTracks(
-          safePlaylistId,
-          tracksToAdd,
-        )
+      ? flowPlaylistConfig.appendSharedPlaylistTracks(safePlaylistId, tracksToAdd)
       : playlist;
   const queued =
     tracksToAdd.length > 0
@@ -570,10 +548,7 @@ async function updateSharedPlaylist({
         name: safeName,
         tracks: normalizedTracks,
       });
-      const { tracksToQueue } = await reuseTracksForPlaylist(
-        tracksNeedingWork,
-        safePlaylistId,
-      );
+      const { tracksToQueue } = await reuseTracksForPlaylist(tracksNeedingWork, safePlaylistId);
       tracksQueued = downloadTracker.addJobs(tracksToQueue, safePlaylistId).length;
     });
     weeklyFlowWorker.pruneOrphanedJobState();
@@ -587,9 +562,7 @@ async function updateSharedPlaylist({
     recordPlaylistHistory(safePlaylistId, { tracksQueued });
   }
   schedulePlaylistMbidEnrichment(safePlaylistId, {
-    reason: hasTracksUpdate
-      ? "shared-playlist-track-update"
-      : "shared-playlist-update",
+    reason: hasTracksUpdate ? "shared-playlist-track-update" : "shared-playlist-update",
     priority: 5,
   });
   return { success: true, playlist, tracksQueued };
@@ -615,8 +588,7 @@ async function deleteSharedPlaylistTrack({ playlistId, jobId } = {}) {
     { clearPending: false },
   );
   weeklyFlowWorker.pruneOrphanedJobState();
-  const updatedPlaylist =
-    (await syncSharedPlaylistConfigFromJobs(safePlaylistId)) || playlist;
+  const updatedPlaylist = (await syncSharedPlaylistConfigFromJobs(safePlaylistId)) || playlist;
   playlistManager.updateConfig(false);
   await playlistManager.refreshPlaylist(safePlaylistId);
   await playlistManager.scheduleScanLibrary(true);
@@ -647,10 +619,7 @@ async function researchPlaylistTrack({ playlistId, jobId } = {}) {
     async () => {
       const { existingFileMode } = weeklyFlowWorker.getWorkerSettings();
       const mode = normalizeExistingFileMode(existingFileMode);
-      if (
-        mode !== "download" &&
-        (job.status === "done" || job.status === "failed")
-      ) {
+      if (mode !== "download" && (job.status === "done" || job.status === "failed")) {
         const reuse = await reuseTrackForPlaylist(job, safePlaylistId, {
           existingFileMode: mode,
           weeklyFlowRoot: weeklyFlowWorker.weeklyFlowRoot,
@@ -665,10 +634,7 @@ async function researchPlaylistTrack({ playlistId, jobId } = {}) {
             updatedJob?.finalPath &&
             updatedJob.finalPath !== previousFinalPath
           ) {
-            await removePlaylistLocalTrackFile(
-              { finalPath: previousFinalPath },
-              safePlaylistId,
-            );
+            await removePlaylistLocalTrackFile({ finalPath: previousFinalPath }, safePlaylistId);
           }
           return;
         }

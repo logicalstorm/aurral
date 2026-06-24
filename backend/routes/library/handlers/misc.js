@@ -20,15 +20,12 @@ export function registerMisc(router) {
 
   router.get("/rootfolder", async (req, res) => {
     try {
-      const { lidarrClient } =
-        await import("../../../services/lidarrClient.js");
+      const { lidarrClient } = await import("../../../services/lidarrClient.js");
       if (!lidarrClient.isConfigured()) {
         return res.json([]);
       }
       const rootFolders = await lidarrClient.getRootFolders();
-      const list = Array.isArray(rootFolders)
-        ? rootFolders.map((r) => ({ path: r.path }))
-        : [];
+      const list = Array.isArray(rootFolders) ? rootFolders.map((r) => ({ path: r.path })) : [];
       res.json(list);
     } catch (error) {
       res.status(500).json({
@@ -112,27 +109,20 @@ export function registerMisc(router) {
         return res.status(400).json({ error: "mbids must be an array" });
       }
 
-      const { lidarrClient } =
-        await import("../../../services/lidarrClient.js");
+      const { lidarrClient } = await import("../../../services/lidarrClient.js");
       if (!lidarrClient.isConfigured()) {
         return res.json({});
       }
 
       const albums = await lidarrClient.request("/album");
-      const wanted = new Set(
-        mbids
-          .map((mbid) => String(mbid || "").trim())
-          .filter(Boolean),
-      );
+      const wanted = new Set(mbids.map((mbid) => String(mbid || "").trim()).filter(Boolean));
       const results = {};
 
       for (const album of Array.isArray(albums) ? albums : []) {
         const foreignAlbumId = String(album?.foreignAlbumId || "").trim();
         if (!foreignAlbumId || !wanted.has(foreignAlbumId)) continue;
 
-        const percentOfTracks = normalizePercentOfTracks(
-          album?.statistics?.percentOfTracks,
-        );
+        const percentOfTracks = normalizePercentOfTracks(album?.statistics?.percentOfTracks);
         const sizeOnDisk = Number(album?.statistics?.sizeOnDisk || 0);
         const trackCount = Number(album?.statistics?.trackCount || 0);
         const trackFileCount = Number(album?.statistics?.trackFileCount || 0);
@@ -140,12 +130,9 @@ export function registerMisc(router) {
 
         results[foreignAlbumId] = {
           inLibrary: true,
-          libraryAlbumId:
-            album.id !== undefined && album.id !== null ? String(album.id) : null,
+          libraryAlbumId: album.id !== undefined && album.id !== null ? String(album.id) : null,
           libraryArtistId:
-            album.artistId !== undefined && album.artistId !== null
-              ? String(album.artistId)
-              : null,
+            album.artistId !== undefined && album.artistId !== null ? String(album.artistId) : null,
           status: hasFiles ? "available" : "inLibrary",
           monitored: Boolean(album?.monitored),
           percentOfTracks,
@@ -170,10 +157,7 @@ export function registerMisc(router) {
     try {
       const artists = await libraryManager.getAllArtists();
       const recent = [...artists]
-        .sort(
-          (a, b) =>
-            new Date(b.addedAt || b.added) - new Date(a.addedAt || a.added),
-        )
+        .sort((a, b) => new Date(b.addedAt || b.added) - new Date(a.addedAt || a.added))
         .slice(0, 20)
         .map((artist) => ({
           ...artist,
@@ -194,8 +178,7 @@ export function registerMisc(router) {
     try {
       const { getRecentMissingReleases } = await import(
         "../../../services/discovery/recentReleases.js"
-      );
-      const recentMissing = await getRecentMissingReleases(24);
+      );      const recentMissing = await getRecentMissingReleases(24);
 
       const cachedCovers = dbOps.getImages(
         recentMissing
@@ -224,10 +207,7 @@ export function registerMisc(router) {
             return [coverId, null];
           }
 
-          return [
-            coverId,
-            buildImageProxyUrl(cover.imageUrl) || cover.imageUrl,
-          ];
+          return [coverId, buildImageProxyUrl(cover.imageUrl) || cover.imageUrl];
         }),
       );
 
@@ -243,9 +223,7 @@ export function registerMisc(router) {
         return {
           ...album,
           coverUrl:
-            coverUrl && coverUrl !== "NOT_FOUND"
-              ? buildImageProxyUrl(coverUrl) || coverUrl
-              : null,
+            coverUrl && coverUrl !== "NOT_FOUND" ? buildImageProxyUrl(coverUrl) || coverUrl : null,
         };
       });
 

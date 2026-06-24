@@ -14,12 +14,7 @@ const PATH_MAPPING_SOURCE_OPTIONS = [
 
 const EMPTY_MAPPING = { source: "all", remote: "", local: "" };
 
-export function PathMappingModal({
-  title,
-  initialValue,
-  onClose,
-  onSave,
-}) {
+export function PathMappingModal({ title, initialValue, onClose, onSave }) {
   const [draft, setDraft] = useState(() => ({
     ...EMPTY_MAPPING,
     ...initialValue,
@@ -32,7 +27,9 @@ export function PathMappingModal({
 
   const handleSave = () => {
     const mapping = {
-      source: String(draft.source || "all").trim().toLowerCase(),
+      source: String(draft.source || "all")
+        .trim()
+        .toLowerCase(),
       remote: String(draft.remote || "").trim(),
       local: String(draft.local || "").trim(),
     };
@@ -41,8 +38,7 @@ export function PathMappingModal({
   };
 
   const canSave =
-    Boolean(String(draft.remote || "").trim()) &&
-    Boolean(String(draft.local || "").trim());
+    Boolean(String(draft.remote || "").trim()) && Boolean(String(draft.local || "").trim());
 
   return createPortal(
     <div className="arr-portal">

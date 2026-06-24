@@ -9,8 +9,7 @@ import {
   isRemoteSearchConfigured,
   searchRemoteCatalog,
 } from "./aurralSearchClient.js";
-import { flowPlaylistConfig } from "./weeklyFlow/weeklyFlowPlaylistConfig.js";
-import { getCachedArtists } from "./libraryManager.js";
+import { flowPlaylistConfig } from "./weeklyFlow/weeklyFlowPlaylistConfig.js";import { getCachedArtists } from "./libraryManager.js";
 import { getDiscoveryCache } from "./discovery/index.js";
 import { compareSearchResults, getLocalMatchThreshold } from "./searchRanking.js";
 
@@ -120,9 +119,7 @@ function addArtistToIndex(index, artist, target = "library") {
   const id = String(
     artist?.mbid || artist?.foreignArtistId || artist?.artistMbid || artist?.id || "",
   ).trim();
-  const name = String(
-    artist?.artistName || artist?.name || artist?.artist || "",
-  ).trim();
+  const name = String(artist?.artistName || artist?.name || artist?.artist || "").trim();
 
   if (target === "library") {
     if (id) index.libraryArtistIds.add(id);
@@ -140,7 +137,9 @@ function addPlaylistTrackToIndex(index, track) {
   const title = String(track?.trackName || track?.title || track?.name || "").trim();
   const albumTitle = String(track?.albumName || track?.albumTitle || track?.album || "").trim();
   const artistMbid = String(track?.artistMbid || track?.artistId || "").trim();
-  const albumMbid = String(track?.albumMbid || track?.releaseGroupMbid || track?.albumId || "").trim();
+  const albumMbid = String(
+    track?.albumMbid || track?.releaseGroupMbid || track?.albumId || "",
+  ).trim();
   const trackMbid = String(track?.trackMbid || track?.recordingMbid || track?.id || "").trim();
 
   addArtistToIndex(index, { id: artistMbid, name: artistName }, "playlist");
@@ -161,11 +160,7 @@ function addLibraryTrackToIndex(index, track) {
   if (fullKey) index.libraryTrackFullKeys.add(fullKey);
 }
 
-export function buildSearchContextIndex({
-  playlists = [],
-  artists = [],
-  tracks = [],
-} = {}) {
+export function buildSearchContextIndex({ playlists = [], artists = [], tracks = [] } = {}) {
   const index = {
     libraryArtistIds: new Set(),
     libraryArtistNames: new Set(),
@@ -227,16 +222,11 @@ function annotateSearchItem(item, query, context = EMPTY_SEARCH_CONTEXT) {
   const next = { ...item };
   const primaryMatchScore = scoreTextMatch(query, getPrimarySearchText(next));
   if (primaryMatchScore > 0) {
-    next.primaryMatchScore = Math.max(
-      Number(next.primaryMatchScore || 0),
-      primaryMatchScore,
-    );
+    next.primaryMatchScore = Math.max(Number(next.primaryMatchScore || 0), primaryMatchScore);
   }
   const baseContextBoost = Number(next.contextBoost || 0);
   let contextBoost = Number.isFinite(baseContextBoost) ? baseContextBoost : 0;
-  const contextReasons = Array.isArray(next.contextReasons)
-    ? [...next.contextReasons]
-    : [];
+  const contextReasons = Array.isArray(next.contextReasons) ? [...next.contextReasons] : [];
 
   const addBoost = (amount, reason) => {
     if (!Number.isFinite(amount) || amount <= 0) return;
@@ -298,10 +288,7 @@ function annotateSearchItem(item, query, context = EMPTY_SEARCH_CONTEXT) {
       addBoost(CONTEXT_BOOST.PLAYLIST_ALBUM, "playlist_album");
     }
     if (artistInLibrary && scoreTextMatch(query, next.title) >= 92) {
-      addBoost(
-        CONTEXT_BOOST.EXACT_TITLE_WITH_LIBRARY_ARTIST,
-        "exact_title_library_artist",
-      );
+      addBoost(CONTEXT_BOOST.EXACT_TITLE_WITH_LIBRARY_ARTIST, "exact_title_library_artist");
     }
   }
 
@@ -315,19 +302,12 @@ function annotateSearchItem(item, query, context = EMPTY_SEARCH_CONTEXT) {
       index,
     );
     const coreTrackKey = buildCoreTrackKey(next.artistName, next.title);
-    const fullTrackKey = buildFullTrackKey(
-      next.artistName,
-      next.title,
-      next.albumTitle,
-    );
+    const fullTrackKey = buildFullTrackKey(next.artistName, next.title, next.albumTitle);
     const playlistTrackCount =
       getCount(index.playlistTrackIds, next.id || next.trackMbid) +
       getCount(index.playlistTrackIds, next.trackMbid) +
       getCount(index.playlistTrackFullKeys, fullTrackKey);
-    const fuzzyPlaylistTrackCount = getCount(
-      index.playlistTrackCoreKeys,
-      coreTrackKey,
-    );
+    const fuzzyPlaylistTrackCount = getCount(index.playlistTrackCoreKeys, coreTrackKey);
     const libraryTrackMatch =
       index.libraryTrackCoreKeys.has(coreTrackKey) ||
       (fullTrackKey && index.libraryTrackFullKeys.has(fullTrackKey));
@@ -350,9 +330,7 @@ function annotateSearchItem(item, query, context = EMPTY_SEARCH_CONTEXT) {
       next.inPlaylist = true;
       next.playlistMatchCount = totalCount;
       addBoost(
-        (exactCount > 0
-          ? CONTEXT_BOOST.PLAYLIST_TRACK
-          : CONTEXT_BOOST.PLAYLIST_TRACK_FUZZY) +
+        (exactCount > 0 ? CONTEXT_BOOST.PLAYLIST_TRACK : CONTEXT_BOOST.PLAYLIST_TRACK_FUZZY) +
           Math.min(totalCount, 8) * 5,
         exactCount > 0 ? "playlist_track" : "playlist_track_fuzzy",
       );
@@ -365,10 +343,7 @@ function annotateSearchItem(item, query, context = EMPTY_SEARCH_CONTEXT) {
       addBoost(CONTEXT_BOOST.PLAYLIST_ARTIST, "playlist_artist");
     }
     if (artistInLibrary && scoreTextMatch(query, next.title) >= 92) {
-      addBoost(
-        CONTEXT_BOOST.EXACT_TITLE_WITH_LIBRARY_ARTIST,
-        "exact_title_library_artist",
-      );
+      addBoost(CONTEXT_BOOST.EXACT_TITLE_WITH_LIBRARY_ARTIST, "exact_title_library_artist");
     }
   }
 
@@ -530,10 +505,7 @@ function getDiscoverPlaylistsForSearch(user) {
       })
       .filter(Boolean);
   } catch (error) {
-    console.warn(
-      "[UnifiedSearch] Failed to read discover playlists:",
-      error.message,
-    );
+    console.warn("[UnifiedSearch] Failed to read discover playlists:", error.message);
     return [];
   }
 }
@@ -542,10 +514,7 @@ function getAllPlaylistsForSearch(user) {
   const shared = getVisiblePlaylistsForUser(user);
   const discover = getDiscoverPlaylistsForSearch(user);
   const seen = new Set(shared.map((playlist) => playlist.id));
-  return [
-    ...shared,
-    ...discover.filter((playlist) => !seen.has(playlist.id)),
-  ];
+  return [...shared, ...discover.filter((playlist) => !seen.has(playlist.id))];
 }
 
 function getVisiblePlaylistsForUser(user) {
@@ -709,10 +678,7 @@ async function searchLocalLibrary(query, limit, user) {
   }
 }
 
-export async function searchUnified(
-  query,
-  { mode = "suggest", limit, user = null } = {},
-) {
+export async function searchUnified(query, { mode = "suggest", limit, user = null } = {}) {
   const trimmed = String(query || "").trim();
   const normalizedMode = normalizeMode(mode);
   const perBucketLimit = bucketLimit(normalizedMode, limit);
@@ -743,12 +709,7 @@ export async function searchUnified(
   ]);
   const library = local?.library || { artists: [], tracks: [], playlists: [] };
   const context = local?.context || EMPTY_SEARCH_CONTEXT;
-  const catalog = applyCatalogSearchContext(
-    fetchedCatalog,
-    trimmed,
-    context,
-    perBucketLimit,
-  );
+  const catalog = applyCatalogSearchContext(fetchedCatalog, trimmed, context, perBucketLimit);
   const rawTop = fetchedCatalog?.top || pickCatalogTopFallback(catalog);
   const top = rawTop ? annotateSearchItem(rawTop, trimmed, context) : null;
 

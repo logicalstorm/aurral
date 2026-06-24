@@ -15,15 +15,10 @@ export function DeleteArtistModal({
   return (
     <div className="artist-modal-backdrop">
       <div className="artist-modal">
-        <h3 className="artist-modal__title">
-          Remove Artist from Library
-        </h3>
+        <h3 className="artist-modal__title">Remove Artist from Library</h3>
         <p className="artist-modal__copy">
-          Are you sure you want to remove{" "}
-          <strong>
-            {artistName || libraryArtistName}
-          </strong>{" "}
-          from library?
+          Are you sure you want to remove <strong>{artistName || libraryArtistName}</strong> from
+          library?
         </p>
 
         <div>
@@ -35,30 +30,20 @@ export function DeleteArtistModal({
               className="artist-checkbox"
             />
             <div>
-              <span className="artist-card-title">
-                Delete artist folder and files
-              </span>
+              <span className="artist-card-title">Delete artist folder and files</span>
               <p className="artist-modal__subcopy">
-                This will permanently delete the artist&apos;s folder and all
-                music files from your disk. This action cannot be undone.
+                This will permanently delete the artist&apos;s folder and all music files from your
+                disk. This action cannot be undone.
               </p>
             </div>
           </label>
         </div>
 
         <div className="artist-modal__actions">
-          <button
-            onClick={onCancel}
-            disabled={deleting}
-            className="btn btn-secondary"
-          >
+          <button onClick={onCancel} disabled={deleting} className="btn btn-secondary">
             Cancel
           </button>
-          <button
-            onClick={onConfirm}
-            disabled={deleting}
-            className="btn btn-danger"
-          >
+          <button onClick={onConfirm} disabled={deleting} className="btn btn-danger">
             {deleting ? (
               <>
                 <Loader className="artist-icon-sm animate-spin" />

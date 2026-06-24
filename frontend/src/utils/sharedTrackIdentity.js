@@ -3,30 +3,15 @@ export function normalizeTrackForSharedIdentity(track) {
     return null;
   }
   const artistName = String(
-    track.artistName ??
-      track.artist ??
-      track.artist_name ??
-      track["Artist Name(s)"] ??
-      "",
+    track.artistName ?? track.artist ?? track.artist_name ?? track["Artist Name(s)"] ?? "",
   ).trim();
   const trackName = String(
-    track.trackName ??
-      track.title ??
-      track.name ??
-      track.track ??
-      track["Track Name"] ??
-      "",
+    track.trackName ?? track.title ?? track.name ?? track.track ?? track["Track Name"] ?? "",
   ).trim();
   if (!artistName || !trackName) return null;
-  const albumName = String(
-    track.albumName ?? track.album ?? track["Album Name"] ?? "",
-  ).trim();
-  const artistMbid = String(
-    track.artistMbid ?? track.artistId ?? track.mbid ?? "",
-  ).trim();
-  const albumMbid = String(
-    track.albumMbid ?? track.releaseGroupMbid ?? track.albumId ?? "",
-  ).trim();
+  const albumName = String(track.albumName ?? track.album ?? track["Album Name"] ?? "").trim();
+  const artistMbid = String(track.artistMbid ?? track.artistId ?? track.mbid ?? "").trim();
+  const albumMbid = String(track.albumMbid ?? track.releaseGroupMbid ?? track.albumId ?? "").trim();
   const trackMbid = String(
     track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? "",
   ).trim();
@@ -80,9 +65,7 @@ export function trackMatchesStoredIdentity(storedIdentity, track) {
 
 export function playlistContainsTrack(playlist, track) {
   if (!track) return false;
-  const identities = Array.isArray(playlist?.trackIdentities)
-    ? playlist.trackIdentities
-    : [];
+  const identities = Array.isArray(playlist?.trackIdentities) ? playlist.trackIdentities : [];
   if (identities.length === 0) return false;
   return identities.some((identity) => trackMatchesStoredIdentity(identity, track));
 }

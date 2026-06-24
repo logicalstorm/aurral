@@ -7,25 +7,25 @@ A friendly starting point for homelabbers who want a clean music stack: Lidarr f
 
 ## At a glance
 
-| | |
-| --- | --- |
-| **Core idea** | Treat discovery as temporary until music proves it belongs in your permanent library. |
+|                     |                                                                                               |
+| ------------------- | --------------------------------------------------------------------------------------------- |
+| **Core idea**       | Treat discovery as temporary until music proves it belongs in your permanent library.         |
 | **Default posture** | Add artists as taste anchors. Keep album monitoring at `none`. Add full albums intentionally. |
-| **Daily listening** | Use flows for fresh music, then move the best finds into static Aurral playlists. |
+| **Daily listening** | Use flows for fresh music, then move the best finds into static Aurral playlists.             |
 
 ## The stack
 
 Self-hosting music works best when each tool has a narrow job.
 
-| Tool | Role |
-| --- | --- |
-| [Lidarr](https://github.com/Lidarr/Lidarr) | Artists, albums, metadata, imports, and long-term library state |
-| [Aurral](https://aurral.org) | Discovery, flows, imported playlists, and Lidarr adds |
-| [Navidrome](https://www.navidrome.org) | Main library and Aurral-generated playback over Subsonic |
-| [slskd](https://github.com/slskd/slskd) | Soulseek client used by Aurral for flow and playlist downloads |
+| Tool                                              | Role                                                                    |
+| ------------------------------------------------- | ----------------------------------------------------------------------- |
+| [Lidarr](https://github.com/Lidarr/Lidarr)        | Artists, albums, metadata, imports, and long-term library state         |
+| [Aurral](https://aurral.org)                      | Discovery, flows, imported playlists, and Lidarr adds                   |
+| [Navidrome](https://www.navidrome.org)            | Main library and Aurral-generated playback over Subsonic                |
+| [slskd](https://github.com/slskd/slskd)           | Soulseek client used by Aurral for flow and playlist downloads          |
 | [Tubifarry](https://github.com/TypNull/Tubifarry) | Optional Lidarr plugin for Soulseek-backed **album** searches in Lidarr |
-| [Amperfy](https://github.com/BLeeEZ/amperfy) | Native-feeling iOS playback against Navidrome |
-| [Tailscale](https://tailscale.com) | Private remote access without exposing admin tools publicly |
+| [Amperfy](https://github.com/BLeeEZ/amperfy)      | Native-feeling iOS playback against Navidrome                           |
+| [Tailscale](https://tailscale.com)                | Private remote access without exposing admin tools publicly             |
 
 ### Two download paths
 
@@ -58,13 +58,13 @@ Aurral gives that temporary layer a real home. It surfaces new artists, builds r
 
 For a discovery-heavy setup, keep Lidarr and Aurral defaults conservative. The important choice is monitoring.
 
-| Default | Recommendation |
-| --- | --- |
+| Default           | Recommendation                                        |
+| ----------------- | ----------------------------------------------------- |
 | Artist monitoring | Enable when you want the artist in your library graph |
-| Album monitoring | Default to **none**. Add albums intentionally. |
-| Search on add | Search for albums you know you want, not every artist |
-| Tags | Use an Aurral tag for discovery-driven additions |
-| Quality profile | Pick the profile you actually want long term |
+| Album monitoring  | Default to **none**. Add albums intentionally.        |
+| Search on add     | Search for albums you know you want, not every artist |
+| Tags              | Use an Aurral tag for discovery-driven additions      |
+| Quality profile   | Pick the profile you actually want long term          |
 
 In Aurral onboarding, you can optionally apply **Davo's Community Lidarr Guide** — an Aurral-friendly quality profile, custom formats, and naming scheme. You can also apply it later from **Settings → Library → Lidarr**.
 
@@ -128,12 +128,12 @@ Aurral works best when it connects the stack without trying to own every part of
 
 Treat flows like radio stations you control. Start with a small number of useful flows instead of creating one for every genre.
 
-| Flow idea | Recipe |
-| --- | --- |
-| Weekly discovery | Balanced mix of Discover, Trending, and Focus |
+| Flow idea        | Recipe                                                     |
+| ---------------- | ---------------------------------------------------------- |
+| Weekly discovery | Balanced mix of Discover, Trending, and Focus              |
 | Library adjacent | Related picks connected to artists already in your library |
-| Deep cuts | Adventurous tags and related artists, with Deep Dive on |
-| Comfort rotation | Mostly Library with a small amount of Discover |
+| Deep cuts        | Adventurous tags and related artists, with Deep Dive on    |
+| Comfort rotation | Mostly Library with a small amount of Discover             |
 
 You can also adopt discover playlists such as **Release Radar** from the Discover page and promote them into your Playlists library.
 
@@ -208,9 +208,9 @@ After startup:
 
 On the **Playlists** page, choose how generated playlists handle files that already exist:
 
-| Mode | When to use |
-| --- | --- |
-| **Download** | Simple first setup and troubleshooting |
+| Mode                     | When to use                                                             |
+| ------------------------ | ----------------------------------------------------------------------- |
+| **Download**             | Simple first setup and troubleshooting                                  |
 | **Reuse existing files** | Same-disk efficiency when Aurral or Lidarr already has a matching track |
 
 Reuse requires Aurral to mount Lidarr's library paths at the same container locations Lidarr reports. See [Playlist imports — file reuse](/using/playlist-imports/#existing-file-reuse).

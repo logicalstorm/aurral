@@ -19,8 +19,7 @@ import {
 import {
   getDiscoveryCache,
   getDiscoveryUpdateStatus,
-} from "../services/discovery/index.js";
-import { getCachedArtistCount } from "../services/libraryManager.js";
+} from "../services/discovery/index.js";import { getCachedArtistCount } from "../services/libraryManager.js";
 import { logger } from "../services/logger.js";
 import { lidarrClient } from "../services/lidarrClient.js";
 import { PLAYLIST_LIBRARY_DIR, resolvePlaylistRoot } from "../services/playlistPaths.js";
@@ -168,11 +167,11 @@ async function buildDiskSpacePayload(settings) {
     unique.push(candidate);
   }
 
-  return (await Promise.all(
-    unique.map((candidate) =>
-      getDiskSpaceEntry(candidate.location, candidate.role),
-    ),
-  )).filter(Boolean);
+  return (
+    await Promise.all(
+      unique.map((candidate) => getDiskSpaceEntry(candidate.location, candidate.role)),
+    )
+  ).filter(Boolean);
 }
 
 function readSqliteVersion() {
@@ -209,8 +208,16 @@ async function buildSystemPayload(settings) {
     links: [
       { label: "Home page", value: "aurral.org", url: "https://aurral.org" },
       { label: "Documentation", value: "docs.aurral.org", url: "https://docs.aurral.org/" },
-      { label: "Source", value: "github.com/lklynet/Aurral", url: "https://github.com/lklynet/Aurral" },
-      { label: "Issues", value: "github.com/lklynet/Aurral/issues", url: "https://github.com/lklynet/Aurral/issues" },
+      {
+        label: "Source",
+        value: "github.com/lklynet/Aurral",
+        url: "https://github.com/lklynet/Aurral",
+      },
+      {
+        label: "Issues",
+        value: "github.com/lklynet/Aurral/issues",
+        url: "https://github.com/lklynet/Aurral/issues",
+      },
     ],
   };
 }
@@ -279,9 +286,7 @@ router.get("/bootstrap", noCache, (req, res) => {
 router.post("/stream-token", noCache, (req, res) => {
   const user = resolveRequestUser(req);
   if (!user) {
-    return res
-      .status(401)
-      .json({ error: "Unauthorized", message: "Authentication required" });
+    return res.status(401).json({ error: "Unauthorized", message: "Authentication required" });
   }
   const token = issueStreamToken(user);
   return res.json({ token, expiresIn: 120 });

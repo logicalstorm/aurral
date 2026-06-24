@@ -1,20 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
 import { useDiscoverNavigation } from "../../../hooks/useDiscoverNavigation";
-import {
-  ArrowRight,
-  Loader,
-  Music,
-  Star,
-} from "lucide-react";
+import { ArrowRight, Loader, Music, Star } from "lucide-react";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { navigateToReleaseGroup } from "../../../utils/searchNavigation";
-import {
-  getPopularReleaseGroups,
-  getReleaseMetric,
-  getReleaseYear,
-} from "../utils";
+import { getPopularReleaseGroups, getReleaseMetric, getReleaseYear } from "../utils";
 
 const viewModes = [
   { value: "popular", label: "Popular Releases" },
@@ -28,14 +19,11 @@ const isCompilation = (releaseGroup) =>
   (releaseGroup?.["secondary-types"] || []).includes("Compilation");
 
 const isSingleOrEp = (releaseGroup) =>
-  releaseGroup?.["primary-type"] === "Single" ||
-  releaseGroup?.["primary-type"] === "EP";
+  releaseGroup?.["primary-type"] === "Single" || releaseGroup?.["primary-type"] === "EP";
 
 const sortLatest = (items) =>
   [...items].sort((a, b) =>
-    String(b["first-release-date"] || "").localeCompare(
-      String(a["first-release-date"] || ""),
-    ),
+    String(b["first-release-date"] || "").localeCompare(String(a["first-release-date"] || "")),
   );
 
 const getVisibleReleases = (releaseGroups, viewMode) => {
@@ -46,8 +34,7 @@ const getVisibleReleases = (releaseGroups, viewMode) => {
     return sortLatest(
       releaseGroups.filter(
         (releaseGroup) =>
-          releaseGroup?.["primary-type"] === "Album" &&
-          !isCompilation(releaseGroup),
+          releaseGroup?.["primary-type"] === "Album" && !isCompilation(releaseGroup),
       ),
     ).slice(0, 6);
   }
@@ -76,10 +63,7 @@ export function ArtistDetailsReleaseGroups({
 }) {
   const navigate = useDiscoverNavigation();
   const [viewMode, setViewMode] = useState("popular");
-  const releaseGroups = useMemo(
-    () => artist["release-groups"] || [],
-    [artist],
-  );
+  const releaseGroups = useMemo(() => artist["release-groups"] || [], [artist]);
   const visibleReleaseGroups = useMemo(
     () => getVisibleReleases(releaseGroups, viewMode),
     [releaseGroups, viewMode],
@@ -120,11 +104,7 @@ export function ArtistDetailsReleaseGroups({
             ))}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onViewAll}
-          className="artist-link-button"
-        >
+        <button type="button" onClick={onViewAll} className="artist-link-button">
           View All
           <ArrowRight className="artist-icon-sm" />
         </button>
@@ -155,10 +135,7 @@ export function ArtistDetailsReleaseGroups({
                 )}
                 <div className="artist-release-card__action">
                   {status?.status === "available" || status?.status === "added" ? (
-                    <span
-                      className="artist-release-card__status"
-                      title="Complete"
-                    >
+                    <span className="artist-release-card__status" title="Complete">
                       <SearchLibraryCheck size="overlay" />
                       <span className="sr-only">Complete</span>
                     </span>
@@ -176,9 +153,7 @@ export function ArtistDetailsReleaseGroups({
                   ) : null}
                 </div>
               </div>
-              <h3 className="artist-release-card__title artist-clamp-2">
-                {releaseGroup.title}
-              </h3>
+              <h3 className="artist-release-card__title artist-clamp-2">{releaseGroup.title}</h3>
               <p className="artist-release-card__meta artist-truncate">
                 {[getReleaseYear(releaseGroup), releaseGroup["primary-type"]]
                   .filter(Boolean)

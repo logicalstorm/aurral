@@ -7,19 +7,14 @@ const DEFAULT_EXPIRY_HOURS = 24;
 const insertSessionStmt = db.prepare(
   "INSERT INTO sessions (user_id, token, created_at, expires_at, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?)",
 );
-const getSessionByTokenStmt = db.prepare(
-  "SELECT * FROM sessions WHERE token = ? LIMIT 1",
-);
+const getSessionByTokenStmt = db.prepare("SELECT * FROM sessions WHERE token = ? LIMIT 1");
 const deleteSessionByTokenStmt = db.prepare("DELETE FROM sessions WHERE token = ?");
 const deleteSessionsByUserIdStmt = db.prepare("DELETE FROM sessions WHERE user_id = ?");
-const deleteExpiredSessionsStmt = db.prepare(
-  "DELETE FROM sessions WHERE expires_at <= ?",
-);
+const deleteExpiredSessionsStmt = db.prepare("DELETE FROM sessions WHERE expires_at <= ?");
 
 const getSessionExpiryMs = () => {
   const hours = Number(process.env.SESSION_EXPIRY_HOURS);
-  const safeHours =
-    Number.isFinite(hours) && hours > 0 ? hours : DEFAULT_EXPIRY_HOURS;
+  const safeHours = Number.isFinite(hours) && hours > 0 ? hours : DEFAULT_EXPIRY_HOURS;
   return safeHours * 60 * 60 * 1000;
 };
 

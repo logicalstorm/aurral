@@ -13,12 +13,7 @@ import {
 } from "../../../utils/api";
 import { emptyArtistShape } from "../constants";
 
-const buildReleaseGroupCoverRequest = (
-  rgId,
-  artist,
-  libraryAlbums,
-  pageArtistName,
-) => {
+const buildReleaseGroupCoverRequest = (rgId, artist, libraryAlbums, pageArtistName) => {
   const releaseGroup =
     artist?.["release-groups"]?.find((item) => item?.id === rgId) ||
     artist?.["appears-on-release-groups"]?.find((item) => item?.id === rgId);
@@ -50,11 +45,7 @@ const buildInitialArtist = (mbid, artistNameFromNav) =>
 
 const normalizeReleaseTypesSelection = (selectedReleaseTypes = []) =>
   [
-    ...new Set(
-      (Array.isArray(selectedReleaseTypes) ? selectedReleaseTypes : []).filter(
-        Boolean,
-      ),
-    ),
+    ...new Set((Array.isArray(selectedReleaseTypes) ? selectedReleaseTypes : []).filter(Boolean)),
   ].sort();
 
 const EMPTY_ARRAY = [];
@@ -66,9 +57,7 @@ const normalizePositiveLimit = (value) => {
 
 const sortAppearsOnReleaseGroups = (items = []) =>
   [...items].sort((a, b) =>
-    String(b["first-release-date"] || "").localeCompare(
-      String(a["first-release-date"] || ""),
-    ),
+    String(b["first-release-date"] || "").localeCompare(String(a["first-release-date"] || "")),
   );
 
 const getAppearsOnCoverIds = (releaseGroups, limit) => {
@@ -79,34 +68,21 @@ const getAppearsOnCoverIds = (releaseGroups, limit) => {
     .filter(Boolean);
 };
 
-const isReleaseTypeSelectionCovered = (
-  selectedReleaseTypes = [],
-  fetchedReleaseTypes = [],
-) => {
+const isReleaseTypeSelectionCovered = (selectedReleaseTypes = [], fetchedReleaseTypes = []) => {
   const fetched = new Set(normalizeReleaseTypesSelection(fetchedReleaseTypes));
-  return normalizeReleaseTypesSelection(selectedReleaseTypes).every((type) =>
-    fetched.has(type),
-  );
+  return normalizeReleaseTypesSelection(selectedReleaseTypes).every((type) => fetched.has(type));
 };
 
 export function useArtistDetailsStream(
   mbid,
   artistNameFromNav,
   selectedReleaseTypes = [],
-  {
-    visibleCoverIds = EMPTY_ARRAY,
-    initialLibraryHint = null,
-    appearsOnLimit = null,
-  } = {},
+  { visibleCoverIds = EMPTY_ARRAY, initialLibraryHint = null, appearsOnLimit = null } = {},
 ) {
   const initialArtist = buildInitialArtist(mbid, artistNameFromNav);
-  const selectedReleaseTypesKey = normalizeReleaseTypesSelection(
-    selectedReleaseTypes,
-  ).join("\0");
+  const selectedReleaseTypesKey = normalizeReleaseTypesSelection(selectedReleaseTypes).join("\0");
   const normalizedAppearsOnLimit = normalizePositiveLimit(appearsOnLimit);
-  const appearsOnLimitKey = normalizedAppearsOnLimit
-    ? String(normalizedAppearsOnLimit)
-    : "";
+  const appearsOnLimitKey = normalizedAppearsOnLimit ? String(normalizedAppearsOnLimit) : "";
   const visibleCoverIdsKey = Array.isArray(visibleCoverIds)
     ? visibleCoverIds.filter(Boolean).join("\0")
     : "";
@@ -122,9 +98,7 @@ export function useArtistDetailsStream(
   const cachedLookupMap = mbid ? readLibraryLookupCache([mbid]) : {};
   const cachedLookup = cachedLookupMap?.[mbid];
   const seededExistsInLibrary =
-    stableInitialLibraryHint.existsInLibrary === true || cachedLookup === true
-      ? true
-      : undefined;
+    stableInitialLibraryHint.existsInLibrary === true || cachedLookup === true ? true : undefined;
   const seededLibraryArtist =
     seededExistsInLibrary && stableInitialLibraryHint.libraryArtist
       ? stableInitialLibraryHint.libraryArtist
@@ -141,14 +115,10 @@ export function useArtistDetailsStream(
   const [similarArtists, setSimilarArtists] = useState([]);
   const [loading, setLoading] = useState(!mbid);
   const [error, setError] = useState(null);
-  const [existsInLibrary, setExistsInLibrary] = useState(
-    seededExistsInLibrary === true,
-  );
+  const [existsInLibrary, setExistsInLibrary] = useState(seededExistsInLibrary === true);
   const [loadingCover, setLoadingCover] = useState(true);
   const [loadingSimilar, setLoadingSimilar] = useState(true);
-  const [loadingLibrary, setLoadingLibrary] = useState(
-    seededExistsInLibrary === undefined,
-  );
+  const [loadingLibrary, setLoadingLibrary] = useState(seededExistsInLibrary === undefined);
   const [loadingReleases, setLoadingReleases] = useState(!!mbid);
   const [loadingAppearsOn, setLoadingAppearsOn] = useState(!!mbid);
   const [appSettings, setAppSettings] = useState(null);
@@ -165,9 +135,7 @@ export function useArtistDetailsStream(
   const artistNameRef = useRef(artistNameFromNav || "");
   const selectedReleaseTypesRef = useRef(selectedReleaseTypes);
   const visibleCoverIdsRef = useRef(visibleCoverIds);
-  const fetchedReleaseTypesRef = useRef(
-    normalizeReleaseTypesSelection(selectedReleaseTypes),
-  );
+  const fetchedReleaseTypesRef = useRef(normalizeReleaseTypesSelection(selectedReleaseTypes));
   const releaseRefreshRequestRef = useRef(0);
   const streamRequestRef = useRef(0);
 
@@ -215,8 +183,7 @@ export function useArtistDetailsStream(
     const isCurrentRequest = () => streamRequestRef.current === requestId;
     const nextCachedLookup = readLibraryLookupCache([mbid])?.[mbid];
     const nextSeededExistsInLibrary =
-      stableInitialLibraryHint.existsInLibrary === true ||
-      nextCachedLookup === true
+      stableInitialLibraryHint.existsInLibrary === true || nextCachedLookup === true
         ? true
         : undefined;
     const nextSeededLibraryArtist =
@@ -352,8 +319,8 @@ export function useArtistDetailsStream(
         });
         if (!isCurrentRequest()) return;
         setLibraryAlbums(albums);
-      } catch {}
-      finally {
+      } catch {
+      } finally {
         if (isCurrentRequest()) {
           setLoadingLibrary(false);
         }
@@ -442,10 +409,7 @@ export function useArtistDetailsStream(
           if (!("bio" in artistData)) next.bio = prev.bio;
           return next;
         });
-        if (
-          "release-groups" in artistData &&
-          Array.isArray(artistData["release-groups"])
-        ) {
+        if ("release-groups" in artistData && Array.isArray(artistData["release-groups"])) {
           setLoadingReleases(false);
         }
         if (
@@ -474,8 +438,7 @@ export function useArtistDetailsStream(
           setLoadingCover(false);
           return;
         }
-        const nameForCover =
-          artistNameRef.current || artistNameFromNav || "";
+        const nameForCover = artistNameRef.current || artistNameFromNav || "";
         if (nameForCover) {
           getArtistCover(mbid, nameForCover, true)
             .then((refreshedCover) => {
@@ -559,11 +522,7 @@ export function useArtistDetailsStream(
           loadRestFallback().catch(() => {});
           return;
         }
-        setError(
-          errorData.message ||
-            errorData.error ||
-            "Failed to fetch artist details",
-        );
+        setError(errorData.message || errorData.error || "Failed to fetch artist details");
         setLoading(false);
         eventSource.close();
       } catch {
@@ -594,9 +553,7 @@ export function useArtistDetailsStream(
   useEffect(() => {
     if (!mbid || !artistId) return;
 
-    const requestedReleaseTypes = normalizeReleaseTypesSelection(
-      selectedReleaseTypesRef.current,
-    );
+    const requestedReleaseTypes = normalizeReleaseTypesSelection(selectedReleaseTypesRef.current);
     const fetchedReleaseTypes = fetchedReleaseTypesRef.current;
 
     if (
@@ -610,21 +567,13 @@ export function useArtistDetailsStream(
     const requestId = ++releaseRefreshRequestRef.current;
     setLoadingReleases(true);
 
-    getArtistDetails(
-      mbid,
-      artistNameRef.current || artistName || artistNameFromNav || "",
-      {
-        mode: normalizedAppearsOnLimit ? "full" : "core",
-        releaseTypes: requestedReleaseTypes,
-        appearsOnLimit: normalizedAppearsOnLimit,
-      },
-    )
+    getArtistDetails(mbid, artistNameRef.current || artistName || artistNameFromNav || "", {
+      mode: normalizedAppearsOnLimit ? "full" : "core",
+      releaseTypes: requestedReleaseTypes,
+      appearsOnLimit: normalizedAppearsOnLimit,
+    })
       .then((artistData) => {
-        if (
-          cancelled ||
-          requestId !== releaseRefreshRequestRef.current ||
-          !artistData?.id
-        ) {
+        if (cancelled || requestId !== releaseRefreshRequestRef.current || !artistData?.id) {
           return;
         }
         fetchedReleaseTypesRef.current = requestedReleaseTypes;
@@ -634,15 +583,10 @@ export function useArtistDetailsStream(
             ...prev,
             "release-groups": artistData["release-groups"] || [],
             "appears-on-release-groups":
-              artistData["appears-on-release-groups"] ||
-              prev["appears-on-release-groups"] ||
-              [],
+              artistData["appears-on-release-groups"] || prev["appears-on-release-groups"] || [],
             "release-group-count":
-              artistData["release-group-count"] ??
-              prev["release-group-count"] ??
-              0,
-            "release-count":
-              artistData["release-count"] ?? prev["release-count"] ?? 0,
+              artistData["release-group-count"] ?? prev["release-group-count"] ?? 0,
+            "release-count": artistData["release-count"] ?? prev["release-count"] ?? 0,
           };
         });
       })
@@ -671,10 +615,7 @@ export function useArtistDetailsStream(
 
   useEffect(() => {
     if (!artistId) return;
-    const releaseGroups = [
-      ...(artistReleaseGroups || []),
-      ...(artistAppearsOnReleaseGroups || []),
-    ];
+    const releaseGroups = [...(artistReleaseGroups || []), ...(artistAppearsOnReleaseGroups || [])];
     const seeded = {};
     for (const releaseGroup of releaseGroups) {
       const coverUrl = releaseGroup?.coverUrl || releaseGroup?._coverUrl;
@@ -730,8 +671,7 @@ export function useArtistDetailsStream(
       const batchMbid = artistMbidRef.current;
       toFetch.forEach((id) => requestedAlbumCoversRef.current.add(id));
 
-      const pageArtistName =
-        artistNameRef.current || artistRef.current?.name || "";
+      const pageArtistName = artistNameRef.current || artistRef.current?.name || "";
       const items = toFetch.map((rgId) =>
         buildReleaseGroupCoverRequest(
           rgId,
@@ -779,9 +719,7 @@ export function useArtistDetailsStream(
       if (loadingReleases) {
         return [];
       }
-      const fromVisible = [
-        ...new Set((visibleCoverIdsRef.current || []).filter(Boolean)),
-      ];
+      const fromVisible = [...new Set((visibleCoverIdsRef.current || []).filter(Boolean))];
       const appearsOnIds = !loadingAppearsOn
         ? getAppearsOnCoverIds(
             artistRef.current?.["appears-on-release-groups"],
@@ -805,9 +743,7 @@ export function useArtistDetailsStream(
           .map((album) => album.mbid || album.foreignAlbumId)
           .filter(Boolean),
       );
-      return visible.filter(
-        (id) => discographyIds.has(id) || libraryIds.has(id),
-      );
+      return visible.filter((id) => discographyIds.has(id) || libraryIds.has(id));
     };
 
     const scheduleCoverBatch = () => {

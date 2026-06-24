@@ -14,7 +14,6 @@ import {
 import { flowPlaylistConfig } from ".../weeklyFlow/weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from ".../weeklyFlow/weeklyFlowOperationQueue.js";
 import { playlistManager } from ".../weeklyFlow/weeklyFlowPlaylistManager.js";
-
 const resolveDiscoverAdoptContext = (user, presetId) => {
   const reqUser = userOps.getUserById(user?.id);
   const listenHistoryProfile = getListenHistoryProfile(reqUser || user || {});
@@ -45,10 +44,10 @@ export async function adoptDiscoverPresetAsFlow(user, presetId) {
 
   const { cachedPlaylist } = resolveDiscoverAdoptContext(user, safePresetId);
   if (!cachedPlaylist || cachedPlaylist.trackCount <= 0) {
-    throw Object.assign(
-      new Error("Run discovery refresh to generate this playlist first"),
-      { statusCode: 404, error: "Playlist preview not available" },
-    );
+    throw Object.assign(new Error("Run discovery refresh to generate this playlist first"), {
+      statusCode: 404,
+      error: "Playlist preview not available",
+    });
   }
 
   const flow = flowPlaylistConfig.createFlow({
@@ -97,10 +96,10 @@ export async function adoptDiscoverPresetAsPlaylist(user, presetId) {
 
   const { cachedPlaylist } = resolveDiscoverAdoptContext(user, safePresetId);
   if (!cachedPlaylist || cachedPlaylist.trackCount <= 0) {
-    throw Object.assign(
-      new Error("Run discovery refresh to generate this playlist first"),
-      { statusCode: 404, error: "Playlist preview not available" },
-    );
+    throw Object.assign(new Error("Run discovery refresh to generate this playlist first"), {
+      statusCode: 404,
+      error: "Playlist preview not available",
+    });
   }
 
   const tracks = (cachedPlaylist.tracks || []).map(serializeTrack);

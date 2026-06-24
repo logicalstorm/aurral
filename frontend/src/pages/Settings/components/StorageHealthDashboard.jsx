@@ -48,19 +48,9 @@ export function StorageHealthDashboard({ result, loading = false }) {
     return null;
   }
 
-  const activeSections = result.sections.filter(
-    (section) => section.status !== "skip",
-  );
-  const summaryStatus = result.ok
-    ? result.partial
-      ? "warn"
-      : "pass"
-    : "fail";
-  const summaryLabel = result.ok
-    ? result.partial
-      ? "Warnings"
-      : "Healthy"
-    : "Failed";
+  const activeSections = result.sections.filter((section) => section.status !== "skip");
+  const summaryStatus = result.ok ? (result.partial ? "warn" : "pass") : "fail";
+  const summaryLabel = result.ok ? (result.partial ? "Warnings" : "Healthy") : "Failed";
   const checkedAt = formatCheckedAt(result.checkedAt);
 
   const toggleSection = (sectionId) => {
@@ -74,9 +64,7 @@ export function StorageHealthDashboard({ result, loading = false }) {
     <div className="arr-health" role="status">
       <div className={`arr-health__summary is-${summaryStatus}`}>
         <div className="arr-health__summary-main">
-          <span
-            className={`arr-health__badge arr-health__badge--${summaryStatus}`}
-          >
+          <span className={`arr-health__badge arr-health__badge--${summaryStatus}`}>
             {summaryLabel}
           </span>
           <span className="arr-health__summary-text">
@@ -105,8 +93,7 @@ export function StorageHealthDashboard({ result, loading = false }) {
           <tbody>
             {result.sections.map((section) => {
               const isExpanded = expanded[section.id] === true;
-              const isCollapsible =
-                section.status !== "skip" && (section.steps?.length ?? 0) > 0;
+              const isCollapsible = section.status !== "skip" && (section.steps?.length ?? 0) > 0;
 
               return (
                 <SectionGroup
@@ -142,23 +129,17 @@ function SectionGroup({ section, isExpanded, isCollapsible, onToggle }) {
               aria-expanded={isExpanded}
             >
               <ChevronDown
-                className={`arr-health__section-chevron${
-                  isExpanded ? "" : " is-collapsed"
-                }`}
+                className={`arr-health__section-chevron${isExpanded ? "" : " is-collapsed"}`}
                 aria-hidden
               />
-              <span
-                className={`arr-health__badge arr-health__badge--${section.status}`}
-              >
+              <span className={`arr-health__badge arr-health__badge--${section.status}`}>
                 {STATUS_LABELS[section.status] || section.status}
               </span>
               <span className="arr-health__section-title">{section.title}</span>
             </button>
           ) : (
             <div className="arr-health__section-cell">
-              <span
-                className={`arr-health__badge arr-health__badge--${section.status}`}
-              >
+              <span className={`arr-health__badge arr-health__badge--${section.status}`}>
                 {STATUS_LABELS[section.status] || section.status}
               </span>
               <span className="arr-health__section-title">{section.title}</span>
@@ -176,9 +157,7 @@ function SectionGroup({ section, isExpanded, isCollapsible, onToggle }) {
               className={`arr-health__step-row is-${step.status}`}
             >
               <td>
-                <span
-                  className={`arr-health__badge arr-health__badge--${step.status}`}
-                >
+                <span className={`arr-health__badge arr-health__badge--${step.status}`}>
                   {STATUS_LABELS[step.status] || step.status}
                 </span>
               </td>

@@ -6,8 +6,7 @@ import { buildImageProxyUrl } from "./imageProxyService.js";
 const DEFAULT_BATCH_SIZE = 6;
 const DEFAULT_DELAY_MS = 25;
 
-const getArtistId = (artist) =>
-  artist?.id || artist?.mbid || artist?.foreignArtistId || null;
+const getArtistId = (artist) => artist?.id || artist?.mbid || artist?.foreignArtistId || null;
 
 const withProxiedImageFields = (artist) => {
   if (!artist || typeof artist !== "object") return artist;
@@ -69,7 +68,7 @@ export const hydrateArtistImages = async (
     await Promise.all(
       batch.map(async ({ artist, id }) => {
         try {
-          const cached = dbOps.getImage(id);
+          const _cached = dbOps.getImage(id);
           const cover = await getArtistImage(id, {
             artistName: artist.name || artist.sortName || null,
           });
@@ -101,22 +100,17 @@ export const primeArtistImageCache = (artists = []) => {
             : null,
     }))
     .filter((artist) => artist.id)
-    .filter(
-      (artist, index, list) =>
-        list.findIndex((entry) => entry.id === artist.id) === index,
-    );
+    .filter((artist, index, list) => list.findIndex((entry) => entry.id === artist.id) === index);
   if (entries.length === 0) return Promise.resolve();
 
   const ids = entries.map((entry) => entry.id);
   const cachedImages = dbOps.getImages(ids);
   const uncached = entries.filter((entry) => {
-    const cached = cachedImages[entry.id];
-    return !cached || cached.imageUrl === "NOT_FOUND";
+    const _cached = cachedImages[entry.id];
+    return !_cached || _cached.imageUrl === "NOT_FOUND";
   });
   const artistNames = Object.fromEntries(
-    uncached
-      .filter((entry) => entry.artistName)
-      .map((entry) => [entry.id, entry.artistName]),
+    uncached.filter((entry) => entry.artistName).map((entry) => [entry.id, entry.artistName]),
   );
   for (let index = 0; index < uncached.length; index += DEFAULT_BATCH_SIZE) {
     const batch = uncached.slice(index, index + DEFAULT_BATCH_SIZE);

@@ -18,9 +18,7 @@ export function AddArtistCustomizeModal({
 }) {
   if (!show) return null;
 
-  const rootFolders = Array.isArray(preferences?.rootFolders)
-    ? preferences.rootFolders
-    : [];
+  const rootFolders = Array.isArray(preferences?.rootFolders) ? preferences.rootFolders : [];
   const qualityProfiles = Array.isArray(preferences?.qualityProfiles)
     ? preferences.qualityProfiles
     : [];
@@ -28,36 +26,23 @@ export function AddArtistCustomizeModal({
   const configured = preferences?.configured === true;
 
   return (
-    <div
-      className="artist-modal-backdrop"
-      onClick={confirming ? undefined : onClose}
-    >
-      <div
-        className="artist-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="artist-modal-backdrop" onClick={confirming ? undefined : onClose}>
+      <div className="artist-modal" onClick={(e) => e.stopPropagation()}>
         <div className="artist-modal__header">
-          <h3 className="artist-modal__title">
-            Customize Add
-          </h3>
+          <h3 className="artist-modal__title">Customize Add</h3>
         </div>
         <p className="artist-modal__subcopy">
-            Choose where <strong>{artistName}</strong> should go for this add
-            only.
+          Choose where <strong>{artistName}</strong> should go for this add only.
         </p>
 
         {loading ? (
           <div className="artist-loading">
-            <Loader
-              className="artist-spinner animate-spin"
-            />
+            <Loader className="artist-spinner animate-spin" />
           </div>
         ) : (
           <div className="artist-modal__fields">
             <div>
-              <label className="artist-field-label">
-                Root Folder
-              </label>
+              <label className="artist-field-label">Root Folder</label>
               <div className="artist-modal-field aurral-radius-round">
                 <select
                   className="artist-modal-select"
@@ -66,9 +51,7 @@ export function AddArtistCustomizeModal({
                   disabled={!configured || confirming}
                 >
                   <option value="">
-                    {configured
-                      ? "Use automatic default"
-                      : "Lidarr is not configured"}
+                    {configured ? "Use automatic default" : "Lidarr is not configured"}
                   </option>
                   {rootFolders.map((folder) => (
                     <option key={folder.path} value={folder.path}>
@@ -80,9 +63,7 @@ export function AddArtistCustomizeModal({
             </div>
 
             <div>
-              <label className="artist-field-label">
-                Quality Profile
-              </label>
+              <label className="artist-field-label">Quality Profile</label>
               <div className="artist-modal-field aurral-radius-round">
                 <select
                   className="artist-modal-select"
@@ -91,9 +72,7 @@ export function AddArtistCustomizeModal({
                   disabled={!configured || confirming}
                 >
                   <option value="">
-                    {configured
-                      ? "Use automatic default"
-                      : "Lidarr is not configured"}
+                    {configured ? "Use automatic default" : "Lidarr is not configured"}
                   </option>
                   {qualityProfiles.map((profile) => (
                     <option key={profile.id} value={String(profile.id)}>
@@ -105,9 +84,7 @@ export function AddArtistCustomizeModal({
             </div>
 
             <div>
-              <label className="artist-field-label">
-                Tag
-              </label>
+              <label className="artist-field-label">Tag</label>
               <div className="artist-modal-field aurral-radius-round">
                 <select
                   className="artist-modal-select"
@@ -116,9 +93,7 @@ export function AddArtistCustomizeModal({
                   disabled={!configured || confirming}
                 >
                   <option value="">
-                    {configured
-                      ? "Use saved global default"
-                      : "Lidarr is not configured"}
+                    {configured ? "Use saved global default" : "Lidarr is not configured"}
                   </option>
                   {tags.map((tag) => (
                     <option key={tag.id} value={String(tag.id)}>
@@ -130,9 +105,9 @@ export function AddArtistCustomizeModal({
             </div>
 
             <p className="artist-subtext">
-              Leaving a field on automatic uses your saved Library Defaults, or
-              the global Lidarr fallback when you do not have a saved default.
-              Leaving tag on automatic uses the global Lidarr tag setting.
+              Leaving a field on automatic uses your saved Library Defaults, or the global Lidarr
+              fallback when you do not have a saved default. Leaving tag on automatic uses the
+              global Lidarr tag setting.
             </p>
           </div>
         )}

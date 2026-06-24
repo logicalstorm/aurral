@@ -4,10 +4,7 @@ import { Loader, ChevronLeft, ChevronRight } from "lucide-react";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import ArtistImage from "../../../components/ArtistImage";
 import { ArtistContextMenu } from "../../../components/ArtistContextMenu";
-import {
-  lookupArtistsInLibraryBatch,
-  readLibraryLookupCache,
-} from "../../../utils/api";
+import { lookupArtistsInLibraryBatch, readLibraryLookupCache } from "../../../utils/api";
 import { getArtistFeedbackFlags } from "../../../utils/discoveryFeedback";
 import { getArtistRecordId } from "../../../utils/artistTaste";
 
@@ -93,9 +90,7 @@ export function ArtistDetailsSimilar({
       <div className="artist-similar-header">
         <h2 className="artist-section-title">
           Fans Also Like
-          {loadingSimilar && (
-            <Loader className="artist-icon-sm animate-spin" />
-          )}
+          {loadingSimilar && <Loader className="artist-icon-sm animate-spin" />}
         </h2>
         <div className="artist-scroll-controls">
           <button
@@ -159,9 +154,7 @@ export function ArtistDetailsSimilar({
                     />
 
                     {similar.match && (
-                      <div className="artist-similar-match">
-                        {similar.match}% Match
-                      </div>
+                      <div className="artist-similar-match">{similar.match}% Match</div>
                     )}
                   </div>
                   <div className="artist-similar-name-row">
@@ -178,9 +171,7 @@ export function ArtistDetailsSimilar({
                       }
                     >
                       <h3 className="artist-similar-name">{similar.name}</h3>
-                      {artistId && libraryLookup[artistId] && (
-                        <SearchLibraryCheck size="sm" />
-                      )}
+                      {artistId && libraryLookup[artistId] && <SearchLibraryCheck size="sm" />}
                     </div>
                     <ArtistContextMenu
                       artist={similar}

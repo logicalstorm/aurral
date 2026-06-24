@@ -59,10 +59,13 @@ function scheduleSupervisorWake(nextClaimAt) {
   if (!Number.isFinite(timestamp) || timestamp <= 0) return;
   const waitMs = timestamp * 1000 - Date.now();
   if (waitMs <= 0) return;
-  workerSupervisorTimer = setTimeout(() => {
-    workerSupervisorTimer = null;
-    checkQueuedBackgroundWork();
-  }, Math.max(1000, Math.min(waitMs, WORKER_SUPERVISOR_POLL_MS)));
+  workerSupervisorTimer = setTimeout(
+    () => {
+      workerSupervisorTimer = null;
+      checkQueuedBackgroundWork();
+    },
+    Math.max(1000, Math.min(waitMs, WORKER_SUPERVISOR_POLL_MS)),
+  );
   if (typeof workerSupervisorTimer.unref === "function") {
     workerSupervisorTimer.unref();
   }
@@ -77,10 +80,7 @@ function checkQueuedBackgroundWork() {
         worker.start();
       }
       const queueNextClaimAt = getHonkerQueueNextClaimAt(worker.queue);
-      if (
-        queueNextClaimAt &&
-        (nextClaimAt == null || queueNextClaimAt < nextClaimAt)
-      ) {
+      if (queueNextClaimAt && (nextClaimAt == null || queueNextClaimAt < nextClaimAt)) {
         nextClaimAt = queueNextClaimAt;
       }
     } catch (error) {
@@ -99,10 +99,7 @@ function startWorkerSupervisor() {
   }
   workerSupervisorStarted = true;
   checkQueuedBackgroundWork();
-  workerSupervisorInterval = setInterval(
-    checkQueuedBackgroundWork,
-    WORKER_SUPERVISOR_POLL_MS,
-  );
+  workerSupervisorInterval = setInterval(checkQueuedBackgroundWork, WORKER_SUPERVISOR_POLL_MS);
   if (typeof workerSupervisorInterval.unref === "function") {
     workerSupervisorInterval.unref();
   }
@@ -122,10 +119,7 @@ registerHonkerShutdownHandler(() => {
 });
 
 export function startBackgroundWorkers({ logger = console } = {}) {
-  if (
-    backgroundWorkersStarted ||
-    process.env.AURRAL_TEST_SERVER === "1"
-  ) {
+  if (backgroundWorkersStarted || process.env.AURRAL_TEST_SERVER === "1") {
     return false;
   }
   backgroundWorkersStarted = true;
@@ -134,9 +128,7 @@ export function startBackgroundWorkers({ logger = console } = {}) {
     .then(({ clearStaleHonkerJobs }) => clearStaleHonkerJobs())
     .then((result) => {
       if (Number(result?.cleared || 0) > 0) {
-        logger.info?.(
-          `[AppRuntime] Cleared ${result.cleared} stuck background job(s) on startup`,
-        );
+        logger.info?.(`[AppRuntime] Cleared ${result.cleared} stuck background job(s) on startup`);
       }
     })
     .catch((error) => {
@@ -146,9 +138,7 @@ export function startBackgroundWorkers({ logger = console } = {}) {
       );
     });
   import("./aurralHistoryService.js")
-    .then(({ syncProcessingActivityHistory }) =>
-      syncProcessingActivityHistory(),
-    )
+    .then(({ syncProcessingActivityHistory }) => syncProcessingActivityHistory())
     .catch((error) => {
       logger.warn?.(
         "[AppRuntime] Failed to reconcile stuck activity history on startup:",

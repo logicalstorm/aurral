@@ -54,10 +54,7 @@ export const validateExternalUrl = (value) => {
     if (hostname === "localhost") {
       return { valid: false, error: "Localhost is not allowed" };
     }
-    if (
-      (ipType === 4 && isPrivateIPv4(hostname)) ||
-      (ipType === 6 && isPrivateIPv6(hostname))
-    ) {
+    if ((ipType === 4 && isPrivateIPv4(hostname)) || (ipType === 6 && isPrivateIPv6(hostname))) {
       return { valid: false, error: "Private and loopback addresses are not allowed" };
     }
   }

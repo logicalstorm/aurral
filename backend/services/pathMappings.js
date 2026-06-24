@@ -16,12 +16,18 @@ function normalizePathSeparators(value) {
 }
 
 export function normalizePathMappingSource(value) {
-  const normalized = String(value || "").trim().toLowerCase();
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
   return PATH_MAPPING_SOURCES.has(normalized) ? normalized : "all";
 }
 
 function isExplicitPathMappingSource(value) {
-  return PATH_MAPPING_SOURCES.has(String(value || "").trim().toLowerCase());
+  return PATH_MAPPING_SOURCES.has(
+    String(value || "")
+      .trim()
+      .toLowerCase(),
+  );
 }
 
 function normalizePathMappingEntry(entry) {
@@ -84,15 +90,10 @@ export function parsePathMappingsEnv() {
 }
 
 export function getPathMappings(source = null) {
-  const mappings = normalizePathMappings([
-    ...storedPathMappings,
-    ...parsePathMappingsEnv(),
-  ]);
+  const mappings = normalizePathMappings([...storedPathMappings, ...parsePathMappingsEnv()]);
   if (!source) return mappings;
   const normalizedSource = normalizePathMappingSource(source);
-  return mappings.filter(
-    (entry) => entry.source === "all" || entry.source === normalizedSource,
-  );
+  return mappings.filter((entry) => entry.source === "all" || entry.source === normalizedSource);
 }
 
 export function looksLikeExternalOnlyPath(value) {
@@ -115,9 +116,7 @@ function pathMatchesPrefix(candidate, prefix) {
   if (normalizedCandidate.toLowerCase() === normalizedPrefix.toLowerCase()) {
     return true;
   }
-  return normalizedCandidate
-    .toLowerCase()
-    .startsWith(`${normalizedPrefix.toLowerCase()}/`);
+  return normalizedCandidate.toLowerCase().startsWith(`${normalizedPrefix.toLowerCase()}/`);
 }
 
 export function resolveLocalPath(externalPath, mappings = getPathMappings()) {
@@ -134,9 +133,7 @@ export function resolveLocalPath(externalPath, mappings = getPathMappings()) {
     if (!pathMatchesPrefix(normalized, mapping.remote)) continue;
     const remoteNorm = normalizePathSeparators(mapping.remote);
     const suffix = normalized.slice(remoteNorm.length).replace(/^\//, "");
-    return suffix
-      ? path.resolve(mapping.local, ...suffix.split("/"))
-      : path.resolve(mapping.local);
+    return suffix ? path.resolve(mapping.local, ...suffix.split("/")) : path.resolve(mapping.local);
   }
 
   return resolvedRaw;
@@ -154,9 +151,7 @@ export function resolveRemotePath(localPath, mappings = getPathMappings()) {
     if (!pathMatchesPrefix(normalized, localNorm)) continue;
     const suffix = normalized.slice(localNorm.length).replace(/^\//, "");
     const remoteBase = normalizePathSeparators(mapping.remote);
-    return suffix
-      ? `${remoteBase}/${suffix.split("/").join("/")}`
-      : remoteBase;
+    return suffix ? `${remoteBase}/${suffix.split("/").join("/")}` : remoteBase;
   }
 
   return resolved;

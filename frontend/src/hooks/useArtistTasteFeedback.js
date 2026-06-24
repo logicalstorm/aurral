@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
-import {
-  addDiscoveryFeedback,
-  getDiscoveryFeedback,
-  removeDiscoveryFeedback,
-} from "../utils/api";
+import { addDiscoveryFeedback, getDiscoveryFeedback, removeDiscoveryFeedback } from "../utils/api";
 import {
   applyArtistDiscoveryFeedback,
   buildArtistFeedbackLookup,
@@ -21,16 +17,11 @@ export function useArtistTasteFeedback() {
 
   useEffect(() => {
     getDiscoveryFeedback()
-      .then((payload) =>
-        setFeedbackList(normalizeDiscoveryFeedbackList(payload)),
-      )
+      .then((payload) => setFeedbackList(normalizeDiscoveryFeedbackList(payload)))
       .catch(() => {});
   }, [user?.id]);
 
-  const lookup = useMemo(
-    () => buildArtistFeedbackLookup(feedbackList),
-    [feedbackList],
-  );
+  const lookup = useMemo(() => buildArtistFeedbackLookup(feedbackList), [feedbackList]);
 
   const getFeedbackFlags = useCallback(
     (artist) => getArtistFeedbackFlags(lookup, artist),
@@ -67,9 +58,7 @@ export function useArtistTasteFeedback() {
         }
         return true;
       } catch (err) {
-        showError(
-          err.response?.data?.message || "Failed to save discovery feedback",
-        );
+        showError(err.response?.data?.message || "Failed to save discovery feedback");
         return false;
       }
     },

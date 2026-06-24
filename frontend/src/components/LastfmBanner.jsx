@@ -61,9 +61,8 @@ const LastfmBanner = () => {
       <div className="app-banner__content">
         <p className="app-banner__title">Personalize your discovery</p>
         <p className="app-banner__text">
-          Discover can use ListenBrainz fallback trends without setup. Connect
-          Last.fm for personalized recommendations, related artists, full tag
-          search, and flows.
+          Discover can use ListenBrainz fallback trends without setup. Connect Last.fm for
+          personalized recommendations, related artists, full tag search, and flows.
         </p>
       </div>
       <div className="app-banner__actions">

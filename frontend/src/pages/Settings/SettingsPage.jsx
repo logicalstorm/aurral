@@ -21,10 +21,7 @@ import { SettingsDiscoverTab } from "./components/SettingsDiscoverTab";
 import { SettingsUsersTab } from "./components/SettingsUsersTab";
 import { SettingsMetadataPanel } from "./components/SettingsMetadataPanel";
 import { SettingsArrToolbar } from "./components/SettingsArrToolbar";
-import {
-  DEFAULT_SETTINGS_TAB,
-  normalizeSettingsTabId,
-} from "./settingsTabsConfig";
+import { DEFAULT_SETTINGS_TAB, normalizeSettingsTabId } from "./settingsTabsConfig";
 import "./settingsArr.css";
 
 const SETTINGS_TABS_WITHOUT_SAVE = new Set(["system", "tasks"]);
@@ -37,30 +34,17 @@ function SettingsPage() {
   const [pendingTab, setPendingTab] = useState(null);
 
   const data = useSettingsData(showSuccess, showError, showInfo);
-  const guard = useUnsavedGuard(
-    data.hasUnsavedChanges,
-    data.setHasUnsavedChanges,
-  );
+  const guard = useUnsavedGuard(data.hasUnsavedChanges, data.setHasUnsavedChanges);
 
   const tabs = useSettingsTabs(authUser);
 
-  const users = useSettingsUsers(
-    authUser,
-    showSuccess,
-    showError,
-    tabs.activeTab,
-  );
+  const users = useSettingsUsers(authUser, showSuccess, showError, tabs.activeTab);
 
   const normalizedParam = normalizeSettingsTabId(tabParam);
-  const shouldRedirect =
-    authUser?.role === "admin" &&
-    tabParam &&
-    normalizedParam !== tabParam;
+  const shouldRedirect = authUser?.role === "admin" && tabParam && normalizedParam !== tabParam;
 
   const settingsTitle = useMemo(() => {
-    return tabs.activeTabMeta
-      ? `${tabs.activeTabMeta.label} - Settings`
-      : "Settings";
+    return tabs.activeTabMeta ? `${tabs.activeTabMeta.label} - Settings` : "Settings";
   }, [tabs.activeTabMeta]);
   useDocumentTitle(settingsTitle);
 
@@ -120,9 +104,7 @@ function SettingsPage() {
             setLidarrProfiles={data.setLidarrProfiles}
             lidarrMetadataProfiles={data.lidarrMetadataProfiles}
             loadingLidarrMetadataProfiles={data.loadingLidarrMetadataProfiles}
-            setLoadingLidarrMetadataProfiles={
-              data.setLoadingLidarrMetadataProfiles
-            }
+            setLoadingLidarrMetadataProfiles={data.setLoadingLidarrMetadataProfiles}
             setLidarrMetadataProfiles={data.setLidarrMetadataProfiles}
             lidarrTags={data.lidarrTags}
             loadingLidarrTags={data.loadingLidarrTags}

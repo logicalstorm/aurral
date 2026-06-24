@@ -42,8 +42,7 @@ export const getPopularityScale = (releaseGroups) => {
     .sort((a, b) => a - b);
   if (counts.length === 0) return { pivot: 0 };
   const mid = Math.floor(counts.length / 2);
-  const pivot =
-    counts.length % 2 === 0 ? (counts[mid - 1] + counts[mid]) / 2 : counts[mid];
+  const pivot = counts.length % 2 === 0 ? (counts[mid - 1] + counts[mid]) / 2 : counts[mid];
   return { pivot };
 };
 
@@ -58,16 +57,12 @@ export const segmentsFromScale = (count, pivot, totalSegments = 10) => {
   return Math.round(clamped * totalSegments);
 };
 
-export const isVisibleLibraryAlbum = (
-  album,
-  { requestingAlbum = null } = {},
-) => {
+export const isVisibleLibraryAlbum = (album, { requestingAlbum = null } = {}) => {
   if (!album || String(album.id ?? "").startsWith("pending-")) return false;
   if (album.monitored) return true;
   return (
     !!requestingAlbum &&
-    (album.mbid === requestingAlbum ||
-      album.foreignAlbumId === requestingAlbum)
+    (album.mbid === requestingAlbum || album.foreignAlbumId === requestingAlbum)
   );
 };
 
@@ -157,10 +152,7 @@ export const getArtistType = (type) => {
   return types[type] || type;
 };
 
-export const matchesReleaseTypeFilter = (
-  releaseGroup,
-  selectedReleaseTypes,
-) => {
+export const matchesReleaseTypeFilter = (releaseGroup, selectedReleaseTypes) => {
   if (!selectedReleaseTypes || selectedReleaseTypes.length === 0) return true;
   const primaryType = releaseGroup["primary-type"];
   const secondaryTypes = releaseGroup["secondary-types"] || [];
@@ -169,9 +161,7 @@ export const matchesReleaseTypeFilter = (
     const normalizedSecondaryTypes = [
       ...new Set(
         secondaryTypes.map((secondaryType) =>
-          secondaryReleaseTypes.includes(secondaryType)
-            ? secondaryType
-            : "Other",
+          secondaryReleaseTypes.includes(secondaryType) ? secondaryType : "Other",
         ),
       ),
     ];
@@ -200,7 +190,11 @@ const getImageKinds = (image) => {
     image?.CoverType,
     ...(Array.isArray(image?.types) ? image.types : []),
   ];
-  return kinds.map((kind) => String(kind || "").trim().toLowerCase());
+  return kinds.map((kind) =>
+    String(kind || "")
+      .trim()
+      .toLowerCase(),
+  );
 };
 
 const imageMatchesKinds = (image, kinds) => {
@@ -340,8 +334,7 @@ export const resolveReleaseLibraryDisplay = (libraryInfo, downloadStatus) => {
 
 export const getReleaseMetric = (releaseGroup) => {
   const ratingValue =
-    releaseGroup?.rating?.value != null &&
-    Number.isFinite(Number(releaseGroup.rating.value))
+    releaseGroup?.rating?.value != null && Number.isFinite(Number(releaseGroup.rating.value))
       ? Number(releaseGroup.rating.value)
       : null;
   if (ratingValue != null) {
@@ -363,9 +356,7 @@ export const getReleaseMetric = (releaseGroup) => {
 };
 
 export const sortReleaseGroupsByPopularity = (releaseGroups = []) =>
-  [...releaseGroups].sort(
-    (a, b) => getReleaseMetric(b).sortValue - getReleaseMetric(a).sortValue,
-  );
+  [...releaseGroups].sort((a, b) => getReleaseMetric(b).sortValue - getReleaseMetric(a).sortValue);
 
 export const getPopularReleaseGroups = (releaseGroups = [], limit = 6) =>
   sortReleaseGroupsByPopularity(releaseGroups).slice(0, limit);
@@ -375,10 +366,7 @@ export const isOwnedReleaseGroup = (getAlbumStatus, releaseGroupId) => {
   return status?.status === "available" || status?.status === "added";
 };
 
-export const buildAurralPick = ({
-  releaseGroups = [],
-  getAlbumStatus,
-} = {}) => {
+export const buildAurralPick = ({ releaseGroups = [], getAlbumStatus } = {}) => {
   const releaseGroup = sortReleaseGroupsByPopularity(releaseGroups).find(
     (item) => item?.id && !isOwnedReleaseGroup(getAlbumStatus, item.id),
   );

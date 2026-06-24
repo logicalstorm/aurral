@@ -50,9 +50,7 @@ async function sendWebhooksDirect(
     const url = (webhook.url || "").trim();
     if (!url) continue;
     if (!/^https?:\/\//i.test(url)) {
-      console.warn(
-        `[NotificationService] Skipping webhook with non-http(s) URL: ${url}`,
-      );
+      console.warn(`[NotificationService] Skipping webhook with non-http(s) URL: ${url}`);
       continue;
     }
     const rawBody = (webhook.body || "").trim();
@@ -82,11 +80,7 @@ export async function deliverQueuedNotification(payload = {}) {
   const kind = String(payload?.kind || "").trim();
   switch (kind) {
     case "gotify":
-      await sendGotifyDirect(
-        payload.title,
-        payload.message,
-        Number(payload.priority ?? 5),
-      );
+      await sendGotifyDirect(payload.title, payload.message, Number(payload.priority ?? 5));
       return;
     case "webhooks":
       await sendWebhooksDirect(
@@ -149,30 +143,16 @@ export async function notifyDiscoveryUpdated() {
   const tasks = [];
   if (gotify.notifyDiscoveryUpdated) {
     tasks.push(
-      queueGotify(
-        "Aurral – Discover",
-        "Daily Discover recommendations have been updated.",
-        5,
-      ),
+      queueGotify("Aurral – Discover", "Daily Discover recommendations have been updated.", 5),
     );
   }
   tasks.push(
-    queueWebhooks(
-      settings.integrations,
-      "notifyDiscoveryUpdated",
-      "",
-      "Aurral – Discover",
-    ),
+    queueWebhooks(settings.integrations, "notifyDiscoveryUpdated", "", "Aurral – Discover"),
   );
   await Promise.all(tasks);
 }
 
-export async function notifyWeeklyFlowDone(
-  playlistType,
-  stats = {},
-  flowPath = "",
-  flowName = "",
-) {
+export async function notifyWeeklyFlowDone(playlistType, stats = {}, flowPath = "", flowName = "") {
   const settings = dbOps.getSettings();
   const gotify = settings.integrations?.gotify || {};
   const completed = stats.completed ?? 0;
@@ -187,13 +167,6 @@ export async function notifyWeeklyFlowDone(
       ),
     );
   }
-  tasks.push(
-    queueWebhooks(
-      settings.integrations,
-      "notifyWeeklyFlowDone",
-      flowPath,
-      flowName,
-    ),
-  );
+  tasks.push(queueWebhooks(settings.integrations, "notifyWeeklyFlowDone", flowPath, flowName));
   await Promise.all(tasks);
 }

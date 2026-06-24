@@ -27,11 +27,7 @@ function resolveDayMs(value) {
   const time = resolveTimeMs(value, null);
   if (!Number.isFinite(time)) return null;
   const date = new Date(time);
-  return Date.UTC(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate(),
-  );
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 export async function getRecentMissingReleases(limit = 24, options = {}) {
@@ -41,9 +37,7 @@ export async function getRecentMissingReleases(limit = 24, options = {}) {
   }
 
   const providedArtists =
-    Array.isArray(options?.artists) && options.artists.length > 0
-      ? options.artists
-      : null;
+    Array.isArray(options?.artists) && options.artists.length > 0 ? options.artists : null;
   const providedAlbums = Array.isArray(options?.albums) ? options.albums : null;
   let artists = providedArtists;
   let albums = providedAlbums;
@@ -80,8 +74,7 @@ export async function getRecentMissingReleases(limit = 24, options = {}) {
 
   return albums
     .map((album) => {
-      const artist =
-        artistsById.get(album.artistId) || artistsById.get(String(album.artistId));
+      const artist = artistsById.get(album.artistId) || artistsById.get(String(album.artistId));
       if (!artist) return null;
       const mapped = libraryManager.mapLidarrAlbum(album, artist);
       const releaseDate = mapped.releaseDate || album.releaseDate || null;
@@ -89,12 +82,7 @@ export async function getRecentMissingReleases(limit = 24, options = {}) {
       const releaseTime = new Date(releaseDate).getTime();
       if (!Number.isFinite(releaseTime) || releaseTime < recentCutoff) return null;
       const releaseDay = resolveDayMs(releaseDate);
-      if (
-        !includeFuture &&
-        releaseDay != null &&
-        today != null &&
-        releaseDay > today
-      ) {
+      if (!includeFuture && releaseDay != null && today != null && releaseDay > today) {
         return null;
       }
       const percent = mapped.statistics?.percentOfTracks || 0;
@@ -102,8 +90,7 @@ export async function getRecentMissingReleases(limit = 24, options = {}) {
       if (percent > 0 || size > 0) return null;
       return {
         ...mapped,
-        artistName:
-          mapped.artistName || artist.artistName || artist.name || null,
+        artistName: mapped.artistName || artist.artistName || artist.name || null,
         artistMbid: artist.foreignArtistId || artist.mbid || null,
         foreignArtistId: artist.foreignArtistId || artist.mbid || null,
       };

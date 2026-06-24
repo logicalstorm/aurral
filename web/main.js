@@ -56,9 +56,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const data = await res.json();
     if (data.stargazers_count !== undefined) {
-      const formattedStars = new Intl.NumberFormat("en-US").format(
-        data.stargazers_count,
-      );
+      const formattedStars = new Intl.NumberFormat("en-US").format(data.stargazers_count);
 
       document.querySelectorAll(".github-stars-count").forEach((el) => {
         el.textContent = formattedStars;

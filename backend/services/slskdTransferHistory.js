@@ -100,9 +100,7 @@ function normalizeUsername(value) {
 
 function normalizeSearchIds(value) {
   const values = Array.isArray(value) ? value : [value];
-  const ids = values
-    .map((entry) => normalizeText(entry))
-    .filter(Boolean);
+  const ids = values.map((entry) => normalizeText(entry)).filter(Boolean);
   return [...new Set(ids)];
 }
 
@@ -126,18 +124,12 @@ function deserializeSearchIds(value) {
 }
 
 function readCandidateRaw(candidate) {
-  return candidate?.raw && typeof candidate.raw === "object"
-    ? candidate.raw
-    : {};
+  return candidate?.raw && typeof candidate.raw === "object" ? candidate.raw : {};
 }
 
 function readTransferId(transfer) {
   return normalizeText(
-    transfer?.id ||
-      transfer?.Id ||
-      transfer?.transferId ||
-      transfer?.TransferId ||
-      "",
+    transfer?.id || transfer?.Id || transfer?.transferId || transfer?.TransferId || "",
   );
 }
 
@@ -200,9 +192,12 @@ export function buildSlskdRankingHistoryOptions() {
   for (const row of activePeerRowsStmt.all()) {
     const key = normalizeUsername(row.user_key || row.username);
     if (!key) continue;
-    const stats =
-      peerStats.get(key) ||
-      { successes: 0, failures: 0, validationFailures: 0, active: 0 };
+    const stats = peerStats.get(key) || {
+      successes: 0,
+      failures: 0,
+      validationFailures: 0,
+      active: 0,
+    };
     stats.active = Number(row.active || 0);
     peerStats.set(key, stats);
   }

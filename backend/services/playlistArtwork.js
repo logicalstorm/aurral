@@ -61,9 +61,7 @@ const hexToRgb = (hex) => {
 
 const rgbToHex = ({ r, g, b }) =>
   `#${[r, g, b]
-    .map((value) =>
-      clamp(Math.round(value), 0, 255).toString(16).padStart(2, "0"),
-    )
+    .map((value) => clamp(Math.round(value), 0, 255).toString(16).padStart(2, "0"))
     .join("")}`;
 
 const mixHex = (left, right, weight = 0.5) => {
@@ -162,11 +160,7 @@ const buildTitlePhrases = (words, limit) => {
     }
 
     const nextWord = words[index + 1];
-    if (
-      nextWord &&
-      !isSmallTitleWord(nextWord) &&
-      `${word} ${nextWord}`.length <= limit
-    ) {
+    if (nextWord && !isSmallTitleWord(nextWord) && `${word} ${nextWord}`.length <= limit) {
       phrases.push(`${word} ${nextWord}`);
       index += 1;
       continue;
@@ -182,35 +176,26 @@ const buildTitleLayout = (value) => {
   const chunkLimit = input.length > 36 ? 12 : 14;
   const words = input
     .split(/\s+/)
-    .flatMap((word) =>
-      word.length > chunkLimit ? chunkWord(word, chunkLimit) : [word],
-    )
+    .flatMap((word) => (word.length > chunkLimit ? chunkWord(word, chunkLimit) : [word]))
     .filter(Boolean);
   const phrases = buildTitlePhrases(words, chunkLimit + 6);
   const lines = phrases.slice(0, TITLE_MAX_LINES);
   if (phrases.length > TITLE_MAX_LINES) {
     const lastIndex = Math.max(lines.length - 1, 0);
     const base = lines[lastIndex] || "";
-    lines[lastIndex] = base.length >= chunkLimit
-      ? `${base.slice(0, Math.max(chunkLimit - 1, 1)).trimEnd()}…`
-      : `${base}…`;
+    lines[lastIndex] =
+      base.length >= chunkLimit
+        ? `${base.slice(0, Math.max(chunkLimit - 1, 1)).trimEnd()}…`
+        : `${base}…`;
   }
 
   const maxLineLength = Math.max(...lines.map((line) => line.length), 1);
   const widthLimitedSize = Math.floor(TITLE_SAFE_WIDTH / (maxLineLength * 0.58));
   const heightLimitedSize = Math.floor(TITLE_SAFE_HEIGHT / (lines.length * 1.12));
-  const fontSize = clamp(
-    Math.min(132, widthLimitedSize, heightLimitedSize),
-    64,
-    132,
-  );
+  const fontSize = clamp(Math.min(132, widthLimitedSize, heightLimitedSize), 64, 132);
   const lineHeight = Math.round(fontSize * 1.1);
   const totalHeight = fontSize + lineHeight * (lines.length - 1);
-  const y = Math.round(
-    TITLE_SAFE_TOP +
-      (TITLE_SAFE_HEIGHT - totalHeight) / 2 +
-      fontSize * 0.78,
-  );
+  const y = Math.round(TITLE_SAFE_TOP + (TITLE_SAFE_HEIGHT - totalHeight) / 2 + fontSize * 0.78);
 
   return { lines, fontSize, lineHeight, y };
 };
@@ -355,16 +340,10 @@ export async function writePlaylistArtworkWebpFromBuffer(buffer, outputPath) {
 
 export async function buildPlaylistArtworkWebpBuffer({ playlistName, kind }) {
   const svg = buildArtworkSvg({ playlistName, kind });
-  return sharp(Buffer.from(svg))
-    .webp({ quality: PLAYLIST_ARTWORK_WEBP_QUALITY })
-    .toBuffer();
+  return sharp(Buffer.from(svg)).webp({ quality: PLAYLIST_ARTWORK_WEBP_QUALITY }).toBuffer();
 }
 
-export async function writePlaylistArtworkSidecar({
-  playlistName,
-  kind,
-  outputPath,
-}) {
+export async function writePlaylistArtworkSidecar({ playlistName, kind, outputPath }) {
   const webpPath = outputPath.replace(/\.(png|webp)$/i, ".webp");
   const buffer = await buildPlaylistArtworkWebpBuffer({ playlistName, kind });
   await sharp(buffer).toFile(webpPath);

@@ -41,10 +41,7 @@ function getPendingScheduledDiscoveryRefresh() {
     return (
       rows.find((row) => {
         const payload = parseQueuedPayload(row.payload);
-        return (
-          payload?.scheduleOnly === true &&
-          String(payload?.reason || "") === "scheduled"
-        );
+        return payload?.scheduleOnly === true && String(payload?.reason || "") === "scheduled";
       }) || null
     );
   } catch {
@@ -68,10 +65,7 @@ export function pruneDuplicateScheduledDiscoveryRefreshes() {
     );
     const scheduled = rows.filter((row) => {
       const payload = parseQueuedPayload(row.payload);
-      return (
-        payload?.scheduleOnly === true &&
-        String(payload?.reason || "") === "scheduled"
-      );
+      return payload?.scheduleOnly === true && String(payload?.reason || "") === "scheduled";
     });
     if (scheduled.length <= 1) return 0;
     const removeIds = scheduled.slice(1).map((row) => row.id);
@@ -112,8 +106,7 @@ export function discoveryNeedsRefresh(cache = getDiscoveryCache()) {
   const lastUpdated = cache?.lastUpdated;
   const hasRecommendations =
     Array.isArray(cache?.recommendations) && cache.recommendations.length > 0;
-  const hasGenres =
-    Array.isArray(cache?.topGenres) && cache.topGenres.length > 0;
+  const hasGenres = Array.isArray(cache?.topGenres) && cache.topGenres.length > 0;
   const refreshHours = getDiscoveryAutoRefreshHours();
   const staleCutoff = Date.now() - refreshHours * 60 * 60 * 1000;
   return (
@@ -125,12 +118,7 @@ export function discoveryNeedsRefresh(cache = getDiscoveryCache()) {
 }
 
 function emitDiscoveryQueued(reason) {
-  recordDiscoveryUpdateProgress(
-    "queued",
-    "Discovery refresh queued",
-    1,
-    { reason },
-  );
+  recordDiscoveryUpdateProgress("queued", "Discovery refresh queued", 1, { reason });
 }
 
 export function enqueueDiscoveryRefresh(options = {}) {
@@ -161,11 +149,7 @@ export function enqueueDiscoveryRefresh(options = {}) {
   }
 
   try {
-    if (
-      scheduleOnly &&
-      reason === "scheduled" &&
-      getPendingScheduledDiscoveryRefresh()
-    ) {
+    if (scheduleOnly && reason === "scheduled" && getPendingScheduledDiscoveryRefresh()) {
       return { enqueued: false, reason: "already_scheduled" };
     }
     enqueueDiscoveryRefreshJob(
@@ -190,9 +174,7 @@ export function scheduleNextDiscoveryRefresh() {
   pruneDuplicateScheduledDiscoveryRefreshes();
   const cache = getDiscoveryCache();
   const refreshMs = getDiscoveryAutoRefreshHours() * 60 * 60 * 1000;
-  const base = cache.lastUpdated
-    ? new Date(cache.lastUpdated).getTime()
-    : Date.now();
+  const base = cache.lastUpdated ? new Date(cache.lastUpdated).getTime() : Date.now();
   const runAtMs = base + refreshMs;
   if (runAtMs <= Date.now()) {
     return enqueueDiscoveryRefresh({ reason: "scheduled" });
@@ -219,15 +201,12 @@ export async function bootstrapDiscoveryRefresh() {
   if (
     !isHonkerLockHeld("discovery-global-refresh") &&
     !discoveryRefreshQueued
-  ) {
-    cache.isUpdating = false;
+  ) {    cache.isUpdating = false;
     clearDiscoveryUpdateProgress();
   }
 
   if (!(await isDiscoveryRefreshConfigured())) {
-    console.log(
-      "Discovery not configured (no Last.fm API key and no artists). Clearing cache.",
-    );
+    console.log("Discovery not configured (no Last.fm API key and no artists). Clearing cache.");
     try {
       dbOps.updateDiscoveryCache({
         recommendations: [],
@@ -261,9 +240,7 @@ export async function bootstrapDiscoveryRefresh() {
     ) {
       const retry = enqueueDiscoveryRefresh({ reason: "startup_incomplete" });
       if (retry.enqueued) {
-        console.log(
-          "Discovery cache timestamp exists but data is incomplete. Re-queued refresh.",
-        );
+        console.log("Discovery cache timestamp exists but data is incomplete. Re-queued refresh.");
       }
       return;
     }

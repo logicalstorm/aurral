@@ -2,29 +2,17 @@ import { useState } from "react";
 import { Plus, RefreshCw, Trash2, Wrench } from "lucide-react";
 import DownloadFolderField from "../../../components/DownloadFolderField";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
-import {
-  IntegrationCard,
-  SettingsIntegrationModal,
-} from "./SettingsIntegrationCards";
+import { IntegrationCard, SettingsIntegrationModal } from "./SettingsIntegrationCards";
 import {
   SettingsModalField,
   SettingsModalSection,
   SettingsModalToggle,
   SettingsModalToggleGroup,
 } from "./SettingsModalLayout";
-import {
-  SettingsArrFieldSet,
-  SettingsArrFormGroup,
-} from "./arr/SettingsArrLayout";
+import { SettingsArrFieldSet, SettingsArrFormGroup } from "./arr/SettingsArrLayout";
 import { getProviderStatus } from "../utils/integrationStatus";
-import {
-  PATH_MAPPING_SOURCE_OPTIONS,
-  PathMappingModal,
-} from "./PathMappingModal";
-import {
-  testNzbgetConnection,
-  testSlskdConnection,
-} from "../../../utils/api";
+import { PATH_MAPPING_SOURCE_OPTIONS, PathMappingModal } from "./PathMappingModal";
+import { testNzbgetConnection, testSlskdConnection } from "../../../utils/api";
 
 const PATH_MAPPING_SOURCE_VALUES = new Set(
   PATH_MAPPING_SOURCE_OPTIONS.map((option) => option.value),
@@ -36,7 +24,9 @@ function toNumber(value, fallback) {
 }
 
 function normalizePathMappingSource(value) {
-  const normalized = String(value || "").trim().toLowerCase();
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
   return PATH_MAPPING_SOURCE_VALUES.has(normalized) ? normalized : "all";
 }
 
@@ -50,10 +40,7 @@ function coercePathMappings(value) {
 }
 
 function sourceLabel(source) {
-  return (
-    PATH_MAPPING_SOURCE_OPTIONS.find((option) => option.value === source)?.label ||
-    source
-  );
+  return PATH_MAPPING_SOURCE_OPTIONS.find((option) => option.value === source)?.label || source;
 }
 
 const CLIENT_MODALS = {
@@ -167,10 +154,7 @@ export function SettingsDownloadClientsSection({
       const result = await testSlskdConnection();
       if (result.success || result.ok) {
         if (result.warning || result.soulseekConnected === false) {
-          showInfo(
-            result.message ||
-              "slskd API is reachable, but Soulseek is not connected",
-          );
+          showInfo(result.message || "slskd API is reachable, but Soulseek is not connected");
         } else {
           showSuccess(result.message || "slskd connection OK");
         }
@@ -211,10 +195,7 @@ export function SettingsDownloadClientsSection({
           <IntegrationCard
             title="NZBGet"
             subtitle="Usenet"
-            status={getProviderStatus(
-              nzbgetEnabled,
-              health?.nzbgetConfigured || nzbgetConfigured,
-            )}
+            status={getProviderStatus(nzbgetEnabled, health?.nzbgetConfigured || nzbgetConfigured)}
             meta={`Priority ${nzbget.priority ?? 20}`}
             onClick={() => setActiveModal(CLIENT_MODALS.nzbget)}
           />
@@ -243,9 +224,8 @@ export function SettingsDownloadClientsSection({
 
       <SettingsArrFieldSet legend="Remote Path Mappings">
         <div className="arr-info">
-          Remote path mappings are rarely required. If Aurral and your download
-          clients share the same container mounts, match paths instead of adding
-          mappings here.
+          Remote path mappings are rarely required. If Aurral and your download clients share the
+          same container mounts, match paths instead of adding mappings here.
         </div>
 
         <div className="arr-table-wrap">
@@ -317,9 +297,7 @@ export function SettingsDownloadClientsSection({
       {mappingModal ? (
         <PathMappingModal
           title={
-            mappingModal.mode === "edit"
-              ? "Edit Remote Path Mapping"
-              : "Add Remote Path Mapping"
+            mappingModal.mode === "edit" ? "Edit Remote Path Mapping" : "Add Remote Path Mapping"
           }
           initialValue={
             mappingModal.mode === "edit" && mappingModal.index != null
@@ -342,9 +320,7 @@ export function SettingsDownloadClientsSection({
               disabled={testingSlskd}
               onClick={handleTestSlskd}
             >
-              <RefreshCw
-                className={`artist-icon-sm${testingSlskd ? " animate-spin" : ""}`}
-              />
+              <RefreshCw className={`artist-icon-sm${testingSlskd ? " animate-spin" : ""}`} />
               {testingSlskd ? "Testing..." : "Test connection"}
             </button>
           }
@@ -353,9 +329,7 @@ export function SettingsDownloadClientsSection({
             <SettingsModalToggle
               label="Enable slskd"
               checked={slskdEnabled}
-              onChange={(event) =>
-                updateIntegration("slskd", { enabled: event.target.checked })
-              }
+              onChange={(event) => updateIntegration("slskd", { enabled: event.target.checked })}
             />
           </SettingsModalSection>
 
@@ -366,9 +340,7 @@ export function SettingsDownloadClientsSection({
                 placeholder="http://localhost:5030"
                 autoComplete="off"
                 value={slskd.url || ""}
-                onChange={(event) =>
-                  updateIntegration("slskd", { url: event.target.value })
-                }
+                onChange={(event) => updateIntegration("slskd", { url: event.target.value })}
               />
             </SettingsModalField>
             <SettingsModalField label="API key">
@@ -376,9 +348,7 @@ export function SettingsDownloadClientsSection({
                 type="password"
                 autoComplete="off"
                 value={slskd.apiKey || ""}
-                onChange={(event) =>
-                  updateIntegration("slskd", { apiKey: event.target.value })
-                }
+                onChange={(event) => updateIntegration("slskd", { apiKey: event.target.value })}
               />
             </SettingsModalField>
           </SettingsModalSection>
@@ -445,9 +415,7 @@ export function SettingsDownloadClientsSection({
               disabled={testingNzbget}
               onClick={handleTestNzbget}
             >
-              <RefreshCw
-                className={`artist-icon-sm${testingNzbget ? " animate-spin" : ""}`}
-              />
+              <RefreshCw className={`artist-icon-sm${testingNzbget ? " animate-spin" : ""}`} />
               {testingNzbget ? "Testing..." : "Test connection"}
             </button>
           }
@@ -456,9 +424,7 @@ export function SettingsDownloadClientsSection({
             <SettingsModalToggle
               label="Enable NZBGet"
               checked={nzbgetEnabled}
-              onChange={(event) =>
-                updateIntegration("nzbget", { enabled: event.target.checked })
-              }
+              onChange={(event) => updateIntegration("nzbget", { enabled: event.target.checked })}
             />
           </SettingsModalSection>
 
@@ -469,9 +435,7 @@ export function SettingsDownloadClientsSection({
                 placeholder="http://localhost:6789"
                 autoComplete="off"
                 value={nzbget.url || ""}
-                onChange={(event) =>
-                  updateIntegration("nzbget", { url: event.target.value })
-                }
+                onChange={(event) => updateIntegration("nzbget", { url: event.target.value })}
               />
             </SettingsModalField>
             <SettingsModalField label="Username">
@@ -479,9 +443,7 @@ export function SettingsDownloadClientsSection({
                 type="text"
                 autoComplete="off"
                 value={nzbget.username || ""}
-                onChange={(event) =>
-                  updateIntegration("nzbget", { username: event.target.value })
-                }
+                onChange={(event) => updateIntegration("nzbget", { username: event.target.value })}
               />
             </SettingsModalField>
             <SettingsModalField label="Password">
@@ -489,9 +451,7 @@ export function SettingsDownloadClientsSection({
                 type="password"
                 autoComplete="off"
                 value={nzbget.password || ""}
-                onChange={(event) =>
-                  updateIntegration("nzbget", { password: event.target.value })
-                }
+                onChange={(event) => updateIntegration("nzbget", { password: event.target.value })}
               />
             </SettingsModalField>
           </SettingsModalSection>
@@ -501,9 +461,7 @@ export function SettingsDownloadClientsSection({
               <SettingsInput
                 type="text"
                 value={nzbget.category || "aurral"}
-                onChange={(event) =>
-                  updateIntegration("nzbget", { category: event.target.value })
-                }
+                onChange={(event) => updateIntegration("nzbget", { category: event.target.value })}
               />
             </SettingsModalField>
             <SettingsModalField label="Source priority">

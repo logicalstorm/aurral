@@ -90,9 +90,7 @@ function DiskSpaceTable({ entries = [] }) {
                 <td>
                   <code className="arr-table__path">{entry.location}</code>
                   {entry.statTarget && entry.statTarget !== entry.location ? (
-                    <span className="arr-table__subtle">
-                      Stats from {entry.statTarget}
-                    </span>
+                    <span className="arr-table__subtle">Stats from {entry.statTarget}</span>
                   ) : null}
                 </td>
                 <td>{entry.role || "—"}</td>
@@ -107,14 +105,10 @@ function DiskSpaceTable({ entries = [] }) {
                           style={{ width: `${usedPercent}%` }}
                         />
                       </div>
-                      <span className="arr-disk-meter__label">
-                        {usedPercent}%
-                      </span>
+                      <span className="arr-disk-meter__label">{usedPercent}%</span>
                     </div>
                   ) : (
-                    <span className="arr-table__subtle">
-                      {entry.error || "Unavailable"}
-                    </span>
+                    <span className="arr-table__subtle">{entry.error || "Unavailable"}</span>
                   )}
                 </td>
               </tr>
@@ -142,14 +136,16 @@ export function SettingsStorageSection({
   showSuccess,
   showError,
 }) {
-  const [healthResult, setHealthResult] = useState(
-    () => getStorageHealthCache().result,
-  );
+  const [healthResult, setHealthResult] = useState(() => getStorageHealthCache().result);
   const [checkingHealth, setCheckingHealth] = useState(false);
 
-  useEffect(() => subscribeStorageHealth((cache) => {
-    setHealthResult(cache.result);
-  }), []);
+  useEffect(
+    () =>
+      subscribeStorageHealth((cache) => {
+        setHealthResult(cache.result);
+      }),
+    [],
+  );
 
   const runHealthCheck = useCallback(
     async ({ notify = true } = {}) => {
@@ -165,9 +161,7 @@ export function SettingsStorageSection({
           } else if (result.ok) {
             showSuccess("Storage checks finished with warnings");
           } else {
-            showError(
-              "Storage checks found problems. Review the results below.",
-            );
+            showError("Storage checks found problems. Review the results below.");
           }
         }
         return result;
@@ -237,17 +231,15 @@ export function SettingsStorageSection({
             onClick={() => runHealthCheck({ notify: true })}
             disabled={checkingHealth}
           >
-            <RefreshCw
-              className={`artist-icon-sm${checkingHealth ? " animate-spin" : ""}`}
-            />
+            <RefreshCw className={`artist-icon-sm${checkingHealth ? " animate-spin" : ""}`} />
             {checkingHealth ? "Checking…" : "Run Checks"}
           </button>
         }
       >
         <p className="arr-form-help">
-          Verifies Aurral, Lidarr, download clients, and Navidrome all see the
-          same files on disk. Mount one shared host folder at the same container
-          path in every app, such as <code>/mnt/user/data:/data</code>.
+          Verifies Aurral, Lidarr, download clients, and Navidrome all see the same files on disk.
+          Mount one shared host folder at the same container path in every app, such as{" "}
+          <code>/mnt/user/data:/data</code>.
         </p>
         <StorageHealthDashboard result={healthResult} loading={checkingHealth} />
       </SettingsArrFieldSet>
@@ -257,9 +249,7 @@ export function SettingsStorageSection({
           <MetaRow label="Version">{system.version || health?.appVersion}</MetaRow>
           <MetaRow label="Node">{system.nodeVersion}</MetaRow>
           <MetaRow label="Platform">
-            {system.platform && system.arch
-              ? `${system.platform} ${system.arch}`
-              : null}
+            {system.platform && system.arch ? `${system.platform} ${system.arch}` : null}
           </MetaRow>
           <MetaRow label="Docker">
             {system.docker == null ? null : system.docker ? "Yes" : "No"}
@@ -278,12 +268,7 @@ export function SettingsStorageSection({
         <dl className="arr-meta-grid arr-meta-grid--two-col">
           {(system.links || []).map((link) => (
             <MetaRow key={link.label} label={link.label}>
-              <a
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="arr-link"
-              >
+              <a href={link.url} target="_blank" rel="noopener noreferrer" className="arr-link">
                 {link.value || link.url}
               </a>
             </MetaRow>

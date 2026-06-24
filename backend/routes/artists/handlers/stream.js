@@ -9,11 +9,7 @@ import {
 import { dbOps } from "../../../db/helpers/index.js";
 import { noCache } from "../../../middleware/cache.js";
 import { verifyTokenAuth } from "../../../middleware/auth.js";
-import {
-  buildArtistRequestKey,
-  sendSSE,
-  pendingArtistRequests,
-} from "../utils.js";
+import { buildArtistRequestKey, sendSSE, pendingArtistRequests } from "../utils.js";
 import { logger } from "../../../services/logger.js";
 import { getArtistImage } from "../../../services/imageService.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
@@ -22,7 +18,12 @@ import {
   resolveReleaseGroupCoversBatch,
 } from "../../../services/releaseGroupCoverService.js";
 import { getArtistByMbid } from "../../../services/providers/brainzmashProvider.js";
-import { toLegacyRelations, getArtistTagPayload, buildArtistBase, extractLastfmImageUrl } from "../shared/transform.js";
+import {
+  toLegacyRelations,
+  getArtistTagPayload,
+  buildArtistBase,
+  extractLastfmImageUrl,
+} from "../shared/transform.js";
 
 export function registerStream(router) {
   router.get("/:mbid/stream", noCache, async (req, res) => {
@@ -30,8 +31,7 @@ export function registerStream(router) {
       const { mbid } = req.params;
       const streamArtistName = (req.query.artistName || "").trim();
       const selectedReleaseTypes =
-        typeof req.query.releaseTypes === "string" &&
-        req.query.releaseTypes.trim()
+        typeof req.query.releaseTypes === "string" && req.query.releaseTypes.trim()
           ? req.query.releaseTypes
               .split(",")
               .map((value) => value.trim())
@@ -67,8 +67,7 @@ export function registerStream(router) {
         clientDisconnected = true;
       });
 
-      const isClientConnected = () =>
-        !clientDisconnected && !req.socket.destroyed;
+      const isClientConnected = () => !clientDisconnected && !req.socket.destroyed;
 
       sendSSE(res, "connected", { mbid });
 
@@ -103,42 +102,30 @@ export function registerStream(router) {
           ? streamArtistName
             ? Promise.resolve(streamArtistName)
             : pendingPromise
-                .then(
-                  (data) => data?.name || streamArtistName || "Unknown Artist",
-                )
+                .then((data) => data?.name || streamArtistName || "Unknown Artist")
                 .catch(() => streamArtistName || "Unknown Artist")
           : (async () => {
               const metadataArtist = await metadataArtistPromise;
               if (metadataArtist?.name) return metadataArtist.name;
               if (streamArtistName) return streamArtistName;
-              const name =
-                (await musicbrainzGetArtistNameByMbid(resolvedMbid)) ||
-                "Unknown Artist";
+              const name = (await musicbrainzGetArtistNameByMbid(resolvedMbid)) || "Unknown Artist";
               return name;
             })();
         tasks.push(
-          Promise.all([metadataArtistPromise, namePromise]).then(
-            async ([metadataArtist, name]) => {
-              if (!metadataArtist || !isClientConnected()) return;
-              const tagPayload = await getArtistTagPayload(
-                resolvedMbid,
-                name,
-                metadataArtist,
-              );
-              sendArtist({
-                ...buildArtistBase(name, resolvedMbid, metadataArtist),
-                tags: tagPayload.tags,
-                genres: tagPayload.genres,
-              });
-            },
-          ),
+          Promise.all([metadataArtistPromise, namePromise]).then(async ([metadataArtist, name]) => {
+            if (!metadataArtist || !isClientConnected()) return;
+            const tagPayload = await getArtistTagPayload(resolvedMbid, name, metadataArtist);
+            sendArtist({
+              ...buildArtistBase(name, resolvedMbid, metadataArtist),
+              tags: tagPayload.tags,
+              genres: tagPayload.genres,
+            });
+          }),
         );
 
         const libraryTask = (async () => {
-          const { lidarrClient } =
-            await import("../../../services/lidarrClient.js");
-          const { libraryManager } =
-            await import("../../../services/libraryManager.js");
+          const { lidarrClient } = await import("../../../services/lidarrClient.js");
+          const { libraryManager } = await import("../../../services/libraryManager.js");
 
           if (!lidarrClient.isConfigured()) return;
 
@@ -179,10 +166,7 @@ export function registerStream(router) {
               albums: [],
             });
 
-            const lidarrAlbums = await libraryManager.getAlbums(
-              libArtist.id,
-              lidarrArtist,
-            );
+            const lidarrAlbums = await libraryManager.getAlbums(libArtist.id, lidarrArtist);
 
             if (!isClientConnected()) return;
 
@@ -239,10 +223,7 @@ export function registerStream(router) {
             releaseGroupsPromise,
           ]).then(async ([metadataArtist, name, releaseGroups]) => {
             if (!isClientConnected()) return null;
-            const releaseGroupsWithCovers = attachCachedCoverUrls(
-              releaseGroups,
-              12,
-            );
+            const releaseGroupsWithCovers = attachCachedCoverUrls(releaseGroups, 12);
             sendArtist({
               ...buildArtistBase(name, resolvedMbid, metadataArtist),
               "release-groups": releaseGroupsWithCovers,
@@ -268,12 +249,11 @@ export function registerStream(router) {
 
           const appearsOnTask = discographyTask.then(async (ctx) => {
             if (!ctx) return [];
-            const appearsOnReleaseGroups =
-              await musicbrainzGetArtistAppearsOnReleaseGroups(
-                resolvedMbid,
-                ctx.releaseGroups,
-                { limit: appearsOnLimit },
-              ).catch(() => []);
+            const appearsOnReleaseGroups = await musicbrainzGetArtistAppearsOnReleaseGroups(
+              resolvedMbid,
+              ctx.releaseGroups,
+              { limit: appearsOnLimit },
+            ).catch(() => []);
             if (!isClientConnected()) return appearsOnReleaseGroups;
             const appearsOnWithCovers = attachCachedCoverUrls(
               appearsOnReleaseGroups,
@@ -289,9 +269,7 @@ export function registerStream(router) {
                   String(a["first-release-date"] || ""),
                 ),
               )
-              .filter(
-                (releaseGroup) => releaseGroup?.id && !releaseGroup.coverUrl,
-              )
+              .filter((releaseGroup) => releaseGroup?.id && !releaseGroup.coverUrl)
               .slice(0, appearsOnLimit || 6)
               .map((releaseGroup) => ({
                 mbid: releaseGroup.id,
@@ -310,26 +288,25 @@ export function registerStream(router) {
           });
           tasks.push(appearsOnTask);
 
-          const metadataCorePromise = Promise.all([
-            discographyTask,
-            appearsOnTask,
-          ]).then(async ([ctx, appearsOnReleaseGroups]) => {
-            if (!ctx) return null;
-            const tagPayload = await getArtistTagPayload(
-              resolvedMbid,
-              ctx.name,
-              ctx.metadataArtist,
-            );
-            return {
-              ...buildArtistBase(ctx.name, resolvedMbid, ctx.metadataArtist),
-              tags: tagPayload.tags,
-              genres: tagPayload.genres,
-              "release-groups": ctx.releaseGroups,
-              "appears-on-release-groups": appearsOnReleaseGroups,
-              "release-group-count": ctx.releaseGroups.length,
-              "release-count": ctx.releaseGroups.length,
-            };
-          });
+          const metadataCorePromise = Promise.all([discographyTask, appearsOnTask]).then(
+            async ([ctx, appearsOnReleaseGroups]) => {
+              if (!ctx) return null;
+              const tagPayload = await getArtistTagPayload(
+                resolvedMbid,
+                ctx.name,
+                ctx.metadataArtist,
+              );
+              return {
+                ...buildArtistBase(ctx.name, resolvedMbid, ctx.metadataArtist),
+                tags: tagPayload.tags,
+                genres: tagPayload.genres,
+                "release-groups": ctx.releaseGroups,
+                "appears-on-release-groups": appearsOnReleaseGroups,
+                "release-group-count": ctx.releaseGroups.length,
+                "release-count": ctx.releaseGroups.length,
+              };
+            },
+          );
 
           fullArtistPromise = metadataCorePromise
             .then((artistPayload) => artistPayload)
@@ -339,19 +316,13 @@ export function registerStream(router) {
           fullArtistPromise.finally(() => {
             pendingArtistRequests.delete(requestKey);
           });
-
         }
         const coverTask = (async () => {
           if (!isClientConnected()) return;
           try {
             const cachedImage = dbOps.getImage(mbid);
-            if (
-              cachedImage &&
-              cachedImage.imageUrl &&
-              cachedImage.imageUrl !== "NOT_FOUND"
-            ) {
-              const artistName =
-                (await namePromise.catch(() => null)) || streamArtistName || null;
+            if (cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== "NOT_FOUND") {
+              const artistName = (await namePromise.catch(() => null)) || streamArtistName || null;
               const cachedCover = await getArtistImage(mbid, {
                 artistName,
               }).catch(() => null);
@@ -369,10 +340,8 @@ export function registerStream(router) {
               return;
             }
 
-            const artistName =
-              (await namePromise.catch(() => null)) || streamArtistName || null;
-            const shouldForceRefresh =
-              cachedImage?.imageUrl === "NOT_FOUND" && !!artistName;
+            const artistName = (await namePromise.catch(() => null)) || streamArtistName || null;
+            const shouldForceRefresh = cachedImage?.imageUrl === "NOT_FOUND" && !!artistName;
             const cover = await getArtistImage(mbid, {
               artistName,
               forceRefresh: shouldForceRefresh,
@@ -408,9 +377,7 @@ export function registerStream(router) {
                   streamArtistName ||
                   (await metadataArtistPromise.catch(() => null))?.name ||
                   (await namePromise.catch(() => null)) ||
-                  (await musicbrainzGetArtistNameByMbid(resolvedMbid).catch(
-                    () => null,
-                  )) ||
+                  (await musicbrainzGetArtistNameByMbid(resolvedMbid).catch(() => null)) ||
                   "";
 
                 if (fallbackArtistName) {

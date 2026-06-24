@@ -20,10 +20,7 @@ function normalizeText(value) {
     .toLowerCase()
     .replace(/&/g, " and ")
     .replace(/\(.*?\)|\[.*?\]/g, " ")
-    .replace(
-      /\b(deluxe|expanded|anniversary|remaster(?:ed)?|bonus|edition|explicit|clean)\b/g,
-      " ",
-    )
+    .replace(/\b(deluxe|expanded|anniversary|remaster(?:ed)?|bonus|edition|explicit|clean)\b/g, " ")
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -56,9 +53,7 @@ function scoreTextMatch(left, right) {
   for (const word of leftWords) {
     if (rightWords.has(word)) overlap += 1;
   }
-  return Math.round(
-    ((2 * overlap) / Math.max(1, leftWords.size + rightWords.size)) * 100,
-  );
+  return Math.round(((2 * overlap) / Math.max(1, leftWords.size + rightWords.size)) * 100);
 }
 
 function getYear(value) {
@@ -71,20 +66,16 @@ function hasAudioCategory(release) {
   if (categories.length === 0) return true;
   return categories.some((category) => {
     const id = Number(category);
-    return (
-      Number.isFinite(id) &&
-      id >= AUDIO_CATEGORY_MIN &&
-      id <= AUDIO_CATEGORY_MAX
-    );
+    return Number.isFinite(id) && id >= AUDIO_CATEGORY_MIN && id <= AUDIO_CATEGORY_MAX;
   });
 }
 
 function hasConflictingYear(title, expectedYear) {
   const expected = getYear(expectedYear);
   if (!expected) return false;
-  const years = [
-    ...String(title || "").matchAll(/\b(19\d{2}|20\d{2})\b/g),
-  ].map((match) => match[1]);
+  const years = [...String(title || "").matchAll(/\b(19\d{2}|20\d{2})\b/g)].map(
+    (match) => match[1],
+  );
   return years.length > 0 && !years.includes(expected);
 }
 
@@ -133,19 +124,18 @@ function scoreReleaseSize(release, context, options) {
 function readComparableAlbumName(context) {
   return String(context?.albumName || "")
     .replace(/\s+(?:-|–|—)\s+(?:single|ep|album)\s*$/i, "")
-    .replace(/\s+[\[(](?:single|ep|album)[\])]\s*$/i, "")
+    .replace(/\s+[[(](?:single|ep|album)[)\]]\s*$/i, "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function releaseKey(release) {
-  return [
-    release?.guid,
-    release?.downloadUrl,
-    release?.indexerId,
-    normalizeTitle(release?.title),
-  ]
-    .map((entry) => String(entry || "").trim().toLowerCase())
+  return [release?.guid, release?.downloadUrl, release?.indexerId, normalizeTitle(release?.title)]
+    .map((entry) =>
+      String(entry || "")
+        .trim()
+        .toLowerCase(),
+    )
     .join("\0");
 }
 
@@ -164,8 +154,7 @@ export function rankUsenetReleases(releases, context, options = {}) {
     const artistScore = scoreTextMatch(title, context?.artistName);
     const trackScore = scoreTextMatch(title, context?.trackName);
     const albumScore = albumName ? scoreTextMatch(title, albumName) : 0;
-    const yearScore =
-      expectedYear && normalizeText(title).includes(expectedYear) ? 10 : 0;
+    const yearScore = expectedYear && normalizeText(title).includes(expectedYear) ? 10 : 0;
     const audioCategoryScore = hasAudioCategory(release) ? 10 : -30;
     const formatScore = scoreFormat(title);
     const sizeScore = scoreReleaseSize(release, context, options);

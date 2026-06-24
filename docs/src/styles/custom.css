@@ -1,7 +1,6 @@
 :root {
   --sl-font: "DM Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --sl-font-mono: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas,
-    monospace;
+  --sl-font-mono: "JetBrains Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --sl-color-white: #f7f8f6;
   --sl-color-gray-1: #cbd2ce;
   --sl-color-gray-2: #aab3ae;

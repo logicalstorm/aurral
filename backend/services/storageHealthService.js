@@ -7,10 +7,7 @@ import { slskdClient } from "./slskdClient.js";
 import { nzbgetClient } from "./nzbgetClient.js";
 import { NavidromeClient } from "./navidrome.js";
 import { runLidarrLibraryAccessTest } from "./lidarrLibraryAccessTest.js";
-import {
-  PLAYLIST_LIBRARY_DIR,
-  resolvePlaylistRoot,
-} from "./playlistPaths.js";
+import { PLAYLIST_LIBRARY_DIR, resolvePlaylistRoot } from "./playlistPaths.js";
 import {
   getPathMappings,
   looksLikeExternalOnlyPath,
@@ -24,8 +21,7 @@ import {
 } from "./playlistM3uPaths.js";
 import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
 import { pathsShareDevice } from "./weeklyFlow/weeklyFlowFileReuse.js";
-import { remapLegacyWeeklyFlowPath, resolveWeeklyFlowRoot } from "./weeklyFlow/weeklyFlowPaths.js";
-import {
+import { remapLegacyWeeklyFlowPath, resolveWeeklyFlowRoot } from "./weeklyFlow/weeklyFlowPaths.js";import {
   getFilesystemBrowseRoots,
   resolveEnvDownloadFolder,
   getSuggestedDownloadFolderPath,
@@ -128,8 +124,7 @@ function getLikelySharedBrowseRoots(browseRoots) {
     }
     return (
       envDownloadFolder &&
-      (pathCoversPrefix(root, envDownloadFolder) ||
-        pathCoversPrefix(envDownloadFolder, root))
+      (pathCoversPrefix(root, envDownloadFolder) || pathCoversPrefix(envDownloadFolder, root))
     );
   });
 }
@@ -151,10 +146,7 @@ async function pathIsWithinAnyRoot(targetPath, roots) {
     const realRoot = await realOrResolvedPath(root);
     if (isFilesystemRootPath(realRoot)) return true;
     const relative = path.relative(realRoot, realTarget);
-    if (
-      relative === "" ||
-      (relative && !relative.startsWith("..") && !path.isAbsolute(relative))
-    ) {
+    if (relative === "" || (relative && !relative.startsWith("..") && !path.isAbsolute(relative))) {
       return true;
     }
   }
@@ -167,9 +159,7 @@ async function checkPathReadable(filePath, mappingSource = null) {
   const mappings = getPathMappings(mappingSource || undefined);
   const candidates = [raw, resolveLocalPath(raw, mappings)];
   const uniqueCandidates = [
-    ...new Set(
-      candidates.map((entry) => String(entry || "").trim()).filter(Boolean),
-    ),
+    ...new Set(candidates.map((entry) => String(entry || "").trim()).filter(Boolean)),
   ];
   for (const candidate of uniqueCandidates) {
     try {
@@ -248,10 +238,7 @@ async function getFilesystemSpace(dirPath) {
   }
 }
 
-async function findSampleMediaFileInDirectory(
-  dirPath,
-  { maxDepth = 4, maxDirs = 80 } = {},
-) {
+async function findSampleMediaFileInDirectory(dirPath, { maxDepth = 4, maxDirs = 80 } = {}) {
   const root = String(dirPath || "").trim();
   if (!root) return null;
   const queue = [{ dir: root, depth: 0 }];
@@ -363,27 +350,17 @@ async function checkSharedVolumeSection() {
 
   if (sharedRoots.length > 0) {
     steps.push(
-      healthStep(
-        "shared-mount",
-        "pass",
-        "Dedicated shared media folder detected",
-        {
-          detail: formatLimitedList(sharedRoots),
-          fix: "Use the same container path in Lidarr, slskd, NZBGet, and Navidrome. /data is a common convention but any matching path works.",
-        },
-      ),
+      healthStep("shared-mount", "pass", "Dedicated shared media folder detected", {
+        detail: formatLimitedList(sharedRoots),
+        fix: "Use the same container path in Lidarr, slskd, NZBGet, and Navidrome. /data is a common convention but any matching path works.",
+      }),
     );
   } else {
     steps.push(
-      healthStep(
-        "shared-mount",
-        "warn",
-        "No dedicated shared media folder detected",
-        {
-          detail: formatLimitedList(browseRoots),
-          fix: "Docker users should mount one host media folder at the same dedicated path in every container, such as /data. Native installs can ignore this if Aurral, Lidarr, and players all use the same absolute paths.",
-        },
-      ),
+      healthStep("shared-mount", "warn", "No dedicated shared media folder detected", {
+        detail: formatLimitedList(browseRoots),
+        fix: "Docker users should mount one host media folder at the same dedicated path in every container, such as /data. Native installs can ignore this if Aurral, Lidarr, and players all use the same absolute paths.",
+      }),
     );
   }
 
@@ -407,9 +384,7 @@ async function checkPathMappingsSection() {
     steps.push(
       healthStep("remote-absolute", "warn", "Remote paths are absolute", {
         detail: formatLimitedList(
-          relativeRemoteMappings.map(
-            (mapping) => `${mapping.source}: ${mapping.remote}`,
-          ),
+          relativeRemoteMappings.map((mapping) => `${mapping.source}: ${mapping.remote}`),
         ),
         fix: "Remote paths should match the absolute path reported by the source app, such as /downloads/complete, N:\\Music, or \\\\server\\share.",
       }),
@@ -449,9 +424,7 @@ async function checkPathMappingsSection() {
     steps.push(
       healthStep("local-readable", "pass", "Mapped local paths are readable directories", {
         detail: formatLimitedList(
-          mappings.map(
-            (mapping) => `${mapping.source}: ${mapping.remote} -> ${mapping.local}`,
-          ),
+          mappings.map((mapping) => `${mapping.source}: ${mapping.remote} -> ${mapping.local}`),
         ),
       }),
     );
@@ -463,9 +436,7 @@ async function checkPathMappingsSection() {
 async function checkDownloadsSection() {
   const steps = [];
   const settings = dbOps.getSettings();
-  const downloadFolder = String(
-    settings.downloadFolderPath || resolvePlaylistRoot() || "",
-  ).trim();
+  const downloadFolder = String(settings.downloadFolderPath || resolvePlaylistRoot() || "").trim();
   const suggested = getSuggestedDownloadFolderPath();
 
   if (!downloadFolder) {
@@ -664,8 +635,7 @@ async function checkDownloadClientSection({
     }
   }
 
-  const completedPath = resolveCompletedPath(config, connection);
-  if (!completedPath) {
+  const completedPath = resolveCompletedPath(config, connection);  if (!completedPath) {
     steps.push(
       healthStep("path-reported", "warn", `${title} completed folder is configured`, {
         fix: `Set the completed download path in Settings → Download Clients → ${key}.`,
@@ -697,10 +667,7 @@ async function checkDownloadClientSection({
     }),
   );
 
-  const sharesPlaylistFilesystem = await pathsShareDevice(
-    readablePath,
-    resolvePlaylistRoot(),
-  );
+  const sharesPlaylistFilesystem = await pathsShareDevice(readablePath, resolvePlaylistRoot());
   steps.push(
     healthStep(
       "same-filesystem",
@@ -835,11 +802,7 @@ async function checkNavidromeSection({ lidarrRootPaths = [], lidarrSample = null
   }
 
   const steps = [];
-  const client = new NavidromeClient(
-    navidrome.url,
-    navidrome.username,
-    navidrome.password,
-  );
+  const client = new NavidromeClient(navidrome.url, navidrome.username, navidrome.password);
 
   try {
     await client.ping();
@@ -895,9 +858,7 @@ async function checkNavidromeSection({ lidarrRootPaths = [], lidarrSample = null
     steps.push(
       healthStep("libraries", "pass", "Navidrome music libraries are configured", {
         detail: formatLimitedList(
-          libraryList
-            .map((entry) => String(entry?.path || "").trim())
-            .filter(Boolean),
+          libraryList.map((entry) => String(entry?.path || "").trim()).filter(Boolean),
         ),
       }),
     );
@@ -934,18 +895,13 @@ async function checkNavidromeSection({ lidarrRootPaths = [], lidarrSample = null
     steps.push(
       healthStep("library-readable", "pass", "Navidrome library paths are readable from Aurral", {
         detail: formatLimitedList(
-          libraryList
-            .map((entry) => String(entry?.path || "").trim())
-            .filter(Boolean),
+          libraryList.map((entry) => String(entry?.path || "").trim()).filter(Boolean),
         ),
       }),
     );
   }
 
-  const playlistLibrary = libraryCoversAnyPath(
-    libraryList,
-    expectedLibraryCandidates,
-  );
+  const playlistLibrary = libraryCoversAnyPath(libraryList, expectedLibraryCandidates);
 
   if (playlistLibrary) {
     steps.push(
@@ -1050,9 +1006,7 @@ async function checkPlaylistFilesSection() {
   }
 
   const totalDoneJobs = Number(downloadTracker.getStats()?.done || 0);
-  const doneJobs = downloadTracker.getDoneWithFinalPath(
-    PLAYLIST_FILE_HEALTH_SAMPLE_LIMIT,
-  );
+  const doneJobs = downloadTracker.getDoneWithFinalPath(PLAYLIST_FILE_HEALTH_SAMPLE_LIMIT);
 
   if (doneJobs.length === 0) {
     steps.push(
@@ -1071,9 +1025,7 @@ async function checkPlaylistFilesSection() {
   let sampleUnreadable = null;
   let sampleEmpty = null;
   for (const job of doneJobs) {
-    const localPath = path.resolve(
-      remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot),
-    );
+    const localPath = path.resolve(remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot));
     try {
       const stat = await fs.stat(localPath);
       if (!stat.isFile()) {
@@ -1197,8 +1149,7 @@ export async function runStorageHealthCheck({ force = false } = {}) {
     .then((result) => {
       storageHealthCache = result;
       storageHealthCacheKey = cacheKey;
-      storageHealthCacheExpiresAt =
-        Date.now() + STORAGE_HEALTH_CACHE_TTL_MS;
+      storageHealthCacheExpiresAt = Date.now() + STORAGE_HEALTH_CACHE_TTL_MS;
       return result;
     })
     .finally(() => {

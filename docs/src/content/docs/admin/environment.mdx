@@ -5,22 +5,22 @@ description: Deployment variables most users touch outside the web UI.
 
 Most setup happens in the web UI. These environment variables matter for Docker deployments.
 
-| Variable | Purpose |
-| --- | --- |
-| `PUID` / `PGID` | Run the container as the user that owns mounted folders |
-| `AURRAL_DATA_DIR` | Override app data directory (default `/config`) |
-| `DOWNLOAD_FOLDER` | Path inside `/data` for generated playlists (can also be set in **Settings → Downloads → Downloads folder**) |
-| `PATH_MAPPINGS` | Optional path translations for mixed Windows/Docker setups, for example `N:/ServerFolders/Music|/music`. Use `source|remote|local` to scope a mapping, for example `lidarr|N:/ServerFolders/Music|/music`. Applied at runtime; not shown in **Settings → Downloads → Advanced remote path mappings** |
-| `M3U_PATH_MODE` | Playlist file path style: `local` (default, Aurral container paths in `.m3u` files) or `remote` (paths Navidrome can open when it sees files differently). Can also be set under **Settings → Playback → Navidrome → Use Navidrome paths in M3U files** |
-| `M3U_PATH_MAPPINGS` | Optional Navidrome playlist path translations, for example `/music|N:/ServerFolders/Music`. Use `Aurral path|Navidrome path` pairs separated by `;`. Applied at runtime; not shown in **Settings → Playback → Navidrome → Navidrome path mappings** |
-| `TRUST_PROXY` | Set when Aurral is behind a reverse proxy |
-| `AUTH_PROXY_ENABLED` | Enable reverse-proxy authentication with the default `x-forwarded-user` header |
-| `AUTH_PROXY_HEADER` | Header containing the authenticated username when using a custom proxy header |
-| `AUTH_PROXY_TRUSTED_IPS` | Optional comma-separated proxy IP allowlist allowed to supply auth headers |
-| `AUTH_PROXY_DEFAULT_ROLE` | Role for newly created proxy-auth users: `user` or `admin` |
-| `AUTH_PROXY_ADMIN_USERS` | Optional comma-separated usernames that should be created as admins |
-| `AUTH_PROXY_ROLE_HEADER` | Optional header whose value can promote a new proxy-auth user to admin |
-| `AURRAL_VERBOSE_LOGS` | Fuller server logs while troubleshooting |
+| Variable                  | Purpose                                                                                                                                                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------- |
+| `PUID` / `PGID`           | Run the container as the user that owns mounted folders                                                                                                                                                                                                 |
+| `AURRAL_DATA_DIR`         | Override app data directory (default `/config`)                                                                                                                                                                                                         |
+| `DOWNLOAD_FOLDER`         | Path inside `/data` for generated playlists (can also be set in **Settings → Downloads → Downloads folder**)                                                                                                                                            |
+| `PATH_MAPPINGS`           | Optional path translations for mixed Windows/Docker setups, for example `N:/ServerFolders/Music                                                                                                                                                         | /music`. Use `source                      | remote                                                                                                                               | local`to scope a mapping, for example`lidarr | N:/ServerFolders/Music | /music`. Applied at runtime; not shown in **Settings → Downloads → Advanced remote path mappings** |
+| `M3U_PATH_MODE`           | Playlist file path style: `local` (default, Aurral container paths in `.m3u` files) or `remote` (paths Navidrome can open when it sees files differently). Can also be set under **Settings → Playback → Navidrome → Use Navidrome paths in M3U files** |
+| `M3U_PATH_MAPPINGS`       | Optional Navidrome playlist path translations, for example `/music                                                                                                                                                                                      | N:/ServerFolders/Music`. Use `Aurral path | Navidrome path`pairs separated by`;`. Applied at runtime; not shown in **Settings → Playback → Navidrome → Navidrome path mappings** |
+| `TRUST_PROXY`             | Set when Aurral is behind a reverse proxy                                                                                                                                                                                                               |
+| `AUTH_PROXY_ENABLED`      | Enable reverse-proxy authentication with the default `x-forwarded-user` header                                                                                                                                                                          |
+| `AUTH_PROXY_HEADER`       | Header containing the authenticated username when using a custom proxy header                                                                                                                                                                           |
+| `AUTH_PROXY_TRUSTED_IPS`  | Optional comma-separated proxy IP allowlist allowed to supply auth headers                                                                                                                                                                              |
+| `AUTH_PROXY_DEFAULT_ROLE` | Role for newly created proxy-auth users: `user` or `admin`                                                                                                                                                                                              |
+| `AUTH_PROXY_ADMIN_USERS`  | Optional comma-separated usernames that should be created as admins                                                                                                                                                                                     |
+| `AUTH_PROXY_ROLE_HEADER`  | Optional header whose value can promote a new proxy-auth user to admin                                                                                                                                                                                  |
+| `AURRAL_VERBOSE_LOGS`     | Fuller server logs while troubleshooting                                                                                                                                                                                                                |
 
 Example:
 

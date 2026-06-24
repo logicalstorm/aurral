@@ -11,12 +11,7 @@ import {
 const FOCUS_PLAYLIST_SIZE = 20;
 const PLAYLIST_BUILD_CONCURRENCY = Math.max(
   1,
-  Math.min(
-    3,
-    Math.floor(
-      Number(process.env.AURRAL_DISCOVERY_PLAYLIST_BUILD_CONCURRENCY) || 1,
-    ),
-  ),
+  Math.min(3, Math.floor(Number(process.env.AURRAL_DISCOVERY_PLAYLIST_BUILD_CONCURRENCY) || 1)),
 );
 const FOCUS_MIX = { discover: 0, mix: 0, trending: 0, focus: 100 };
 const LISTENING_HISTORY_PLAYLIST_ID = "focus-listening-history";
@@ -77,9 +72,7 @@ const buildPlaylistPreview = (preset, tracks, plan = null) => {
     presetId: preset.id,
     name: preset.name,
     description: preset.description || null,
-    type:
-      preset.type ||
-      (preset.id === RELEASE_RADAR_PRESET.id ? "release_radar" : "flow"),
+    type: preset.type || (preset.id === RELEASE_RADAR_PRESET.id ? "release_radar" : "flow"),
     mix,
     size: Math.max(1, Math.round(Number(preset.size) || 30)),
     deepDive: preset.deepDive === true,
@@ -127,11 +120,7 @@ const resolveFocusSlotBudgets = (maxFocusPlaylists) => {
   return { maxFocus, tag, artist, crossover };
 };
 
-const resolveHistoryTopArtists = ({
-  historyTopArtists = [],
-  basedOn = [],
-  limit = 3,
-} = {}) => {
+const resolveHistoryTopArtists = ({ historyTopArtists = [], basedOn = [], limit = 3 } = {}) => {
   const explicit = uniqueStrings(historyTopArtists, limit);
   if (explicit.length >= limit) return explicit;
   const fromBasedOn = uniqueStrings(
@@ -177,8 +166,7 @@ const buildFocusedPlaylistCandidates = ({
   let crossoverSlots = 0;
 
   const autoFocusCount = () =>
-    candidates.filter((entry) => entry.id !== LISTENING_HISTORY_PLAYLIST_ID)
-      .length;
+    candidates.filter((entry) => entry.id !== LISTENING_HISTORY_PLAYLIST_ID).length;
 
   const canAddAutoFocus = () => autoFocusCount() < maxFocus;
 
@@ -205,14 +193,10 @@ const buildFocusedPlaylistCandidates = ({
     return pushCandidate(preset);
   };
 
-  const historyArtistKeys = new Set(
-    historyArtists.map((artist) => slugify(artist)),
-  );
+  const historyArtistKeys = new Set(historyArtists.map((artist) => slugify(artist)));
   const librarySeedArtists = uniqueStrings(
     basedOn
-      .filter(
-        (entry) => String(entry?.source || "").toLowerCase() === "library",
-      )
+      .filter((entry) => String(entry?.source || "").toLowerCase() === "library")
       .map((entry) => entry?.name || entry?.artistName),
     8,
   );
@@ -262,9 +246,7 @@ const buildFocusedPlaylistCandidates = ({
   for (let index = 0; index < tasteTags.length - 1; index += 1) {
     if (tagSlots >= tagBudget || !canAddAutoFocus()) break;
     const left = tasteTags[index];
-    const right = tasteTags.find(
-      (tag, tagIndex) => tagIndex > index && !areTagsSimilar(left, tag),
-    );
+    const right = tasteTags.find((tag, tagIndex) => tagIndex > index && !areTagsSimilar(left, tag));
     if (!right) continue;
     const pairKey = [slugify(left), slugify(right)].sort().join("::");
     if (usedTagPairs.has(pairKey)) continue;
@@ -304,11 +286,7 @@ const buildFocusedPlaylistCandidates = ({
     }
   }
 
-  if (
-    relatedSeedArtists.length >= 2 &&
-    artistSlots < artistBudget &&
-    canAddAutoFocus()
-  ) {
+  if (relatedSeedArtists.length >= 2 && artistSlots < artistBudget && canAddAutoFocus()) {
     const left = relatedSeedArtists[0];
     const right =
       relatedSeedArtists.find((artist) => slugify(artist) !== slugify(left)) ||
@@ -336,8 +314,7 @@ const buildFocusedPlaylistCandidates = ({
     const artistName = relatedSeedArtists[index];
     const artistKey = slugify(artistName);
     if (!artistKey || usedArtistKeys.has(`cross:${artistKey}`)) continue;
-    const tag =
-      tasteTags[(index + 1) % Math.max(tasteTags.length, 1)] || tasteTags[0];
+    const tag = tasteTags[(index + 1) % Math.max(tasteTags.length, 1)] || tasteTags[0];
     if (!tag) continue;
     usedArtistKeys.add(`cross:${artistKey}`);
     if (
@@ -368,26 +345,18 @@ const buildFocusedPlaylistCandidates = ({
   for (let index = 0; index < recPool.length; index += 1) {
     if (!canAddAutoFocus()) break;
     const recommendation = recPool[index];
-    const targetArtist = String(
-      recommendation?.name || recommendation?.artistName || "",
-    ).trim();
+    const targetArtist = String(recommendation?.name || recommendation?.artistName || "").trim();
     if (!targetArtist) continue;
     const recTags = uniqueStrings(
       [
-        ...(Array.isArray(recommendation.matchedTags)
-          ? recommendation.matchedTags
-          : []),
-        ...(Array.isArray(recommendation.tags)
-          ? recommendation.tags.slice(0, 2)
-          : []),
+        ...(Array.isArray(recommendation.matchedTags) ? recommendation.matchedTags : []),
+        ...(Array.isArray(recommendation.tags) ? recommendation.tags.slice(0, 2) : []),
       ],
       2,
     );
     const diversifiedRecTags = [];
     for (const tag of recTags) {
-      if (
-        diversifiedRecTags.some((existing) => areTagsSimilar(existing, tag))
-      ) {
+      if (diversifiedRecTags.some((existing) => areTagsSimilar(existing, tag))) {
         continue;
       }
       diversifiedRecTags.push(tag);
@@ -397,9 +366,7 @@ const buildFocusedPlaylistCandidates = ({
     const anchorArtist = relatedSeedArtists.find(
       (artist) => slugify(artist) !== slugify(targetArtist),
     );
-    const tagLabel = diversifiedRecTags
-      .map((tag) => titleCase(tag))
-      .join(" + ");
+    const tagLabel = diversifiedRecTags.map((tag) => titleCase(tag)).join(" + ");
     addAutoFocusCandidate({
       id: `focus-path:${slugify(targetArtist)}:${slugify(diversifiedRecTags.join("-"))}`,
       name:
@@ -445,20 +412,14 @@ async function buildPlaylistsFromPresets(presets, options, onProgress) {
   const items = Array.isArray(presets) ? presets : [];
   const totalSteps = items.length + 1;
   let completed = 0;
-  for (
-    let index = 0;
-    index < items.length;
-    index += PLAYLIST_BUILD_CONCURRENCY
-  ) {
+  for (let index = 0; index < items.length; index += PLAYLIST_BUILD_CONCURRENCY) {
     const batch = items.slice(index, index + PLAYLIST_BUILD_CONCURRENCY);
     const batchResults = await Promise.all(
       batch.map(async (preset) => {
         try {
           return await buildPlaylistFromPreset(preset, options);
         } catch (error) {
-          console.warn(
-            `[DiscoverPlaylists] Failed to build ${preset.id}: ${error.message}`,
-          );
+          console.warn(`[DiscoverPlaylists] Failed to build ${preset.id}: ${error.message}`);
           return null;
         }
       }),
@@ -471,16 +432,13 @@ async function buildPlaylistsFromPresets(presets, options, onProgress) {
 }
 
 async function buildReleaseRadarPlaylist(options = {}) {
-  const {
-    listenHistoryProfile = null,
-    basedOn = [],
-    libraryArtists = null,
-  } = options;
+  const { listenHistoryProfile = null, basedOn = [], libraryArtists = null } = options;
   try {
-    const tracks = await playlistSource.getReleaseRadarTracks(
-      RELEASE_RADAR_PRESET.size,
-      { listenHistoryProfile, basedOn, libraryArtists },
-    );
+    const tracks = await playlistSource.getReleaseRadarTracks(RELEASE_RADAR_PRESET.size, {
+      listenHistoryProfile,
+      basedOn,
+      libraryArtists,
+    });
     if (tracks.length > 0) {
       return buildPlaylistPreview(RELEASE_RADAR_PRESET, tracks);
     }
@@ -512,8 +470,7 @@ export async function generateDiscoverPlaylists({
     recommendations,
     historyTopArtists,
   });
-  const baseDiscoveryCache =
-    discoveryCache || getDiscoveryCache(listenHistoryProfile);
+  const baseDiscoveryCache = discoveryCache || getDiscoveryCache(listenHistoryProfile);
   const plannerOptions = {
     discoveryCache: {
       ...baseDiscoveryCache,
@@ -530,12 +487,11 @@ export async function generateDiscoverPlaylists({
     libraryArtistKeys,
   };
   const playlistPresets = [...DISCOVER_PLAYLIST_PRESETS, ...focusCandidates];
-  const { playlists: presetPlaylists, totalSteps } =
-    await buildPlaylistsFromPresets(
-      playlistPresets,
-      { listenHistoryProfile, plannerOptions },
-      onProgress,
-    );
+  const { playlists: presetPlaylists, totalSteps } = await buildPlaylistsFromPresets(
+    playlistPresets,
+    { listenHistoryProfile, plannerOptions },
+    onProgress,
+  );
 
   const playlists = [...presetPlaylists];
 
@@ -551,8 +507,7 @@ export async function generateDiscoverPlaylists({
   onProgress?.({ completed: totalSteps, total: totalSteps });
 
   const { attachArtworkToDiscoverPlaylists } =
-    await import("./playlistArtworkBuilder.js");
-  return attachArtworkToDiscoverPlaylists(playlists);
+    await import("./playlistArtworkBuilder.js");  return attachArtworkToDiscoverPlaylists(playlists);
 }
 
 export function annotateDiscoverPlaylistsForUser(playlists, user) {
@@ -572,15 +527,12 @@ export function annotateDiscoverPlaylistsForUser(playlists, user) {
   return (Array.isArray(playlists) ? playlists : []).map((playlist) => ({
     ...playlist,
     adoptedFlowId: adoptedFlowByPresetId.get(playlist.presetId) || null,
-    adoptedPlaylistId:
-      adoptedPlaylistByPresetId.get(playlist.presetId) || null,
+    adoptedPlaylistId: adoptedPlaylistByPresetId.get(playlist.presetId) || null,
   }));
 }
 
 export function getCachedDiscoverPlaylist(cache, presetId) {
-  const playlists = Array.isArray(cache?.discoverPlaylists)
-    ? cache.discoverPlaylists
-    : [];
+  const playlists = Array.isArray(cache?.discoverPlaylists) ? cache.discoverPlaylists : [];
   return playlists.find((playlist) => playlist.presetId === presetId) || null;
 }
 

@@ -17,23 +17,14 @@ export function LidarrLibraryAccessCheck({ result }) {
         {result.steps.map((entry) => {
           const Icon = STEP_ICONS[entry.status] || AlertCircle;
           return (
-            <li
-              key={entry.id}
-              className={`settings-page__access-step is-${entry.status}`}
-            >
+            <li key={entry.id} className={`settings-page__access-step is-${entry.status}`}>
               <Icon className="settings-page__access-step-icon" aria-hidden />
               <div className="settings-page__access-step-body">
-                <span className="settings-page__access-step-label">
-                  {entry.label}
-                </span>
+                <span className="settings-page__access-step-label">{entry.label}</span>
                 {entry.detail ? (
-                  <span className="settings-page__access-step-detail">
-                    {entry.detail}
-                  </span>
+                  <span className="settings-page__access-step-detail">{entry.detail}</span>
                 ) : null}
-                {entry.fix ? (
-                  <p className="settings-page__access-step-fix">{entry.fix}</p>
-                ) : null}
+                {entry.fix ? <p className="settings-page__access-step-fix">{entry.fix}</p> : null}
               </div>
             </li>
           );
@@ -43,9 +34,7 @@ export function LidarrLibraryAccessCheck({ result }) {
         <p className="settings-page__access-sample">
           <span className="settings-page__access-sample-label">Example</span>
           {result.sample.artistName} — {result.sample.trackTitle}
-          <code className="settings-page__access-sample-path">
-            {result.sample.path}
-          </code>
+          <code className="settings-page__access-sample-path">{result.sample.path}</code>
         </p>
       ) : null}
     </div>

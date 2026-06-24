@@ -112,9 +112,7 @@ const updateStmt = db.prepare(`
 
 const deleteStmt = db.prepare(`DELETE FROM ${JOBS_TABLE} WHERE id = ?`);
 const deleteAllStmt = db.prepare(`DELETE FROM ${JOBS_TABLE}`);
-const selectAllStmt = db.prepare(
-  `SELECT * FROM ${JOBS_TABLE} ORDER BY created_at ASC, id ASC`,
-);
+const selectAllStmt = db.prepare(`SELECT * FROM ${JOBS_TABLE} ORDER BY created_at ASC, id ASC`);
 const updatePlaylistTypeStmt = db.prepare(
   `UPDATE ${JOBS_TABLE} SET playlist_type = ?, playlist_id = ? WHERE playlist_type = ?`,
 );
@@ -210,11 +208,7 @@ export class WeeklyFlowDownloadTracker {
 
   isSlskdDispatched(id) {
     const job = this.jobs.get(id);
-    return (
-      this.slskdDispatched.has(id) ||
-      !!job?.slskdBatchId ||
-      !!job?.slskdSearchId
-    );
+    return this.slskdDispatched.has(id) || !!job?.slskdBatchId || !!job?.slskdSearchId;
   }
 
   markSlskdDispatched(id) {
@@ -370,12 +364,8 @@ export class WeeklyFlowDownloadTracker {
   }
 
   _removeFromPendingQueues(id) {
-    this.pendingFreshQueue = this.pendingFreshQueue.filter(
-      (entryId) => entryId !== id,
-    );
-    this.pendingRetryQueue = this.pendingRetryQueue.filter(
-      (entryId) => entryId !== id,
-    );
+    this.pendingFreshQueue = this.pendingFreshQueue.filter((entryId) => entryId !== id);
+    this.pendingRetryQueue = this.pendingRetryQueue.filter((entryId) => entryId !== id);
   }
 
   _load() {
@@ -557,9 +547,7 @@ export class WeeklyFlowDownloadTracker {
     let changed = false;
     const assignString = (key) => {
       if (!(key in metadata)) return;
-      const nextValue = metadata[key]
-        ? String(metadata[key]).trim() || null
-        : null;
+      const nextValue = metadata[key] ? String(metadata[key]).trim() || null : null;
       if (job[key] !== nextValue) {
         job[key] = nextValue;
         changed = true;
@@ -650,10 +638,7 @@ export class WeeklyFlowDownloadTracker {
       if (!job || job.status !== "pending") {
         continue;
       }
-      if (
-        lastPlaylistType &&
-        String(job.playlistType || "") === String(lastPlaylistType || "")
-      ) {
+      if (lastPlaylistType && String(job.playlistType || "") === String(lastPlaylistType || "")) {
         if (fallbackIndex === -1) fallbackIndex = index;
         continue;
       }
@@ -688,21 +673,12 @@ export class WeeklyFlowDownloadTracker {
   getNextPendingMatching(predicate = null, lastPlaylistType = null) {
     const accepts = typeof predicate === "function" ? predicate : () => true;
     const canProcess = (job) =>
-      job &&
-      job.status === "pending" &&
-      !this._shouldSkipForWorker(job) &&
-      accepts(job);
+      job && job.status === "pending" && !this._shouldSkipForWorker(job) && accepts(job);
     this.pendingFreshQueue = this._compactPendingQueue(this.pendingFreshQueue);
-    const nextFresh = this._pickPendingFromQueue(
-      this.pendingFreshQueue,
-      lastPlaylistType,
-    );
+    const nextFresh = this._pickPendingFromQueue(this.pendingFreshQueue, lastPlaylistType);
     if (canProcess(nextFresh)) return nextFresh;
     this.pendingRetryQueue = this._compactPendingQueue(this.pendingRetryQueue);
-    const nextRetry = this._pickPendingFromQueue(
-      this.pendingRetryQueue,
-      lastPlaylistType,
-    );
+    const nextRetry = this._pickPendingFromQueue(this.pendingRetryQueue, lastPlaylistType);
     if (canProcess(nextRetry)) return nextRetry;
     if (this.pendingSet.size > 0) {
       for (const id of this.pendingSet) {
@@ -715,9 +691,7 @@ export class WeeklyFlowDownloadTracker {
 
   peekPending(limit = 10) {
     const max =
-      Number.isFinite(Number(limit)) && Number(limit) > 0
-        ? Math.floor(Number(limit))
-        : 10;
+      Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.floor(Number(limit)) : 10;
     const jobs = [];
     const combined = [...this.pendingFreshQueue, ...this.pendingRetryQueue];
     for (const id of combined) {
@@ -769,8 +743,7 @@ export class WeeklyFlowDownloadTracker {
     job.stagingPath = null;
     job.finalPath = null;
     job.retryCycle = asRetryCycle;
-    job.error =
-      typeof error === "string" ? error : (error && error.message) || null;
+    job.error = typeof error === "string" ? error : (error && error.message) || null;
     this._update(job);
     this._applyStatusDelta(job.playlistType, previousStatus, job.status);
     this.pendingSet.add(id);
@@ -791,8 +764,7 @@ export class WeeklyFlowDownloadTracker {
     const keepRetryTier = options?.keepRetryTier === true;
     const currentlyRetryTier = this.pendingRetrySet.has(id);
     const moveToRetryTier = keepRetryTier ? currentlyRetryTier : false;
-    job.error =
-      typeof error === "string" ? error : (error && error.message) || null;
+    job.error = typeof error === "string" ? error : (error && error.message) || null;
     this._update(job);
     this._removeFromPendingQueues(id);
     this.pendingSet.add(id);
@@ -841,8 +813,7 @@ export class WeeklyFlowDownloadTracker {
     job.status = "failed";
     job.retryCycle = false;
     job.completedAt = Date.now();
-    job.error =
-      typeof error === "string" ? error : (error && error.message) || null;
+    job.error = typeof error === "string" ? error : (error && error.message) || null;
     this._update(job);
     this._applyStatusDelta(job.playlistType, previousStatus, job.status);
     return true;
@@ -851,9 +822,7 @@ export class WeeklyFlowDownloadTracker {
   getByPlaylistType(playlistType, limit = null) {
     const jobs = [];
     const max =
-      Number.isFinite(Number(limit)) && Number(limit) > 0
-        ? Math.floor(Number(limit))
-        : null;
+      Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.floor(Number(limit)) : null;
     for (const job of this.jobs.values()) {
       if (job.playlistType === playlistType) {
         jobs.push(job);
@@ -971,9 +940,7 @@ export class WeeklyFlowDownloadTracker {
 
   getDoneWithFinalPath(limit = 500) {
     const max =
-      Number.isFinite(Number(limit)) && Number(limit) > 0
-        ? Math.floor(Number(limit))
-        : 500;
+      Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.floor(Number(limit)) : 500;
     const jobs = [];
     for (const job of this.jobs.values()) {
       if (job?.status !== "done" || typeof job?.finalPath !== "string") {
@@ -994,8 +961,7 @@ export class WeeklyFlowDownloadTracker {
     if (Array.isArray(playlistTypes) && playlistTypes.length > 0) {
       for (const playlistType of playlistTypes) {
         statsByType[playlistType] = this._cloneStats(
-          this.statsByPlaylistType.get(String(playlistType)) ||
-            this._emptyStats(),
+          this.statsByPlaylistType.get(String(playlistType)) || this._emptyStats(),
         );
       }
       return statsByType;
@@ -1036,9 +1002,7 @@ export class WeeklyFlowDownloadTracker {
   }
 
   clearCompleted() {
-    return this._deleteJobsWhere(
-      (job) => job.status === "done" || job.status === "failed",
-    );
+    return this._deleteJobsWhere((job) => job.status === "done" || job.status === "failed");
   }
 
   clearByPlaylistType(playlistType) {

@@ -1,8 +1,7 @@
 import { getWeeklyFlowOperationQueue, getWorkerId } from "../honkerDb.js";
 import {
   processWeeklyFlowOperation,
-} from "./weeklyFlowOperations.js";
-import {
+} from "./weeklyFlowOperations.js";import {
   setWeeklyFlowOperationWorkerState,
 } from "./weeklyFlowOperationQueue.js";
 import {
@@ -16,14 +15,11 @@ import {
 
 const WORKER_NAME = "weekly-flow-operation";
 
-const PERMANENT_ERROR_CODES = new Set([
-  "SHARED_PLAYLIST_NAME_CONFLICT",
-  "FLOW_NAME_CONFLICT",
-]);
+const PERMANENT_ERROR_CODES = new Set(["SHARED_PLAYLIST_NAME_CONFLICT", "FLOW_NAME_CONFLICT"]);
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
+let _loopPromise = null;
 let currentLabel = null;
 let idleController = null;
 
@@ -78,7 +74,7 @@ async function runLoop() {
     idleController?.dispose();
     idleController = null;
     running = false;
-    loopPromise = null;
+    _loopPromise = null;
     currentLabel = null;
     syncWorkerState();
     const intentional = stopRequested || idleStopped;
@@ -94,7 +90,7 @@ export function startWeeklyFlowOperationWorker() {
   running = true;
   stopRequested = false;
   syncWorkerState();
-  loopPromise = runLoop();
+  _loopPromise = runLoop();
 }
 
 export function stopWeeklyFlowOperationWorker() {

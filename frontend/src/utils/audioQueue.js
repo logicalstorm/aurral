@@ -13,7 +13,9 @@ const FORMAT_BY_EXTENSION = {
 const DEFAULT_FORMAT_ATTEMPTS = ["mp3", "m4a", "flac", "ogg", "aac"];
 
 function extensionFromPath(value) {
-  const path = String(value || "").split("?")[0].toLowerCase();
+  const path = String(value || "")
+    .split("?")[0]
+    .toLowerCase();
   return path.match(/\.([a-z0-9]+)$/i)?.[1] || null;
 }
 
@@ -53,9 +55,7 @@ export function getHowlerFormat(formatKey) {
 }
 
 export function normalizeQueueTrack(track, overrides = {}) {
-  const id = String(
-    track?.id ?? track?.trackId ?? track?.mbid ?? overrides.id ?? "",
-  );
+  const id = String(track?.id ?? track?.trackId ?? track?.mbid ?? overrides.id ?? "");
   const src = track?.src ?? track?.streamUrl ?? track?.preview_url ?? "";
   return {
     id: id || `track-${crypto.randomUUID()}`,

@@ -29,14 +29,9 @@ export function normalizeListenHistoryUrl(value) {
 }
 
 export function getListenHistoryProfile(source = {}) {
-  const safeSource =
-    source && typeof source === "object" && !Array.isArray(source)
-      ? source
-      : {};
-  const explicitUsername =
-    safeSource.listenHistoryUsername ?? safeSource.listen_history_username;
-  const legacyLastfmUsername =
-    safeSource.lastfmUsername ?? safeSource.lastfm_username;
+  const safeSource = source && typeof source === "object" && !Array.isArray(source) ? source : {};
+  const explicitUsername = safeSource.listenHistoryUsername ?? safeSource.listen_history_username;
+  const legacyLastfmUsername = safeSource.lastfmUsername ?? safeSource.lastfm_username;
   const username = normalizeListenHistoryUsername(
     explicitUsername != null ? explicitUsername : legacyLastfmUsername,
   );
@@ -46,21 +41,20 @@ export function getListenHistoryProfile(source = {}) {
   const hasExplicitProvider =
     safeSource.listenHistoryProvider !== undefined ||
     safeSource.listen_history_provider !== undefined;
-  const provider = username || url
-    ? hasExplicitProvider
-      ? normalizeListenHistoryProvider(
-          safeSource.listenHistoryProvider ??
-            safeSource.listen_history_provider,
-        )
-      : legacyLastfmUsername != null
-        ? "lastfm"
-        : url
-          ? "koito"
-          : DEFAULT_LISTEN_HISTORY_PROVIDER
-    : normalizeListenHistoryProvider(
-        safeSource.listenHistoryProvider ??
-          safeSource.listen_history_provider,
-      );
+  const provider =
+    username || url
+      ? hasExplicitProvider
+        ? normalizeListenHistoryProvider(
+            safeSource.listenHistoryProvider ?? safeSource.listen_history_provider,
+          )
+        : legacyLastfmUsername != null
+          ? "lastfm"
+          : url
+            ? "koito"
+            : DEFAULT_LISTEN_HISTORY_PROVIDER
+      : normalizeListenHistoryProvider(
+          safeSource.listenHistoryProvider ?? safeSource.listen_history_provider,
+        );
 
   return {
     listenHistoryProvider: provider,
@@ -96,9 +90,7 @@ export function getListenHistoryCacheNamespace(profile) {
   }
   if (!normalized.listenHistoryUsername) return null;
   const prefix = CACHE_PREFIX_BY_PROVIDER[normalized.listenHistoryProvider];
-  return prefix
-    ? `${prefix}:${normalized.listenHistoryUsername}`
-    : null;
+  return prefix ? `${prefix}:${normalized.listenHistoryUsername}` : null;
 }
 
 export function getDefaultListenHistoryProfile(settings) {

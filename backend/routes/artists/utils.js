@@ -33,8 +33,7 @@ export const buildArtistRequestKey = ({
     ? [...selectedReleaseTypes].filter(Boolean).sort().join(",")
     : "";
   const limitValue = Number.parseInt(appearsOnLimit, 10);
-  const limitKey =
-    Number.isFinite(limitValue) && limitValue > 0 ? String(limitValue) : "";
+  const limitKey = Number.isFinite(limitValue) && limitValue > 0 ? String(limitValue) : "";
   return [String(mbid || "").trim(), mode, releaseTypesKey, limitKey].join(":");
 };
 

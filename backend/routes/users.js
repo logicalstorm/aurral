@@ -21,14 +21,8 @@ import { normalizeKoitoBaseUrl } from "../services/koitoClient.js";
 
 const buildListenHistoryUpdates = (body, existing) => {
   const hasLegacyLastfmUpdate = Object.hasOwn(body, "lastfmUsername");
-  const hasListenHistoryProviderUpdate = Object.hasOwn(
-    body,
-    "listenHistoryProvider",
-  );
-  const hasListenHistoryUsernameUpdate = Object.hasOwn(
-    body,
-    "listenHistoryUsername",
-  );
+  const hasListenHistoryProviderUpdate = Object.hasOwn(body, "listenHistoryProvider");
+  const hasListenHistoryUsernameUpdate = Object.hasOwn(body, "listenHistoryUsername");
   const hasListenHistoryUrlUpdate = Object.hasOwn(body, "listenHistoryUrl");
   if (
     !hasListenHistoryProviderUpdate &&
@@ -48,9 +42,7 @@ const buildListenHistoryUpdates = (body, existing) => {
   );
 
   if (provider === "koito") {
-    const rawUrl = hasListenHistoryUrlUpdate
-      ? body.listenHistoryUrl
-      : existing.listenHistoryUrl;
+    const rawUrl = hasListenHistoryUrlUpdate ? body.listenHistoryUrl : existing.listenHistoryUrl;
     const trimmedUrl = normalizeListenHistoryUrl(rawUrl);
     if (!trimmedUrl) {
       const error = new Error("Koito URL is required");
@@ -124,9 +116,7 @@ const FALLBACK_GENRE_SECTION_PREFIX = "fallbackGenre:";
 
 const normalizeDiscoverLayout = (value) => {
   if (!Array.isArray(value)) return null;
-  const defaultsById = new Map(
-    DEFAULT_DISCOVER_LAYOUT.map((item) => [item.id, item]),
-  );
+  const defaultsById = new Map(DEFAULT_DISCOVER_LAYOUT.map((item) => [item.id, item]));
   const seenDynamicIds = new Set();
   const normalized = [];
   for (const item of value) {
@@ -144,10 +134,7 @@ const normalizeDiscoverLayout = (value) => {
     if (!defaultsById.has(id)) continue;
     normalized.push({
       id,
-      enabled:
-        typeof item?.enabled === "boolean"
-          ? item.enabled
-          : defaultsById.get(id).enabled,
+      enabled: typeof item?.enabled === "boolean" ? item.enabled : defaultsById.get(id).enabled,
     });
     defaultsById.delete(id);
   }
@@ -168,10 +155,7 @@ const clearOrphanedDiscoveryCache = (userId, existingProfile, nextProfile) => {
   if (!existingNamespace) return;
   const otherUsers = userOps
     .getAllListeningHistoryUsers()
-    .filter(
-      (user) =>
-        user.id !== userId && listenHistoryProfilesEqual(user, existingProfile),
-    );
+    .filter((user) => user.id !== userId && listenHistoryProfilesEqual(user, existingProfile));
   if (otherUsers.length === 0) {
     dbOps.deleteDiscoveryCacheByPrefix(`${existingNamespace}:`);
   }
@@ -201,29 +185,23 @@ router.post("/", requireAuth, requireAdmin, (req, res) => {
       return res.status(400).json({ error: passwordValidation.error });
     }
     const hash = bcrypt.hashSync(password, 10);
-    const perms = permissions
-      ? { ...userOps.getDefaultPermissions(), ...permissions }
-      : null;
+    const perms = permissions ? { ...userOps.getDefaultPermissions(), ...permissions } : null;
     const created = userOps.createUser(un, hash, role, perms);
     if (!created) {
       return res.status(500).json({ error: "Failed to create user" });
     }
     reconcileLocalBypassAfterUserMutation();
-    res
-      .status(201)
-      .json({
-        id: created.id,
-        username: created.username,
-        role: created.role,
-        permissions: created.permissions,
-        lidarrRootFolderPath: created.lidarrRootFolderPath,
-        lidarrQualityProfileId: created.lidarrQualityProfileId,
-        discoverLayout: created.discoverLayout,
-      });
+    res.status(201).json({
+      id: created.id,
+      username: created.username,
+      role: created.role,
+      permissions: created.permissions,
+      lidarrRootFolderPath: created.lidarrRootFolderPath,
+      lidarrQualityProfileId: created.lidarrQualityProfileId,
+      discoverLayout: created.discoverLayout,
+    });
   } catch (e) {
-    res
-      .status(500)
-      .json({ error: "Failed to create user", message: e.message });
+    res.status(500).json({ error: "Failed to create user", message: e.message });
   }
 });
 
@@ -265,9 +243,7 @@ router.patch("/:id", requireAuth, (req, res) => {
       if (password) {
         const { currentPassword } = req.body;
         if (!currentPassword) {
-          return res
-            .status(400)
-            .json({ error: "currentPassword required to change password" });
+          return res.status(400).json({ error: "currentPassword required to change password" });
         }
         if (!bcrypt.compareSync(currentPassword, existing.passwordHash)) {
           return res.status(401).json({ error: "Current password is incorrect" });
@@ -330,9 +306,7 @@ router.patch("/:id", requireAuth, (req, res) => {
     reconcileLocalBypassAfterUserMutation();
     res.json(updated);
   } catch (e) {
-    res
-      .status(500)
-      .json({ error: "Failed to update user", message: e.message });
+    res.status(500).json({ error: "Failed to update user", message: e.message });
   }
 });
 
@@ -497,9 +471,7 @@ router.patch("/me/lidarr-preferences", requireAuth, async (req, res) => {
     }
     if (
       nextQualityProfileId !== null &&
-      !summary.qualityProfiles.some(
-        (profile) => profile.id === nextQualityProfileId,
-      )
+      !summary.qualityProfiles.some((profile) => profile.id === nextQualityProfileId)
     ) {
       return res.status(400).json({
         error: "Invalid Lidarr preferences",
@@ -518,9 +490,7 @@ router.patch("/me/lidarr-preferences", requireAuth, async (req, res) => {
       });
     }
 
-    const refreshedSummary = await lidarrClient.getArtistAddPreferenceSummary(
-      updated,
-    );
+    const refreshedSummary = await lidarrClient.getArtistAddPreferenceSummary(updated);
     res.json(refreshedSummary);
   } catch (e) {
     res.status(500).json({
@@ -549,9 +519,7 @@ router.post("/me/password", requireAuth, (req, res) => {
     deleteSessionsByUserId(req.user.id);
     res.json({ success: true });
   } catch (e) {
-    res
-      .status(500)
-      .json({ error: "Failed to change password", message: e.message });
+    res.status(500).json({ error: "Failed to change password", message: e.message });
   }
 });
 
@@ -570,9 +538,7 @@ router.delete("/:id", requireAuth, requireAdmin, (req, res) => {
     reconcileLocalBypassAfterUserMutation();
     res.json({ success: true });
   } catch (e) {
-    res
-      .status(500)
-      .json({ error: "Failed to delete user", message: e.message });
+    res.status(500).json({ error: "Failed to delete user", message: e.message });
   }
 });
 

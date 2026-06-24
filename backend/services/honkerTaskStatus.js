@@ -265,17 +265,12 @@ async function pruneExpiredRuns() {
   try {
     const { pruneDuplicateScheduledDiscoveryRefreshes } = await import(
       "./discovery/refreshScheduler.js"
-    );
-    pruneDuplicateScheduledDiscoveryRefreshes();
+    );    pruneDuplicateScheduledDiscoveryRefreshes();
   } catch {}
 }
 
 function isActiveQueueRow(row) {
-  return (
-    row.status === "running" ||
-    row.status === "queued" ||
-    row.status === "scheduled"
-  );
+  return row.status === "running" || row.status === "queued" || row.status === "scheduled";
 }
 
 function isWithinTaskHistoryWindow(row) {
@@ -362,10 +357,12 @@ function formatPayloadLabel(value) {
 }
 
 function systemTaskInfo(kind) {
-  return SYSTEM_TASK_LABELS[kind] || {
-    label: formatPayloadLabel(kind) || "System Task",
-    description: queueDescription("system-task"),
-  };
+  return (
+    SYSTEM_TASK_LABELS[kind] || {
+      label: formatPayloadLabel(kind) || "System Task",
+      description: queueDescription("system-task"),
+    }
+  );
 }
 
 function discoveryRefreshInfo(payload = {}) {
@@ -423,8 +420,7 @@ export function describeHonkerTask(queue, payloadValue) {
     suffix = payload?.[extractor] ? formatPayloadLabel(payload[extractor]) : null;
   }
 
-  return suffix ? `${def.label}: ${suffix}` : def.label;
-}
+  return suffix ? `${def.label}: ${suffix}` : def.label;}
 
 function describeHonkerTaskDetail(queue, payloadValue) {
   const payload = parsePayload(payloadValue) || {};
@@ -480,9 +476,7 @@ function summarizePayload(queue, payloadValue) {
     const username = profile.listenHistoryUsername || profile.username;
     const provider = profile.listenHistoryProvider || profile.provider;
     if (provider || username) {
-      parts.push(
-        `Profile: ${[provider, username].filter(Boolean).join(" / ")}`,
-      );
+      parts.push(`Profile: ${[provider, username].filter(Boolean).join(" / ")}`);
     }
   }
 
@@ -564,8 +558,7 @@ function enrichQueueRow(row) {
   let runningForMs = null;
   let isStale = false;
   if (row.status === "running") {
-    const startedMs =
-      Date.parse(row.startedAt || "") || Date.parse(row.queuedAt || "");
+    const startedMs = Date.parse(row.startedAt || "") || Date.parse(row.queuedAt || "");
     if (Number.isFinite(startedMs) && startedMs > 0) {
       runningForMs = Math.max(0, Date.now() - startedMs);
       isStale = runningForMs > STALE_RUNNING_MS;
@@ -621,15 +614,9 @@ function normalizeLiveJobRow(row, runningStartsByJobId = new Map()) {
   const currentTime = nowUnix();
   const state = String(row.state || "pending");
   const status =
-    state === "processing"
-      ? "running"
-      : Number(row.run_at) > currentTime
-        ? "scheduled"
-        : "queued";
+    state === "processing" ? "running" : Number(row.run_at) > currentTime ? "scheduled" : "queued";
   const startedUnix =
-    state === "processing"
-      ? runningStartsByJobId.get(`${row.queue}:${row.id}`)
-      : null;
+    state === "processing" ? runningStartsByJobId.get(`${row.queue}:${row.id}`) : null;
 
   return {
     source: "live",
@@ -866,18 +853,14 @@ async function readWorkerStatuses() {
 }
 
 function normalizeWorkerRows(workerStatuses, queueStats) {
-  const workerByName = new Map(
-    workerStatuses.map((worker) => [worker.name, worker]),
-  );
+  const workerByName = new Map(workerStatuses.map((worker) => [worker.name, worker]));
   const rows = [];
   const seenQueues = new Set();
 
   for (const definition of QUEUE_DEFINITIONS) {
     seenQueues.add(definition.queue);
     const stats = queueStats.get(definition.queue) || {};
-    const worker = definition.worker
-      ? workerByName.get(definition.worker)
-      : null;
+    const worker = definition.worker ? workerByName.get(definition.worker) : null;
     const processing = Number(stats.runningCount || 0);
     const loopRunning = worker?.running === true;
     rows.push({
@@ -946,9 +929,7 @@ function normalizeQueueRows(liveRows, deadRows, runRows, runningStartsByJobId) {
   const normalizedLive = groupQueueRows(
     liveRows.map((row) => normalizeLiveJobRow(row, runningStartsByJobId)),
   );
-  const liveJobKeys = new Set(
-    liveRows.map((row) => `${row.queue}:${row.id}`),
-  );
+  const liveJobKeys = new Set(liveRows.map((row) => `${row.queue}:${row.id}`));
   const runJobKeys = new Set();
   const normalizedRuns = runRows
     .filter((row) => !liveJobKeys.has(`${row.queue}:${row.job_id}`))
@@ -962,8 +943,7 @@ function normalizeQueueRows(liveRows, deadRows, runRows, runningStartsByJobId) {
         maxAttempts: null,
         priority: null,
         state: run.status,
-        sortAt:
-          Date.parse(run.endedAt || run.startedAt || run.queuedAt || 0) / 1000,
+        sortAt: Date.parse(run.endedAt || run.startedAt || run.queuedAt || 0) / 1000,
         duplicateCount: 1,
       };
     });
@@ -999,12 +979,7 @@ function groupQueueRows(rows) {
       continue;
     }
 
-    const key = [
-      row.queue,
-      row.status,
-      row.name,
-      row.payloadSummary,
-    ].join("|");
+    const key = [row.queue, row.status, row.name, row.payloadSummary].join("|");
     const existing = groupedByTask.get(key);
     if (!existing) {
       groupedByTask.set(key, row);
@@ -1078,10 +1053,7 @@ export function recordHonkerTaskRunFinished(runId, status, error = null) {
     ensureRunSchema();
     const id = Number(runId);
     if (!Number.isFinite(id) || id <= 0) return;
-    const row = safeGet(
-      "SELECT started_at FROM honker_task_runs WHERE id = ?",
-      [id],
-    );
+    const row = safeGet("SELECT started_at FROM honker_task_runs WHERE id = ?", [id]);
     const endedAt = nowUnix();
     const durationMs = row?.started_at
       ? Math.max(0, (endedAt - Number(row.started_at)) * 1000)
@@ -1099,8 +1071,7 @@ export function recordHonkerTaskRunFinished(runId, status, error = null) {
 
 export async function clearStaleHonkerJobs() {
   ensureRunSchema();
-  const { sweepAllHonkerQueues, getHonkerDb, getHonkerQueueByName } =
-    await import("./honkerDb.js");
+  const { sweepAllHonkerQueues, getHonkerDb, getHonkerQueueByName } = await import("./honkerDb.js");
   const honkerDb = getHonkerDb();
   const now = nowUnix();
   const staleCutoff = now - Math.floor(STALE_RUNNING_MS / 1000);
@@ -1136,10 +1107,9 @@ export async function clearStaleHonkerJobs() {
         swept += Number(queue.sweepExpired()) || 0;
       }
 
-      const stillLive = honkerDb.query(
-        `SELECT id FROM _honker_live WHERE id = ? LIMIT 1`,
-        [row.id],
-      );
+      const stillLive = honkerDb.query(`SELECT id FROM _honker_live WHERE id = ? LIMIT 1`, [
+        row.id,
+      ]);
       if (stillLive.length > 0) {
         const tx = honkerDb.transaction();
         try {
@@ -1154,11 +1124,7 @@ export async function clearStaleHonkerJobs() {
       }
 
       if (row.run_id) {
-        recordHonkerTaskRunFinished(
-          Number(row.run_id),
-          "failed",
-          clearedReason,
-        );
+        recordHonkerTaskRunFinished(Number(row.run_id), "failed", clearedReason);
       }
       cleared += 1;
     } catch (error) {
@@ -1212,12 +1178,7 @@ export async function getHonkerTaskStatus() {
   const queueStats = readQueueStats(liveRows);
   const workerStatuses = await readWorkerStatuses();
   const workers = normalizeWorkerRows(workerStatuses, queueStats);
-  const queue = normalizeQueueRows(
-    liveRows,
-    deadRows,
-    runRows,
-    runningStartsByJobId,
-  );
+  const queue = normalizeQueueRows(liveRows, deadRows, runRows, runningStartsByJobId);
 
   return {
     timestamp: new Date().toISOString(),

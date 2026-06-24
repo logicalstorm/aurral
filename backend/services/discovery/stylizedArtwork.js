@@ -101,8 +101,7 @@ const buildCoverTitleLines = (title) => {
   return cleaned.length > 0 ? cleaned : ["Untitled"];
 };
 
-const estimateTextWidth = (line, fontSize) =>
-  String(line || "").length * fontSize * 0.56;
+const estimateTextWidth = (line, fontSize) => String(line || "").length * fontSize * 0.56;
 
 const renderArtworkTitleOverlay = async (titleLines) => {
   const maxWidth = ARTWORK_SIZE - TITLE_PADDING_X * 2;
@@ -112,10 +111,7 @@ const renderArtworkTitleOverlay = async (titleLines) => {
   while (fontSize > 28) {
     const lineHeight = fontSize * 1.05;
     const totalHeight = titleLines.length * lineHeight;
-    const widestLine = Math.max(
-      ...titleLines.map((line) => estimateTextWidth(line, fontSize)),
-      0,
-    );
+    const widestLine = Math.max(...titleLines.map((line) => estimateTextWidth(line, fontSize)), 0);
     if (totalHeight <= maxHeight && widestLine <= maxWidth) break;
     fontSize -= 2;
   }
@@ -155,12 +151,8 @@ const mapToneBufferToPalette = (toneMapRaw, palette) => {
     const mappedLuminance = 0.05 + luminance ** 1.38 * 0.32;
     const offset = index * 3;
     mapped[offset] = Math.round(dark.r + (light.r - dark.r) * mappedLuminance);
-    mapped[offset + 1] = Math.round(
-      dark.g + (light.g - dark.g) * mappedLuminance,
-    );
-    mapped[offset + 2] = Math.round(
-      dark.b + (light.b - dark.b) * mappedLuminance,
-    );
+    mapped[offset + 1] = Math.round(dark.g + (light.g - dark.g) * mappedLuminance);
+    mapped[offset + 2] = Math.round(dark.b + (light.b - dark.b) * mappedLuminance);
   }
 
   return mapped;
@@ -176,11 +168,7 @@ export async function fetchImageBuffer(imageUrl) {
   return Buffer.from(response.data);
 }
 
-export async function renderStylizedPhotoArtwork({
-  imageBuffer,
-  title,
-  paletteSeed = null,
-}) {
+export async function renderStylizedPhotoArtwork({ imageBuffer, title, paletteSeed = null }) {
   const base = sharp(imageBuffer, { animated: false })
     .resize(ARTWORK_SIZE, ARTWORK_SIZE, { fit: "cover", position: "attention" })
     .ensureAlpha();
@@ -224,9 +212,7 @@ export async function renderStylizedPhotoArtwork({
     .png()
     .toBuffer();
 
-  const titleOverlay = await renderArtworkTitleOverlay(
-    buildCoverTitleLines(title),
-  );
+  const titleOverlay = await renderArtworkTitleOverlay(buildCoverTitleLines(title));
 
   return sharp({
     create: {

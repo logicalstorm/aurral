@@ -43,12 +43,12 @@ Each track must include:
 
 Accepted aliases:
 
-| Field | Accepted keys |
-| --- | --- |
-| Artist | `artistName`, `artist`, `artist_name`, `Artist Name(s)` |
-| Track | `trackName`, `title`, `name`, `track`, `Track Name` |
-| Album (optional) | `albumName`, `album`, `Album Name` |
-| Artist ID (optional) | `artistMbid`, `artistId`, `mbid` |
+| Field                | Accepted keys                                           |
+| -------------------- | ------------------------------------------------------- |
+| Artist               | `artistName`, `artist`, `artist_name`, `Artist Name(s)` |
+| Track                | `trackName`, `title`, `name`, `track`, `Track Name`     |
+| Album (optional)     | `albumName`, `album`, `Album Name`                      |
+| Artist ID (optional) | `artistMbid`, `artistId`, `mbid`                        |
 
 Minimum shape:
 
@@ -163,9 +163,9 @@ Imported playlists behave differently from flows when downloads fail:
 
 Aurral keeps every generated playlist entry inside its own playlist folder under `aurral-weekly-flow/<playlist-id>`. When existing file reuse is enabled, that entry can point at a matching completed Aurral or Lidarr file instead of a new slskd download.
 
-| Mode | Behavior |
-| --- | --- |
-| Download | Always download a new file |
+| Mode                 | Behavior                                                             |
+| -------------------- | -------------------------------------------------------------------- |
+| Download             | Always download a new file                                           |
 | Reuse existing files | Use a matching completed Aurral or Lidarr file when one is available |
 
 Aurral-global reuse prevents the same imported track from being downloaded again for another playlist. Lidarr-aware reuse requires Aurral to read the files at the paths Lidarr reports. In a standard all-Docker setup, that means the same `/data` mount and root folder path (for example `/data/music`).

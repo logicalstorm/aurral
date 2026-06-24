@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
-import {
-  CheckCircle2,
-  Crosshair,
-  ListMusic,
-  Loader,
-  Sparkles,
-} from "lucide-react";
+import { CheckCircle2, Crosshair, ListMusic, Loader, Sparkles } from "lucide-react";
 import { DiscoverPlaylistContextMenu } from "../components/DiscoverPlaylistContextMenu";
 import { DiscoverRail } from "../components/DiscoverRail";
 import { FlowTracksPanel } from "./FlowPageComponents";
@@ -42,10 +36,8 @@ const sortDiscoverPlaylists = (playlists) => {
   return list.sort((left, right) => {
     const leftIndex = DISCOVER_FLOW_PRESET_ORDER.indexOf(left?.presetId);
     const rightIndex = DISCOVER_FLOW_PRESET_ORDER.indexOf(right?.presetId);
-    const leftOrder =
-      leftIndex >= 0 ? leftIndex : DISCOVER_FLOW_PRESET_ORDER.length;
-    const rightOrder =
-      rightIndex >= 0 ? rightIndex : DISCOVER_FLOW_PRESET_ORDER.length;
+    const leftOrder = leftIndex >= 0 ? leftIndex : DISCOVER_FLOW_PRESET_ORDER.length;
+    const rightOrder = rightIndex >= 0 ? rightIndex : DISCOVER_FLOW_PRESET_ORDER.length;
     if (leftOrder !== rightOrder) return leftOrder - rightOrder;
     return String(left?.name || "").localeCompare(String(right?.name || ""));
   });
@@ -137,21 +129,13 @@ export function DiscoverPlaylistSection({
   const navigate = useDiscoverNavigation();
   const { showSuccess, showError } = useToast();
 
-  const visiblePlaylists = useMemo(
-    () => sortDiscoverPlaylists(playlists),
-    [playlists],
-  );
+  const visiblePlaylists = useMemo(() => sortDiscoverPlaylists(playlists), [playlists]);
 
-  const expandedPlaylist = visiblePlaylists.find(
-    (playlist) => playlist.presetId === expandedId,
-  );
+  const expandedPlaylist = visiblePlaylists.find((playlist) => playlist.presetId === expandedId);
 
   const expandedTracks = useMemo(() => {
     if (!expandedPlaylist) return [];
-    return mapPlaylistTracks(
-      expandedPlaylist.tracks || [],
-      expandedPlaylist.presetId,
-    );
+    return mapPlaylistTracks(expandedPlaylist.tracks || [], expandedPlaylist.presetId);
   }, [expandedPlaylist]);
 
   const handleToggle = useCallback((presetId) => {
@@ -166,10 +150,7 @@ export function DiscoverPlaylistSection({
       if (!(target instanceof Node)) return;
       if (expandedPanelRef.current?.contains(target)) return;
       if (playlistCardsRef.current?.contains(target)) return;
-      if (
-        target instanceof Element &&
-        target.closest(".artist-options-menu--discover")
-      ) {
+      if (target instanceof Element && target.closest(".artist-options-menu--discover")) {
         return;
       }
       setExpandedId(null);
@@ -184,9 +165,7 @@ export function DiscoverPlaylistSection({
     setPlaylistMenuError("");
     try {
       const data = await getFlowStatus();
-      const nextPlaylists = Array.isArray(data?.sharedPlaylists)
-        ? data.sharedPlaylists
-        : [];
+      const nextPlaylists = Array.isArray(data?.sharedPlaylists) ? data.sharedPlaylists : [];
       setSharedPlaylists(nextPlaylists);
       return nextPlaylists;
     } catch (error) {
@@ -204,11 +183,7 @@ export function DiscoverPlaylistSection({
   }, [showError]);
 
   const getDefaultPlaylistName = useCallback(
-    (track) =>
-      reserveUniquePlaylistName(
-        sharedPlaylists,
-        `${track?.artistName || "Artist"} Picks`,
-      ),
+    (track) => reserveUniquePlaylistName(sharedPlaylists, `${track?.artistName || "Artist"} Picks`),
     [sharedPlaylists],
   );
 
@@ -225,10 +200,7 @@ export function DiscoverPlaylistSection({
         if (target?.mode === "new") {
           const name =
             String(target?.name || "").trim() ||
-            reserveUniquePlaylistName(
-              sharedPlaylists,
-              `${payload.artistName} Picks`,
-            );
+            reserveUniquePlaylistName(sharedPlaylists, `${payload.artistName} Picks`);
           const response = await createSharedPlaylist({
             name,
             tracks: [payload],
@@ -241,9 +213,7 @@ export function DiscoverPlaylistSection({
           await addSharedPlaylistTracks(target.playlistId, {
             tracks: [payload],
           });
-          showSuccess(
-            `Track added to ${targetPlaylist?.name || "playlist"}`,
-          );
+          showSuccess(`Track added to ${targetPlaylist?.name || "playlist"}`);
         }
         const nextPlaylists = await loadPlaylistsForMenu();
         if (nextPlaylists) {
@@ -277,9 +247,7 @@ export function DiscoverPlaylistSection({
   const handleAdoptFlow = useCallback(
     async (playlist) => {
       if (playlist.adoptedFlowId) {
-        navigate(
-          `/playlists?selected=${encodeURIComponent(playlist.adoptedFlowId)}`,
-        );
+        navigate(`/playlists?selected=${encodeURIComponent(playlist.adoptedFlowId)}`);
         return;
       }
       setAdoptingFlowId(playlist.presetId);
@@ -312,9 +280,7 @@ export function DiscoverPlaylistSection({
   const handleAdoptPlaylist = useCallback(
     async (playlist) => {
       if (playlist.adoptedPlaylistId) {
-        navigate(
-          `/playlists?selected=${encodeURIComponent(playlist.adoptedPlaylistId)}`,
-        );
+        navigate(`/playlists?selected=${encodeURIComponent(playlist.adoptedPlaylistId)}`);
         return;
       }
       setAdoptingPlaylistId(playlist.presetId);
@@ -374,28 +340,18 @@ export function DiscoverPlaylistSection({
           ) : null}
         </div>
         {expandedPlaylist.description ? (
-          <p className="artist-card-meta artist-clamp-2">
-            {expandedPlaylist.description}
-          </p>
+          <p className="artist-card-meta artist-clamp-2">{expandedPlaylist.description}</p>
         ) : null}
-        {recipeMeta ? (
-          <p className="artist-card-meta">{recipeMeta}</p>
-        ) : null}
+        {recipeMeta ? <p className="artist-card-meta">{recipeMeta}</p> : null}
         {(focusTags.length > 0 || focusArtists.length > 0) && (
           <div className="discover-playlist-flow-meta__pills">
             {focusTags.map((tag) => (
-              <span
-                key={`tag-${tag}`}
-                className="discover-playlist-flow-meta__pill"
-              >
+              <span key={`tag-${tag}`} className="discover-playlist-flow-meta__pill">
                 #{tag}
               </span>
             ))}
             {focusArtists.map((artist) => (
-              <span
-                key={`artist-${artist}`}
-                className="discover-playlist-flow-meta__pill"
-              >
+              <span key={`artist-${artist}`} className="discover-playlist-flow-meta__pill">
                 ~{artist}
               </span>
             ))}
@@ -451,96 +407,89 @@ export function DiscoverPlaylistSection({
       }
     >
       <div ref={playlistCardsRef} className="discover-playlist-cards">
-      {visiblePlaylists.map((playlist) => {
-        const CoverIcon = getPlaylistCoverIcon(playlist);
-        const sourceLine = getPlaylistSourceLine(playlist);
-        const isExpanded = expandedId === playlist.presetId;
-        const showArtwork =
-          Number(playlist.trackCount) > 0 &&
-          !failedArtworkIds[playlist.presetId];
+        {visiblePlaylists.map((playlist) => {
+          const CoverIcon = getPlaylistCoverIcon(playlist);
+          const sourceLine = getPlaylistSourceLine(playlist);
+          const isExpanded = expandedId === playlist.presetId;
+          const showArtwork =
+            Number(playlist.trackCount) > 0 && !failedArtworkIds[playlist.presetId];
 
-        return (
-          <div key={playlist.presetId} className="artist-discover-shelf-card">
-            <div
-              className={`artist-discover-card artist-discover-card--playlist${isExpanded ? " is-expanded" : ""}`}
-            >
-              <button
-                type="button"
-                className="artist-discover-card__cover"
-                onClick={() => handleToggle(playlist.presetId)}
-                aria-expanded={isExpanded}
-                aria-label={`${isExpanded ? "Collapse" : "Expand"} ${playlist.name}`}
+          return (
+            <div key={playlist.presetId} className="artist-discover-shelf-card">
+              <div
+                className={`artist-discover-card artist-discover-card--playlist${isExpanded ? " is-expanded" : ""}`}
               >
-                {showArtwork ? (
-                  <img
-                    src={getDiscoverArtworkUrl(
-                      playlist.presetId,
-                      artworkVersion,
-                    )}
-                    alt=""
-                    className="artist-discover-card__image"
-                    loading="lazy"
-                    onError={() =>
-                      setFailedArtworkIds((current) => ({
-                        ...current,
-                        [playlist.presetId]: true,
-                      }))
-                    }
+                <button
+                  type="button"
+                  className="artist-discover-card__cover"
+                  onClick={() => handleToggle(playlist.presetId)}
+                  aria-expanded={isExpanded}
+                  aria-label={`${isExpanded ? "Collapse" : "Expand"} ${playlist.name}`}
+                >
+                  {showArtwork ? (
+                    <img
+                      src={getDiscoverArtworkUrl(playlist.presetId, artworkVersion)}
+                      alt=""
+                      className="artist-discover-card__image"
+                      loading="lazy"
+                      onError={() =>
+                        setFailedArtworkIds((current) => ({
+                          ...current,
+                          [playlist.presetId]: true,
+                        }))
+                      }
+                    />
+                  ) : (
+                    <div className="artist-media-placeholder--discover">
+                      <CoverIcon className="artist-icon-lg" />
+                    </div>
+                  )}
+                </button>
+                <div className="artist-discover-card__content">
+                  <div className="artist-discover-card__text">
+                    <div className="artist-card-title-row--discover">
+                      <button
+                        type="button"
+                        className="artist-card-title--discover"
+                        title={playlist.name}
+                        onClick={() => handleToggle(playlist.presetId)}
+                        aria-expanded={isExpanded}
+                      >
+                        {playlist.name}
+                      </button>
+                      {playlist.adoptedFlowId ? (
+                        <CheckCircle2
+                          className="artist-library-check--discover"
+                          title="Added as rotating flow"
+                        />
+                      ) : null}
+                      {playlist.adoptedPlaylistId ? (
+                        <CheckCircle2
+                          className="artist-library-check--discover"
+                          title="Added as static playlist"
+                        />
+                      ) : null}
+                    </div>
+                    {sourceLine ? (
+                      <p className="artist-card-meta--discover" title={sourceLine}>
+                        {sourceLine}
+                      </p>
+                    ) : null}
+                  </div>
+                  <DiscoverPlaylistContextMenu
+                    playlist={playlist}
+                    canAdopt={canAdopt}
+                    adoptingFlowId={adoptingFlowId}
+                    adoptingPlaylistId={adoptingPlaylistId}
+                    onAdoptFlow={handleAdoptFlow}
+                    onAdoptPlaylist={handleAdoptPlaylist}
+                    triggerVariant="icon"
                   />
-                ) : (
-                  <div className="artist-media-placeholder--discover">
-                    <CoverIcon className="artist-icon-lg" />
-                  </div>
-                )}
-              </button>
-              <div className="artist-discover-card__content">
-                <div className="artist-discover-card__text">
-                  <div className="artist-card-title-row--discover">
-                    <button
-                      type="button"
-                      className="artist-card-title--discover"
-                      title={playlist.name}
-                      onClick={() => handleToggle(playlist.presetId)}
-                      aria-expanded={isExpanded}
-                    >
-                      {playlist.name}
-                    </button>
-                    {playlist.adoptedFlowId ? (
-                      <CheckCircle2
-                        className="artist-library-check--discover"
-                        title="Added as rotating flow"
-                      />
-                    ) : null}
-                    {playlist.adoptedPlaylistId ? (
-                      <CheckCircle2
-                        className="artist-library-check--discover"
-                        title="Added as static playlist"
-                      />
-                    ) : null}
-                  </div>
-                  {sourceLine ? (
-                    <p
-                      className="artist-card-meta--discover"
-                      title={sourceLine}
-                    >
-                      {sourceLine}
-                    </p>
-                  ) : null}
                 </div>
-                <DiscoverPlaylistContextMenu
-                  playlist={playlist}
-                  canAdopt={canAdopt}
-                  adoptingFlowId={adoptingFlowId}
-                  adoptingPlaylistId={adoptingPlaylistId}
-                  onAdoptFlow={handleAdoptFlow}
-                  onAdoptPlaylist={handleAdoptPlaylist}
-                  triggerVariant="icon"
-                />
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
       </div>
     </DiscoverRail>
   );

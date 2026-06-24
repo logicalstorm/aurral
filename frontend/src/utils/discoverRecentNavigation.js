@@ -2,8 +2,7 @@ const DISCOVER_HOME_PATHS = new Set(["/", "/discover"]);
 
 export const DISCOVER_RECENT_PAGES_KEY = "aurral.discover.recentPages";
 export const DISCOVER_FLOW_ACTIVE_KEY = "aurral.discover.flowActive";
-export const DISCOVERY_MANUAL_REFRESH_KEY =
-  "aurral.discovery.manualRefreshPending";
+export const DISCOVERY_MANUAL_REFRESH_KEY = "aurral.discovery.manualRefreshPending";
 export const DISCOVER_RECENT_PAGES_LIMIT = 5;
 
 export function isDiscoverHomePath(pathname) {
@@ -54,11 +53,7 @@ export function shouldRecordDiscoverNavigation(location, recentPages, flowActive
   return recentPages.some((entry) => entry.path === path);
 }
 
-export function shouldKeepDiscoverSectionActive(
-  location,
-  recentPages,
-  flowActive,
-) {
+export function shouldKeepDiscoverSectionActive(location, recentPages, flowActive) {
   const pathname = location?.pathname || "";
   const path = getDiscoverPathFromLocation(location);
   if (isDiscoverHomePath(pathname)) return true;
@@ -108,13 +103,10 @@ export function normalizeDiscoverPath(path) {
   if (!search) return normalizedPathname;
   const params = new URLSearchParams(search);
   const normalizedSearch = params.toString();
-  return normalizedSearch
-    ? `${normalizedPathname}?${normalizedSearch}`
-    : normalizedPathname;
+  return normalizedSearch ? `${normalizedPathname}?${normalizedSearch}` : normalizedPathname;
 }
 
-const MBID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MBID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function pickDiscoverRecentPageState(state) {
   if (!state || typeof state !== "object") return {};
@@ -142,12 +134,9 @@ export function buildDiscoverRecentLabel(path, state = {}) {
   if (pathname.startsWith("/artist/")) {
     const isReleaseRoute = /\/release\/[^/]+$/.test(pathname);
     if (isReleaseRoute) {
-      const releaseTitle =
-        state?.focusReleaseGroup?.title || state?.focusTrackTitle || "";
+      const releaseTitle = state?.focusReleaseGroup?.title || state?.focusTrackTitle || "";
       if (releaseTitle) {
-        return state?.artistName
-          ? `${releaseTitle} · ${state.artistName}`
-          : releaseTitle;
+        return state?.artistName ? `${releaseTitle} · ${state.artistName}` : releaseTitle;
       }
     }
     if (/\/albums$/.test(pathname)) {

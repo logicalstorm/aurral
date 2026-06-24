@@ -16,13 +16,7 @@ export const DEFAULT_ACTIVITY_VIEW = "queue";
 export const DEFAULT_ACTIVITY_SOURCE = "all";
 
 const ACTIVITY_VIEW_IDS = ACTIVITY_VIEWS.map((entry) => entry.id);
-const LEGACY_HISTORY_SOURCE_IDS = [
-  "all",
-  "lidarr",
-  "slskd",
-  "nzbget",
-  "aurral",
-];
+const LEGACY_HISTORY_SOURCE_IDS = ["all", "lidarr", "slskd", "nzbget", "aurral"];
 
 export function getActivitySourceItems(usenetConfigured = false) {
   if (!usenetConfigured) return BASE_ACTIVITY_SOURCE_ITEMS;
@@ -63,9 +57,7 @@ export function matchesActivitySource(request, source) {
 
 export function isActivityQueueItem(request) {
   return (
-    request?.inQueue === true ||
-    request?.status === "processing" ||
-    request?.status === "pending"
+    request?.inQueue === true || request?.status === "processing" || request?.status === "pending"
   );
 }
 
@@ -76,8 +68,7 @@ export function matchesActivityView(request, view) {
 
 export function buildActivityPath(view, source) {
   const nextView = normalizeActivityView(view);
-  const nextSource =
-    source == null || source === "" ? DEFAULT_ACTIVITY_SOURCE : String(source);
+  const nextSource = source == null || source === "" ? DEFAULT_ACTIVITY_SOURCE : String(source);
   return `/activity/${nextView}/${nextSource}`;
 }
 
@@ -87,10 +78,7 @@ export function resolveLegacyHistoryPath(tab, usenetConfigured = false) {
     return buildActivityPath(tab, DEFAULT_ACTIVITY_SOURCE);
   }
   if (LEGACY_HISTORY_SOURCE_IDS.includes(tab)) {
-    return buildActivityPath(
-      "history",
-      normalizeActivitySource(tab, usenetConfigured),
-    );
+    return buildActivityPath("history", normalizeActivitySource(tab, usenetConfigured));
   }
   return buildActivityPath("history", DEFAULT_ACTIVITY_SOURCE);
 }

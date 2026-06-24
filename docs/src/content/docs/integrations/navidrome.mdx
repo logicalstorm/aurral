@@ -17,11 +17,11 @@ Navidrome is optional, but it is the cleanest way to play generated flows and im
 
 Aurral writes M3U playlists under `aurral-weekly-flow` with one track path per line. Navidrome must be able to open those paths on **its** filesystem.
 
-| Navidrome deployment | Playlist path mode | Setting |
-| --- | --- | --- |
-| Docker, same mounts as Aurral (for example `/data` or `/music`) | **local** (default) | Leave **Use Navidrome paths in M3U files** off |
-| Docker, different mount path than Aurral (for example Navidrome sees `/data/media/music` while Aurral sees `/music`) | **remote** | Enable the Navidrome setting and add a Navidrome path mapping, or set `M3U_PATH_MODE=remote` plus `M3U_PATH_MAPPINGS` |
-| Native Windows while Aurral is in Docker | **remote** | Enable the Navidrome setting and add a Navidrome path mapping, or set `M3U_PATH_MODE=remote` plus `M3U_PATH_MAPPINGS` |
+| Navidrome deployment                                                                                                 | Playlist path mode  | Setting                                                                                                               |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Docker, same mounts as Aurral (for example `/data` or `/music`)                                                      | **local** (default) | Leave **Use Navidrome paths in M3U files** off                                                                        |
+| Docker, different mount path than Aurral (for example Navidrome sees `/data/media/music` while Aurral sees `/music`) | **remote**          | Enable the Navidrome setting and add a Navidrome path mapping, or set `M3U_PATH_MODE=remote` plus `M3U_PATH_MAPPINGS` |
+| Native Windows while Aurral is in Docker                                                                             | **remote**          | Enable the Navidrome setting and add a Navidrome path mapping, or set `M3U_PATH_MODE=remote` plus `M3U_PATH_MAPPINGS` |
 
 ### What remote mode does
 

@@ -5,8 +5,7 @@ import { ListMusic, Loader2, MoreVertical, Plus, RefreshCw } from "lucide-react"
 
 const MAIN_CONTENT_PORTAL_SELECTOR = ".app-main-wrap";
 
-const getMainContentPortalRoot = () =>
-  document.querySelector(MAIN_CONTENT_PORTAL_SELECTOR);
+const getMainContentPortalRoot = () => document.querySelector(MAIN_CONTENT_PORTAL_SELECTOR);
 
 const getMenuHorizontalAnchorRect = (button) => {
   const discoverCard = button.closest(".artist-discover-card");
@@ -74,18 +73,11 @@ export function DiscoverPlaylistContextMenu({
       placement = spaceBelow > spaceAbove ? "below" : "above";
     }
     const top =
-      placement === "below"
-        ? rect.bottom - wrapRect.top + gap
-        : rect.top - wrapRect.top - gap;
+      placement === "below" ? rect.bottom - wrapRect.top + gap : rect.top - wrapRect.top - gap;
     const anchorRect = getMenuHorizontalAnchorRect(button);
     const right = wrapRect.right - anchorRect.right;
     setMenuPosition((prev) => {
-      if (
-        prev &&
-        prev.top === top &&
-        prev.right === right &&
-        prev.placement === placement
-      ) {
+      if (prev && prev.top === top && prev.right === right && prev.placement === placement) {
         return prev;
       }
       return { top, right, placement };
@@ -182,9 +174,7 @@ export function DiscoverPlaylistContextMenu({
 
   if (!canAdopt || !playlist) return null;
 
-  const flowLabel = playlist.adoptedFlowId
-    ? "Open rotating flow"
-    : "Add as rotating flow";
+  const flowLabel = playlist.adoptedFlowId ? "Open rotating flow" : "Add as rotating flow";
   const playlistLabel = playlist.adoptedPlaylistId
     ? "Open static playlist"
     : "Add as static playlist";

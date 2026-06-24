@@ -38,12 +38,7 @@ const MIME_EXTENSION_MAP = {
   "image/avif": "avif",
   "image/svg+xml": "svg",
 };
-const OPTIMIZABLE_CONTENT_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/avif",
-]);
+const OPTIMIZABLE_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 
 const ensureCacheDir = () => {
   fs.mkdirSync(IMAGE_PROXY_DIR, { recursive: true });
@@ -67,10 +62,7 @@ const initializeCacheIndex = () => {
       continue;
     }
     if (!meta?.extension) continue;
-    const imagePath = path.join(
-      IMAGE_PROXY_DIR,
-      `${cacheKey}.${meta.extension}`,
-    );
+    const imagePath = path.join(IMAGE_PROXY_DIR, `${cacheKey}.${meta.extension}`);
     if (!fs.existsSync(imagePath)) continue;
     const sourceUrl = normalizeKnownImageUrl(meta.sourceUrl);
     const entry = {
@@ -79,8 +71,7 @@ const initializeCacheIndex = () => {
       imagePath,
       localUrl: buildLocalImageUrl(cacheKey, meta.extension),
       isFresh:
-        Number(meta.fetchedAt || 0) > 0 &&
-        Date.now() - Number(meta.fetchedAt || 0) < CACHE_TTL_MS,
+        Number(meta.fetchedAt || 0) > 0 && Date.now() - Number(meta.fetchedAt || 0) < CACHE_TTL_MS,
     };
     cacheEntriesByKey.set(cacheKey, entry);
     if (sourceUrl) {
@@ -129,8 +120,7 @@ const isPrivateHostname = (hostname) => {
   return PRIVATE_HOST_PATTERNS.some((pattern) => pattern.test(normalized));
 };
 
-const hashValue = (value) =>
-  crypto.createHash("sha256").update(String(value)).digest("hex");
+const hashValue = (value) => crypto.createHash("sha256").update(String(value)).digest("hex");
 
 const normalizeKnownImageUrl = (value) =>
   String(value || "")
@@ -165,18 +155,15 @@ const removeStaleCachedFiles = (cacheKey, keepExtension) => {
   }
 };
 
-const buildLocalImageUrl = (cacheKey, extension) =>
-  `${IMAGE_PROXY_ROUTE}/${cacheKey}.${extension}`;
+const buildLocalImageUrl = (cacheKey, extension) => `${IMAGE_PROXY_ROUTE}/${cacheKey}.${extension}`;
 
 const getCacheKeyFromLocalUrl = (value) => {
   const normalized = String(value || "").trim();
-  const match = normalized.match(
-    /\/api\/image-proxy\/([a-f0-9]{64})(?:\.[a-z0-9]+)?$/i,
-  );
+  const match = normalized.match(/\/api\/image-proxy\/([a-f0-9]{64})(?:\.[a-z0-9]+)?$/i);
   return match?.[1]?.toLowerCase() || null;
 };
 
-const readCacheMetadata = (metaPath) => {
+const _readCacheMetadata = (metaPath) => {
   try {
     return JSON.parse(fs.readFileSync(metaPath, "utf8"));
   } catch {
@@ -201,9 +188,7 @@ const getCachedEntry = (sourceUrl) => {
   const normalizedSourceUrl = normalizeKnownImageUrl(sourceUrl);
   if (!normalizedSourceUrl) return null;
   initializeCacheIndex();
-  const cacheKey =
-    cacheKeysBySourceUrl.get(normalizedSourceUrl) ||
-    hashValue(normalizedSourceUrl);
+  const cacheKey = cacheKeysBySourceUrl.get(normalizedSourceUrl) || hashValue(normalizedSourceUrl);
   return getCachedEntryFromKey(cacheKey);
 };
 
@@ -265,10 +250,7 @@ const optimizeImageBuffer = async (buffer, contentType) => {
     };
   }
 
-  const largestDimension = Math.max(
-    metadata?.width || 0,
-    metadata?.height || 0,
-  );
+  const largestDimension = Math.max(metadata?.width || 0, metadata?.height || 0);
   const dimensionSteps = FALLBACK_MAX_DIMENSIONS.filter(
     (dimension) => dimension === null || largestDimension > dimension,
   );
@@ -297,20 +279,14 @@ const optimizeImageBuffer = async (buffer, contentType) => {
         })
         .toBuffer();
 
-      if (
-        !bestCandidate ||
-        optimizedBuffer.length < bestCandidate.buffer.length
-      ) {
+      if (!bestCandidate || optimizedBuffer.length < bestCandidate.buffer.length) {
         bestCandidate = {
           buffer: optimizedBuffer,
           contentType: "image/webp",
         };
       }
 
-      if (
-        quality === DEFAULT_WEBP_QUALITY &&
-        optimizedBuffer.length <= OPTIMIZED_IMAGE_MAX_BYTES
-      ) {
+      if (quality === DEFAULT_WEBP_QUALITY && optimizedBuffer.length <= OPTIMIZED_IMAGE_MAX_BYTES) {
         return {
           buffer: optimizedBuffer,
           contentType: "image/webp",
@@ -353,9 +329,7 @@ const normalizeCachedEntryIfNeeded = async (entry) => {
     entry.cacheKey,
     optimized.buffer,
     optimized.contentType,
-    normalizeKnownImageUrl(entry.meta.sourceUrl) ||
-      entry.meta.sourceUrl ||
-      null,
+    normalizeKnownImageUrl(entry.meta.sourceUrl) || entry.meta.sourceUrl || null,
   );
 };
 
@@ -378,8 +352,7 @@ const fetchAndCacheImage = async (sourceUrl) => {
     timeout: FETCH_TIMEOUT_MS,
     maxRedirects: 10,
     headers: {
-      Accept:
-        "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
       "User-Agent": "Aurral Local Image Cache",
     },
   });
@@ -392,10 +365,7 @@ const fetchAndCacheImage = async (sourceUrl) => {
     throw new Error("Upstream response is not an image");
   }
 
-  const optimized = await optimizeImageBuffer(
-    Buffer.from(response.data),
-    contentType,
-  );
+  const optimized = await optimizeImageBuffer(Buffer.from(response.data), contentType);
 
   return writeCacheEntry(
     hashValue(normalizedSourceUrl),
@@ -475,16 +445,12 @@ export const handleImageProxyRequest = async (req, res) => {
   }
 
   res.set("Content-Type", cached.meta.contentType || "image/jpeg");
-  res.set(
-    "Cache-Control",
-    "public, max-age=86400, stale-while-revalidate=604800",
-  );
+  res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
   return res.sendFile(cached.imagePath);
 };
 
 export const handleLegacyImageProxyRequest = async (req, res) => {
-  const rawSourceUrl =
-    typeof req.query.src === "string" ? req.query.src.trim() : "";
+  const rawSourceUrl = typeof req.query.src === "string" ? req.query.src.trim() : "";
   if (!rawSourceUrl) {
     return res.status(404).json({ error: "Image not found" });
   }

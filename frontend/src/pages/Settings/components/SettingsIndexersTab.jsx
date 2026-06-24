@@ -11,11 +11,7 @@ export function SettingsIndexersTab({
 }) {
   return (
     <div className="arr-page">
-      <form
-        onSubmit={handleSaveSettings}
-        className="arr-form"
-        autoComplete="off"
-      >
+      <form onSubmit={handleSaveSettings} className="arr-form" autoComplete="off">
         <SettingsIndexersSection
           settings={settings}
           updateSettings={updateSettings}

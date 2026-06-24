@@ -7,28 +7,14 @@ const flowNumber = (value) => Number(value || 0);
 
 export const getFlowDisplayTrackCount = (flow, stats, trackListLength = 0) => {
   if (isReleaseRadarFlow(flow)) {
-    const actual = Math.max(
-      flowNumber(trackListLength),
-      flowNumber(stats?.total),
-    );
+    const actual = Math.max(flowNumber(trackListLength), flowNumber(stats?.total));
     return actual > 0 ? actual : flowNumber(flow?.size);
   }
-  return Math.max(
-    flowNumber(flow?.size),
-    flowNumber(trackListLength),
-    flowNumber(stats?.total),
-  );
+  return Math.max(flowNumber(flow?.size), flowNumber(trackListLength), flowNumber(stats?.total));
 };
 
-export const getSharedPlaylistTrackCount = (
-  playlist,
-  stats,
-  trackListLength = 0,
-) => {
-  const fromJobs = Math.max(
-    flowNumber(trackListLength),
-    flowNumber(stats?.total),
-  );
+export const getSharedPlaylistTrackCount = (playlist, stats, trackListLength = 0) => {
+  const fromJobs = Math.max(flowNumber(trackListLength), flowNumber(stats?.total));
   if (fromJobs > 0) return fromJobs;
   return flowNumber(playlist?.trackCount);
 };
@@ -123,8 +109,7 @@ export const getCombinedActivityStats = (status) => {
   const flow = status?.stats || EMPTY_FLOW_STATS;
   const shared = status?.sharedStats || EMPTY_FLOW_STATS;
   const pending = flowNumber(flow.pending) + flowNumber(shared.pending);
-  const downloading =
-    flowNumber(flow.downloading) + flowNumber(shared.downloading);
+  const downloading = flowNumber(flow.downloading) + flowNumber(shared.downloading);
   const done = flowNumber(flow.done) + flowNumber(shared.done);
   const failed = flowNumber(flow.failed) + flowNumber(shared.failed);
   return {

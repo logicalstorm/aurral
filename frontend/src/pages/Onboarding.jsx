@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronRight, ChevronLeft, CheckCircle2 } from "lucide-react";
 import {
   applyLidarrCommunityGuideOnboarding,
@@ -21,10 +15,7 @@ import { useToast } from "../contexts/ToastContext";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { LidarrLibraryAccessCheck } from "./Settings/components/LidarrLibraryAccessCheck";
 import { CommunityGuideModal } from "./Settings/components/CommunityGuideModal";
-import {
-  SettingsInput,
-  SettingsSelect,
-} from "./Settings/components/SettingsField";
+import { SettingsInput, SettingsSelect } from "./Settings/components/SettingsField";
 import DownloadFolderField from "../components/DownloadFolderField";
 
 import { OnboardingStep, OnboardingStepHeader, OnboardingHint, OnboardingFieldGroup } from "./onboardingUtils.jsx";
@@ -41,8 +32,7 @@ function Onboarding() {
   const [lidarrApiKey, setLidarrApiKey] = useState("");
   const [lidarrQualityProfileId, setLidarrQualityProfileId] = useState("");
   const [lidarrMetadataProfileId, setLidarrMetadataProfileId] = useState("");
-  const [lidarrDefaultMonitorOption, setLidarrDefaultMonitorOption] =
-    useState("none");
+  const [lidarrDefaultMonitorOption, setLidarrDefaultMonitorOption] = useState("none");
   const [lidarrSearchOnAdd, setLidarrSearchOnAdd] = useState(false);
   const [lidarrProfiles, setLidarrProfiles] = useState([]);
   const [lidarrMetadataProfiles, setLidarrMetadataProfiles] = useState([]);
@@ -55,14 +45,11 @@ function Onboarding() {
   const [slskdUrl, setSlskdUrl] = useState("");
   const [slskdApiKey, setSlskdApiKey] = useState("");
   const [ticketmasterApiKey, setTicketmasterApiKey] = useState("");
-  const [ticketmasterSearchRadiusMiles, setTicketmasterSearchRadiusMiles] =
-    useState(250);
+  const [ticketmasterSearchRadiusMiles, setTicketmasterSearchRadiusMiles] = useState(250);
   const [lidarrTestSuccess, setLidarrTestSuccess] = useState(false);
   const [testingLidarr, setTestingLidarr] = useState(false);
-  const [testingLidarrLibraryAccess, setTestingLidarrLibraryAccess] =
-    useState(false);
-  const [lidarrLibraryAccessResult, setLidarrLibraryAccessResult] =
-    useState(null);
+  const [testingLidarrLibraryAccess, setTestingLidarrLibraryAccess] = useState(false);
+  const [lidarrLibraryAccessResult, setLidarrLibraryAccessResult] = useState(null);
   const [showCommunityGuideModal, setShowCommunityGuideModal] = useState(false);
   const [applyingCommunityGuide, setApplyingCommunityGuide] = useState(false);
   const [davoApplied, setDavoApplied] = useState(false);
@@ -83,31 +70,24 @@ function Onboarding() {
   const { showSuccess, showInfo } = useToast();
 
   const currentStep = STEPS[step];
-  const hasNavidrome =
-    navidromeUrl.trim() && navidromeUsername.trim() && navidromePassword;
+  const hasNavidrome = navidromeUrl.trim() && navidromeUsername.trim() && navidromePassword;
   const hasLastfm = !!lastfmUsername.trim() && !!lastfmApiKey.trim();
   const hasSlskd = !!slskdUrl.trim() && !!slskdApiKey.trim();
   const hasTicketmaster = !!ticketmasterApiKey.trim();
   const passwordTooShort = authPassword.length > 0 && authPassword.length < 8;
   const adminComplete =
-    authUser.trim() &&
-    authPassword &&
-    !passwordTooShort &&
-    authPassword === authPasswordConfirm;
+    authUser.trim() && authPassword && !passwordTooShort && authPassword === authPasswordConfirm;
   const downloadsComplete = !!downloadFolderPath.trim();
-  const lidarrPreferencesComplete =
-    !!lidarrQualityProfileId && !!lidarrMetadataProfileId;
+  const lidarrPreferencesComplete = !!lidarrQualityProfileId && !!lidarrMetadataProfileId;
 
   const syncLogoPosition = useCallback(() => {
     const card = cardRef.current;
-    const anchor =
-      step === 0 ? heroAnchorRef.current : compactAnchorRef.current;
+    const anchor = step === 0 ? heroAnchorRef.current : compactAnchorRef.current;
     if (!card || !anchor) return;
 
     const cardRect = card.getBoundingClientRect();
     const anchorRect = anchor.getBoundingClientRect();
-    const size =
-      step === 0 ? ONBOARDING_HERO_LOGO_SIZE : ONBOARDING_COMPACT_LOGO_SIZE;
+    const size = step === 0 ? ONBOARDING_HERO_LOGO_SIZE : ONBOARDING_COMPACT_LOGO_SIZE;
 
     setLogoFlyout({
       top: anchorRect.top - cardRect.top + (anchorRect.height - size) / 2,
@@ -157,15 +137,10 @@ function Onboarding() {
     try {
       const [profiles, metadataProfiles] = await Promise.all([
         getLidarrProfilesOnboarding(lidarrUrl.trim(), lidarrApiKey.trim()),
-        getLidarrMetadataProfilesOnboarding(
-          lidarrUrl.trim(),
-          lidarrApiKey.trim(),
-        ),
+        getLidarrMetadataProfilesOnboarding(lidarrUrl.trim(), lidarrApiKey.trim()),
       ]);
       setLidarrProfiles(Array.isArray(profiles) ? profiles : []);
-      setLidarrMetadataProfiles(
-        Array.isArray(metadataProfiles) ? metadataProfiles : [],
-      );
+      setLidarrMetadataProfiles(Array.isArray(metadataProfiles) ? metadataProfiles : []);
     } catch (e) {
       setError(getApiErrorMessage(e, "Failed to load Lidarr profiles"));
     } finally {
@@ -223,10 +198,7 @@ function Onboarding() {
     setLidarrLibraryAccessResult(null);
     setError("");
     try {
-      const result = await testLidarrLibraryAccessOnboarding(
-        lidarrUrl.trim(),
-        lidarrApiKey.trim(),
-      );
+      const result = await testLidarrLibraryAccessOnboarding(lidarrUrl.trim(), lidarrApiKey.trim());
       setLidarrLibraryAccessResult(result);
       if (result.ok) {
         showSuccess("Library access check passed");
@@ -259,9 +231,7 @@ function Onboarding() {
       }
       await loadLidarrProfiles();
       if (result.results?.qualityProfile?.name) {
-        showInfo(
-          `Default quality profile set to '${result.results.qualityProfile.name}'`,
-        );
+        showInfo(`Default quality profile set to '${result.results.qualityProfile.name}'`);
       }
     } catch (e) {
       setError(getApiErrorMessage(e, "Failed to apply community guide"));
@@ -306,16 +276,10 @@ function Onboarding() {
     setTestingSlskd(true);
     setError("");
     try {
-      const result = await testSlskdOnboarding(
-        slskdUrl.trim(),
-        slskdApiKey.trim(),
-      );
+      const result = await testSlskdOnboarding(slskdUrl.trim(), slskdApiKey.trim());
       setSlskdTestSuccess(true);
       if (result.warning || result.soulseekConnected === false) {
-        showInfo(
-          result.message ||
-            "slskd API is reachable, but Soulseek is not connected",
-        );
+        showInfo(result.message || "slskd API is reachable, but Soulseek is not connected");
       } else {
         showSuccess(result.message || "slskd connection successful");
       }
@@ -407,10 +371,7 @@ function Onboarding() {
     if (currentStep === "admin") return !adminComplete;
     if (currentStep === "downloads") return !downloadsComplete;
     if (currentStep === "lidarr-connect") {
-      return (
-        !lidarrTestSuccess &&
-        (!lidarrUrl.trim() || !lidarrApiKey.trim() || testingLidarr)
-      );
+      return !lidarrTestSuccess && (!lidarrUrl.trim() || !lidarrApiKey.trim() || testingLidarr);
     }
     if (currentStep === "lidarr-library") {
       return testingLidarrLibraryAccess;
@@ -484,525 +445,518 @@ function Onboarding() {
           onSubmit={(e) => e.preventDefault()}
           className="onboarding-card"
         >
-        <img
-          src="/arralogo.svg"
-          alt="Aurral"
-          aria-hidden={step > 0}
-          className={`onboarding-brand-mark${animateStepHeight ? " onboarding-brand-mark--animate" : ""}`}
-          style={logoFlyout}
-        />
-        <div className="onboarding-progress">
-          <div className="onboarding-progress__dots">
-            {STEPS.slice(0, -1).map((s, i) => (
-              <div
-                key={s}
-                className="onboarding-progress__dot"
-                style={{
-                  backgroundColor:
-                    i <= step ? "var(--aurral-green)" : "var(--aurral-gray)",
-                }}
-              />
-            ))}
-          </div>
-          <div className="onboarding-progress__meta">
-            {step > 0 ? (
-              <div
-                ref={compactAnchorRef}
-                className="onboarding-logo-anchor onboarding-logo-anchor--compact"
-                aria-hidden="true"
-              />
-            ) : null}
-            <span className="onboarding-progress__count">
-              {step + 1} / {STEPS.length}
-            </span>
-          </div>
-        </div>
-
-        <div
-          className={`onboarding-step-shell${animateStepHeight ? " onboarding-step-shell--animate" : ""}`}
-          style={stepHeight != null ? { height: stepHeight } : undefined}
-        >
-          <div ref={stepMeasureRef} className="onboarding-step-measure">
-            {currentStep === "welcome" && (
-              <OnboardingStep centered>
+          <img
+            src="/arralogo.svg"
+            alt="Aurral"
+            aria-hidden={step > 0}
+            className={`onboarding-brand-mark${animateStepHeight ? " onboarding-brand-mark--animate" : ""}`}
+            style={logoFlyout}
+          />
+          <div className="onboarding-progress">
+            <div className="onboarding-progress__dots">
+              {STEPS.slice(0, -1).map((s, i) => (
                 <div
-                  ref={heroAnchorRef}
-                  className="onboarding-logo-anchor onboarding-logo-anchor--hero"
+                  key={s}
+                  className="onboarding-progress__dot"
+                  style={{
+                    backgroundColor: i <= step ? "var(--aurral-green)" : "var(--aurral-gray)",
+                  }}
+                />
+              ))}
+            </div>
+            <div className="onboarding-progress__meta">
+              {step > 0 ? (
+                <div
+                  ref={compactAnchorRef}
+                  className="onboarding-logo-anchor onboarding-logo-anchor--compact"
                   aria-hidden="true"
                 />
-                <OnboardingStepHeader
-                  centered
-                  title="Welcome to Aurral"
-                  titleClassName="onboarding-title--hero"
-                  copy="Let's set up your admin account and connect services."
-                />
-              </OnboardingStep>
-            )}
+              ) : null}
+              <span className="onboarding-progress__count">
+                {step + 1} / {STEPS.length}
+              </span>
+            </div>
+          </div>
 
-            {currentStep === "admin" && (
-              <OnboardingStep>
-                <OnboardingStepHeader
-                  title="Admin account"
-                  copy="Create a local account to sign in to Aurral."
-                />
-                <div className="onboarding-fields">
-                  <SettingsInput legacyStyle
-                    type="text"
-                    autoComplete="off"
-                    placeholder="Username"
-                    value={authUser}
-                    onChange={(e) => setAuthUser(e.target.value)}
+          <div
+            className={`onboarding-step-shell${animateStepHeight ? " onboarding-step-shell--animate" : ""}`}
+            style={stepHeight != null ? { height: stepHeight } : undefined}
+          >
+            <div ref={stepMeasureRef} className="onboarding-step-measure">
+              {currentStep === "welcome" && (
+                <OnboardingStep centered>
+                  <div
+                    ref={heroAnchorRef}
+                    className="onboarding-logo-anchor onboarding-logo-anchor--hero"
+                    aria-hidden="true"
                   />
-                  <SettingsInput legacyStyle
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder="Password"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
+                  <OnboardingStepHeader
+                    centered
+                    title="Welcome to Aurral"
+                    titleClassName="onboarding-title--hero"
+                    copy="Let's set up your admin account and connect services."
                   />
-                  <SettingsInput legacyStyle
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder="Confirm password"
-                    value={authPasswordConfirm}
-                    onChange={(e) => setAuthPasswordConfirm(e.target.value)}
-                  />
-                  <OnboardingHint>
-                    Password must be at least 8 characters long.
-                  </OnboardingHint>
-                </div>
-              </OnboardingStep>
-            )}
+                </OnboardingStep>
+              )}
 
-            {currentStep === "downloads" && (
-              <OnboardingStep>
-                <OnboardingStepHeader
-                  title="Downloads folder"
-                  copy="Choose where Aurral writes generated flows and imported playlists. Mount this path into Navidrome and slskd as well."
-                />
-                <div className="onboarding-fields">
-                  <OnboardingFieldGroup label="Path">
-                    <DownloadFolderField
-                      value={downloadFolderPath}
-                      onChange={setDownloadFolderPath}
-                      helperText="Folder where Aurral writes generated flows and imported playlists. Use the same mounted path in Navidrome and slskd."
+              {currentStep === "admin" && (
+                <OnboardingStep>
+                  <OnboardingStepHeader
+                    title="Admin account"
+                    copy="Create a local account to sign in to Aurral."
+                  />
+                  <div className="onboarding-fields">
+                    <SettingsInput
+                      legacyStyle
+                      type="text"
+                      autoComplete="off"
+                      placeholder="Username"
+                      value={authUser}
+                      onChange={(e) => setAuthUser(e.target.value)}
                     />
-                  </OnboardingFieldGroup>
-                </div>
-              </OnboardingStep>
-            )}
+                    <SettingsInput
+                      legacyStyle
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Password"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                    />
+                    <SettingsInput
+                      legacyStyle
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder="Confirm password"
+                      value={authPasswordConfirm}
+                      onChange={(e) => setAuthPasswordConfirm(e.target.value)}
+                    />
+                    <OnboardingHint>Password must be at least 8 characters long.</OnboardingHint>
+                  </div>
+                </OnboardingStep>
+              )}
 
-            {currentStep === "lidarr-connect" && (
-              <OnboardingStep>
-                <OnboardingStepHeader
-                  title="Connect Lidarr"
-                  copy="Aurral uses Lidarr to manage your music library and downloads."
-                />
-                <div className="onboarding-fields">
-                  <SettingsInput legacyStyle
-                    type="url"
-                    autoComplete="off"
-                    placeholder="Lidarr URL (e.g. http://localhost:8686)"
-                    value={lidarrUrl}
-                    onChange={(e) => {
-                      setLidarrUrl(e.target.value);
-                      setLidarrTestSuccess(false);
-                      setLidarrLibraryAccessResult(null);
-                      setLidarrQualityProfileId("");
-                      setLidarrMetadataProfileId("");
-                      setDavoApplied(false);
-                    }}
+              {currentStep === "downloads" && (
+                <OnboardingStep>
+                  <OnboardingStepHeader
+                    title="Downloads folder"
+                    copy="Choose where Aurral writes generated flows and imported playlists. Mount this path into Navidrome and slskd as well."
                   />
-                  <SettingsInput legacyStyle
-                    type="password"
-                    autoComplete="off"
-                    placeholder="API key"
-                    value={lidarrApiKey}
-                    onChange={(e) => {
-                      setLidarrApiKey(e.target.value);
-                      setLidarrTestSuccess(false);
-                      setLidarrLibraryAccessResult(null);
-                      setLidarrQualityProfileId("");
-                      setLidarrMetadataProfileId("");
-                      setDavoApplied(false);
-                    }}
-                  />
-                  <OnboardingHint>
-                    Find your API key in Lidarr under Settings → General →
-                    Security.
-                  </OnboardingHint>
-                </div>
-              </OnboardingStep>
-            )}
+                  <div className="onboarding-fields">
+                    <OnboardingFieldGroup label="Path">
+                      <DownloadFolderField
+                        value={downloadFolderPath}
+                        onChange={setDownloadFolderPath}
+                        helperText="Folder where Aurral writes generated flows and imported playlists. Use the same mounted path in Navidrome and slskd."
+                      />
+                    </OnboardingFieldGroup>
+                  </div>
+                </OnboardingStep>
+              )}
 
-            {currentStep === "lidarr-library" && (
-              <OnboardingStep>
-                <OnboardingStepHeader
-                  title="Library access"
-                  copy="Verify we can read files from Lidarr's library paths for playback and playlist reuse."
-                />
-                <div className="onboarding-fields">
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn--bold"
-                    onClick={handleTestLidarrLibraryAccess}
-                    disabled={
-                      testingLidarrLibraryAccess ||
-                      !lidarrUrl.trim() ||
-                      !lidarrApiKey.trim()
-                    }
-                  >
-                    {testingLidarrLibraryAccess
-                      ? "Checking library access..."
-                      : "Test library access"}
-                  </button>
-                  <LidarrLibraryAccessCheck
-                    result={lidarrLibraryAccessResult}
+              {currentStep === "lidarr-connect" && (
+                <OnboardingStep>
+                  <OnboardingStepHeader
+                    title="Connect Lidarr"
+                    copy="Aurral uses Lidarr to manage your music library and downloads."
                   />
-                </div>
-              </OnboardingStep>
-            )}
-
-            {currentStep === "lidarr-davo" && (
-              <OnboardingStep>
-                <OnboardingStepHeader
-                  title="Recommended Lidarr settings"
-                  copy="Optionally apply Davo's Community Lidarr Guide settings. This creates an Aurral-friendly quality profile, custom formats, and naming scheme."
-                />
-                <div className="onboarding-fields">
-                  <button
-                    type="button"
-                    className="btn btn-primary btn--bold"
-                    onClick={() => setShowCommunityGuideModal(true)}
-                    disabled={applyingCommunityGuide}
-                  >
-                    {applyingCommunityGuide
-                      ? "Applying..."
-                      : "Apply Davo's Recommended Settings"}
-                  </button>
-                  <OnboardingHint>
-                    <a
-                      href="https://wiki.servarr.com/lidarr/community-guide"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="settings-page__link"
-                    >
-                      Read the full Community Lidarr Guide
-                    </a>{" "}
-                    for naming, custom formats, and profile details.
-                  </OnboardingHint>
-                  {davoApplied ? (
+                  <div className="onboarding-fields">
+                    <SettingsInput
+                      legacyStyle
+                      type="url"
+                      autoComplete="off"
+                      placeholder="Lidarr URL (e.g. http://localhost:8686)"
+                      value={lidarrUrl}
+                      onChange={(e) => {
+                        setLidarrUrl(e.target.value);
+                        setLidarrTestSuccess(false);
+                        setLidarrLibraryAccessResult(null);
+                        setLidarrQualityProfileId("");
+                        setLidarrMetadataProfileId("");
+                        setDavoApplied(false);
+                      }}
+                    />
+                    <SettingsInput
+                      legacyStyle
+                      type="password"
+                      autoComplete="off"
+                      placeholder="API key"
+                      value={lidarrApiKey}
+                      onChange={(e) => {
+                        setLidarrApiKey(e.target.value);
+                        setLidarrTestSuccess(false);
+                        setLidarrLibraryAccessResult(null);
+                        setLidarrQualityProfileId("");
+                        setLidarrMetadataProfileId("");
+                        setDavoApplied(false);
+                      }}
+                    />
                     <OnboardingHint>
-                      Community guide settings were applied successfully.
+                      Find your API key in Lidarr under Settings → General → Security.
                     </OnboardingHint>
-                  ) : null}
-                </div>
-              </OnboardingStep>
-            )}
+                  </div>
+                </OnboardingStep>
+              )}
 
-            {currentStep === "lidarr-preferences" && (
-              <OnboardingStep>
-                <OnboardingStepHeader
-                  title="Lidarr defaults"
-                  copy="Choose the profiles Aurral uses when adding artists and albums."
-                />
-                <div className="onboarding-fields">
-                  <OnboardingFieldGroup label="Default quality profile">
-                    <SettingsSelect legacyStyle
-                      value={lidarrQualityProfileId}
-                      onChange={(e) =>
-                        setLidarrQualityProfileId(e.target.value)
-                      }
-                      disabled={loadingLidarrProfiles}
-                    >
-                      <option value="">
-                        {loadingLidarrProfiles
-                          ? "Loading profiles..."
-                          : lidarrProfiles.length === 0
-                            ? "No profiles available"
-                            : "Select a profile"}
-                      </option>
-                      {lidarrProfiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.name}
-                        </option>
-                      ))}
-                    </SettingsSelect>
-                  </OnboardingFieldGroup>
-                  <OnboardingFieldGroup label="Default metadata profile">
-                    <SettingsSelect legacyStyle
-                      value={lidarrMetadataProfileId}
-                      onChange={(e) =>
-                        setLidarrMetadataProfileId(e.target.value)
-                      }
-                      disabled={loadingLidarrProfiles}
-                    >
-                      <option value="">
-                        {loadingLidarrProfiles
-                          ? "Loading profiles..."
-                          : lidarrMetadataProfiles.length === 0
-                            ? "No profiles available"
-                            : "Select a profile"}
-                      </option>
-                      {lidarrMetadataProfiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.name}
-                        </option>
-                      ))}
-                    </SettingsSelect>
-                  </OnboardingFieldGroup>
-                  <OnboardingFieldGroup
-                    label="Default monitoring option"
-                    hint="Aurral uses a pick-and-choose album workflow. We recommend None (Artist Only) so new artists are not fully monitored automatically."
-                  >
-                    <SettingsSelect legacyStyle
-                      value={lidarrDefaultMonitorOption}
-                      onChange={(e) =>
-                        setLidarrDefaultMonitorOption(e.target.value)
+              {currentStep === "lidarr-library" && (
+                <OnboardingStep>
+                  <OnboardingStepHeader
+                    title="Library access"
+                    copy="Verify we can read files from Lidarr's library paths for playback and playlist reuse."
+                  />
+                  <div className="onboarding-fields">
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn--bold"
+                      onClick={handleTestLidarrLibraryAccess}
+                      disabled={
+                        testingLidarrLibraryAccess || !lidarrUrl.trim() || !lidarrApiKey.trim()
                       }
                     >
-                      <option value="none">None (Artist Only)</option>
-                      <option value="existing">Existing Albums</option>
-                      <option value="all">All Albums</option>
-                      <option value="future">Future Albums</option>
-                      <option value="missing">Missing Albums</option>
-                      <option value="latest">Latest Album</option>
-                      <option value="first">First Album</option>
-                    </SettingsSelect>
-                  </OnboardingFieldGroup>
-                  <label className="onboarding-checkbox-row">
-                    <input
-                      type="checkbox"
-                      className="artist-checkbox"
-                      checked={lidarrSearchOnAdd}
-                      onChange={(e) => setLidarrSearchOnAdd(e.target.checked)}
-                    />
-                    <span>Search on add</span>
-                  </label>
-                  <OnboardingHint>
-                    When enabled, Lidarr searches for albums as soon as they are
-                    added. Aurral usually triggers searches when you request
-                    specific albums, so leaving this off is fine.
-                  </OnboardingHint>
-                </div>
-              </OnboardingStep>
-            )}
+                      {testingLidarrLibraryAccess
+                        ? "Checking library access..."
+                        : "Test library access"}
+                    </button>
+                    <LidarrLibraryAccessCheck result={lidarrLibraryAccessResult} />
+                  </div>
+                </OnboardingStep>
+              )}
 
-            {currentStep === "navidrome" && (
-              <OnboardingStep>
-                <OnboardingStepHeader
-                  title="Navidrome (optional)"
-                  copy="Recommended for streaming and playlists. Leave blank to skip and add later in settings."
-                />
-                <div className="onboarding-fields">
-                  <SettingsInput legacyStyle
-                    type="url"
-                    autoComplete="off"
-                    placeholder="Navidrome URL"
-                    value={navidromeUrl}
-                    onChange={(e) => {
-                      setNavidromeUrl(e.target.value);
-                      setNavidromeTestSuccess(false);
-                    }}
+              {currentStep === "lidarr-davo" && (
+                <OnboardingStep>
+                  <OnboardingStepHeader
+                    title="Recommended Lidarr settings"
+                    copy="Optionally apply Davo's Community Lidarr Guide settings. This creates an Aurral-friendly quality profile, custom formats, and naming scheme."
                   />
-                  <SettingsInput legacyStyle
-                    type="text"
-                    autoComplete="off"
-                    placeholder="Username"
-                    value={navidromeUsername}
-                    onChange={(e) => {
-                      setNavidromeUsername(e.target.value);
-                      setNavidromeTestSuccess(false);
-                    }}
-                  />
-                  <SettingsInput legacyStyle
-                    type="password"
-                    autoComplete="off"
-                    placeholder="Password"
-                    value={navidromePassword}
-                    onChange={(e) => {
-                      setNavidromePassword(e.target.value);
-                      setNavidromeTestSuccess(false);
-                    }}
-                  />
-                </div>
-              </OnboardingStep>
-            )}
-
-            {currentStep === "lastfm" && (
-              <OnboardingStep>
-                <OnboardingStepHeader
-                  title="Last.fm (optional)"
-                  copy="Recommended for personalized discovery, related artists, full tag search, and flows. If you skip it, Discover will use ListenBrainz trending artists and default genre shelves."
-                />
-                <div className="onboarding-fields">
-                  <SettingsInput legacyStyle
-                    type="text"
-                    autoComplete="off"
-                    placeholder="Last.fm username"
-                    value={lastfmUsername}
-                    onChange={(e) => setLastfmUsername(e.target.value)}
-                  />
-                  <SettingsInput legacyStyle
-                    type="password"
-                    autoComplete="off"
-                    placeholder="Last.fm API key"
-                    value={lastfmApiKey}
-                    onChange={(e) => setLastfmApiKey(e.target.value)}
-                  />
-                </div>
-              </OnboardingStep>
-            )}
-
-            {currentStep === "slskd" && (
-              <OnboardingStep>
-                <OnboardingStepHeader
-                  title="slskd (optional)"
-                  copy="Recommended for Soulseek-based downloads in flows and playlists. Leave blank to skip and add later in settings."
-                />
-                <div className="onboarding-fields">
-                  <SettingsInput legacyStyle
-                    type="url"
-                    autoComplete="off"
-                    placeholder="slskd URL (e.g. http://localhost:5030)"
-                    value={slskdUrl}
-                    onChange={(e) => {
-                      setSlskdUrl(e.target.value);
-                      setSlskdTestSuccess(false);
-                    }}
-                  />
-                  <SettingsInput legacyStyle
-                    type="password"
-                    autoComplete="off"
-                    placeholder="API key"
-                    value={slskdApiKey}
-                    onChange={(e) => {
-                      setSlskdApiKey(e.target.value);
-                      setSlskdTestSuccess(false);
-                    }}
-                  />
-                </div>
-              </OnboardingStep>
-            )}
-
-            {currentStep === "ticketmaster" && (
-              <OnboardingStep>
-                <OnboardingStepHeader
-                  title="Ticketmaster (optional)"
-                  copy="Recommended for nearby shows on the Discover page."
-                />
-                <div className="onboarding-fields">
-                  <div className="onboarding-callout">
-                    <p>
-                      Register on the{" "}
+                  <div className="onboarding-fields">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn--bold"
+                      onClick={() => setShowCommunityGuideModal(true)}
+                      disabled={applyingCommunityGuide}
+                    >
+                      {applyingCommunityGuide ? "Applying..." : "Apply Davo's Recommended Settings"}
+                    </button>
+                    <OnboardingHint>
                       <a
-                        href="https://developer-acct.ticketmaster.com/user/login"
+                        href="https://wiki.servarr.com/lidarr/community-guide"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="settings-page__link"
                       >
-                        Ticketmaster developer portal
+                        Read the full Community Lidarr Guide
                       </a>{" "}
-                      to get a Consumer Key used for authentication.
-                    </p>
+                      for naming, custom formats, and profile details.
+                    </OnboardingHint>
+                    {davoApplied ? (
+                      <OnboardingHint>
+                        Community guide settings were applied successfully.
+                      </OnboardingHint>
+                    ) : null}
                   </div>
-                  <SettingsInput legacyStyle
-                    type="password"
-                    autoComplete="off"
-                    placeholder="Consumer key"
-                    value={ticketmasterApiKey}
-                    onChange={(e) => setTicketmasterApiKey(e.target.value)}
+                </OnboardingStep>
+              )}
+
+              {currentStep === "lidarr-preferences" && (
+                <OnboardingStep>
+                  <OnboardingStepHeader
+                    title="Lidarr defaults"
+                    copy="Choose the profiles Aurral uses when adding artists and albums."
                   />
-                  <OnboardingFieldGroup
-                    label="Search radius (miles)"
-                    hint="How far from your location to search for nearby shows."
-                  >
-                    <SettingsInput legacyStyle
-                      type="number"
-                      min={5}
-                      max={250}
-                      step={5}
-                      value={ticketmasterSearchRadiusMiles}
+                  <div className="onboarding-fields">
+                    <OnboardingFieldGroup label="Default quality profile">
+                      <SettingsSelect
+                        legacyStyle
+                        value={lidarrQualityProfileId}
+                        onChange={(e) => setLidarrQualityProfileId(e.target.value)}
+                        disabled={loadingLidarrProfiles}
+                      >
+                        <option value="">
+                          {loadingLidarrProfiles
+                            ? "Loading profiles..."
+                            : lidarrProfiles.length === 0
+                              ? "No profiles available"
+                              : "Select a profile"}
+                        </option>
+                        {lidarrProfiles.map((profile) => (
+                          <option key={profile.id} value={profile.id}>
+                            {profile.name}
+                          </option>
+                        ))}
+                      </SettingsSelect>
+                    </OnboardingFieldGroup>
+                    <OnboardingFieldGroup label="Default metadata profile">
+                      <SettingsSelect
+                        legacyStyle
+                        value={lidarrMetadataProfileId}
+                        onChange={(e) => setLidarrMetadataProfileId(e.target.value)}
+                        disabled={loadingLidarrProfiles}
+                      >
+                        <option value="">
+                          {loadingLidarrProfiles
+                            ? "Loading profiles..."
+                            : lidarrMetadataProfiles.length === 0
+                              ? "No profiles available"
+                              : "Select a profile"}
+                        </option>
+                        {lidarrMetadataProfiles.map((profile) => (
+                          <option key={profile.id} value={profile.id}>
+                            {profile.name}
+                          </option>
+                        ))}
+                      </SettingsSelect>
+                    </OnboardingFieldGroup>
+                    <OnboardingFieldGroup
+                      label="Default monitoring option"
+                      hint="Aurral uses a pick-and-choose album workflow. We recommend None (Artist Only) so new artists are not fully monitored automatically."
+                    >
+                      <SettingsSelect
+                        legacyStyle
+                        value={lidarrDefaultMonitorOption}
+                        onChange={(e) => setLidarrDefaultMonitorOption(e.target.value)}
+                      >
+                        <option value="none">None (Artist Only)</option>
+                        <option value="existing">Existing Albums</option>
+                        <option value="all">All Albums</option>
+                        <option value="future">Future Albums</option>
+                        <option value="missing">Missing Albums</option>
+                        <option value="latest">Latest Album</option>
+                        <option value="first">First Album</option>
+                      </SettingsSelect>
+                    </OnboardingFieldGroup>
+                    <label className="onboarding-checkbox-row">
+                      <input
+                        type="checkbox"
+                        className="artist-checkbox"
+                        checked={lidarrSearchOnAdd}
+                        onChange={(e) => setLidarrSearchOnAdd(e.target.checked)}
+                      />
+                      <span>Search on add</span>
+                    </label>
+                    <OnboardingHint>
+                      When enabled, Lidarr searches for albums as soon as they are added. Aurral
+                      usually triggers searches when you request specific albums, so leaving this
+                      off is fine.
+                    </OnboardingHint>
+                  </div>
+                </OnboardingStep>
+              )}
+
+              {currentStep === "navidrome" && (
+                <OnboardingStep>
+                  <OnboardingStepHeader
+                    title="Navidrome (optional)"
+                    copy="Recommended for streaming and playlists. Leave blank to skip and add later in settings."
+                  />
+                  <div className="onboarding-fields">
+                    <SettingsInput
+                      legacyStyle
+                      type="url"
+                      autoComplete="off"
+                      placeholder="Navidrome URL"
+                      value={navidromeUrl}
                       onChange={(e) => {
-                        const raw = Number(e.target.value);
-                        setTicketmasterSearchRadiusMiles(
-                          Number.isFinite(raw)
-                            ? Math.max(5, Math.min(250, Math.floor(raw)))
-                            : 250,
-                        );
+                        setNavidromeUrl(e.target.value);
+                        setNavidromeTestSuccess(false);
                       }}
                     />
-                  </OnboardingFieldGroup>
-                </div>
-              </OnboardingStep>
-            )}
+                    <SettingsInput
+                      legacyStyle
+                      type="text"
+                      autoComplete="off"
+                      placeholder="Username"
+                      value={navidromeUsername}
+                      onChange={(e) => {
+                        setNavidromeUsername(e.target.value);
+                        setNavidromeTestSuccess(false);
+                      }}
+                    />
+                    <SettingsInput
+                      legacyStyle
+                      type="password"
+                      autoComplete="off"
+                      placeholder="Password"
+                      value={navidromePassword}
+                      onChange={(e) => {
+                        setNavidromePassword(e.target.value);
+                        setNavidromeTestSuccess(false);
+                      }}
+                    />
+                  </div>
+                </OnboardingStep>
+              )}
 
-            {currentStep === "brainzmash" && (
-              <OnboardingStep centered>
-                <CheckCircle2 className="onboarding-success-icon" />
-                <OnboardingStepHeader
-                  centered
-                  title="Powered by BrainzMash"
-                  copy="Aurral uses BrainzMash as its metadata provider for artist and album discovery, cover art, and Lidarr-compatible metadata."
-                />
-                <div className="onboarding-step__body">
-                  <p className="onboarding-copy onboarding-copy--center">
-                    Special thanks to the BrainzMash team for the open-source
-                    work behind that experience. If Aurral has been useful,
-                    consider checking out the project, starring the repo, and
-                    joining the community.
-                  </p>
-                  <p className="onboarding-copy onboarding-copy--center">
-                    <a
-                      href="https://github.com/statichum/brainzmash-hearring-aid"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="settings-page__link"
+              {currentStep === "lastfm" && (
+                <OnboardingStep>
+                  <OnboardingStepHeader
+                    title="Last.fm (optional)"
+                    copy="Recommended for personalized discovery, related artists, full tag search, and flows. If you skip it, Discover will use ListenBrainz trending artists and default genre shelves."
+                  />
+                  <div className="onboarding-fields">
+                    <SettingsInput
+                      legacyStyle
+                      type="text"
+                      autoComplete="off"
+                      placeholder="Last.fm username"
+                      value={lastfmUsername}
+                      onChange={(e) => setLastfmUsername(e.target.value)}
+                    />
+                    <SettingsInput
+                      legacyStyle
+                      type="password"
+                      autoComplete="off"
+                      placeholder="Last.fm API key"
+                      value={lastfmApiKey}
+                      onChange={(e) => setLastfmApiKey(e.target.value)}
+                    />
+                  </div>
+                </OnboardingStep>
+              )}
+
+              {currentStep === "slskd" && (
+                <OnboardingStep>
+                  <OnboardingStepHeader
+                    title="slskd (optional)"
+                    copy="Recommended for Soulseek-based downloads in flows and playlists. Leave blank to skip and add later in settings."
+                  />
+                  <div className="onboarding-fields">
+                    <SettingsInput
+                      legacyStyle
+                      type="url"
+                      autoComplete="off"
+                      placeholder="slskd URL (e.g. http://localhost:5030)"
+                      value={slskdUrl}
+                      onChange={(e) => {
+                        setSlskdUrl(e.target.value);
+                        setSlskdTestSuccess(false);
+                      }}
+                    />
+                    <SettingsInput
+                      legacyStyle
+                      type="password"
+                      autoComplete="off"
+                      placeholder="API key"
+                      value={slskdApiKey}
+                      onChange={(e) => {
+                        setSlskdApiKey(e.target.value);
+                        setSlskdTestSuccess(false);
+                      }}
+                    />
+                  </div>
+                </OnboardingStep>
+              )}
+
+              {currentStep === "ticketmaster" && (
+                <OnboardingStep>
+                  <OnboardingStepHeader
+                    title="Ticketmaster (optional)"
+                    copy="Recommended for nearby shows on the Discover page."
+                  />
+                  <div className="onboarding-fields">
+                    <div className="onboarding-callout">
+                      <p>
+                        Register on the{" "}
+                        <a
+                          href="https://developer-acct.ticketmaster.com/user/login"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="settings-page__link"
+                        >
+                          Ticketmaster developer portal
+                        </a>{" "}
+                        to get a Consumer Key used for authentication.
+                      </p>
+                    </div>
+                    <SettingsInput
+                      legacyStyle
+                      type="password"
+                      autoComplete="off"
+                      placeholder="Consumer key"
+                      value={ticketmasterApiKey}
+                      onChange={(e) => setTicketmasterApiKey(e.target.value)}
+                    />
+                    <OnboardingFieldGroup
+                      label="Search radius (miles)"
+                      hint="How far from your location to search for nearby shows."
                     >
-                      statichum/brainzmash-hearring-aid
-                    </a>
-                  </p>
-                  <OnboardingHint center>
-                    Finish setup to sign in with your admin account and open
-                    Aurral.
-                  </OnboardingHint>
-                </div>
-              </OnboardingStep>
-            )}
+                      <SettingsInput
+                        legacyStyle
+                        type="number"
+                        min={5}
+                        max={250}
+                        step={5}
+                        value={ticketmasterSearchRadiusMiles}
+                        onChange={(e) => {
+                          const raw = Number(e.target.value);
+                          setTicketmasterSearchRadiusMiles(
+                            Number.isFinite(raw)
+                              ? Math.max(5, Math.min(250, Math.floor(raw)))
+                              : 250,
+                          );
+                        }}
+                      />
+                    </OnboardingFieldGroup>
+                  </div>
+                </OnboardingStep>
+              )}
 
-            {error && <p className="onboarding-error">{error}</p>}
+              {currentStep === "brainzmash" && (
+                <OnboardingStep centered>
+                  <CheckCircle2 className="onboarding-success-icon" />
+                  <OnboardingStepHeader
+                    centered
+                    title="Powered by BrainzMash"
+                    copy="Aurral uses BrainzMash as its metadata provider for artist and album discovery, cover art, and Lidarr-compatible metadata."
+                  />
+                  <div className="onboarding-step__body">
+                    <p className="onboarding-copy onboarding-copy--center">
+                      Special thanks to the BrainzMash team for the open-source work behind that
+                      experience. If Aurral has been useful, consider checking out the project,
+                      starring the repo, and joining the community.
+                    </p>
+                    <p className="onboarding-copy onboarding-copy--center">
+                      <a
+                        href="https://github.com/statichum/brainzmash-hearring-aid"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="settings-page__link"
+                      >
+                        statichum/brainzmash-hearring-aid
+                      </a>
+                    </p>
+                    <OnboardingHint center>
+                      Finish setup to sign in with your admin account and open Aurral.
+                    </OnboardingHint>
+                  </div>
+                </OnboardingStep>
+              )}
+
+              {error && <p className="onboarding-error">{error}</p>}
+            </div>
           </div>
-        </div>
 
-        <div className="onboarding-actions">
-          {step > 0 && currentStep !== "brainzmash" && (
+          <div className="onboarding-actions">
+            {step > 0 && currentStep !== "brainzmash" && (
+              <button type="button" onClick={handleBack} className="btn btn-secondary btn--bold">
+                <ChevronLeft className="artist-icon-xs" />
+                Back
+              </button>
+            )}
             <button
               type="button"
-              onClick={handleBack}
-              className="btn btn-secondary btn--bold"
+              onClick={primaryAction}
+              disabled={isPrimaryDisabled}
+              className={`btn btn--bold btn--grow${isPrimaryDisabled ? " btn-secondary" : " btn-primary"}`}
             >
-              <ChevronLeft className="artist-icon-xs" />
-              Back
+              {primaryLabel === "Next" || primaryLabel === "Skip" ? (
+                <>
+                  {primaryLabel}
+                  {primaryLabel === "Next" && <ChevronRight className="artist-icon-xs" />}
+                </>
+              ) : (
+                primaryLabel
+              )}
             </button>
-          )}
-          <button
-            type="button"
-            onClick={primaryAction}
-            disabled={isPrimaryDisabled}
-            className={`btn btn--bold btn--grow${isPrimaryDisabled ? " btn-secondary" : " btn-primary"}`}
-          >
-            {primaryLabel === "Next" || primaryLabel === "Skip" ? (
-              <>
-                {primaryLabel}
-                {primaryLabel === "Next" && (
-                  <ChevronRight className="artist-icon-xs" />
-                )}
-              </>
-            ) : (
-              primaryLabel
-            )}
-          </button>
-        </div>
+          </div>
         </form>
       </div>
     </div>

@@ -9,7 +9,7 @@ const WORKER_NAME = "notification-outbox";
 
 let running = false;
 let stopRequested = false;
-let loopPromise = null;
+let _loopPromise = null;
 let abortController = null;
 
 async function runLoop() {
@@ -26,7 +26,7 @@ async function runLoop() {
   } finally {
     abortController = null;
     running = false;
-    loopPromise = null;
+    _loopPromise = null;
     const intentional = stopRequested;
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startNotificationOutboxWorker, {
@@ -39,7 +39,7 @@ export function startNotificationOutboxWorker() {
   if (running || isHonkerShuttingDown()) return;
   running = true;
   stopRequested = false;
-  loopPromise = runLoop();
+  _loopPromise = runLoop();
 }
 
 export function stopNotificationOutboxWorker() {

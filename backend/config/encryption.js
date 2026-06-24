@@ -12,10 +12,7 @@ function encryptWithKey(text, key) {
   const cipher = crypto.createCipheriv(ALGO, key, iv, {
     authTagLength: TAG_LEN,
   });
-  const enc = Buffer.concat([
-    cipher.update(String(text), "utf8"),
-    cipher.final(),
-  ]);
+  const enc = Buffer.concat([cipher.update(String(text), "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return PREFIX + Buffer.concat([iv, tag, enc]).toString("base64");
 }
@@ -76,8 +73,7 @@ export function decryptIntegrations(integrations, key) {
   const out = structuredClone(integrations);
   for (const path of SENSITIVE_PATHS) {
     const v = getAt(out, path);
-    if (v != null && typeof v === "string")
-      setAt(out, path, decryptWithKey(v, key));
+    if (v != null && typeof v === "string") setAt(out, path, decryptWithKey(v, key));
   }
   return out;
 }
@@ -87,8 +83,7 @@ export function encryptIntegrations(integrations, key) {
   const out = structuredClone(integrations);
   for (const path of SENSITIVE_PATHS) {
     const v = getAt(out, path);
-    if (v != null && typeof v === "string")
-      setAt(out, path, encryptWithKey(v, key));
+    if (v != null && typeof v === "string") setAt(out, path, encryptWithKey(v, key));
   }
   return out;
 }

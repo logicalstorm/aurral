@@ -17,8 +17,7 @@ export function UnsavedModal({ show, onCancel, onConfirm }) {
               Unsaved Changes
             </h3>
             <p className="settings-page__modal-copy">
-              You have unsaved changes. Are you sure you want to leave? Your
-              changes will be lost.
+              You have unsaved changes. Are you sure you want to leave? Your changes will be lost.
             </p>
           </div>
         </div>
@@ -26,11 +25,7 @@ export function UnsavedModal({ show, onCancel, onConfirm }) {
           <button type="button" onClick={onCancel} className="btn btn-secondary">
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="btn btn-danger"
-          >
+          <button type="button" onClick={onConfirm} className="btn btn-danger">
             Leave Without Saving
           </button>
         </div>
