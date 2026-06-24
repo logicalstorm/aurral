@@ -698,20 +698,12 @@ export class WeeklyFlowDownloadTracker {
       lastPlaylistType,
     );
     if (canProcess(nextFresh)) return nextFresh;
-    for (const id of this.pendingFreshQueue) {
-      const job = this.jobs.get(id);
-      if (canProcess(job)) return job;
-    }
     this.pendingRetryQueue = this._compactPendingQueue(this.pendingRetryQueue);
     const nextRetry = this._pickPendingFromQueue(
       this.pendingRetryQueue,
       lastPlaylistType,
     );
     if (canProcess(nextRetry)) return nextRetry;
-    for (const id of this.pendingRetryQueue) {
-      const job = this.jobs.get(id);
-      if (canProcess(job)) return job;
-    }
     if (this.pendingSet.size > 0) {
       for (const id of this.pendingSet) {
         const job = this.jobs.get(id);

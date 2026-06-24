@@ -46,9 +46,9 @@ export function buildSharedTrackIdentity(track) {
   const normalized = normalizeTrackForSharedIdentity(track);
   if (!normalized) return "";
   return [
-    normalized.artistName.toLocaleLowerCase(),
-    normalized.trackName.toLocaleLowerCase(),
-    normalized.albumName.toLocaleLowerCase(),
+    normalized.artistName.toLowerCase(),
+    normalized.trackName.toLowerCase(),
+    normalized.albumName.toLowerCase(),
     normalized.artistMbid,
     normalized.albumMbid,
     normalized.trackMbid,
@@ -59,7 +59,7 @@ export function buildSharedTrackIdentity(track) {
 function buildCoreTrackIdentity(track) {
   const normalized = normalizeTrackForSharedIdentity(track);
   if (!normalized) return "";
-  return `${normalized.artistName.toLocaleLowerCase()}\u0001${normalized.trackName.toLocaleLowerCase()}`;
+  return `${normalized.artistName.toLowerCase()}\u0001${normalized.trackName.toLowerCase()}`;
 }
 
 function coreIdentityFromStoredIdentity(identity) {

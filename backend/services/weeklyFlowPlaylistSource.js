@@ -1,6 +1,6 @@
 import { lastfmRequest, getLastfmApiKey } from "./apiClients.js";
 import { getDiscoveryCache } from "./discoveryService.js";
-import { dbOps } from "../config/db-helpers.js";
+import { normalizeWeightMap } from "./weeklyFlowPlaylistConfig.js";
 
 const MBID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -174,44 +174,6 @@ export class WeeklyFlowPlaylistSource {
     return out;
   }
 
-  _normalizeWeightMap(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-    const out = {};
-    for (const [key, rawValue] of Object.entries(value)) {
-      const name = String(key || "").trim();
-      if (!name) continue;
-      const parsed = Number(rawValue);
-      if (!Number.isFinite(parsed)) continue;
-      const rounded = Math.round(parsed);
-      if (rounded <= 0) continue;
-      out[name] = rounded;
-    }
-    return out;
-  }
-
-  _sumWeightMap(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
-    return Object.values(value).reduce((acc, entry) => {
-      const parsed = Number(entry);
-      return acc + (Number.isFinite(parsed) ? parsed : 0);
-    }, 0);
-  }
-
-  _normalizeRecipeCounts(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value))
-      return null;
-    const parseField = (entry) => {
-      const parsed = Number(entry);
-      if (!Number.isFinite(parsed)) return 0;
-      return Math.max(Math.round(parsed), 0);
-    };
-    return {
-      discover: parseField(value?.discover ?? 0),
-      mix: parseField(value?.mix ?? 0),
-      trending: parseField(value?.trending ?? 0),
-    };
-  }
-
   _normalizeList(value) {
     if (value == null) return [];
     if (Array.isArray(value)) {
@@ -239,7 +201,7 @@ export class WeeklyFlowPlaylistSource {
       }
       return out;
     }
-    return Object.keys(this._normalizeWeightMap(value));
+    return Object.keys(normalizeWeightMap(value));
   }
 
   _normalizeFocusStrength(value) {
@@ -651,7 +613,7 @@ export class WeeklyFlowPlaylistSource {
   }
 
   async getTagGroupTracks(tagsMap, limit, options = {}) {
-    const tags = Object.keys(this._normalizeWeightMap(tagsMap));
+    const tags = Object.keys(normalizeWeightMap(tagsMap));
     if (tags.length === 0 || limit <= 0) return [];
     if (tags.length === 1) {
       return this.getTagTracks(tags[0], limit, options);
@@ -675,7 +637,7 @@ export class WeeklyFlowPlaylistSource {
   }
 
   async getRelatedArtistGroupTracks(relatedArtistsMap, limit, options = {}) {
-    const artists = Object.keys(this._normalizeWeightMap(relatedArtistsMap));
+    const artists = Object.keys(normalizeWeightMap(relatedArtistsMap));
     if (artists.length === 0 || limit <= 0) return [];
     if (artists.length === 1) {
       return this.getRelatedArtistTracks(artists[0], limit, options);

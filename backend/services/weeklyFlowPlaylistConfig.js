@@ -23,7 +23,7 @@ const clampSize = (value) => {
   return Math.max(Math.round(n), 1);
 };
 
-const normalizeWeightMap = (value) => {
+export const normalizeWeightMap = (value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const out = {};
   for (const [key, rawValue] of Object.entries(value)) {
@@ -78,31 +78,6 @@ const normalizeStringArray = (value) => {
     out.push(text);
   }
   return out;
-};
-
-const sumWeightMap = (value) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
-  return Object.values(value).reduce((acc, entry) => {
-    const parsed = Number(entry);
-    return acc + (Number.isFinite(parsed) ? parsed : 0);
-  }, 0);
-};
-
-const normalizeRecipeCounts = (value, fallback) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return fallback ?? { discover: 0, mix: 0, trending: 0, focus: 0 };
-  }
-  const parseField = (entry) => {
-    const parsed = Number(entry);
-    if (!Number.isFinite(parsed)) return 0;
-    return Math.max(Math.round(parsed), 0);
-  };
-  return {
-    discover: parseField(value?.discover ?? 0),
-    mix: parseField(value?.mix ?? 0),
-    trending: parseField(value?.trending ?? 0),
-    focus: parseField(value?.focus ?? 0),
-  };
 };
 
 const clampCount = (value, min = 1, max = 100) => {
@@ -237,42 +212,6 @@ const extractFromBlocks = (value) => {
   }
   if (total <= 0) return null;
   return { recipe, tags, relatedArtists, deepDive, size: total };
-};
-
-const buildCountsFromMix = (size, mix) => {
-  const weights = [
-    { key: "discover", value: Number(mix?.discover ?? 0) },
-    { key: "mix", value: Number(mix?.mix ?? 0) },
-    { key: "trending", value: Number(mix?.trending ?? 0) },
-    { key: "focus", value: Number(mix?.focus ?? 0) },
-  ];
-  const sum = weights.reduce(
-    (acc, w) => acc + (Number.isFinite(w.value) ? w.value : 0),
-    0,
-  );
-  if (sum <= 0 || !Number.isFinite(sum) || size <= 0) {
-    return { discover: 0, mix: 0, trending: 0, focus: 0 };
-  }
-  const scaled = weights.map((w) => ({
-    ...w,
-    raw: (w.value / sum) * size,
-  }));
-  const floored = scaled.map((w) => ({
-    ...w,
-    count: Math.floor(w.raw),
-    remainder: w.raw - Math.floor(w.raw),
-  }));
-  let remaining = size - floored.reduce((acc, w) => acc + w.count, 0);
-  const ordered = [...floored].sort((a, b) => b.remainder - a.remainder);
-  for (let i = 0; i < ordered.length && remaining > 0; i++) {
-    ordered[i].count += 1;
-    remaining -= 1;
-  }
-  const out = {};
-  for (const item of ordered) {
-    out[item.key] = item.count;
-  }
-  return out;
 };
 
 const normalizeMix = (mix) => {
@@ -428,9 +367,9 @@ export const normalizeSharedTrack = (track) => {
 
 export const buildSharedTrackIdentity = (track) =>
   [
-    String(track?.artistName || "").trim().toLocaleLowerCase(),
-    String(track?.trackName || "").trim().toLocaleLowerCase(),
-    String(track?.albumName || "").trim().toLocaleLowerCase(),
+    String(track?.artistName || "").trim().toLowerCase(),
+    String(track?.trackName || "").trim().toLowerCase(),
+    String(track?.albumName || "").trim().toLowerCase(),
     String(track?.artistMbid || "").trim(),
     String(track?.albumMbid || "").trim(),
     String(track?.trackMbid || "").trim(),
@@ -438,8 +377,8 @@ export const buildSharedTrackIdentity = (track) =>
   ].join("\u0001");
 
 export const buildCoreTrackIdentity = (track) => {
-  const artistName = String(track?.artistName || "").trim().toLocaleLowerCase();
-  const trackName = String(track?.trackName || "").trim().toLocaleLowerCase();
+  const artistName = String(track?.artistName || "").trim().toLowerCase();
+  const trackName = String(track?.trackName || "").trim().toLowerCase();
   if (!artistName || !trackName) return "";
   return `${artistName}\u0001${trackName}`;
 };

@@ -1,4 +1,5 @@
-import { getDiscoveryRefreshQueue, getWorkerId } from "./honkerDb.js";
+import createHonkerWorker from "./honkerWorkerFactory.js";
+import { getDiscoveryRefreshQueue } from "./honkerDb.js";
 import {
   clearDiscoveryUpdateProgress,
   getDiscoveryCache,
@@ -11,21 +12,6 @@ import {
   markDiscoveryRefreshDequeued,
   scheduleNextDiscoveryRefresh,
 } from "./discoveryRefreshScheduler.js";
-import {
-  createIdleAbortController,
-  getWorkerIdleStopMs,
-  isHonkerShuttingDown,
-  markHonkerWorkerLoopEnded,
-  registerHonkerWorker,
-  withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
-
-const WORKER_NAME = "discovery-refresh";
-
-let running = false;
-let stopRequested = false;
-let loopPromise = null;
-let idleController = null;
 
 async function runDiscoveryRefresh(payload) {
   if (!(await isDiscoveryRefreshConfigured())) {
@@ -52,74 +38,27 @@ async function runDiscoveryRefresh(payload) {
   await updateDiscoveryCache();
 }
 
-async function runLoop() {
-  const queue = getDiscoveryRefreshQueue();
-  const workerId = getWorkerId();
-  idleController = createIdleAbortController({
-    idleStopMs: getWorkerIdleStopMs(),
-  });
-  idleController.arm();
-  try {
-    for await (const job of queue.claim(workerId, {
-      idlePollS: 5,
-      signal: idleController.signal,
-    })) {
-      idleController.disarm();
-      if (!running || stopRequested) break;
-      markDiscoveryRefreshDequeued();
-      try {
-        await withJobHeartbeat(job, queue, () => runDiscoveryRefresh(job.payload));
-        job.ack();
-        scheduleNextDiscoveryRefresh();
-      } catch (error) {
-        const message = error?.message || String(error);
-        getDiscoveryCache().isUpdating = false;
-        clearDiscoveryUpdateProgress();
-        if (job.attempts >= 3) {
-          job.fail(message);
-        } else {
-          job.retry(300, message);
-        }
-      }
-      idleController.arm();
-    }
-  } catch (error) {
-    if (!idleController?.idleStopped && !stopRequested) {
-      console.error("[discoveryRefreshWorker] loop error:", error);
-    }
-  } finally {
-    const idleStopped = idleController?.idleStopped === true;
-    idleController?.dispose();
-    idleController = null;
-    running = false;
-    loopPromise = null;
-    const intentional = stopRequested || idleStopped;
-    stopRequested = false;
-    markHonkerWorkerLoopEnded(WORKER_NAME, startDiscoveryRefreshWorker, {
-      intentional,
-    });
-  }
-}
-
-export function startDiscoveryRefreshWorker() {
-  if (running || isHonkerShuttingDown()) return;
-  running = true;
-  stopRequested = false;
-  loopPromise = runLoop();
-}
-
-export function stopDiscoveryRefreshWorker() {
-  stopRequested = true;
-  running = false;
-  idleController?.abort();
-}
-
-export function isDiscoveryRefreshWorkerRunning() {
-  return running;
-}
-
-registerHonkerWorker(WORKER_NAME, {
+const {
   start: startDiscoveryRefreshWorker,
   stop: stopDiscoveryRefreshWorker,
   isRunning: isDiscoveryRefreshWorkerRunning,
+} = createHonkerWorker({
+  name: "discovery-refresh",
+  getQueue: getDiscoveryRefreshQueue,
+  processJob: runDiscoveryRefresh,
+  idlePollS: 5,
+  retryDelayS: 300,
+  maxAttempts: 3,
+  onJobDequeue: markDiscoveryRefreshDequeued,
+  onJobSuccess: scheduleNextDiscoveryRefresh,
+  onJobError: () => {
+    getDiscoveryCache().isUpdating = false;
+    clearDiscoveryUpdateProgress();
+  },
 });
+
+export {
+  startDiscoveryRefreshWorker,
+  stopDiscoveryRefreshWorker,
+  isDiscoveryRefreshWorkerRunning,
+};

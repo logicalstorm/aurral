@@ -384,10 +384,6 @@ router.post("/complete", async (req, res) => {
       nextSettings.downloadFolderPath = validation.path;
     }
     dbOps.updateSettings(nextSettings);
-    const { refreshPlaylistRuntimeRoots } = await import(
-      "../services/playlistRuntime.js"
-    );
-    await refreshPlaylistRuntimeRoots();
 
     const authUserFinal = integrations?.general?.authUser || "admin";
     const authPasswordFinal = integrations?.general?.authPassword || "";

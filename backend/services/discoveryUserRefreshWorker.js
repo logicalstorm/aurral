@@ -1,22 +1,8 @@
-import { dbOps } from "../config/db-helpers.js";
-import { getDiscoveryUserRefreshQueue, getWorkerId } from "./honkerDb.js";
+import createHonkerWorker from "./honkerWorkerFactory.js";
+import { getDiscoveryUserRefreshQueue } from "./honkerDb.js";
 import { updateUserDiscoveryCache } from "./discoveryService.js";
 import { getListenHistoryCacheNamespace } from "./listeningHistory.js";
-import {
-  createIdleAbortController,
-  getWorkerIdleStopMs,
-  isHonkerShuttingDown,
-  markHonkerWorkerLoopEnded,
-  registerHonkerWorker,
-  withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
-
-const WORKER_NAME = "discovery-user-refresh";
-
-let running = false;
-let stopRequested = false;
-let loopPromise = null;
-let idleController = null;
+import { dbOps } from "../config/db-helpers.js";
 
 function wasRefreshedSince(profile, requestedAt) {
   const cacheNamespace = getListenHistoryCacheNamespace(profile);
@@ -43,72 +29,21 @@ async function processDiscoveryUserRefresh(payload = {}) {
   return { refreshed: true };
 }
 
-async function runLoop() {
-  const queue = getDiscoveryUserRefreshQueue();
-  const workerId = getWorkerId();
-  idleController = createIdleAbortController({
-    idleStopMs: getWorkerIdleStopMs(),
-  });
-  idleController.arm();
-  try {
-    for await (const job of queue.claim(workerId, {
-      idlePollS: 10,
-      signal: idleController.signal,
-    })) {
-      idleController.disarm();
-      if (!running || stopRequested) break;
-      try {
-        await withJobHeartbeat(job, queue, () =>
-          processDiscoveryUserRefresh(job.payload),
-        );
-        job.ack();
-      } catch (error) {
-        const message = error?.message || String(error);
-        if (job.attempts >= 4) {
-          job.fail(message);
-        } else {
-          job.retry(300, message);
-        }
-      }
-      idleController.arm();
-    }
-  } catch (error) {
-    if (!idleController?.idleStopped && !stopRequested) {
-      console.error("[discoveryUserRefreshWorker] loop error:", error);
-    }
-  } finally {
-    const idleStopped = idleController?.idleStopped === true;
-    idleController?.dispose();
-    idleController = null;
-    running = false;
-    loopPromise = null;
-    const intentional = stopRequested || idleStopped;
-    stopRequested = false;
-    markHonkerWorkerLoopEnded(WORKER_NAME, startDiscoveryUserRefreshWorker, {
-      intentional,
-    });
-  }
-}
-
-export function startDiscoveryUserRefreshWorker() {
-  if (running || isHonkerShuttingDown()) return;
-  running = true;
-  stopRequested = false;
-  loopPromise = runLoop();
-}
-
-export function stopDiscoveryUserRefreshWorker() {
-  stopRequested = true;
-  running = false;
-  idleController?.abort();
-}
-
-export function isDiscoveryUserRefreshWorkerRunning() {
-  return running;
-}
-
-registerHonkerWorker(WORKER_NAME, {
+const {
   start: startDiscoveryUserRefreshWorker,
   stop: stopDiscoveryUserRefreshWorker,
   isRunning: isDiscoveryUserRefreshWorkerRunning,
+} = createHonkerWorker({
+  name: "discovery-user-refresh",
+  getQueue: getDiscoveryUserRefreshQueue,
+  processJob: processDiscoveryUserRefresh,
+  idlePollS: 10,
+  retryDelayS: 300,
+  maxAttempts: 4,
 });
+
+export {
+  startDiscoveryUserRefreshWorker,
+  stopDiscoveryUserRefreshWorker,
+  isDiscoveryUserRefreshWorkerRunning,
+};

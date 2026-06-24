@@ -106,6 +106,12 @@ export const sanitizeFlowStats = (stats) => {
   };
 };
 
+export const playlistStats = (jobs) => {
+  const raw = buildFlowStatsFromJobs(jobs);
+  const stats = sanitizeFlowStats(raw);
+  return { ...stats, state: getPlaylistStateFromStats(stats) };
+};
+
 export const getPlaylistStateFromStats = (stats) => {
   if (stats.total === 0) return "idle";
   if (stats.downloading > 0 || stats.pending > 0) return "running";

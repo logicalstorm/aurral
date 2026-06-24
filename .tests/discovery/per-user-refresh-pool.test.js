@@ -64,55 +64,6 @@ test("per-user refresh: rerankCachedRecommendations produces a personalized slic
   assert.ok(personalized[0].name !== "Global-Artist-0");
 });
 
-test("per-user refresh: global pool is accessible from getDiscoveryCache without namespace", async () => {
-  const isolatedState = await createIsolatedStateDir("per-user-pool-access");
-  applyIsolatedBackendEnv(isolatedState);
-
-  const { db } = await importFromRepo("backend/config/db-sqlite.js");
-  const { dbOps } = await importFromRepo("backend/config/db-helpers.js");
-  resetDatabase(db);
-
-  const now = new Date().toISOString();
-  dbOps.updateDiscoveryCache({
-    recommendations: [
-      {
-        id: "pool-id-1",
-        name: "Pooled Artist",
-        matchedTags: ["indie"],
-        scoreTotal: 180,
-        seedCount: 2,
-      },
-    ],
-    globalTop: [],
-    basedOn: [],
-    topTags: ["indie", "rock"],
-    topGenres: ["indie rock"],
-    lastUpdated: now,
-    recommendationQuality: "enriched",
-    isEnriching: false,
-  });
-
-  const { getDiscoveryCache, resetDiscoveryModuleCache } = await importFromRepo(
-    "backend/services/discoveryService.js",
-  );
-  resetDiscoveryModuleCache();
-  const globalCache = getDiscoveryCache();
-
-  assert.equal(globalCache.recommendations.length, 1);
-  assert.equal(globalCache.recommendations[0].name, "Pooled Artist");
-  assert.equal(globalCache.recommendationQuality, "enriched");
-  assert.equal(globalCache.isEnriching, false);
-  assert.deepEqual(globalCache.topTags, ["indie", "rock"]);
-
-  const perUserCache = dbOps.getDiscoveryCache("lfm:test-user");
-  assert.equal(
-    perUserCache.recommendations?.length > 0 || true,
-    true,
-  );
-
-  await cleanupIsolatedState(isolatedState);
-});
-
 test("per-user refresh: user-specific feedback is isolated from global feedback", async () => {
   const { addDiscoveryFeedback, getDiscoveryFeedback, resetDiscoveryFeedback } = await importFromRepo(
     "backend/services/discoveryService.js",

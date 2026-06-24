@@ -618,184 +618,81 @@ async function checkLidarrSection() {
   };
 }
 
-async function checkSlskdSection() {
+async function checkDownloadClientSection({
+  client,
+  key,
+  title,
+  isEnabled,
+  skipReason,
+  resolveCompletedPath,
+  pathFix,
+  extraSteps = null,
+}) {
   const integrations = dbOps.getSettings()?.integrations || {};
-  const slskd = integrations.slskd || {};
-  if (slskd.enabled === false || !slskdClient.isConfigured()) {
-    return buildSection("slskd", "slskd downloads", [], {
+  const config = integrations[key] || {};
+
+  if (!isEnabled(config) || !client.isConfigured()) {
+    return buildSection(key, title, [], {
       skipped: true,
-      skipReason: "slskd is not configured.",
+      skipReason,
     });
   }
 
   const steps = [];
-  const connection = await slskdClient.testConnection({ force: true });
+  const connection = await client.testConnection({ force: true });
   if (!connection.ok) {
     steps.push(
-      healthStep("api", "fail", "Connected to slskd", {
+      healthStep("api", "fail", `Connected to ${title}`, {
         detail: connection.message || "Connection failed",
-        fix: "Check the slskd URL and API key in Settings → Download Clients. From Docker, use a URL Aurral can reach inside the network.",
+        fix: `Check the ${key} URL and credentials in Settings → Download Clients.`,
       }),
     );
-    return buildSection("slskd", "slskd downloads", steps);
+    return buildSection(key, title, steps);
   }
 
   steps.push(
-    healthStep("api", "pass", "Connected to slskd", {
-      detail: connection.message || "slskd is reachable",
+    healthStep("api", "pass", `Connected to ${title}`, {
+      detail: connection.message || `${key} is reachable`,
     }),
   );
 
-  if (connection.soulseekConnected === false) {
-    steps.push(
-      healthStep("soulseek", "warn", "Soulseek network is connected", {
-        detail: connection.serverState || "Disconnected",
-        fix: "Open slskd, log in, and connect to the Soulseek server before starting downloads.",
-      }),
-    );
-  } else {
-    steps.push(
-      healthStep("soulseek", "pass", "Soulseek network is connected", {
-        detail: connection.serverState || "Connected",
-      }),
-    );
+  if (extraSteps) {
+    const extra = extraSteps(connection);
+    steps.push(...extra);
+    if (extra.some((s) => s.status === "fail")) {
+      return buildSection(key, title, steps);
+    }
   }
 
-  const downloadPath = String(connection.downloadPath || "").trim();
-  if (!downloadPath) {
-    steps.push(
-      healthStep("path-reported", "warn", "slskd download folder is reported", {
-        fix: "Set a download folder in slskd options, for example /data/downloads/slskd/complete.",
-      }),
-    );
-    return buildSection("slskd", "slskd downloads", steps);
-  }
-
-  steps.push(
-    healthStep("path-reported", "pass", "slskd download folder is reported", {
-      detail: downloadPath,
-    }),
-  );
-
-  const readablePath = await checkPathReadable(downloadPath, "slskd");
-  if (!readablePath) {
-    steps.push(
-      healthStep("path-readable", "fail", "Aurral can read slskd completed files", {
-        detail: downloadPath,
-        fix: looksLikeExternalOnlyPath(downloadPath)
-          ? "slskd reports a host path Aurral cannot read inside Docker. Mount the shared parent folder into both containers, or add an slskd mapping under Settings → Download Clients → Remote Path Mappings."
-          : `Mount the same host folder into Aurral at the path slskd uses, or add an slskd mapping for ${downloadPath} under Settings → Download Clients → Remote Path Mappings.`,
-      }),
-    );
-    return buildSection("slskd", "slskd downloads", steps);
-  }
-
-  steps.push(
-    healthStep("path-readable", "pass", "Aurral can read slskd completed files", {
-      detail: formatPathAccessDetail(downloadPath, readablePath),
-    }),
-  );
-
-  const sharesPlaylistFilesystem = await pathsShareDevice(
-    readablePath,
-    resolvePlaylistRoot(),
-  );
-  steps.push(
-    healthStep(
-      "same-filesystem",
-      sharesPlaylistFilesystem ? "pass" : "warn",
-      "slskd and Aurral downloads share a filesystem",
-      {
-        detail: `${readablePath} -> ${resolvePlaylistRoot()}`,
-        fix: sharesPlaylistFilesystem
-          ? "Completed files can usually be moved into the Aurral playlist folder without a cross-device copy."
-          : "Aurral can copy across filesystems, but same-filesystem mounts are faster and avoid failures from low space, permissions, or partial copy cleanup.",
-      },
-    ),
-  );
-
-  const sampleFile = await findSampleMediaFileInDirectory(readablePath);
-  if (!sampleFile) {
-    steps.push(
-      healthStep("sample-file", "warn", "Sample slskd completed file on disk", {
-        detail: readablePath,
-        fix: "Complete at least one slskd download, then run checks again to verify a real file path.",
-      }),
-    );
-  } else {
-    steps.push(
-      healthStep("sample-file", "pass", "Sample slskd completed file on disk", {
-        detail: sampleFile,
-      }),
-    );
-  }
-
-  return buildSection("slskd", "slskd downloads", steps);
-}
-
-async function checkNzbgetSection() {
-  const integrations = dbOps.getSettings()?.integrations || {};
-  const nzbget = integrations.nzbget || {};
-  if (nzbget.enabled !== true || !nzbgetClient.isConfigured()) {
-    return buildSection("nzbget", "NZBGet downloads", [], {
-      skipped: true,
-      skipReason: "NZBGet is not enabled.",
-    });
-  }
-
-  const steps = [];
-  const connection = await nzbgetClient.testConnection({ force: true });
-  if (!connection.ok) {
-    steps.push(
-      healthStep("api", "fail", "Connected to NZBGet", {
-        detail: connection.message || "Connection failed",
-        fix: "Check the NZBGet URL and credentials in Settings → Download Clients.",
-      }),
-    );
-    return buildSection("nzbget", "NZBGet downloads", steps);
-  }
-
-  steps.push(
-    healthStep("api", "pass", "Connected to NZBGet", {
-      detail: connection.message || "NZBGet is reachable",
-    }),
-  );
-
-  const completedPath = String(
-    nzbget.completedPath ||
-      connection.downloadPath ||
-      connection.directories?.completedPath ||
-      "",
-  ).trim();
-
+  const completedPath = resolveCompletedPath(config, connection);
   if (!completedPath) {
     steps.push(
-      healthStep("path-reported", "warn", "NZBGet completed folder is configured", {
-        fix: "Set the completed download path in Settings → Download Clients → NZBGet.",
+      healthStep("path-reported", "warn", `${title} completed folder is configured`, {
+        fix: `Set the completed download path in Settings → Download Clients → ${key}.`,
       }),
     );
-    return buildSection("nzbget", "NZBGet downloads", steps);
+    return buildSection(key, title, steps);
   }
 
   steps.push(
-    healthStep("path-reported", "pass", "NZBGet completed folder is configured", {
+    healthStep("path-reported", "pass", `${title} completed folder is configured`, {
       detail: completedPath,
     }),
   );
 
-  const readablePath = await checkPathReadable(completedPath, "nzbget");
+  const readablePath = await checkPathReadable(completedPath, key);
   if (!readablePath) {
     steps.push(
-      healthStep("path-readable", "fail", "Aurral can read NZBGet completed files", {
+      healthStep("path-readable", "fail", `Aurral can read ${title} completed files`, {
         detail: completedPath,
-        fix: "Mount the same host folder into Aurral and NZBGet, or add an NZBGet mapping under Settings → Download Clients → Remote Path Mappings.",
+        fix: pathFix(completedPath),
       }),
     );
-    return buildSection("nzbget", "NZBGet downloads", steps);
+    return buildSection(key, title, steps);
   }
 
   steps.push(
-    healthStep("path-readable", "pass", "Aurral can read NZBGet completed files", {
+    healthStep("path-readable", "pass", `Aurral can read ${title} completed files`, {
       detail: formatPathAccessDetail(completedPath, readablePath),
     }),
   );
@@ -808,7 +705,7 @@ async function checkNzbgetSection() {
     healthStep(
       "same-filesystem",
       sharesPlaylistFilesystem ? "pass" : "warn",
-      "NZBGet and Aurral downloads share a filesystem",
+      `${key} and Aurral downloads share a filesystem`,
       {
         detail: `${readablePath} -> ${resolvePlaylistRoot()}`,
         fix: sharesPlaylistFilesystem
@@ -821,20 +718,70 @@ async function checkNzbgetSection() {
   const sampleFile = await findSampleMediaFileInDirectory(readablePath);
   if (!sampleFile) {
     steps.push(
-      healthStep("sample-file", "warn", "Sample NZBGet completed file on disk", {
+      healthStep("sample-file", "warn", `Sample ${title} completed file on disk`, {
         detail: readablePath,
-        fix: "Complete at least one NZBGet download, then run checks again to verify a real file path.",
+        fix: `Complete at least one ${key} download, then run checks again to verify a real file path.`,
       }),
     );
   } else {
     steps.push(
-      healthStep("sample-file", "pass", "Sample NZBGet completed file on disk", {
+      healthStep("sample-file", "pass", `Sample ${title} completed file on disk`, {
         detail: sampleFile,
       }),
     );
   }
 
-  return buildSection("nzbget", "NZBGet downloads", steps);
+  return buildSection(key, title, steps);
+}
+
+async function checkSlskdSection() {
+  return checkDownloadClientSection({
+    client: slskdClient,
+    key: "slskd",
+    title: "slskd downloads",
+    isEnabled: (config) => config.enabled !== false,
+    skipReason: "slskd is not configured.",
+    resolveCompletedPath: (_, connection) =>
+      String(connection.downloadPath || "").trim(),
+    pathFix: (downloadPath) =>
+      looksLikeExternalOnlyPath(downloadPath)
+        ? "slskd reports a host path Aurral cannot read inside Docker. Mount the shared parent folder into both containers, or add an slskd mapping under Settings → Download Clients → Remote Path Mappings."
+        : `Mount the same host folder into Aurral at the path slskd uses, or add an slskd mapping for ${downloadPath} under Settings → Download Clients → Remote Path Mappings.`,
+    extraSteps: (connection) => {
+      if (connection.soulseekConnected === false) {
+        return [
+          healthStep("soulseek", "warn", "Soulseek network is connected", {
+            detail: connection.serverState || "Disconnected",
+            fix: "Open slskd, log in, and connect to the Soulseek server before starting downloads.",
+          }),
+        ];
+      }
+      return [
+        healthStep("soulseek", "pass", "Soulseek network is connected", {
+          detail: connection.serverState || "Connected",
+        }),
+      ];
+    },
+  });
+}
+
+async function checkNzbgetSection() {
+  return checkDownloadClientSection({
+    client: nzbgetClient,
+    key: "nzbget",
+    title: "NZBGet downloads",
+    isEnabled: (config) => config.enabled === true,
+    skipReason: "NZBGet is not enabled.",
+    resolveCompletedPath: (config, connection) =>
+      String(
+        config.completedPath ||
+          connection.downloadPath ||
+          connection.directories?.completedPath ||
+          "",
+      ).trim(),
+    pathFix: (completedPath) =>
+      "Mount the same host folder into Aurral and NZBGet, or add an NZBGet mapping under Settings → Download Clients → Remote Path Mappings.",
+  });
 }
 
 function uniqueVisiblePathCandidates(paths) {

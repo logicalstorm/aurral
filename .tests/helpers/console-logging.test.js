@@ -83,20 +83,31 @@ test("patched verbose server console includes full detail output", () => {
   assert.match(output, /probe failure/);
 });
 
-test("structured logger starts at debug level in verbose console mode", async () => {
-  const originalVerbose = process.env.AURRAL_VERBOSE_LOGS;
-  process.env.AURRAL_VERBOSE_LOGS = "true";
+test("simplified logger writes to console with level and category", async () => {
+  const output = [];
+  const original = {
+    log: console.log,
+    error: console.error,
+    warn: console.warn,
+  };
+  console.log = (...args) => output.push(["log", ...args]);
+  console.error = (...args) => output.push(["error", ...args]);
+  console.warn = (...args) => output.push(["warn", ...args]);
 
   try {
-    const { LOG_LEVELS_EXPORT, logger } = await import(
-      `../../backend/services/logger.js?verbose-test=${Date.now()}`
+    const { logger } = await import(
+      `../../backend/services/logger.js?console-test=${Date.now()}`
     );
-    assert.equal(logger.shouldLog(LOG_LEVELS_EXPORT.DEBUG), true);
+    logger.info("test", "info message", { key: "val" });
+    logger.warn("test", "warn message");
+    logger.error("test", "error message");
+
+    assert.ok(output.some((entry) => entry[0] === "log" && String(entry[1]).includes("[info]") && String(entry[1]).includes("[test]") && String(entry[1]).includes("info message")));
+    assert.ok(output.some((entry) => entry[0] === "warn" && String(entry[1]).includes("[warn]")));
+    assert.ok(output.some((entry) => entry[0] === "error" && String(entry[1]).includes("[error]")));
   } finally {
-    if (originalVerbose === undefined) {
-      delete process.env.AURRAL_VERBOSE_LOGS;
-    } else {
-      process.env.AURRAL_VERBOSE_LOGS = originalVerbose;
-    }
+    console.log = original.log;
+    console.error = original.error;
+    console.warn = original.warn;
   }
 });

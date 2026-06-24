@@ -39,10 +39,6 @@ test.beforeEach(async () => {
     ...dbOps.getSettings(),
     downloadFolderPath: downloadFolder,
   });
-  const { refreshPlaylistRuntimeRoots } = await importFromRepo(
-    "backend/services/playlistRuntime.js",
-  );
-  await refreshPlaylistRuntimeRoots();
 });
 
 test.after(async () => {

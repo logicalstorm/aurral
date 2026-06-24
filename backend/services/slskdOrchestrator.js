@@ -4,7 +4,7 @@ import { db } from "../config/db-sqlite.js";
 import { isSlskdCleanupAfterRunsEnabled, slskdClient } from "./slskdClient.js";
 import { logger } from "./logger.js";
 import { enqueuePipelineJob } from "./honkerDb.js";
-import { downloadTracker } from "./playlistDownloadTracker.js";
+import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import {
   buildFlowSearchTiers,
   rankFlowSearchResults,

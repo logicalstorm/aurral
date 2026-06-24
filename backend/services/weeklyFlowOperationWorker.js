@@ -3,8 +3,6 @@ import {
   processWeeklyFlowOperation,
 } from "./weeklyFlowOperations.js";
 import {
-  rejectWeeklyFlowOperationResult,
-  resolveWeeklyFlowOperationResult,
   setWeeklyFlowOperationWorkerState,
 } from "./weeklyFlowOperationQueue.js";
 import {
@@ -57,13 +55,11 @@ async function runLoop() {
           processWeeklyFlowOperation(job.payload),
         );
         job.ack();
-        resolveWeeklyFlowOperationResult(job.id, result);
       } catch (error) {
         const message = error?.message || String(error);
         const permanent = PERMANENT_ERROR_CODES.has(String(error?.code || ""));
         if (permanent || job.attempts >= 3) {
           job.fail(message);
-          rejectWeeklyFlowOperationResult(job.id, error);
         } else {
           job.retry(60, message);
         }

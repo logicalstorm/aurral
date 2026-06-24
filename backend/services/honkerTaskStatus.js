@@ -136,6 +136,56 @@ const queueDefinitionByName = new Map(
   QUEUE_DEFINITIONS.map((definition) => [definition.queue, definition]),
 );
 
+const PAYLOAD_LABEL_KEY = {
+  "slskd-pipeline": "phase",
+  "weekly-flow-operation": (p) =>
+    formatPayloadLabel(p?.label || p?.kind) || null,
+  "playlist-retry": "playlistType",
+  "playlist-reserve-build": "playlistType",
+  "playlist-mbid-enrichment": "playlistId",
+  "library-scan": (p) => (p?.force ? "Manual" : null),
+  "discovery-playlist-build": "playlistId",
+  "discovery-user-refresh": (p) =>
+    p?.listenHistoryProfile?.listenHistoryUsername || null,
+  "image-prefetch": (p) => {
+    const count = Array.isArray(p?.mbids) ? p.mbids.length : 0;
+    return count > 0 ? `${count} artist${count === 1 ? "" : "s"}` : null;
+  },
+};
+
+const PAYLOAD_DETAIL_KEY = {
+  "slskd-pipeline": (p, desc) =>
+    p?.phase
+      ? `${desc} Current phase: ${formatPayloadLabel(p.phase)}.`
+      : desc,
+  "playlist-retry": (p, desc) =>
+    p?.playlistType
+      ? `Retries incomplete tracks for ${formatPayloadLabel(p.playlistType)}.`
+      : desc,
+  "playlist-reserve-build": (p, desc) =>
+    p?.playlistType
+      ? `Builds reserve tracks for ${formatPayloadLabel(p.playlistType)}.`
+      : desc,
+  "playlist-mbid-enrichment": (p, desc) =>
+    p?.playlistId
+      ? `Finds missing MusicBrainz IDs for ${formatPayloadLabel(p.playlistId)}.`
+      : "Scans playlists for tracks missing MusicBrainz IDs and queues enrichment jobs.",
+  "library-scan": (p, desc) =>
+    p?.force
+      ? "Refreshes Aurral's library view after startup or a forced scan."
+      : desc,
+  "discovery-user-refresh": (p, desc) =>
+    p?.listenHistoryProfile?.listenHistoryUsername
+      ? `Refreshes listening history for ${p.listenHistoryProfile.listenHistoryUsername}.`
+      : desc,
+  "image-prefetch": (p, desc) => {
+    const count = Array.isArray(p?.mbids) ? p.mbids.length : 0;
+    return count > 0
+      ? `Fetches artwork for ${count} artist${count === 1 ? "" : "s"}.`
+      : desc;
+  },
+};
+
 let schemaEnsured = false;
 let insertRunStatement = null;
 let updateRunStatement = null;
@@ -353,138 +403,40 @@ function discoveryRefreshInfo(payload = {}) {
 export function describeHonkerTask(queue, payloadValue) {
   const payload = parsePayload(payloadValue) || {};
   const safeQueue = String(queue || "").trim();
-  const kind = String(payload?.kind || "").trim();
-  const phase = String(payload?.phase || "").trim();
-  const label = String(payload?.label || "").trim();
 
-  if (safeQueue === "system-task") {
-    return systemTaskInfo(kind).label;
+  if (safeQueue === "system-task")
+    return systemTaskInfo(String(payload?.kind || "").trim()).label;
+  if (safeQueue === "discovery-refresh") return discoveryRefreshInfo(payload).label;
+  if (safeQueue === "_outbox:notifications")
+    return payload?.event ? `Notification: ${formatPayloadLabel(payload.event)}` : "Notification";
+
+  const def = queueDefinitionByName.get(safeQueue);
+  if (!def) return queueLabel(safeQueue);
+
+  const extractor = PAYLOAD_LABEL_KEY[safeQueue];
+  if (!extractor) return def.label;
+
+  let suffix;
+  if (typeof extractor === "function") {
+    suffix = extractor(payload);
+  } else {
+    suffix = payload?.[extractor] ? formatPayloadLabel(payload[extractor]) : null;
   }
 
-  if (safeQueue === "slskd-pipeline") {
-    return phase
-      ? `Download Pipeline: ${formatPayloadLabel(phase)}`
-      : "Download Pipeline";
-  }
-
-  if (safeQueue === "weekly-flow-operation") {
-    return label || formatPayloadLabel(kind) || "Playlist Operation";
-  }
-
-  if (safeQueue === "playlist-retry") {
-    return payload?.playlistType
-      ? `Playlist Retry: ${formatPayloadLabel(payload.playlistType)}`
-      : "Playlist Retry";
-  }
-
-  if (safeQueue === "playlist-reserve-build") {
-    return payload?.playlistType
-      ? `Reserve Build: ${formatPayloadLabel(payload.playlistType)}`
-      : "Reserve Build";
-  }
-
-  if (safeQueue === "playlist-mbid-enrichment") {
-    return payload?.playlistId
-      ? `Playlist MBID Enrichment: ${formatPayloadLabel(payload.playlistId)}`
-      : "Playlist MBID Enrichment";
-  }
-
-  if (safeQueue === "library-scan") {
-    return payload?.force ? "Manual Library Scan" : "Library Scan";
-  }
-
-  if (safeQueue === "discovery-refresh") {
-    return discoveryRefreshInfo(payload).label;
-  }
-
-  if (safeQueue === "discovery-playlist-build") {
-    return payload?.playlistId
-      ? `Discovery Playlist Build: ${formatPayloadLabel(payload.playlistId)}`
-      : "Discovery Playlist Build";
-  }
-
-  if (safeQueue === "discovery-user-refresh") {
-    const profile = payload?.listenHistoryProfile || {};
-    return profile?.listenHistoryUsername
-      ? `Discovery User Refresh: ${profile.listenHistoryUsername}`
-      : "Discovery User Refresh";
-  }
-
-  if (safeQueue === "image-prefetch") {
-    const mbids = Array.isArray(payload?.mbids) ? payload.mbids : [];
-    return mbids.length > 0
-      ? `Image Prefetch: ${mbids.length} artist${mbids.length === 1 ? "" : "s"}`
-      : "Image Prefetch";
-  }
-
-  if (safeQueue === "_outbox:notifications") {
-    return payload?.event
-      ? `Notification: ${formatPayloadLabel(payload.event)}`
-      : "Notification";
-  }
-
-  return queueLabel(safeQueue);
+  return suffix ? `${def.label}: ${suffix}` : def.label;
 }
 
 function describeHonkerTaskDetail(queue, payloadValue) {
   const payload = parsePayload(payloadValue) || {};
   const safeQueue = String(queue || "").trim();
-  const kind = String(payload?.kind || "").trim();
 
-  if (safeQueue === "system-task") {
-    return systemTaskInfo(kind).description;
-  }
-  if (safeQueue === "discovery-refresh") {
-    return discoveryRefreshInfo(payload).description;
-  }
-  if (safeQueue === "slskd-pipeline") {
-    const phase = String(payload?.phase || "").trim();
-    return phase
-      ? `${queueDescription(safeQueue)} Current phase: ${formatPayloadLabel(phase)}.`
-      : queueDescription(safeQueue);
-  }
-  if (safeQueue === "weekly-flow-operation") {
-    return queueDescription(safeQueue);
-  }
-  if (safeQueue === "playlist-retry") {
-    return payload?.playlistType
-      ? `Retries incomplete tracks for ${formatPayloadLabel(payload.playlistType)}.`
-      : queueDescription(safeQueue);
-  }
-  if (safeQueue === "playlist-reserve-build") {
-    return payload?.playlistType
-      ? `Builds reserve tracks for ${formatPayloadLabel(payload.playlistType)}.`
-      : queueDescription(safeQueue);
-  }
-  if (safeQueue === "playlist-mbid-enrichment") {
-    return payload?.playlistId
-      ? `Finds missing MusicBrainz IDs for ${formatPayloadLabel(payload.playlistId)}.`
-      : "Scans playlists for tracks missing MusicBrainz IDs and queues enrichment jobs.";
-  }
-  if (safeQueue === "library-scan") {
-    return payload?.force
-      ? "Refreshes Aurral's library view after startup or a forced scan."
-      : queueDescription(safeQueue);
-  }
-  if (safeQueue === "discovery-playlist-build") {
-    return queueDescription(safeQueue);
-  }
-  if (safeQueue === "discovery-user-refresh") {
-    const profile = payload?.listenHistoryProfile || {};
-    return profile?.listenHistoryUsername
-      ? `Refreshes listening history for ${profile.listenHistoryUsername}.`
-      : queueDescription(safeQueue);
-  }
-  if (safeQueue === "image-prefetch") {
-    const mbids = Array.isArray(payload?.mbids) ? payload.mbids : [];
-    return mbids.length > 0
-      ? `Fetches artwork for ${mbids.length} artist${mbids.length === 1 ? "" : "s"}.`
-      : queueDescription(safeQueue);
-  }
-  if (safeQueue === "_outbox:notifications") {
-    return queueDescription(safeQueue);
-  }
-  return queueDescription(safeQueue);
+  if (safeQueue === "system-task")
+    return systemTaskInfo(String(payload?.kind || "").trim()).description;
+  if (safeQueue === "discovery-refresh") return discoveryRefreshInfo(payload).description;
+
+  const desc = queueDescription(safeQueue);
+  const formatter = PAYLOAD_DETAIL_KEY[safeQueue];
+  return formatter ? formatter(payload, desc) : desc;
 }
 
 function summarizePayload(queue, payloadValue) {

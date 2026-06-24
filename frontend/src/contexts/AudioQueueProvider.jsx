@@ -107,6 +107,8 @@ export function AudioQueueProvider({ children }) {
 
   const loadedSignatureRef = useRef(null);
 
+  const loadTrackAtIndexRef = useRef(() => {});
+
   const getTrackAt = useCallback((playbackIndex) => {
     const s = stateRef.current;
     const queueIndex = s.playbackOrder[playbackIndex];
@@ -134,7 +136,7 @@ export function AudioQueueProvider({ children }) {
       format: getHowlerFormat(formatKey),
       onloaderror: () => {
         loadedSignatureRef.current = null;
-        loadTrackAtIndex(playbackIndex, formatAttemptIndex + 1);
+        loadTrackAtIndexRef.current(playbackIndex, formatAttemptIndex + 1);
       },
       onend: () => {
         const cur = stateRef.current;
@@ -142,7 +144,7 @@ export function AudioQueueProvider({ children }) {
 
         if (cur.repeatMode === "one") {
           loadedSignatureRef.current = null;
-          loadTrackAtIndex(cur.currentIndex);
+          loadTrackAtIndexRef.current(cur.currentIndex);
           return;
         }
 
@@ -165,6 +167,8 @@ export function AudioQueueProvider({ children }) {
       },
     });
   }, []);
+
+  loadTrackAtIndexRef.current = loadTrackAtIndex;
 
   useEffect(() => {
     if (state.currentIndex < 0) {

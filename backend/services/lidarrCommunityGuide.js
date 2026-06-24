@@ -131,91 +131,12 @@ export async function applyLidarrCommunityGuide(lidarrClient) {
       },
     ];
 
-    const toFieldArray = (fields) => {
-      if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
-        return fields;
-      }
-      return Object.entries(fields)
-        .filter(([, value]) => value !== undefined && value !== null)
-        .map(([name, value]) => ({ name, value }));
-    };
-
-    const flattenFields = (fields) => {
-      if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
-        return {};
-      }
-      return Object.fromEntries(
-        Object.entries(fields).filter(
-          ([, value]) => value !== undefined && value !== null,
-        ),
-      );
-    };
-
-    const buildCustomFormatPayloadVariants = (format) => {
-      const base = structuredClone(format);
-      const variants = [base];
-
-      const withFieldArray = {
-        ...base,
-        specifications: Array.isArray(base.specifications)
-          ? base.specifications.map((spec) => ({
-              ...spec,
-              fields: toFieldArray(spec?.fields),
-            }))
-          : base.specifications,
-      };
-      variants.push(withFieldArray);
-
-      const withFlattenedFields = {
-        ...base,
-        specifications: Array.isArray(base.specifications)
-          ? base.specifications.map((spec) => {
-              const fields = flattenFields(spec?.fields);
-              const normalizedSpec = { ...spec, ...fields };
-              delete normalizedSpec.fields;
-              return normalizedSpec;
-            })
-          : base.specifications,
-      };
-      variants.push(withFlattenedFields);
-
-      const seen = new Set();
-      return variants.filter((variant) => {
-        const key = JSON.stringify(variant);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-    };
-
-    const createCustomFormatWithFallback = async (format) => {
-      const payloads = buildCustomFormatPayloadVariants(format);
-      let lastError = null;
-
-      for (const payload of payloads) {
-        try {
-          return await lidarrClient.createCustomFormat(payload);
-        } catch (err) {
-          lastError = err;
-          const message = String(err?.message || "");
-          const isBadRequest =
-            message.includes("400 Bad Request") ||
-            message.includes("Lidarr API error: 400");
-          if (!isBadRequest) {
-            throw err;
-          }
-        }
-      }
-
-      throw lastError || new Error("Failed to create custom format");
-    };
-
     const existingFormats = await lidarrClient.getCustomFormats();
     for (const format of customFormats) {
       const existing = existingFormats.find((f) => f.name === format.name);
       if (!existing) {
         try {
-          const created = await createCustomFormatWithFallback(format);
+          const created = await lidarrClient.createCustomFormat(format);
           results.customFormats.push(created);
         } catch (err) {
           results.errors.push(

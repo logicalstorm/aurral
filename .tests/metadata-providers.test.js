@@ -18,8 +18,6 @@ const { dbOps } = await importFromRepo("backend/config/db-helpers.js");
 const {
   __setMetadataProviderHealthStateForTests,
   getMetadataProviderHealthSnapshot,
-  getCoverArtArchiveApiBaseUrls,
-  getCoverArtArchiveApiBaseUrl,
   getMusicbrainzApiBaseUrls,
   getMusicbrainzApiBaseUrl,
 } = await importFromRepo("backend/services/apiClients.js");
@@ -29,7 +27,7 @@ test.after(async () => {
   await cleanupIsolatedState(isolatedState);
 });
 
-test("default settings use BrainzMash metadata and the official Cover Art Archive endpoint", () => {
+test("default settings use BrainzMash metadata", () => {
   assert.equal(
     defaultData.settings.integrations.metadata.provider,
     "brainzmash",
@@ -39,7 +37,6 @@ test("default settings use BrainzMash metadata and the official Cover Art Archiv
     DEFAULT_METADATA_BASE_URL,
   );
   assert.equal(getMusicbrainzApiBaseUrl(), DEFAULT_METADATA_BASE_URL);
-  assert.equal(getCoverArtArchiveApiBaseUrl(), "https://coverartarchive.org");
 });
 
 test("backend metadata provider defaults to BrainzMash when unset", () => {
@@ -76,9 +73,6 @@ test("custom BrainzMash base URL is respected end to end", () => {
 
   assert.deepEqual(getMusicbrainzApiBaseUrls(), [
     "https://brainzmash.example.net",
-  ]);
-  assert.deepEqual(getCoverArtArchiveApiBaseUrls(), [
-    "https://coverartarchive.org",
   ]);
 });
 

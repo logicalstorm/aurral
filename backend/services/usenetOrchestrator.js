@@ -1,6 +1,6 @@
 import path from "path";
 import fs from "fs/promises";
-import { downloadTracker } from "./playlistDownloadTracker.js";
+import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { prowlarrClient } from "./prowlarrClient.js";
 import { nzbgetClient } from "./nzbgetClient.js";
 import { logger } from "./logger.js";
