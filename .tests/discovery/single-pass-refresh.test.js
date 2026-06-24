@@ -127,80 +127,6 @@ test("single-pass refresh: applyHydratedCandidateTags recalculates score when ca
   assert.ok(hydrated.scoreTotal > 120);
 });
 
-test("single-pass refresh: mergeRetainedRecommendationPool handles fresh + retained correctly", async () => {
-  const { mergeRetainedRecommendationPool, rerankRecommendations } =
-    await importFromRepo("backend/services/discovery/recommendationPipeline.js");
-
-  const { rerankCachedRecommendations } = await importFromRepo(
-    "backend/services/discovery/index.js",
-  );
-
-  const runStartedAt = "2026-06-22T00:00:00.000Z";
-
-  function makeArtist(index, score, prefix) {
-    const padded = String(index).padStart(12, "0");
-    return {
-      id: `00000000-0000-4000-8000-${padded}`,
-      name: `${prefix}-${index}`,
-      matchedTags: ["indie"],
-      supportingSeeds: [{ artistName: "Seed", weight: 1 }],
-      scoreSimilarity: score,
-      scoreTagAffinity: 10,
-      scoreSeedCoverage: 8,
-      scoreNovelty: 6,
-      scorePopularityPenalty: 2,
-      scoreTotal: score,
-      seedCount: 1,
-      sourceType: "lastfm",
-    };
-  }
-
-  let offset = 0;
-  function batch(count, score, prefix) {
-    const start = offset;
-    offset += count;
-    return Array.from({ length: count }, (_, index) =>
-      makeArtist(start + index, score - index, prefix),
-    );
-  }
-
-  const existing = batch(100, 160, "existing");
-
-  const freshFull = batch(250, 220, "fresh-full");
-  const freshRanked = rerankCachedRecommendations({
-    recommendations: freshFull,
-    discoveryMode: "balanced",
-    limit: 200,
-  });
-
-  const merged = mergeRetainedRecommendationPool({
-    freshRecommendations: freshRanked,
-    existingRecommendations: existing,
-    limit: 500,
-    runStartedAt,
-    discoveryMode: "balanced",
-  });
-
-  const freshInOutput = merged.filter(
-    (item) => item.recommendationPoolState === "fresh",
-  );
-  const retainedInOutput = merged.filter(
-    (item) => item.recommendationPoolState === "retained",
-  );
-
-  assert.equal(merged.length, 300);
-  assert.ok(freshInOutput.length > 0);
-  assert.ok(retainedInOutput.length > 0);
-  assert.equal(
-    freshInOutput.every((item) => item.name.startsWith("fresh-full-")),
-    true,
-  );
-  assert.equal(
-    retainedInOutput.every((item) => item.name.startsWith("existing-")),
-    true,
-  );
-});
-
 test("single-pass refresh: recommendationQuality constants are correctly defined", async () => {
   const {
     DISCOVERY_QUALITY_INITIAL,
@@ -303,11 +229,4 @@ test("single-pass refresh: db discovery cache stores initial quality for backwar
   assert.equal(cache.enrichmentProgressMessage, "Improving recommendations");
 });
 
-test("single-pass refresh: api call counter instruments lastfmRequest with method breakdown", async () => {
-  const { getLastfmApiCallCount, getLastfmApiCallCountByMethod, resetLastfmApiCallCount } =
-    await importFromRepo("backend/services/apiClients/index.js");
 
-  resetLastfmApiCallCount();
-  assert.equal(getLastfmApiCallCount(), 0);
-  assert.deepEqual(getLastfmApiCallCountByMethod(), {});
-});

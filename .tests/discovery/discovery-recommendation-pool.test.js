@@ -289,3 +289,36 @@ test("enrichment marks returning artists as fresh while preserving firstDiscover
   assert.equal(updatedReturning.lastRecommendedAt, "2026-06-18T01:00:00.000Z");
   assert.equal(updatedReturning.recommendationPoolState, "fresh");
 });
+
+test("merge retains existing artists alongside fresh when fresh batch falls short of pool limit", () => {
+  resetArtistIds();
+  const runStartedAt = "2026-06-22T00:00:00.000Z";
+
+  const existing = makeBatch(100, 160, "existing");
+  const freshFull = makeBatch(250, 220, "fresh-full");
+  const freshRanked = rerankCachedRecommendations({
+    recommendations: freshFull,
+    discoveryMode: "balanced",
+    limit: 200,
+  });
+
+  const merged = mergeRetainedRecommendationPool({
+    freshRecommendations: freshRanked,
+    existingRecommendations: existing,
+    limit: 500,
+    runStartedAt,
+    discoveryMode: "balanced",
+  });
+
+  assert.equal(merged.length, 300);
+  assert.ok(merged.filter((item) => item.recommendationPoolState === "fresh").length > 0);
+  assert.ok(merged.filter((item) => item.recommendationPoolState === "retained").length > 0);
+  assert.equal(
+    merged.filter((item) => item.name.startsWith("fresh-full-")).length,
+    200,
+  );
+  assert.equal(
+    merged.filter((item) => item.name.startsWith("existing-")).length,
+    100,
+  );
+});

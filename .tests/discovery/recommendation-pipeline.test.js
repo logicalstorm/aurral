@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 
 import {
   addRecommendationCandidate,
-  applyHydratedCandidateTags,
   buildDiscoverySeedList,
   finalizeRecommendationAccumulator,
   mergeRetainedRecommendationPool,
@@ -128,39 +127,6 @@ test("mergeResolvedRecommendations collapses name and mbid variants of the same 
   );
 });
 
-test("applyHydratedCandidateTags replaces route tags with candidate tags for scoring", () => {
-  const recommendation = {
-    id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-    name: "Hydrated Pick",
-    tags: ["shoegaze"],
-    matchedTags: ["shoegaze"],
-    scoreSimilarity: 50,
-    scoreTagAffinity: 27,
-    scoreSeedCoverage: 8,
-    scoreNovelty: 10,
-    scorePopularityPenalty: 2,
-    scoreTotal: 93,
-    seedCount: 1,
-  };
-
-  const hydrated = applyHydratedCandidateTags(
-    recommendation,
-    ["Industrial", "Noise Rock"],
-    new Map([
-      ["industrial", 4],
-      ["noise rock", 2],
-      ["shoegaze", 4],
-    ]),
-  );
-
-  assert.deepEqual(hydrated.tags, ["industrial", "noise rock"]);
-  assert.deepEqual(hydrated.matchedTags, ["industrial", "noise rock"]);
-  assert.equal(hydrated.scoreTagAffinity, 42);
-  assert.equal(hydrated.scoreTotal, 108);
-  assert.equal(hydrated.score, 108);
-  assert.equal(hydrated.candidateTagsHydrated, true);
-  assert.equal(hydrated.tagSource, "lastfm_artist");
-});
 
 test("rerankRecommendations hides exact negative feedback and favors deeper mode diversification", () => {
   const recommendations = [

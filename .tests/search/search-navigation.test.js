@@ -10,6 +10,10 @@ import {
   resolveSearchTopArtist,
   resolveSearchTopResult,
 } from "../../frontend/src/utils/searchNavigation.js";
+import {
+  applyCatalogSearchContext,
+  buildSearchContextIndex,
+} from "../../backend/services/unifiedSearchService.js";
 
 test("resolveSearchTopResult uses API top when it is an artist", () => {
   const artist = {
@@ -430,4 +434,164 @@ test("buildSearchArtistResults includes resolved top artist when catalog artists
   assert.equal(artists.length, 1);
   assert.equal(artists[0].name, "The White Stripes");
   assert.equal(artists[0].id, "11ae9fbb-f3d7-4a47-936f-4c0a04d3b3b5");
+});
+
+test("album title search prioritizes the album and its artist", () => {
+  const album = {
+    type: "album",
+    id: "tbp-rg",
+    title: "The Black Parade",
+    artistName: "My Chemical Romance",
+    artistMbid: "mcr-mbid",
+    score: 0.94,
+  };
+  const items = buildMixedSuggestionItems({
+    query: "the black parade",
+    top: album,
+    catalog: {
+      artists: [{ type: "artist", id: "mcr-mbid", name: "My Chemical Romance", score: 0.87 }],
+      albums: [album],
+      tracks: [{
+        type: "track", id: "wtbp", title: "Welcome to the Black Parade",
+        artistName: "My Chemical Romance", artistMbid: "mcr-mbid",
+        albumTitle: "The Black Parade", albumMbid: "tbp-rg", score: 0.82,
+      }],
+    },
+    library: { artists: [], tracks: [], playlists: [] },
+  }, 8);
+
+  assert.equal(items[0].type, "album");
+  assert.equal(items[0].title, "The Black Parade");
+  assert.equal(items.some((item) => item.type === "artist" && item.name === "My Chemical Romance"), true);
+});
+
+test("track search surfaces the song and keeps artist in results", () => {
+  const track = {
+    type: "track", id: "br-rec", title: "Bohemian Rhapsody",
+    artistName: "Queen", artistMbid: "queen-mbid",
+    albumTitle: "A Night at the Opera", albumMbid: "opera-rg", score: 0.95,
+  };
+  const items = buildMixedSuggestionItems({
+    query: "bohemian rhapsody",
+    top: track,
+    catalog: {
+      artists: [{ type: "artist", id: "queen-mbid", name: "Queen", score: 0.88 }],
+      albums: [{ type: "album", id: "opera-rg", title: "A Night at the Opera", artistName: "Queen", score: 0.79 }],
+      tracks: [track],
+    },
+    library: { artists: [], tracks: [], playlists: [] },
+  }, 5);
+
+  assert.equal(items[0].type, "track");
+  assert.equal(items[0].title, "Bohemian Rhapsody");
+  assert.equal(items[0].artistName, "Queen");
+});
+
+test("stop-word queries use API top for the expected artist", () => {
+  const beatles = { type: "artist", id: "beatles-mbid", name: "The Beatles", score: 0.97 };
+  const items = buildMixedSuggestionItems({
+    query: "the beatles",
+    top: beatles,
+    catalog: {
+      artists: [beatles],
+      albums: [{ type: "album", id: "ar", title: "Abbey Road", artistName: "The Beatles", score: 0.74 }],
+      tracks: [{ type: "track", id: "ct", title: "Come Together", artistName: "The Beatles", score: 0.68 }],
+    },
+    library: { artists: [], tracks: [], playlists: [] },
+  }, 5);
+
+  assert.equal(items[0].name, "The Beatles");
+});
+
+test("catalog bucket order is preserved for albums and tracks", () => {
+  const context = { artists: [], tracks: [], playlists: [], index: buildSearchContextIndex({}) };
+  const catalog = applyCatalogSearchContext(
+    {
+      artists: [],
+      albums: [
+        { type: "album", id: "a", title: "Kid A", artistName: "Radiohead", score: 0.91 },
+        { type: "album", id: "b", title: "In Rainbows", artistName: "Radiohead", score: 0.89 },
+      ],
+      tracks: [
+        { type: "track", id: "t1", title: "Everything In Its Right Place", artistName: "Radiohead", score: 0.86 },
+        { type: "track", id: "t2", title: "15 Step", artistName: "Radiohead", score: 0.84 },
+      ],
+    },
+    "radiohead",
+    context,
+    5,
+  );
+
+  assert.deepEqual(catalog.albums.map((album) => album.title), ["Kid A", "In Rainbows"]);
+  assert.deepEqual(catalog.tracks.map((track) => track.title), ["Everything In Its Right Place", "15 Step"]);
+});
+
+test("weak library matches do not override API top for album title queries", () => {
+  const album = { type: "album", id: "tbp", title: "The Black Parade", artistName: "My Chemical Romance", artistMbid: "mcr-mbid", score: 0.94 };
+  const items = buildMixedSuggestionItems(
+    {
+      query: "the black parade",
+      top: album,
+      catalog: {
+        artists: [{ type: "artist", id: "mcr-mbid", name: "My Chemical Romance", score: 0.87 }],
+        albums: [album],
+        tracks: [],
+      },
+      library: {
+        artists: [{ type: "artist", id: "tbk", name: "The Black Keys", score: 67, inLibrary: true, source: "library" }],
+        playlists: [{ type: "playlist", id: "dw", name: "Discover Weekly", score: 67, inLibrary: true, source: "library" }],
+        tracks: [],
+      },
+    },
+    6,
+  );
+
+  assert.equal(items[0].type, "album");
+  assert.equal(items[0].title, "The Black Parade");
+});
+
+test("mixed suggestions preserve bucket order when API top is absent", () => {
+  const items = buildMixedSuggestionItems({
+    query: "remute",
+    catalog: {
+      artists: [{ type: "artist", id: "b", name: "Bear", score: 0.80 }],
+      albums: [{ type: "album", id: "rg", title: "Gold Collection", artistName: "Remute", score: 0.95 }],
+      tracks: [{ type: "track", id: "r", title: "Support Song", artistName: "Support Lesbiens", score: 0.88 }],
+    },
+    library: { artists: [], tracks: [], playlists: [] },
+  }, 3);
+
+  assert.deepEqual(items.map((item) => item.type), ["artist", "album", "track"]);
+});
+
+test("playlist context boosts catalog tracks without reshuffling album order", () => {
+  const context = {
+    artists: [{ mbid: "radiohead", artistName: "Radiohead" }],
+    tracks: [],
+    playlists: [{
+      id: "pl-1", name: "Late Night",
+      tracks: [{
+        artistName: "Radiohead", trackName: "Paranoid Android",
+        albumName: "OK Computer", artistMbid: "radiohead",
+        albumMbid: "ok-computer", trackMbid: "paranoid-android",
+      }],
+    }],
+  };
+  const catalog = applyCatalogSearchContext(
+    {
+      artists: [{ type: "artist", id: "shadow", name: "Paranoid Android", score: 0.91 }],
+      albums: [{ type: "album", id: "okc", title: "OK Computer", artistName: "Radiohead", score: 0.88 }],
+      tracks: [
+        { type: "track", id: "paranoid-android", title: "Paranoid Android", artistName: "Radiohead", artistMbid: "radiohead", albumTitle: "OK Computer", albumMbid: "ok-computer", score: 0.93 },
+        { type: "track", id: "kp", title: "Karma Police", artistName: "Radiohead", artistMbid: "radiohead", score: 0.90 },
+      ],
+    },
+    "paranoid android",
+    { ...context, index: buildSearchContextIndex(context) },
+    5,
+  );
+
+  assert.equal(catalog.tracks[0].title, "Paranoid Android");
+  assert.equal(catalog.tracks[1].title, "Karma Police");
+  assert.ok(catalog.tracks[0].contextBoost > 0);
 });

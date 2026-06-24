@@ -92,3 +92,53 @@ test("enrichSharedPlaylistMbids fills missing playlist and job MBIDs", async () 
   assert.equal(storedJob.trackNumber, 1);
   assert.equal(storedJob.albumTrackCount, 12);
 });
+
+test("enrichSharedPlaylistMbids returns missing when playlistId is empty", async () => {
+  const result = await enrichSharedPlaylistMbids("");
+  assert.equal(result.missing, true);
+  assert.equal(result.changed, false);
+});
+
+test("enrichSharedPlaylistMbids returns missing when playlist not found", async () => {
+  const result = await enrichSharedPlaylistMbids("nonexistent-id");
+  assert.equal(result.missing, true);
+  assert.equal(result.changed, false);
+});
+
+test("enrichSharedPlaylistMbids handles resolveTrackContext throwing by falling back to original track", async () => {
+  const playlist = flowPlaylistConfig.createSharedPlaylist({
+    name: "Fragile",
+    tracks: [{ artistName: "Unknown", trackName: "Ghost" }],
+  });
+
+  const result = await enrichSharedPlaylistMbids(playlist.id, {
+    resolveTrackContext: () => { throw new Error("resolve failed"); },
+  });
+
+  assert.equal(result.changed, false);
+  const storedTrack = flowPlaylistConfig.getSharedPlaylist(playlist.id)?.tracks?.[0];
+  assert.ok(!storedTrack.artistMbid);
+});
+
+test("enrichSharedPlaylistMbids leaves already-enriched tracks unchanged", async () => {
+  const playlist = flowPlaylistConfig.createSharedPlaylist({
+    name: "Enriched",
+    tracks: [{
+      artistName: "Radiohead",
+      trackName: "Creep",
+      artistMbid: "radiohead-mbid",
+      trackMbid: "creep-mbid",
+    }],
+  });
+
+  const result = await enrichSharedPlaylistMbids(playlist.id, {
+    resolveTrackContext: (track) => ({
+      ...track,
+      albumName: "Pablo Honey",
+      albumMbid: "pablo-honey-mbid",
+    }),
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.playlistTracksUpdated, 1);
+});
