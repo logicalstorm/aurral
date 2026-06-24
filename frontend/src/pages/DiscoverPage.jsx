@@ -225,6 +225,7 @@ const writeStoredNearbyShows = (value, userId, locationMode, zip) => {
   } catch {
     console.warn("Failed to write discover nearby-shows");
   }
+};
 
 const stripDiscoverPlaylistAdoptionFields = (playlists) =>
   (Array.isArray(playlists) ? playlists : []).map((playlist) => {
@@ -325,6 +326,7 @@ const writeStoredDiscoveryData = (value, userId) => {
   } catch {
     console.warn("Failed to write discover discovery-data");
   }
+};
 
 const normalizeDiscoverLayout = (value) => {
   if (!Array.isArray(value)) return null;
@@ -477,7 +479,7 @@ function DiscoverPage() {
           applyDiscoveryData(discoveryData);
           setError(null);
         })
-        .catch(logPollWarning),
+        .catch(console.warn),
     [applyDiscoveryData],
   );
 
@@ -670,13 +672,14 @@ function DiscoverPage() {
     data?.isUpdating,
     data?.isEnriching,
     data?.stale,
+    fetchAndApplyDiscovery,
   ]);
 
   useEffect(() => {
     if (!isDiscoverySocketConnected) return;
     if (!data?.playlistsUpdating) return;
     fetchAndApplyDiscovery(true);
-  }, [authUser?.id, isDiscoverySocketConnected, data?.playlistsUpdating]);
+  }, [authUser?.id, isDiscoverySocketConnected, data?.playlistsUpdating, fetchAndApplyDiscovery]);
 
   useEffect(() => {
     if (!data?.isUpdating && !data?.isEnriching) return;
@@ -699,6 +702,7 @@ function DiscoverPage() {
     data?.isUpdating,
     data?.isEnriching,
     isDiscoverySocketConnected,
+    fetchAndApplyDiscovery,
   ]);
 
   useEffect(() => {
@@ -714,6 +718,7 @@ function DiscoverPage() {
     data?.isUpdating,
     data?.isEnriching,
     isDiscoverySocketConnected,
+    fetchAndApplyDiscovery,
   ]);
 
   useEffect(() => {
@@ -769,7 +774,7 @@ function DiscoverPage() {
       .catch((err) => {
         showError(err?.message || "Failed to load recent releases");
       });
-  }, [authUser?.id]);
+  }, [authUser?.id, showError]);
 
   useEffect(() => {
     let cancelled = false;
@@ -892,7 +897,7 @@ function DiscoverPage() {
             }
           }
         })
-        .catch(logPollWarning)
+        .catch(console.warn)
         .finally(() => {
           requestedReleaseCoversRef.current.delete(id);
         });
@@ -925,7 +930,7 @@ function DiscoverPage() {
             }
           }
         })
-        .catch(logPollWarning)
+        .catch(console.warn)
         .finally(() => {
           requestedArtistCoversRef.current.delete(artistId);
         });

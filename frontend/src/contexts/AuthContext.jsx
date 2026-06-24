@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useMemo } from "react";
+import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
 import {
   AUTH_INVALID_EVENT,
   clearAuthStorage,
@@ -34,7 +34,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const checkAuthStatus = async () => {
+  const checkAuthStatus = useCallback(async () => {
     try {
       const bootstrap = await getBootstrapStatus();
       const isOnboarding = !!bootstrap.onboardingRequired;
@@ -99,11 +99,11 @@ export const AuthProvider = ({ children }) => {
       globalThis?.sessionStorage?.removeItem(AUTH_RECOVERY_RELOAD_KEY);
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     checkAuthStatus();
-  }, []);
+  }, [checkAuthStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,9 +134,9 @@ export const AuthProvider = ({ children }) => {
       cancelled = true;
       window.removeEventListener(AUTH_INVALID_EVENT, handleInvalidAuth);
     };
-  }, []);
+  }, [checkAuthStatus]);
 
-  const login = async (password, username) => {
+  const login = useCallback(async (password, username) => {
     const normalizedUsername = String(username || "").trim();
     if (!normalizedUsername || !password) return false;
 
@@ -150,22 +150,22 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return false;
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await logoutApi();
     } catch {}
     clearAuthStorage();
     setIsAuthenticated(false);
     setUser(null);
-  };
+  }, []);
 
-  const hasPermission = (perm) => {
+  const hasPermission = useCallback((perm) => {
     if (!user) return false;
     if (user.role === "admin") return true;
     return !!user.permissions?.[perm];
-  };
+  }, [user]);
 
   return (
     <AuthContext.Provider
