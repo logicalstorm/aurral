@@ -3,11 +3,20 @@ import {
   deezerGetArtistTopTracksById,
 } from "../../../services/apiClients/index.js";
 import { dbOps } from "../../../db/helpers/index.js";
-import createRoute from "../../shared/createRoute.js";
+import { UUID_REGEX } from "../../../config/constants.js";
+import { cacheMiddleware } from "../../../middleware/cache.js";
 
 export function registerPreview(router) {
-  createRoute(router, "get", "/:mbid/preview", async (req, res) => {
+  router.get("/:mbid/preview", cacheMiddleware(60), async (req, res) => {
     const { mbid } = req.params;
+
+    if (!UUID_REGEX.test(mbid)) {
+      return res.status(400).json({
+        error: "Invalid MBID format",
+        message: `"${mbid}" is not a valid MusicBrainz ID. MBIDs must be UUIDs.`,
+      });
+    }
+
     const artistNameParam = (req.query.artistName || "").trim();
     const override = dbOps.getArtistOverride(mbid);
     const resolvedMbid = override?.musicbrainzId || mbid;
@@ -25,5 +34,5 @@ export function registerPreview(router) {
       artistName.replace(/\s*\([^)]*\)\s*$/, "").trim() || artistName;
     const tracks = await deezerGetArtistTopTracks(normalized);
     res.json({ tracks });
-  }, { cache: 60, uuid: true });
+  });
 }

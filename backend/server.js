@@ -7,7 +7,7 @@ import fs from "fs";
 import { createServer } from "http";
 import { fileURLToPath } from "url";
 
-import { createAuthMiddleware } from "./middleware/auth.js";
+import { authMiddleware } from "./middleware/auth.js";
 import { logger } from "./services/logger.js";
 import { websocketService } from "./services/websocketService.js";
 import { getAllDownloadStatuses } from "./routes/library/handlers/downloads.js";
@@ -120,7 +120,7 @@ app.use(
 );
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
-app.use(createAuthMiddleware());
+app.use(authMiddleware);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

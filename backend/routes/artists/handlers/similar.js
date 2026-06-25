@@ -6,11 +6,20 @@ import {
 import { dbOps } from "../../../db/helpers/index.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
 import { extractLastfmImageUrl } from "../shared/transform.js";
-import createRoute from "../../shared/createRoute.js";
+import { UUID_REGEX } from "../../../config/constants.js";
+import { cacheMiddleware } from "../../../middleware/cache.js";
 
 export function registerSimilar(router) {
-  createRoute(router, "get", "/:mbid/similar", async (req, res) => {
+  router.get("/:mbid/similar", cacheMiddleware(300), async (req, res) => {
     const { mbid } = req.params;
+
+    if (!UUID_REGEX.test(mbid)) {
+      return res.status(400).json({
+        error: "Invalid MBID format",
+        message: `"${mbid}" is not a valid MusicBrainz ID. MBIDs must be UUIDs.`,
+      });
+    }
+
     const { limit = 10 } = req.query;
     const artistNameParam = String(req.query.artistName || "").trim();
 
@@ -61,5 +70,5 @@ export function registerSimilar(router) {
       .filter((a) => a.id);
 
     res.json({ artists: formattedArtists });
-  }, { cache: 300, uuid: true });
+  });
 }

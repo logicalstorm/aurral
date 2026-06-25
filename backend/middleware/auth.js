@@ -542,8 +542,7 @@ function consumeStreamToken(rawToken) {
   return payload.user || null;
 }
 
-export const createAuthMiddleware = () => {
-  return (req, res, next) => {
+export const authMiddleware = (req, res, next) => {
     if (!req.path.startsWith("/api")) return next();
     if (
       req.path === "/api/health" ||
@@ -586,7 +585,6 @@ export const createAuthMiddleware = () => {
     }
 
     return sendUnauthorizedResponse(req, res);
-  };
 };
 
 function getCredentialsFromRequest(req) {
