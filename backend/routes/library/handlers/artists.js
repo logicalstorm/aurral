@@ -107,18 +107,7 @@ export function registerArtists(router) {
           albumOnly: Boolean(releaseGroupMbid),
           albumMbid: releaseGroupMbid || null,
         });
-
-        (async () => {
-          const artist = await libraryManager.addArtistWithResolvedOptions(
-            mbid,
-            artistName,
-            preparedAddOptions,
-          );
-          if (artist?.error) {
-            logger.error("library", `Failed to add artist ${artistName}:`, { message: artist.error });
-            return;
-          }
-        })();      } catch (error) {
+      } catch (error) {
         const statusCode =
           error?.statusCode === 400 || error?.statusCode === 409 ? error.statusCode : 500;
         return res.status(statusCode).json({
@@ -145,7 +134,7 @@ export function registerArtists(router) {
           preparedAddOptions,
         );
         if (artist?.error) {
-          console.error(`[Library] Failed to add artist ${artistName}:`, artist.error);
+          logger.error("library", `Failed to add artist ${artistName}:`, { message: artist.error });
           return;
         }
       })();

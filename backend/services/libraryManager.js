@@ -276,7 +276,9 @@ export class LibraryManager {
     }
     const isArtistAlreadyAddedError = (error) => {
       const message = String(error?.message || "").toLowerCase();
-      return message.includes("artistexistsvalidator") || message.includes("already been added");
+      return message.includes("artistexistsvalidator") ||
+        message.includes("already been added") ||
+        message.includes("constraint failed");
     };
     try {
       const lidarrSettings = getSettings();
