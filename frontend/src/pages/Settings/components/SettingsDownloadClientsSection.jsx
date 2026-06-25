@@ -229,7 +229,7 @@ export function SettingsDownloadClientsSection({
           <IntegrationCard
             title="SABnzbd"
             subtitle="Usenet"
-            status={getProviderStatus(sabnzbdEnabled, sabnzbdConfigured)}
+            status={getProviderStatus(sabnzbdEnabled, health?.sabnzbdConfigured || sabnzbdConfigured)}
             meta={`Priority ${sabnzbd.priority ?? 20}`}
             onClick={() => setActiveModal(CLIENT_MODALS.sabnzbd)}
           />

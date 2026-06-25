@@ -33,18 +33,33 @@ function buildUrl(url, apiKey) {
   return `${base}/api?apikey=${encodeURIComponent(apiKey)}&output=json`;
 }
 
-function buildClient() {
-  const { url, apiKey } = getSettings();
-  const apiUrl = buildUrl(url, apiKey);
-  if (!apiUrl) throw new Error("SABnzbd not configured");
-  return axios.create({
-    baseURL: normalizeBaseUrl(url),
-    timeout: 45000,
-    headers: {
-      Accept: "application/json",
-    },
-    validateStatus: () => true,
-  });
+function sanitizeNzbName(value) {
+  const raw = String(value || "aurral-download");
+  const cleaned = Array.from(raw)
+    .map((ch) => {
+      const code = ch.codePointAt(0);
+      if (code < 0x20) return "_";
+      if ('<>:"/\\|?*'.includes(ch)) return "_";
+      return ch;
+    })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+  return cleaned || "aurral-download";
+}
+
+function mapPriority(addPaused) {
+  if (addPaused) return -2;
+  return 0;
+}
+
+function readConfigValue(entries, name) {
+  const key = String(name || "").toLowerCase();
+  const entry = (Array.isArray(entries) ? entries : []).find(
+    (item) => String(item?.name || "").toLowerCase() === key,
+  );
+  return entry?.value ?? "";
 }
 
 export class SabnzbdClient {
@@ -61,6 +76,79 @@ export class SabnzbdClient {
       configured: this.isConfigured(),
       connected: cached?.connected === true,
       downloadPaused: cached?.downloadPaused === true,
+    };
+  }
+
+  async api(mode, params = {}) {
+    const settings = getSettings();
+    const base = buildUrl(settings.url, settings.apiKey);
+    const query = Object.entries({ mode, ...params })
+      .filter(([, v]) => v != null && v !== "")
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+      .join("&");
+    const response = await axios.get(`${base}&${query}`, {
+      timeout: 45000,
+      validateStatus: () => true,
+    });
+    if (response.status !== 200) {
+      throw new Error(`SABnzbd ${mode} failed: HTTP ${response.status}`);
+    }
+    return response.data;
+  }
+
+  async appendUrl({
+    name,
+    url,
+    category,
+    priority,
+    addPaused,
+  }) {
+    const settings = getSettings();
+    const safeUrl = String(url || "").trim();
+    if (!safeUrl) throw new Error("SABnzbd append requires a URL");
+    const nzbName = `${sanitizeNzbName(name)}.nzb`;
+    const pp = mapPriority(addPaused ?? settings.addPaused);
+    const result = await this.api("addurl", {
+      name: safeUrl,
+      nzbname: nzbName,
+      cat: category ?? settings.category,
+      priority: normalizeInteger(priority, pp),
+      pp: 3,
+    });
+    if (!result?.nzo_ids || result.nzo_ids.length === 0) {
+      throw new Error("SABnzbd rejected the NZB URL");
+    }
+    return {
+      nzbId: String(result.nzo_ids[0]),
+      nzbName,
+    };
+  }
+
+  async getQueueItem(nzoId) {
+    const id = String(nzoId || "").trim();
+    if (!id) return null;
+    const result = await this.api("queue", { nzo_ids: id });
+    const slots = result?.queue?.slots || [];
+    return slots.find((s) => String(s.nzo_id) === id) || null;
+  }
+
+  async getHistoryItem(nzoId) {
+    const id = String(nzoId || "").trim();
+    if (!id) return null;
+    const result = await this.api("history", { nzo_ids: id });
+    const slots = result?.history?.slots || [];
+    return slots.find((s) => String(s.nzo_id) === id) || null;
+  }
+
+  async getDownloadDirectories() {
+    const settings = getSettings();
+    const result = await this.api("get_config", { section: "misc" }).catch(() => null);
+    const entries = result?.config?.misc || [];
+    return {
+      completedPath: "",
+      destDir: readConfigValue(entries, "completed_dir"),
+      interDir: "",
+      mainDir: "",
     };
   }
 

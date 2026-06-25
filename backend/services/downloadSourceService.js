@@ -2,6 +2,7 @@ import { dbOps } from "../db/helpers/index.js";
 import { slskdClient } from "./slskdClient.js";
 import { prowlarrClient } from "./prowlarrClient.js";
 import { nzbgetClient } from "./nzbgetClient.js";
+import { sabnzbdClient } from "./sabnzbdClient.js";
 
 const SOURCE_LABELS = {
   slskd: "Soulseek",
@@ -29,14 +30,19 @@ function getSlskdPriority() {
 }
 
 function getUsenetPriority() {
-  const nzbget = getIntegrations().nzbget || {};
-  return normalizePriority(nzbget.priority, 20);
+  const integrations = getIntegrations();
+  if (sabnzbdClient.isConfigured()) {
+    return normalizePriority(integrations.sabnzbd?.priority, 20);
+  }
+  return normalizePriority(integrations.nzbget?.priority, 20);
 }
 
 export function getDownloadSourceStatus() {
   const slskdConfigured = isSlskdEnabled() && slskdClient.isConfigured();
   const prowlarrConfigured = prowlarrClient.isConfigured();
   const nzbgetConfigured = nzbgetClient.isConfigured();
+  const sabnzbdConfigured = sabnzbdClient.isConfigured();
+  const usenetConfigured = prowlarrConfigured && (nzbgetConfigured || sabnzbdConfigured);
   return {
     slskd: {
       id: "slskd",
@@ -48,11 +54,12 @@ export function getDownloadSourceStatus() {
     usenet: {
       id: "usenet",
       label: SOURCE_LABELS.usenet,
-      enabled: prowlarrConfigured && nzbgetConfigured,
-      configured: prowlarrConfigured && nzbgetConfigured,
+      enabled: usenetConfigured,
+      configured: usenetConfigured,
       priority: getUsenetPriority(),
       prowlarrConfigured,
       nzbgetConfigured,
+      sabnzbdConfigured,
     },
   };
 }
@@ -76,7 +83,7 @@ export function getDownloadSourceNotConfiguredMessage() {
   const status = getDownloadSourceStatus();
   const pieces = [];
   if (!status.slskd.configured) pieces.push("slskd");
-  if (!status.usenet.configured) pieces.push("Prowlarr + NZBGet");
+  if (!status.usenet.configured) pieces.push("Prowlarr + NZBGet or SABnzbd");
   return `No download source is configured. Configure ${pieces.join(" or ")} in Settings > Integrations to enable downloads for flows and playlists.`;
 }
 

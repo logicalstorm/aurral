@@ -3,11 +3,13 @@ import fs from "fs/promises";
 import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
 import { prowlarrClient } from "./prowlarrClient.js";
 import { nzbgetClient } from "./nzbgetClient.js";
+import { sabnzbdClient } from "./sabnzbdClient.js";
 import { logger } from "./logger.js";
 import {
   buildFlowSearchTiers,
   validateDownloadedTrack,
-} from "./weeklyFlow/weeklyFlowSoulseekMatcher.js";import {
+} from "./weeklyFlow/weeklyFlowSoulseekMatcher.js";
+import {
   isAudioFile,
   rankUsenetReleases,
   selectRankedUsenetCandidates,
@@ -32,6 +34,16 @@ const MIN_USENET_CANDIDATES = 2;
 const MAX_DOWNLOAD_CANDIDATES = 5;
 const POLL_DELAY_SECONDS = 5;
 const MAX_POLL_ATTEMPTS = 720;
+
+function getUsenetClient() {
+  if (sabnzbdClient.isConfigured()) return sabnzbdClient;
+  return nzbgetClient;
+}
+
+function getUsenetClientKey() {
+  if (sabnzbdClient.isConfigured()) return "sabnzbd";
+  return "nzbget";
+}
 
 function hasEnoughCandidates(aggregated, resolvedTrack) {
   return (
@@ -81,14 +93,14 @@ async function findAudioFilesRecursive(root, depth = 0, matches = []) {
   return matches;
 }
 
-function uniqueResolvedPaths(values) {
+function uniqueResolvedPaths(values, source) {
   const seen = new Set();
   const out = [];
-  const nzbgetMappings = getPathMappings("nzbget");
+  const mappings = getPathMappings(source);
   for (const value of values) {
     const raw = String(value || "").trim();
     if (!raw) continue;
-    const resolved = path.resolve(resolveLocalPath(raw, nzbgetMappings));
+    const resolved = path.resolve(resolveLocalPath(raw, mappings));
     if (seen.has(resolved)) continue;
     seen.add(resolved);
     out.push(resolved);
@@ -96,14 +108,15 @@ function uniqueResolvedPaths(values) {
   return out;
 }
 
-async function locateBestDownloadedAudio(historyItem, candidate, resolvedTrack) {
-  const directories = await nzbgetClient.getDownloadDirectories();
+async function locateBestDownloadedAudio(historyItem, candidate, resolvedTrack, client) {
+  const directories = await client.getDownloadDirectories();
+  const clientKey = getUsenetClientKey();
   const roots = uniqueResolvedPaths([
     historyItem?.FinalDir,
     historyItem?.DestDir,
     directories.completedPath,
     directories.destDir,
-  ]);
+  ], clientKey);
   const files = [];
   for (const root of roots) {
     const stat = await fs.stat(root).catch(() => null);
@@ -115,7 +128,7 @@ async function locateBestDownloadedAudio(historyItem, candidate, resolvedTrack) 
       files.push(...(await findAudioFilesRecursive(root)));
     }
   }
-  const uniqueFiles = uniqueResolvedPaths(files);
+  const uniqueFiles = uniqueResolvedPaths(files, clientKey);
   let best = null;
   for (const filePath of uniqueFiles) {
     const validation = await validateDownloadedTrack(
@@ -227,9 +240,12 @@ async function handleUsenetDownload(payload, helpers) {
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobDownloading }) => recordTrackJobDownloading(job))
     .catch((err) => { console.warn(err); });
+
+  const client = getUsenetClient();
+  const clientKey = getUsenetClientKey();
   let appended;
   try {
-    appended = await nzbgetClient.appendUrl({
+    appended = await client.appendUrl({
       name: release.title,
       url: release.downloadUrl,
       dupeKey: `aurral-${job.id}`,
@@ -237,8 +253,9 @@ async function handleUsenetDownload(payload, helpers) {
     });
   } catch (error) {
     const message = error?.message || String(error);
-    logger.slskd("warn", "NZBGet append failed for Usenet release", {
+    logger.slskd("warn", "Usenet client append failed for release", {
       jobId: job.id,
+      client: clientKey,
       releaseTitle: release.title,
       error: message,
     });
@@ -247,7 +264,7 @@ async function handleUsenetDownload(payload, helpers) {
   }
   downloadTracker.updateDownloadMetadata(job.id, {
     downloadSource: "usenet",
-    downloadClient: "nzbget",
+    downloadClient: clientKey,
     downloadClientId: appended.nzbId,
     releaseGuid: release.guid,
     releaseTitle: release.title,
@@ -274,9 +291,10 @@ async function handleUsenetPoll(payload, helpers) {
   const pollAttempts = Number(payload.pollAttempts || 0) + 1;
   if (pollAttempts > MAX_POLL_ATTEMPTS) {
     if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload, { nzbId: null, history: null });
-    return helpers.failOrTryNextSource(payload, job, "NZBGet polling timed out");
+    return helpers.failOrTryNextSource(payload, job, "Usenet polling timed out");
   }
-  const historyItem = await nzbgetClient.getHistoryItem(payload.nzbId);
+  const client = getUsenetClient();
+  const historyItem = await client.getHistoryItem(payload.nzbId);
   if (historyItem) {
     const state = classifyHistoryStatus(historyItem);
     if (state === "success") {
@@ -292,11 +310,11 @@ async function handleUsenetPoll(payload, helpers) {
       return helpers.failOrTryNextSource(
         payload,
         job,
-        `NZBGet download failed: ${historyItem.Status || "failed"}`,
+        `Usenet download failed: ${historyItem.Status || historyItem.status || "failed"}`,
       );
     }
   }
-  const queueItem = await nzbgetClient.getQueueItem(payload.nzbId);
+  const queueItem = await client.getQueueItem(payload.nzbId);
   const queueStatus = readQueueStatus(queueItem);
   if (queueStatus && queueStatus.includes("PAUSED")) {
     return {
@@ -319,14 +337,16 @@ async function handleUsenetFinalize(payload, helpers) {
   if (!job) return null;
   if (job.status === "failed" || job.status === "done") return null;
   const candidate = getPayloadCandidate(payload);
-  const historyItem = payload.history || (await nzbgetClient.getHistoryItem(payload.nzbId));
+  const client = getUsenetClient();
+  const historyItem = payload.history || (await client.getHistoryItem(payload.nzbId));
   const resolvedTrack = buildResolvedTrack(job, payload.track);
-  const found = await locateBestDownloadedAudio(historyItem, candidate, resolvedTrack);
+  const found = await locateBestDownloadedAudio(historyItem, candidate, resolvedTrack, client);
   if (!found.filePath) {
     const reason =
       found.validation?.reason ||
-      "NZBGet completed, but no matching audio file was found";
-    if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload, { nzbId: null, history: null });    return helpers.failOrTryNextSource(payload, job, reason);
+      "Usenet download completed, but no matching audio file was found";
+    if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload, { nzbId: null, history: null });
+    return helpers.failOrTryNextSource(payload, job, reason);
   }
 
   import("./aurralHistoryService.js")
@@ -344,7 +364,8 @@ async function handleUsenetFinalize(payload, helpers) {
   );
   return finalizePipelineJobSuccess({
     downloadTracker,
-    job,    committedFinalPath,
+    job,
+    committedFinalPath,
     album: candidate?.resolvedAlbumName || job.albumName,
   });
 }

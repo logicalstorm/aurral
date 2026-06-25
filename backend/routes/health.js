@@ -250,6 +250,7 @@ function buildBootstrapPayload(req) {
     slskdConfigured: downloadSources.slskd.configured,
     prowlarrConfigured: downloadSources.usenet.prowlarrConfigured,
     nzbgetConfigured: downloadSources.usenet.nzbgetConfigured,
+    sabnzbdConfigured: downloadSources.usenet.sabnzbdConfigured,
     usenetConfigured: downloadSources.usenet.configured,
     downloadSources,
     metadataProviders: getMetadataProviderHealthSnapshot(),
