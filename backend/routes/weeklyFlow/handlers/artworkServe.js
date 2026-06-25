@@ -26,7 +26,7 @@ export function registerArtworkServe(router) {
     }
 
     const { getArtworkContentTypeForExtension } =
-      await import("../../services/playlistArtworkGenerator.js");
+      await import("../../../services/playlistArtworkGenerator.js");
     res.type(getArtworkContentTypeForExtension(artwork.extension));
     res.sendFile(artwork.safePath);
   });

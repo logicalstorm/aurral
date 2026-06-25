@@ -35,7 +35,6 @@ export function useFlowStatus() {
       setStatus(data);
     } catch {
       if (options.signal?.aborted) return;
-      setStatus(null);
     } finally {
       if (!options.signal?.aborted) {
         setLoading(false);
