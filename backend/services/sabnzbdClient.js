@@ -175,9 +175,10 @@ export class SabnzbdClient {
     }
     try {
       const apiUrl = buildUrl(settings.url, settings.apiKey);
-      const [versionRes, statsRes] = await Promise.all([
+      const [versionRes, statsRes, directories] = await Promise.all([
         axios.get(`${apiUrl}&mode=version`, { timeout: 15000, validateStatus: () => true }),
         axios.get(`${apiUrl}&mode=server_stats`, { timeout: 15000, validateStatus: () => true }),
+        this.getDownloadDirectories(),
       ]);
       const version = versionRes.data?.version || null;
       const paused = statsRes.data?.paused === true;
@@ -189,6 +190,8 @@ export class SabnzbdClient {
         version,
         downloadPaused: paused,
         downloadRate: rate,
+        downloadPath: directories.destDir || null,
+        directories,
         message: `SABnzbd is connected${version ? ` (v${version})` : ""}`,
       };
       connectionCache = { checkedAt: Date.now(), result };

@@ -5,6 +5,7 @@ import { dbOps } from "../db/helpers/index.js";
 import { lidarrClient } from "./lidarrClient.js";
 import { slskdClient } from "./slskdClient.js";
 import { nzbgetClient } from "./nzbgetClient.js";
+import { sabnzbdClient } from "./sabnzbdClient.js";
 import { NavidromeClient } from "./navidrome.js";
 import { runLidarrLibraryAccessTest } from "./lidarrLibraryAccessTest.js";
 import { PLAYLIST_LIBRARY_DIR, resolvePlaylistRoot } from "./playlistPaths.js";
@@ -752,6 +753,20 @@ async function checkNzbgetSection() {
   });
 }
 
+async function checkSabnzbdSection() {
+  return checkDownloadClientSection({
+    client: sabnzbdClient,
+    key: "sabnzbd",
+    title: "SABnzbd downloads",
+    isEnabled: (config) => config.enabled === true,
+    skipReason: "SABnzbd is not enabled.",
+    resolveCompletedPath: (_config, connection) =>
+      String(connection.downloadPath || connection.directories?.destDir || "").trim(),
+    pathFix: (completedPath) =>
+      "Mount the same host folder into Aurral and SABnzbd, or add a SABnzbd mapping under Settings → Download Clients → Remote Path Mappings.",
+  });
+}
+
 function uniqueVisiblePathCandidates(paths) {
   const seen = new Set();
   const result = [];
@@ -1114,6 +1129,7 @@ async function buildStorageHealthCheck() {
     lidarrSection,
     await checkSlskdSection(),
     await checkNzbgetSection(),
+    await checkSabnzbdSection(),
     await checkNavidromeSection({ lidarrRootPaths, lidarrSample }),
     await checkPlaylistFilesSection(),
   ];
