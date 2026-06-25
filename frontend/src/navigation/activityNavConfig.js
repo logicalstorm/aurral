@@ -10,19 +10,19 @@ const BASE_ACTIVITY_SOURCE_ITEMS = [
   { id: "aurral", label: "Aurral" },
 ];
 
-const NZBGET_ACTIVITY_SOURCE_ITEM = { id: "nzbget", label: "NZBGet" };
+const USENET_ACTIVITY_SOURCE_ITEM = { id: "usenet", label: "Usenet" };
 
 export const DEFAULT_ACTIVITY_VIEW = "queue";
 export const DEFAULT_ACTIVITY_SOURCE = "all";
 
 const ACTIVITY_VIEW_IDS = ACTIVITY_VIEWS.map((entry) => entry.id);
-const LEGACY_HISTORY_SOURCE_IDS = ["all", "lidarr", "slskd", "nzbget", "aurral"];
+const LEGACY_HISTORY_SOURCE_IDS = ["all", "lidarr", "slskd", "nzbget", "usenet", "aurral"];
 
 export function getActivitySourceItems(usenetConfigured = false) {
   if (!usenetConfigured) return BASE_ACTIVITY_SOURCE_ITEMS;
   const items = [...BASE_ACTIVITY_SOURCE_ITEMS];
   const slskdIndex = items.findIndex((item) => item.id === "slskd");
-  items.splice(slskdIndex + 1, 0, NZBGET_ACTIVITY_SOURCE_ITEM);
+  items.splice(slskdIndex + 1, 0, USENET_ACTIVITY_SOURCE_ITEM);
   return items;
 }
 
@@ -36,13 +36,14 @@ export function normalizeActivityView(view) {
 }
 
 export function normalizeActivitySource(source, usenetConfigured = false) {
-  const sourceIds = getActivitySourceIds(usenetConfigured);
   if (!source) return DEFAULT_ACTIVITY_SOURCE;
+  if (source === "nzbget" && usenetConfigured) return "usenet";
+  const sourceIds = getActivitySourceIds(usenetConfigured);
   return sourceIds.includes(source) ? source : DEFAULT_ACTIVITY_SOURCE;
 }
 
 export function getActivityRequestSource(request) {
-  if (request?.source === "nzbget") return "nzbget";
+  if (request?.source === "nzbget" || request?.source === "sabnzbd") return "usenet";
   if (request?.source === "slskd") return "slskd";
   if (request?.source === "aurral") return "aurral";
   if (request?.source === "lidarr") return "lidarr";

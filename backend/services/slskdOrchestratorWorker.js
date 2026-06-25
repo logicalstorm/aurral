@@ -12,6 +12,7 @@ import {
   isHonkerShuttingDown,
   markHonkerWorkerLoopEnded,
   registerHonkerWorker,
+  scheduleHonkerComponentRestart,
   withJobHeartbeat,
 } from "./honkerWorkerRuntime.js";
 
@@ -80,6 +81,11 @@ async function runLoop() {
       intentional,
       shouldRestart: () => isAnyDownloadSourceConfigured(),
     });
+    if (idleStopped) {
+      scheduleHonkerComponentRestart(WORKER_NAME, startSlskdOrchestratorWorker, {
+        shouldRestart: () => isAnyDownloadSourceConfigured(),
+      });
+    }
   }
 }
 

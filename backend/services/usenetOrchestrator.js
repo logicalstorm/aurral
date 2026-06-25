@@ -55,7 +55,7 @@ function hasEnoughCandidates(aggregated, resolvedTrack) {
 function classifyHistoryStatus(item) {
   const status = String(item?.Status || item?.status || "").toUpperCase();
   if (!status) return "pending";
-  if (status.startsWith("SUCCESS") || status.startsWith("WARNING")) {
+  if (status.startsWith("SUCCESS") || status.startsWith("WARNING") || status.startsWith("COMPLETED")) {
     return "success";
   }
   if (status.startsWith("FAILURE") || status.startsWith("DELETED")) {

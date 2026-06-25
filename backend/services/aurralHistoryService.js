@@ -52,20 +52,25 @@ const toIso = (createdAt) => {
   return new Date(value).toISOString();
 };
 
-const resolveTrackDownloadHistorySource = (downloadSource) => {
+const resolveTrackDownloadHistorySource = (downloadSource, downloadClient) => {
   const normalized = String(downloadSource || "")
     .trim()
     .toLowerCase();
-  if (normalized === "usenet") return "nzbget";
+  if (normalized === "usenet") {
+    const client = String(downloadClient || "").trim().toLowerCase();
+    if (client === "sabnzbd") return "sabnzbd";
+    return "nzbget";
+  }
   return "slskd";
 };
 
-const resolveDownloadClientLabel = (downloadSource) =>
-  resolveTrackDownloadHistorySource(downloadSource) === "nzbget" ? "NZBGet" : "slskd";
+const CLIENT_LABELS = { sabnzbd: "SABnzbd", nzbget: "NZBGet", slskd: "slskd" };
+const resolveDownloadClientLabel = (downloadSource, downloadClient) =>
+  CLIENT_LABELS[resolveTrackDownloadHistorySource(downloadSource, downloadClient)] || "slskd";
 
 const resolveHistorySource = (kind, metadata = null) => {
   if (kind === "track_download") {
-    return resolveTrackDownloadHistorySource(metadata?.downloadSource);
+    return resolveTrackDownloadHistorySource(metadata?.downloadSource, metadata?.downloadClient);
   }
   return KIND_SOURCE_MAP[kind] || "aurral";
 };
@@ -554,13 +559,14 @@ export const recordTrackJobActivity = ({
   title = null,
   subtitle = null,
   downloadSource = null,
+  downloadClient = null,
 } = {}) => {
   const id = String(jobId || "").trim();
   if (!id) return null;
   const playlistName = resolvePlaylistName(playlistId);
   const track = String(trackName || "Track").trim();
   const artist = String(artistName || "Artist").trim();
-  const clientLabel = resolveDownloadClientLabel(downloadSource);
+  const clientLabel = resolveDownloadClientLabel(downloadSource, downloadClient);
   return upsertAurralHistory({
     referenceId: id,
     kind: "track_download",
@@ -575,6 +581,7 @@ export const recordTrackJobActivity = ({
       artistName: artist,
       playlistId,
       downloadSource: downloadSource || "slskd",
+      downloadClient: downloadClient || null,
     },
   });
 };
@@ -586,9 +593,10 @@ export const recordTrackJobSearching = (job) =>
     artistName: job?.artistName,
     playlistId: job?.playlistId || job?.playlistType,
     downloadSource: job?.downloadSource,
+    downloadClient: job?.downloadClient,
     status: "processing",
     statusLabel: "Searching",
-    title: `Searching ${resolveDownloadClientLabel(job?.downloadSource)} for ${job?.trackName || "track"}`,
+    title: `Searching ${resolveDownloadClientLabel(job?.downloadSource, job?.downloadClient)} for ${job?.trackName || "track"}`,
   });
 
 export const recordTrackJobDownloading = (job) =>
@@ -598,9 +606,10 @@ export const recordTrackJobDownloading = (job) =>
     artistName: job?.artistName,
     playlistId: job?.playlistId || job?.playlistType,
     downloadSource: job?.downloadSource,
+    downloadClient: job?.downloadClient,
     status: "processing",
     statusLabel: "Downloading",
-    title: `Downloading ${job?.trackName || "track"} via ${resolveDownloadClientLabel(job?.downloadSource)}`,
+    title: `Downloading ${job?.trackName || "track"} via ${resolveDownloadClientLabel(job?.downloadSource, job?.downloadClient)}`,
   });
 
 export const recordTrackJobMoving = (job) =>
@@ -610,6 +619,7 @@ export const recordTrackJobMoving = (job) =>
     artistName: job?.artistName,
     playlistId: job?.playlistId || job?.playlistType,
     downloadSource: job?.downloadSource,
+    downloadClient: job?.downloadClient,
     status: "processing",
     statusLabel: "Moving",
     title: `Moving ${job?.trackName || "track"} into playlist library`,
@@ -622,6 +632,7 @@ export const recordTrackJobCompleted = (job) =>
     artistName: job?.artistName,
     playlistId: job?.playlistId || job?.playlistType,
     downloadSource: job?.downloadSource,
+    downloadClient: job?.downloadClient,
     status: "completed",
     statusLabel: "Downloaded",
     title: `Downloaded ${job?.trackName || "track"}`,
@@ -635,6 +646,7 @@ export const recordTrackJobFailed = (job, message = "Download failed") =>
     artistName: job?.artistName,
     playlistId: job?.playlistId || job?.playlistType,
     downloadSource: job?.downloadSource,
+    downloadClient: job?.downloadClient,
     status: "failed",
     statusLabel: "Failed",
     title: `Failed to download ${job?.trackName || "track"}`,

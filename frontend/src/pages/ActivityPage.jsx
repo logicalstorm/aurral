@@ -22,7 +22,7 @@ const ACTIVITY_SOURCE_COLORS = {
   all: "var(--aurral-gray)",
   lidarr: TAG_COLORS[10],
   slskd: TAG_COLORS[0],
-  nzbget: TAG_COLORS[2],
+  usenet: TAG_COLORS[2],
   aurral: TAG_COLORS[12],
 };
 
@@ -172,8 +172,8 @@ const QUEUE_EMPTY_STATE_COPY = {
     title: "No slskd downloads in progress",
     message: "Active Soulseek searches and downloads will appear here.",
   },
-  nzbget: {
-    title: "No NZBGet downloads in progress",
+  usenet: {
+    title: "No Usenet downloads in progress",
     message: "Active Usenet downloads will appear here.",
   },
   aurral: {
@@ -196,8 +196,8 @@ const HISTORY_EMPTY_STATE_COPY = {
     title: "No slskd history",
     message: "Completed and failed Soulseek downloads will appear here.",
   },
-  nzbget: {
-    title: "No NZBGet history",
+  usenet: {
+    title: "No Usenet history",
     message: "Completed and failed Usenet downloads will appear here.",
   },
   aurral: {
@@ -421,9 +421,9 @@ function ActivityPage() {
 
   const handleRowNavigate = (
     request,
-    { isSlskd, isNzbget, isAurral, isAlbum, artistMbid, artistName, displayName },
+    { isSlskd, isUsenet, isAurral, isAlbum, artistMbid, artistName, displayName },
   ) => {
-    if ((isSlskd || isNzbget) && request.playlistId) {
+    if ((isSlskd || isUsenet) && request.playlistId) {
       navigate(`/playlists?selected=${encodeURIComponent(request.playlistId)}`);
       return;
     }
@@ -436,8 +436,8 @@ function ActivityPage() {
 
   const renderRequestRow = (request, rowIndex = 0) => {
     const isSlskd = request.source === "slskd";
-    const isNzbget = request.source === "nzbget";
-    const isTrackDownload = isSlskd || isNzbget || request.kind === "track_download";
+    const isUsenet = request.source === "nzbget" || request.source === "sabnzbd";
+    const isTrackDownload = isSlskd || isUsenet || request.kind === "track_download";
     const isAurral = request.source === "aurral" && !isTrackDownload;
     const isActivity = request.type === "activity";
     const isAlbum = request.type === "album";
@@ -451,7 +451,7 @@ function ActivityPage() {
     const metaLine = usesTitleSubtitle ? request.subtitle || null : artistName;
     const artistMbid = isAlbum ? request.artistMbid : request.mbid;
     const canNavigate =
-      ((isSlskd || isNzbget) && request.playlistId) ||
+      ((isSlskd || isUsenet) && request.playlistId) ||
       ((isAurral || isActivity) && request.href) ||
       (artistMbid && artistMbid !== "null" && artistMbid !== "undefined");
     const requestSource = getActivityRequestSource(request);
@@ -478,7 +478,7 @@ function ActivityPage() {
           if (!canNavigate) return;
           handleRowNavigate(request, {
             isSlskd,
-            isNzbget,
+            isUsenet,
             isAurral,
             isAlbum,
             artistMbid,
