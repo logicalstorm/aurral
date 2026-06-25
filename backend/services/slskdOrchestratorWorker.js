@@ -76,6 +76,7 @@ async function runLoop() {
     running = false;
     _loopPromise = null;
     const intentional = stopRequested || idleStopped;
+    console.log("[pipeline] worker stopped", { idleStopped, intentional });
     stopRequested = false;
     markHonkerWorkerLoopEnded(WORKER_NAME, startSlskdOrchestratorWorker, {
       intentional,
@@ -92,6 +93,7 @@ async function runLoop() {
 export function startSlskdOrchestratorWorker() {
   if (running || isHonkerShuttingDown()) return;
   if (!isAnyDownloadSourceConfigured()) return;
+  console.log("[pipeline] worker starting");
   running = true;
   stopRequested = false;
   enqueuePendingJobsWithoutBatch();
