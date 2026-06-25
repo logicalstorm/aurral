@@ -164,5 +164,6 @@ export {
   deleteSharedPlaylist,
   deleteSharedPlaylistTrack,
   reSearchSharedPlaylistTrack,
+  reSearchMissingSharedPlaylistTracks,
   startFlowPlaylist,
 } from "./api/endpoints/playlists.js";

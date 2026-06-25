@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { downloadTracker } from "../../../services/weeklyFlow/weeklyFlowDownloadTracker.js";
+import { weeklyFlowWorker } from "../../../services/weeklyFlow/weeklyFlowWorker.js";
 import { slskdClient } from "../../../services/slskdClient.js";
 import {
   dedupeSharedTracks,
@@ -343,6 +344,26 @@ export function registerSharedPlaylists(router) {
       } catch (error) {
         res.status(500).json({
           error: "Failed to re-search shared playlist track",
+          message: error.message,
+        });
+      }
+    },
+  );
+
+  router.post(
+    "/shared-playlists/:playlistId/research-missing",
+    async (req, res) => {
+      try {
+        const { playlistId } = req.params;
+        const playlist = getAccessibleSharedPlaylist(req.user, playlistId);
+        if (!playlist) {
+          return res.status(404).json({ error: "Shared playlist not found" });
+        }
+        const count = await weeklyFlowWorker.researchMissingTracks(playlistId);
+        res.json({ success: true, playlistId, requeued: count });
+      } catch (error) {
+        res.status(500).json({
+          error: "Failed to re-search missing tracks",
           message: error.message,
         });
       }

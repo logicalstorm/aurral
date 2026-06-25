@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Check, Loader2, Play, FilePlus2, Download, Trash2 } from "lucide-react";
+import { Check, Loader2, Play, FilePlus2, Download, Trash2, Search } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   getFlowJobs,
@@ -21,6 +21,7 @@ import {
   deleteFlowArtwork,
   generateFlowArtwork,
   reSearchSharedPlaylistTrack,
+  reSearchMissingSharedPlaylistTracks,
 } from "../utils/api";
 import { CreatePlaylistModal, RenamePlaylistModal } from "../components/PlaylistModals";
 import PillToggle from "../components/PillToggle";
@@ -128,6 +129,7 @@ function FlowPage() {
   const [applyingFlowNameId, setApplyingFlowNameId] = useState(null);
   const [applyingSharedPlaylistNameId, setApplyingSharedPlaylistNameId] = useState(null);
   const [reSearchingTrackIds, setReSearchingTrackIds] = useState({});
+  const [reSearchingMissingPlaylistId, setReSearchingMissingPlaylistId] = useState(null);
   const [savingToPlaylistId, setSavingToPlaylistId] = useState(null);
   const [deletingTrackId, setDeletingTrackId] = useState(null);
   const [tracksLoadingByFlowId, setTracksLoadingByFlowId] = useState({});
@@ -1048,6 +1050,30 @@ function FlowPage() {
     }
   };
 
+  const handleReSearchMissingSharedPlaylistTracks = async (playlistId) => {
+    if (!playlistId || reSearchingMissingPlaylistId) return;
+    setReSearchingMissingPlaylistId(playlistId);
+    try {
+      const result = await reSearchMissingSharedPlaylistTracks(playlistId);
+      showSuccess(
+        result?.requeued > 0
+          ? `Re-searching ${result.requeued} track${result.requeued !== 1 ? "s" : ""}`
+          : "No failed tracks to re-search",
+      );
+      await fetchStatus();
+      await fetchFlowTracks(playlistId, { showSpinner: false });
+    } catch (err) {
+      const message =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Failed to re-search missing tracks";
+      showError(message);
+    } finally {
+      setReSearchingMissingPlaylistId(null);
+    }
+  };
+
   const handleNavigateArtist = (track) => {
     if (!track?.artistMbid) return;
     navigate(`/artist/${track.artistMbid}`, {
@@ -1235,6 +1261,23 @@ function FlowPage() {
         </>
       ) : selectedPlaylist ? (
         <>
+          <button
+            type="button"
+            className="artist-menu-item"
+            onClick={() =>
+              handleReSearchMissingSharedPlaylistTracks(selectedPlaylist.id)
+            }
+            disabled={reSearchingMissingPlaylistId === selectedPlaylist.id}
+          >
+            <span className="artist-menu-item__main">
+              {reSearchingMissingPlaylistId === selectedPlaylist.id ? (
+                <Loader2 className="artist-icon-sm animate-spin" />
+              ) : (
+                <Search className="artist-icon-sm" />
+              )}
+              Re-search missing
+            </span>
+          </button>
           <button
             type="button"
             className="artist-menu-item"

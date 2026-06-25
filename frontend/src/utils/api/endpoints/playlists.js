@@ -126,6 +126,11 @@ export const reSearchSharedPlaylistTrack = (playlistId, jobId) =>
     `/playlists/shared-playlists/${playlistId}/tracks/${jobId}/research`,
   );
 
+export const reSearchMissingSharedPlaylistTracks = (playlistId) =>
+  postData(
+    `/playlists/shared-playlists/${playlistId}/research-missing`,
+  );
+
 export const startFlowPlaylist = (flowId, limit = 30) =>
   postData(`/playlists/start/${flowId}`, {
     limit,

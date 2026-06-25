@@ -635,6 +635,36 @@ export class WeeklyFlowWorker {
     return 0;
   }
 
+  async researchMissingTracks(playlistType) {
+    const jobs = downloadTracker.getByPlaylistType(playlistType);
+    let requeued = 0;
+    for (const job of jobs) {
+      if (job.status !== "failed") continue;
+      const priorError = String(job?.error || "").trim();
+      const reason = ["Manual re-search", priorError].filter(Boolean).join(" • ");
+      if (downloadTracker.setPending(job.id, reason || null, { asRetryCycle: true })) {
+        requeued += 1;
+      }
+    }
+    if (requeued > 0) {
+      if (this.running) {
+        this.wake();
+      } else {
+        await this.start();
+      }
+      return requeued;
+    }
+    const stats = downloadTracker.getPlaylistTypeStats(playlistType);
+    if (stats.pending > 0) {
+      if (this.running) {
+        this.wake();
+      } else {
+        await this.start();
+      }
+    }
+    return requeued;
+  }
+
   async repairReusableLinks(force = false) {
     const now = Date.now();
     if (!force && now - this.lastReuseRepairAt < REUSE_REPAIR_INTERVAL_MS) {
