@@ -17,6 +17,7 @@ import {
 import {
   getM3uPathMappings,
   getM3uPathMode,
+  resolveM3uTrackPath,
   resolveM3uVisiblePath,
 } from "./playlistM3uPaths.js";
 import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
@@ -971,32 +972,36 @@ async function checkPlaylistFilesSection() {
   const weeklyFlowRoot = resolveWeeklyFlowRoot();
   const m3uMode = getM3uPathMode();
   const m3uMappings = getM3uPathMappings();
-  const playlistLibraryPath = path
-    .join(resolvePlaylistRoot(), PLAYLIST_LIBRARY_DIR)
-    .replace(/\\/g, "/")
-    .replace(/\/+$/, "");
+  const totalDoneJobs = Number(downloadTracker.getStats()?.done || 0);
+  const doneJobs = downloadTracker.getDoneWithFinalPath(PLAYLIST_FILE_HEALTH_SAMPLE_LIMIT);
 
   if (m3uMode === "remote") {
-    const visiblePlaylistPath = resolveNavidromeVisiblePath(
-      playlistLibraryPath,
-      m3uMode,
-      m3uMappings,
-    );
-    steps.push(
-      healthStep(
-        "m3u-mode",
-        visiblePlaylistPath ? "pass" : "fail",
-        "Generated M3U paths resolve for playlist consumers",
-        {
-          detail: visiblePlaylistPath
-            ? `${playlistLibraryPath} -> ${visiblePlaylistPath}`
-            : playlistLibraryPath,
-          fix: visiblePlaylistPath
-            ? "Remote mode is appropriate when Navidrome sees different paths than Aurral."
-            : "Add a Navidrome path mapping under Settings → Playback → Navidrome Playlist Paths from the Aurral playlist folder to the path Navidrome scans, or turn off remote mode when both apps share the same paths.",
-        },
-      ),
-    );
+    let sampleResolved = null;
+    for (const job of doneJobs) {
+      const localPath = path.resolve(remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot));
+      const resolved = resolveM3uTrackPath(job, localPath, m3uMode, m3uMappings);
+      if (resolved && normalizePathCompare(resolved) !== normalizePathCompare(localPath)) {
+        sampleResolved = `${localPath} -> ${resolved}`;
+        break;
+      }
+    }
+
+    if (doneJobs.length === 0) {
+      steps.push(
+        healthStep("m3u-mode", "warn", "Generated M3U paths resolve for playlist consumers", {
+          detail: "No completed playlist tracks to verify yet.",
+          fix: "Create or import a playlist, or run a flow, then run this check again.",
+        }),
+      );
+    } else {
+      steps.push(
+        healthStep("m3u-mode", "pass", "Generated M3U paths resolve for playlist consumers", {
+          detail: sampleResolved
+            ? `${doneJobs.length} sampled track${doneJobs.length === 1 ? "" : "s"} resolved via path mappings (e.g. ${sampleResolved})`
+            : `${doneJobs.length} sampled track${doneJobs.length === 1 ? "" : "s"} use local container paths`,
+        }),
+      );
+    }
   } else {
     steps.push(
       healthStep("m3u-mode", "pass", "Playlist files use local container paths", {
@@ -1004,9 +1009,6 @@ async function checkPlaylistFilesSection() {
       }),
     );
   }
-
-  const totalDoneJobs = Number(downloadTracker.getStats()?.done || 0);
-  const doneJobs = downloadTracker.getDoneWithFinalPath(PLAYLIST_FILE_HEALTH_SAMPLE_LIMIT);
 
   if (doneJobs.length === 0) {
     steps.push(
