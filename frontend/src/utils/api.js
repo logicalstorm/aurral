@@ -135,6 +135,7 @@ export {
   testProwlarrConnection,
   getProwlarrIndexers,
   testNzbgetConnection,
+  testSabnzbdConnection,
   testLidarrConnection,
   testLidarrLibraryAccess,
   getStorageHealth,

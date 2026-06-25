@@ -49,6 +49,8 @@ export const getProwlarrIndexers = () => getData("/settings/prowlarr/indexers");
 
 export const testNzbgetConnection = () => postData("/settings/nzbget/test");
 
+export const testSabnzbdConnection = () => postData("/settings/sabnzbd/test");
+
 export const testLidarrConnection = (url, apiKey) =>
   getData("/settings/lidarr/test", {
     params: lidarrCredentialParams(url, apiKey),

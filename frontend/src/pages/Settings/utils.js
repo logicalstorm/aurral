@@ -127,6 +127,15 @@ export const normalizeSettings = (savedSettings) => {
         completedPath: "",
         ...(savedSettings.integrations?.nzbget || {}),
       },
+      sabnzbd: {
+        enabled: false,
+        url: "",
+        apiKey: "",
+        category: "aurral",
+        priority: 20,
+        addPaused: false,
+        ...(savedSettings.integrations?.sabnzbd || {}),
+      },
       ticketmaster: {
         apiKey: "",
         searchRadiusMiles: 250,

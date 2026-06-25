@@ -12,7 +12,7 @@ import {
 import { SettingsArrFieldSet, SettingsArrFormGroup } from "./arr/SettingsArrLayout";
 import { getProviderStatus } from "../utils/integrationStatus";
 import { PATH_MAPPING_SOURCE_OPTIONS, PathMappingModal } from "./PathMappingModal";
-import { testNzbgetConnection, testSlskdConnection } from "../../../utils/api";
+import { testNzbgetConnection, testSabnzbdConnection, testSlskdConnection } from "../../../utils/api";
 
 const PATH_MAPPING_SOURCE_VALUES = new Set(
   PATH_MAPPING_SOURCE_OPTIONS.map((option) => option.value),
@@ -46,6 +46,7 @@ function sourceLabel(source) {
 const CLIENT_MODALS = {
   slskd: "slskd",
   nzbget: "nzbget",
+  sabnzbd: "sabnzbd",
 };
 
 export function SettingsDownloadClientsSection({
@@ -60,20 +61,24 @@ export function SettingsDownloadClientsSection({
   const [activeModal, setActiveModal] = useState(null);
   const [testingSlskd, setTestingSlskd] = useState(false);
   const [testingNzbget, setTestingNzbget] = useState(false);
+  const [testingSabnzbd, setTestingSabnzbd] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [mappingModal, setMappingModal] = useState(null);
 
   const integrations = settings.integrations || {};
   const slskd = integrations.slskd || {};
   const nzbget = integrations.nzbget || {};
+  const sabnzbd = integrations.sabnzbd || {};
   const pathMappings = coercePathMappings(settings.pathMappings).filter(
     (entry) => entry.remote || entry.local,
   );
 
   const slskdConfigured = Boolean(slskd.url && slskd.apiKey);
   const nzbgetConfigured = Boolean(nzbget.url);
+  const sabnzbdConfigured = Boolean(sabnzbd.url && sabnzbd.apiKey);
   const slskdEnabled = slskd.enabled !== false;
   const nzbgetEnabled = nzbget.enabled === true;
+  const sabnzbdEnabled = sabnzbd.enabled === true;
 
   const updateIntegration = (key, patch) =>
     updateSettings({
@@ -143,6 +148,28 @@ export function SettingsDownloadClientsSection({
     }
   };
 
+  const handleTestSabnzbd = async () => {
+    if (!sabnzbdEnabled || !sabnzbd.url || !sabnzbd.apiKey) {
+      showError("Enable SABnzbd and enter the server URL and API key first");
+      return;
+    }
+    setTestingSabnzbd(true);
+    try {
+      await handleSaveSettings();
+      const result = await testSabnzbdConnection();
+      showSuccess(result.message || "SABnzbd connection OK");
+    } catch (error) {
+      showError(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          error.message ||
+          "SABnzbd connection failed",
+      );
+    } finally {
+      setTestingSabnzbd(false);
+    }
+  };
+
   const handleTestSlskd = async () => {
     if (!slskd.url || !slskd.apiKey) {
       showError("Enter slskd URL and API key first");
@@ -198,6 +225,13 @@ export function SettingsDownloadClientsSection({
             status={getProviderStatus(nzbgetEnabled, health?.nzbgetConfigured || nzbgetConfigured)}
             meta={`Priority ${nzbget.priority ?? 20}`}
             onClick={() => setActiveModal(CLIENT_MODALS.nzbget)}
+          />
+          <IntegrationCard
+            title="SABnzbd"
+            subtitle="Usenet"
+            status={getProviderStatus(sabnzbdEnabled, sabnzbdConfigured)}
+            meta={`Priority ${sabnzbd.priority ?? 20}`}
+            onClick={() => setActiveModal(CLIENT_MODALS.sabnzbd)}
           />
         </div>
       </div>
@@ -522,6 +556,99 @@ export function SettingsDownloadClientsSection({
                 checked={nzbget.addPaused === true}
                 onChange={(event) =>
                   updateIntegration("nzbget", {
+                    addPaused: event.target.checked,
+                  })
+                }
+              />
+            </SettingsModalSection>
+          )}
+        </SettingsIntegrationModal>
+      )}
+
+      {activeModal === CLIENT_MODALS.sabnzbd && (
+        <SettingsIntegrationModal
+          title="SABnzbd"
+          onClose={() => setActiveModal(null)}
+          footerActions={
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={testingSabnzbd}
+              onClick={handleTestSabnzbd}
+            >
+              <RefreshCw className={`artist-icon-sm${testingSabnzbd ? " animate-spin" : ""}`} />
+              {testingSabnzbd ? "Testing..." : "Test connection"}
+            </button>
+          }
+        >
+          <SettingsModalSection title="General">
+            <SettingsModalToggle
+              label="Enable SABnzbd"
+              checked={sabnzbdEnabled}
+              onChange={(event) => updateIntegration("sabnzbd", { enabled: event.target.checked })}
+            />
+          </SettingsModalSection>
+
+          <SettingsModalSection title="Connection">
+            <SettingsModalField label="Server URL">
+              <SettingsInput
+                type="url"
+                placeholder="http://localhost:8080"
+                autoComplete="off"
+                value={sabnzbd.url || ""}
+                onChange={(event) => updateIntegration("sabnzbd", { url: event.target.value })}
+              />
+            </SettingsModalField>
+            <SettingsModalField label="API key">
+              <SettingsInput
+                type="password"
+                autoComplete="off"
+                value={sabnzbd.apiKey || ""}
+                onChange={(event) => updateIntegration("sabnzbd", { apiKey: event.target.value })}
+              />
+            </SettingsModalField>
+          </SettingsModalSection>
+
+          <SettingsModalSection title="Downloads">
+            <SettingsModalField label="Category">
+              <SettingsInput
+                type="text"
+                value={sabnzbd.category || "aurral"}
+                onChange={(event) => updateIntegration("sabnzbd", { category: event.target.value })}
+              />
+            </SettingsModalField>
+            <SettingsModalField label="Source priority">
+              <SettingsInput
+                type="number"
+                min="1"
+                max="1000"
+                value={sabnzbd.priority ?? 20}
+                onChange={(event) =>
+                  updateIntegration("sabnzbd", {
+                    priority: toNumber(event.target.value, 20),
+                  })
+                }
+              />
+            </SettingsModalField>
+          </SettingsModalSection>
+
+          <div className="settings-page__advanced-toggle-row">
+            <button
+              type="button"
+              className="settings-page__advanced-toggle"
+              onClick={() => setShowAdvanced((current) => !current)}
+            >
+              {showAdvanced ? "Hide advanced" : "Show advanced"}
+            </button>
+          </div>
+
+          {showAdvanced && (
+            <SettingsModalSection title="Advanced">
+              <SettingsModalToggle
+                label="Add NZBs paused"
+                checked={sabnzbd.addPaused === true}
+                onChange={(event) =>
+                  updateIntegration("sabnzbd", {
                     addPaused: event.target.checked,
                   })
                 }

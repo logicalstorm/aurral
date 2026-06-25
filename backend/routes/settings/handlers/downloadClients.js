@@ -81,6 +81,28 @@ export function registerDownloadClients(router) {
     }
   });
 
+  router.post("/sabnzbd/test", async (req, res) => {
+    try {
+      const { sabnzbdClient } = await import("../../../services/sabnzbdClient.js");
+      const result = await sabnzbdClient.testConnection({ force: true });
+      if (!result.configured) {
+        return res.status(400).json(result);
+      }
+      if (!result.ok) {
+        return res.status(502).json(result);
+      }
+      return res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        error: "SABnzbd test failed",
+        message: error.message,
+      });
+    }
+  });
+
   router.post("/gotify/test", async (req, res) => {
     try {
       const { sendGotifyTest } =

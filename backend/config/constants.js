@@ -95,6 +95,14 @@ export const defaultData = {
         addPaused: false,
         completedPath: "",
       },
+      sabnzbd: {
+        enabled: false,
+        url: "",
+        apiKey: "",
+        category: "aurral",
+        priority: 20,
+        addPaused: false,
+      },
       ticketmaster: {
         apiKey: "",
         searchRadiusMiles: 250,

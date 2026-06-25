@@ -10,6 +10,7 @@ const PATH_MAPPING_SOURCE_OPTIONS = [
   { value: "lidarr", label: "Lidarr" },
   { value: "slskd", label: "slskd" },
   { value: "nzbget", label: "NZBGet" },
+  { value: "sabnzbd", label: "SABnzbd" },
 ];
 
 const EMPTY_MAPPING = { source: "all", remote: "", local: "" };
