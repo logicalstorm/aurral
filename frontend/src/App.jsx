@@ -138,6 +138,12 @@ function AppContent() {
     };
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    if (isHealthy === false && isAuthenticated) {
+      window.location.reload();
+    }
+  }, [isHealthy, isAuthenticated]);
+
   return (
     <Router
       basename={basePath}
