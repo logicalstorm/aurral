@@ -302,6 +302,10 @@ export function LidarrSettingsSection({
               </option>
             ))}
           </SettingsSelect>
+          <p className="settings-page__section-note">
+            Users can set their own default in Profile → Library Defaults, which overrides
+            this instance-wide setting.
+          </p>
         </SettingsArrFormGroup>
 
         <SettingsArrFormGroup label="Default Metadata Profile" labelFor="lidarr-metadata-profile">
