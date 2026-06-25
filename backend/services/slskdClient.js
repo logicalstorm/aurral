@@ -93,8 +93,9 @@ export async function testSlskdWithCredentials(url, apiKey) {
     const server = appRes.data?.server || {};
     const serverState = String(server.state || "");
     const soulseekConnected = server.isConnected === true || serverState.includes("Connected");
-    const downloadPath =
-      optionsRes.data?.directories?.downloads || optionsRes.data?.directories?.download || null;
+    const rawDownloadPath =
+      optionsRes.data?.directories?.downloads || optionsRes.data?.directories?.download;
+    const downloadPath = Array.isArray(rawDownloadPath) ? String(rawDownloadPath[0] || "").trim() || null : String(rawDownloadPath || "").trim() || null;
     return {
       ok: true,
       configured: true,
@@ -254,8 +255,9 @@ export class SlskdClient {
       const server = appRes.data?.server || {};
       const serverState = String(server.state || "");
       const soulseekConnected = server.isConnected === true || serverState.includes("Connected");
-      const downloadPath =
-        optionsRes.data?.directories?.downloads || optionsRes.data?.directories?.download || null;
+      const rawDownloadPath =
+        optionsRes.data?.directories?.downloads || optionsRes.data?.directories?.download;
+      const downloadPath = Array.isArray(rawDownloadPath) ? String(rawDownloadPath[0] || "").trim() || null : String(rawDownloadPath || "").trim() || null;
       const result = {
         ok: true,
         configured: true,
