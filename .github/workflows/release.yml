@@ -34,7 +34,7 @@ jobs:
       - name: Verify workflow commit is current branch head
         id: guard
         run: |
-          git fetch origin "${GITHUB_REF_NAME}:refs/remotes/origin/${GITHUB_REF_NAME}" --depth=1
+          git fetch origin "+${GITHUB_REF_NAME}:refs/remotes/origin/${GITHUB_REF_NAME}" --depth=1
           REMOTE_SHA="$(git rev-parse "origin/${GITHUB_REF_NAME}")"
           if [ "$REMOTE_SHA" = "$GITHUB_SHA" ]; then
             echo "is_current_head=true" >> "$GITHUB_OUTPUT"
