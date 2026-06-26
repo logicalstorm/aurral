@@ -59,6 +59,8 @@ export function getTrackStatusMeta(status) {
       };
     case "failed":
       return { label: "Failed", className: "flow-page__track-status-dot--failed" };
+    case "blocked":
+      return { label: "Review", className: "flow-page__track-status-dot--blocked" };
     case "pending":
     default:
       return { label: "Queued", className: "flow-page__track-status-dot--pending" };

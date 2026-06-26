@@ -131,6 +131,12 @@ export const reSearchMissingSharedPlaylistTracks = (playlistId) =>
     `/playlists/shared-playlists/${playlistId}/research-missing`,
   );
 
+export const approveBlockedJob = (jobId) =>
+  postData(`/playlists/jobs/${jobId}/approve`);
+
+export const denyBlockedJob = (jobId) =>
+  postData(`/playlists/jobs/${jobId}/deny`);
+
 export const startFlowPlaylist = (flowId, limit = 30) =>
   postData(`/playlists/start/${flowId}`, {
     limit,

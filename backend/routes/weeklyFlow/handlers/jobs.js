@@ -19,6 +19,16 @@ import {
   pauseSharedPlaylistRetryCycle,
   getAccessibleSharedPlaylist,
 } from "./utils.js";
+import {
+  commitImportToPlaylistLibrary,
+} from "../../../services/slskdOrchestrator.js";
+import { resolvePlaylistRoot } from "../../../services/playlistPaths.js";
+import {
+  joinUnderRoot,
+  sanitizePathPart,
+} from "../../../services/playlistDownloadUtils.js";
+import path from "path";
+import fs from "fs/promises";
 
 export function registerJobs(router) {
   router.get("/status", noCache, (req, res) => {
@@ -166,6 +176,50 @@ export function registerJobs(router) {
   router.delete("/jobs/completed", requireAdmin, (req, res) => {
     const count = downloadTracker.clearCompleted();
     res.json({ success: true, cleared: count });
+  });
+
+  router.post("/jobs/:jobId/approve", async (req, res) => {
+    const job = downloadTracker.getJob(req.params.jobId);
+    if (!job || job.status !== "blocked") {
+      return res.status(404).json({ error: "Blocked job not found" });
+    }
+    const sourcePath = String(job.stagingPath || "").trim();
+    if (!sourcePath) {
+      return res.status(400).json({ error: "Staging file path missing" });
+    }
+    try {
+      await fs.access(sourcePath);
+    } catch {
+      return res.status(404).json({ error: "Staging file no longer exists" });
+    }
+    const playlistRoot = resolvePlaylistRoot();
+    const ext = path.extname(sourcePath).toLowerCase();
+    const albumDir = sanitizePathPart(job.albumName, "Unknown Album");
+    const artistDir = sanitizePathPart(job.artistName, "Unknown Artist");
+    const finalDir = joinUnderRoot(playlistRoot, path.join(job.playlistType, artistDir, albumDir));
+    const finalName = `${sanitizePathPart(job.trackName, "Unknown Track")}${ext || ".mp3"}`;
+    const finalPath = path.join(finalDir, finalName);
+    try {
+      const committedPath = await commitImportToPlaylistLibrary(sourcePath, finalPath);
+      downloadTracker.setDone(job.id, committedPath, job.albumName);
+      res.json({ success: true, path: committedPath });
+    } catch (error) {
+      res.status(500).json({ error: "Import failed", message: error.message });
+    }
+  });
+
+  router.post("/jobs/:jobId/deny", async (req, res) => {
+    const job = downloadTracker.getJob(req.params.jobId);
+    if (!job || job.status !== "blocked") {
+      return res.status(404).json({ error: "Blocked job not found" });
+    }
+    const sourcePath = String(job.stagingPath || "").trim();
+    if (sourcePath) {
+      await fs.rm(sourcePath, { force: true }).catch(() => {});
+    }
+    downloadTracker.setPending(job.id, "Denied by user", { asRetryCycle: false });
+    weeklyFlowWorker.wake();
+    res.json({ success: true });
   });
 
   router.delete("/jobs/all", requireAdmin, (req, res) => {

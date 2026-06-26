@@ -11,6 +11,8 @@ import {
   ArrowDown,
   Plus,
   Trash2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { getFlowTrackDisplayNumber, sortFlowTracks } from "../../../utils/flowTrackSort";
 import { Link } from "react-router-dom";
@@ -18,6 +20,7 @@ import { useAudioQueue } from "../../../hooks/useAudioQueue";
 import { normalizeFlowTrack } from "../../../utils/audioQueue";
 import { TrackPlaylistMenu, TrackPlaylistSubmenu } from "../../ArtistDetails/components/TrackPlaylistMenu";
 import { getTrackStatusMeta } from "./MoreMenu";
+import { approveBlockedJob, denyBlockedJob } from "../../../utils/api/endpoints/playlists.js";
 
 function FlowTrackPlaylistMenus({
   track,
@@ -342,6 +345,8 @@ export function FlowTracksPanel({
   headerActions = null,
   deletingTrackId = null,
   reSearchingTrackIds = {},
+  approvingTrackId = null,
+  denyingTrackId = null,
   useTrackContextMenu = false,
   playlists = [],
   playlistsLoading = false,
@@ -355,6 +360,8 @@ export function FlowTracksPanel({
   onMoveTrackToPlaylist,
   onNavigateArtist,
   onReSearchTrack,
+  onApproveTrack,
+  onDenyTrack,
   playbackSource = null,
   showPlaybackControls = true,
   hideAlbumColumn = false,
@@ -588,6 +595,14 @@ export function FlowTracksPanel({
                   typeof onReSearchTrack === "function" &&
                   !!track.id &&
                   (track.status === "done" || track.status === "failed");
+                const isBlocked =
+                  track.status === "blocked" && !!track.id;
+                const canApprove =
+                  isBlocked && typeof onApproveTrack === "function";
+                const canDeny =
+                  isBlocked && typeof onDenyTrack === "function";
+                const isApproving = approvingTrackId === track.id;
+                const isDenying = denyingTrackId === track.id;
                 const isReSearching = reSearchingTrackIds[track.id] === true;
                 const isDeleting = deletingTrackId === track.id;
                 const isCurrent = track.id === currentTrackId && isCurrentPlaying;
@@ -709,6 +724,38 @@ export function FlowTracksPanel({
                                       <Loader2 className="artist-icon-xs animate-spin" />
                                     ) : (
                                       <Search className="artist-icon-xs" />
+                                    )}
+                                  </button>
+                                ) : null}
+                                {canApprove ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onApproveTrack(track)}
+                                    className="btn btn-primary btn-icon btn-xs"
+                                    aria-label={`Approve ${track.trackName}`}
+                                    title={`Approve ${track.trackName}`}
+                                    disabled={isApproving}
+                                  >
+                                    {isApproving ? (
+                                      <Loader2 className="artist-icon-xs animate-spin" />
+                                    ) : (
+                                      <CheckCircle2 className="artist-icon-xs" />
+                                    )}
+                                  </button>
+                                ) : null}
+                                {canDeny ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onDenyTrack(track)}
+                                    className="btn btn-ghost-danger btn-icon btn-xs"
+                                    aria-label={`Deny ${track.trackName}`}
+                                    title={`Deny ${track.trackName}`}
+                                    disabled={isDenying}
+                                  >
+                                    {isDenying ? (
+                                      <Loader2 className="artist-icon-xs animate-spin" />
+                                    ) : (
+                                      <XCircle className="artist-icon-xs" />
                                     )}
                                   </button>
                                 ) : null}

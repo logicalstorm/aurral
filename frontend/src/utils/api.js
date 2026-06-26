@@ -166,5 +166,7 @@ export {
   deleteSharedPlaylistTrack,
   reSearchSharedPlaylistTrack,
   reSearchMissingSharedPlaylistTracks,
+  approveBlockedJob,
+  denyBlockedJob,
   startFlowPlaylist,
 } from "./api/endpoints/playlists.js";

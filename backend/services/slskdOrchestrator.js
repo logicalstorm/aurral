@@ -1009,6 +1009,17 @@ async function handleFinalize(payload) {
       remoteFile,
       sourcePath,
     });
+    if (validation.blocked) {
+      downloadTracker.setBlocked(job.id, validation.reason, sourcePath);
+      recordPayloadOutcome(
+        job,
+        payload,
+        "blocked",
+        validation.reason || "Blocked for review",
+        { transfer, sourcePath, validation },
+      );
+      return null;
+    }
     recordPayloadOutcome(
       job,
       payload,

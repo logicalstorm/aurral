@@ -10945,6 +10945,10 @@ textarea {
   background: var(--aurral-danger);
 }
 
+.flow-page__track-status-dot--blocked {
+  background: #fb923c;
+}
+
 .flow-page__track-status-dot--link {
   cursor: pointer;
   text-decoration: none;

@@ -297,6 +297,7 @@ export class WeeklyFlowDownloadTracker {
       total: 0,
       pending: 0,
       downloading: 0,
+      blocked: 0,
       done: 0,
       failed: 0,
     };
@@ -307,6 +308,7 @@ export class WeeklyFlowDownloadTracker {
       total: Number(stats?.total || 0),
       pending: Number(stats?.pending || 0),
       downloading: Number(stats?.downloading || 0),
+      blocked: Number(stats?.blocked || 0),
       done: Number(stats?.done || 0),
       failed: Number(stats?.failed || 0),
     };
@@ -814,6 +816,24 @@ export class WeeklyFlowDownloadTracker {
     job.retryCycle = false;
     job.completedAt = Date.now();
     job.error = typeof error === "string" ? error : (error && error.message) || null;
+    this._update(job);
+    this._applyStatusDelta(job.playlistType, previousStatus, job.status);
+    return true;
+  }
+
+  setBlocked(id, error, stagingPath = null) {
+    const job = this.jobs.get(id);
+    if (!job) return false;
+    const previousStatus = job.status;
+    this.clearSlskdPipelineState(id, { clearDownloadMetadata: false });
+    this.pendingSet.delete(id);
+    this.pendingRetrySet.delete(id);
+    this._removeFromPendingQueues(id);
+    job.status = "blocked";
+    job.retryCycle = false;
+    job.completedAt = Date.now();
+    job.error = typeof error === "string" ? error : (error && error.message) || null;
+    if (stagingPath) job.stagingPath = stagingPath;
     this._update(job);
     this._applyStatusDelta(job.playlistType, previousStatus, job.status);
     return true;

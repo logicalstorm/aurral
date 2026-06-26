@@ -1345,14 +1345,18 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
     expectedDuration,
   );
   const valid = matchCheck.valid && durationValid;
+  const blocked = matchCheck.valid && !durationValid;
 
   return {
     valid,
+    blocked,
     reason: valid
       ? null
-      : !matchCheck.valid
-        ? `${matchCheck.reason}: title=${titleScore}, artist=${artistScore}, album=${albumScore}, variantScore=${variantMatch.score}, trackNumberMismatch=${trackNumberMismatch}`
-        : `duration-mismatch: title=${titleScore}, artist=${artistScore}, album=${albumScore}, durationValid=${durationValid}`,
+      : blocked
+        ? `blocked-duration-mismatch: title=${titleScore}, artist=${artistScore}, album=${albumScore}, actualDurationMs=${actualDurationMs}, expectedDurationMs=${expectedDuration}`
+        : !matchCheck.valid
+          ? `${matchCheck.reason}: title=${titleScore}, artist=${artistScore}, album=${albumScore}, variantScore=${variantMatch.score}, trackNumberMismatch=${trackNumberMismatch}`
+          : `duration-mismatch: title=${titleScore}, artist=${artistScore}, album=${albumScore}, durationValid=${durationValid}`,
     scores: {
       title: titleScore,
       artist: artistScore,

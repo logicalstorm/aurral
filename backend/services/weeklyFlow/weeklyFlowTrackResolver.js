@@ -345,7 +345,7 @@ export async function resolveWeeklyFlowTrackContext(track) {
       if (!base.trackMbid && matchedTrack.recordingId) {
         base.trackMbid = matchedTrack.recordingId;
       }
-      if (!base.durationMs && matchedTrack.durationMs) {
+      if (matchedTrack.durationMs) {
         base.durationMs = matchedTrack.durationMs;
       }
       base.trackNumber =
