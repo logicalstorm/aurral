@@ -9,11 +9,11 @@ For how Lidarr, slskd, Navidrome, and Aurral should share mounts, read [Shared s
 
 ## What lives where
 
-| Path                 | Contains                                                                                                                                           |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/config`            | Database, settings, users, sessions, cache state, and playlist jobs. Mount with `./config/aurral:/config`; not shared with other apps.             |
-| `/data` shared mount | Library (`/data/music`), slskd completes, and Aurral output (`DOWNLOAD_FOLDER`).                                                                   |
-| `DOWNLOAD_FOLDER`    | Generated flows, imported playlists, staging, and playlist files inside the shared mount — typically `/data/downloads/aurral/aurral-weekly-flow/`. |
+| Path              | Contains |
+| ----------------- | -------- |
+| `/config`         | Database, settings, users, sessions, cache state, and playlist jobs. Mount with `./config:/config`; not shared with other apps. |
+| `/data`           | Shared library (`/data/music`), slskd completes, and Aurral output (`DOWNLOAD_FOLDER`). |
+| `DOWNLOAD_FOLDER` | Generated flows, imported playlists, staging, and playlist files inside the shared mount. Typically `/data/downloads/aurral`. |
 
 :::note
 `/config` replaces the older `/app/backend/data` path from Aurral v1. Existing databases in either location are detected automatically on startup.
@@ -22,11 +22,11 @@ For how Lidarr, slskd, Navidrome, and Aurral should share mounts, read [Shared s
 ## Back up
 
 - Your mounted `/config` folder
-- Your shared `DOWNLOAD_FOLDER` host folder if you want generated playlists to survive rebuilds
+- Your `DOWNLOAD_FOLDER` host folder if you want generated playlists to survive rebuilds
 - Your compose file and `.env`
 
 ## Library safety
 
-- Aurral does not directly write into your root music library.
+- Aurral does not write into your root music library.
 - Artist and album changes go through Lidarr.
-- Flows and imported playlists stay in Aurral's generated download area.
+- Flows and imported playlists stay in Aurral's download area.

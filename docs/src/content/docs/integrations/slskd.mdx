@@ -3,7 +3,7 @@ title: slskd
 description: Soulseek-backed downloads for flows and playlists.
 ---
 
-slskd handles Soulseek acquisition for flow and playlist tracks. Aurral can also use [Usenet](/integrations/usenet/) via Prowlarr and NZBGet as an alternate or fallback source.
+slskd handles Soulseek acquisition for flow and playlist tracks. Aurral can also use [Usenet](/integrations/usenet/) via Prowlarr and SABnzbd/NZBGet as an alternate or fallback source.
 
 ![Aurral history with slskd downloads](../../../assets/screenshots/history.webp)
 
@@ -15,7 +15,7 @@ slskd handles Soulseek acquisition for flow and playlist tracks. Aurral can also
 
 Aurral picks up completed files from slskd's download path and moves them into your `DOWNLOAD_FOLDER`.
 
-If slskd runs on Windows and reports host paths such as `N:\...`, mount the parent folder into Aurral and configure a manual slskd path mapping under **Settings → Downloads → Advanced remote path mappings**. See [Shared storage](/getting-started/storage/#windows-and-mixed-docker-setups).
+If slskd runs on Windows and reports host paths like `N:\...`, mount the parent folder into Aurral and add a path mapping under **Settings → Downloads → Advanced remote path mappings**. See [Shared storage](/getting-started/storage/#windows-and-mixed-docker-setups).
 
 ## Worker settings
 
@@ -27,4 +27,4 @@ Open the **slskd** card in **Settings → Downloads** to configure:
 
 ## Download fallback
 
-When Usenet is also configured, Aurral tries sources in priority order. If slskd fails for a track, Aurral can fall back to Usenet automatically. See [Usenet](/integrations/usenet/#download-source-priority-and-fallback).
+When Usenet is also configured, Aurral tries sources in priority order. If slskd fails, Aurral can fall back to Usenet automatically. See [Usenet](/integrations/usenet/#download-source-priority-and-fallback).

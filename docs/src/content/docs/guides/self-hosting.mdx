@@ -83,7 +83,7 @@ If you want Soulseek-backed **album** downloads inside Lidarr:
 For **Aurral flows and playlists**, connect download clients in **Settings → Downloads**:
 
 - **slskd** for Soulseek — Aurral sends searches, selects the best candidate, and moves completed files from slskd's download directory into your `DOWNLOAD_FOLDER`.
-- **Prowlarr + NZBGet** for Usenet — Aurral searches indexers via Prowlarr, queues NZBs in NZBGet, and imports completed files the same way. See [Usenet](/integrations/usenet/).
+- **Prowlarr + SABnzbd/NZBGet** for Usenet — Aurral searches indexers via Prowlarr, queues NZBs in the download client, and imports completed files the same way. See [Usenet](/integrations/usenet/).
 
 You can run both and set **source priority** so Aurral falls back when one source fails.
 
@@ -161,7 +161,7 @@ services:
       - PGID=${PGID:-1000}
     volumes:
       - ${MEDIA_ROOT:-/srv/media}:/data
-      - ${CONFIG:-./config/aurral}:/config
+      - ${CONFIG:-./config}:/config
 
   lidarr:
     image: lscr.io/linuxserver/lidarr:latest

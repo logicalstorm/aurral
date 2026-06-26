@@ -9,21 +9,18 @@ Flows are dynamic playlists. They regenerate on their schedule, download into Au
 
 ## How a flow works
 
-Think of a flow as three layers:
+A flow has three layers:
 
 1. **Schedule** — when the flow runs
 2. **Source mix** — where tracks come from
 3. **Focus inputs** — what the Focus source should try to match
-
-The flow first decides **when** to run, then **where tracks should come from**, then **what the dedicated Focus source should try to match**.
 
 ## Schedule
 
 - **Tracks** sets the playlist size.
 - **Update days** chooses which days the flow may run.
 - **Update hour** chooses the hour for those runs.
-- A flow only starts generating when it is enabled.
-- A disabled flow is a draft. Its settings are saved, but it will not run until enabled.
+- A flow only starts generating when it is enabled. A disabled flow saves its settings but will not run.
 
 ## Source mix
 
@@ -36,33 +33,25 @@ Source mix controls where tracks come from.
 | Trending | Broader trending pools; always excludes library artists                   |
 | Focus    | Non-library artists that best match your genre tags and related artists   |
 
-The mix slider is one shared slider:
+The mix slider is shared across enabled sources:
 
 - With all four sources on, it behaves like a four-way mix.
 - With two sources on, it collapses into a two-way split.
 - With one source on, that source takes 100%.
 
-The counts shown inside the slider are the current track targets for each source based on the flow size.
+The counts shown inside the slider are the current track targets per source based on the flow size.
 
 ### Source toggles
 
-- Turning a source **off** removes it from the mix entirely.
-- Turning a source **on** adds it back into the shared slider.
+Turning a source off removes it from the mix entirely. Turning it on adds it back into the shared slider.
 
 ### Library behavior
 
-- **Library** is the only source allowed to use library artists.
-- **Discover**, **Trending**, and **Focus** always exclude library artists.
-- Turning **Library** off does not disable your saved focus inputs. It only removes the library-only source from the mix.
+**Library** is the only source allowed to use library artists. **Discover**, **Trending**, and **Focus** always exclude them. Disabling **Library** does not clear your saved focus inputs — it only removes the library-only source from the mix.
 
 ## Deep dive
 
-Deep dive changes how far Aurral looks when pulling candidates for a source.
-
-- **Off** keeps source pulls narrower.
-- **On** lets Aurral reach further and pull from a broader slice of each source.
-
-It does not change the schedule or source percentages. It changes the breadth of candidate selection inside the active sources.
+Deep dive changes how far Aurral looks when pulling candidates for a source. **Off** keeps source pulls narrower. **On** lets Aurral reach further from each source. It does not change the schedule or source percentages.
 
 ## Focus
 
@@ -70,8 +59,8 @@ Focus is a dedicated fourth source. It does not bend Discover, Library, or Trend
 
 - **Genre tags** tell Focus which genres to target.
 - **Related artists** tell Focus which similarity seeds to target.
-- If **Focus** is enabled in source mix, at least one genre tag or related artist is required.
-- If **Focus** is disabled, your tags and related artists can stay saved, but they are inactive.
+- If Focus is enabled, at least one genre tag or related artist is required.
+- If Focus is disabled, your tags and artists stay saved but are inactive.
 
 ### Focus matching behavior
 
@@ -88,20 +77,15 @@ When both genre tags and related artists are present, Focus broadens in this ord
 
 ### Multiple tags or related artists
 
-- Multiple tags prefer overlap first. `acoustic, sad` tries artists matching both before broadening to one-tag matches.
-- Multiple related artists prefer shared similarity first. Two seeds prefer artists similar to both before broadening to artists similar to only one.
+Multiple tags prefer overlap first. `acoustic, sad` tries artists matching both before broadening to one-tag matches. Multiple related artists prefer shared similarity first.
 
 ### Focus input behavior
 
-- Enter multiple tags or artists separated by commas.
-- Entries tokenize when separated by a comma or when the field loses focus.
-- Duplicate entries are ignored when they become tokens.
+Enter multiple tags or artists separated by commas. Entries tokenize when separated by a comma or when the field loses focus. Duplicates are ignored.
 
 ## Fallback behavior
 
 Aurral always tries the most specific matches first, then relaxes if it runs out of valid candidates.
-
-The general order is:
 
 1. Fill each enabled source with its own quota
 2. For Focus, match the focus request as closely as possible before broadening
@@ -109,11 +93,7 @@ The general order is:
 4. Redistribute source shortfalls across the other enabled sources
 5. Use reserve/replacement candidates if the run still comes up short
 
-That means:
-
-- Focus does not secretly steer the other sources
-- You can make highly targeted playlists by weighting Focus heavily or using Focus alone
-- Fallback still stays inside the enabled sources whenever possible
+Focus does not secretly steer the other sources. You can make highly targeted playlists by weighting Focus heavily or using Focus alone. Fallback still stays inside the enabled sources whenever possible.
 
 ## Flow generation behavior
 

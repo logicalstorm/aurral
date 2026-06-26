@@ -3,7 +3,7 @@ title: Plex
 description: Flow and playlist playback in Plex and Plexamp.
 ---
 
-Plex is optional. When configured, Aurral creates an **Aurral** music library in Plex Media Server, scans your flow downloads, and builds a **regular Plex playlist** for each enabled flow and shared playlist. Playlists appear in Plex and Plexamp alongside your other libraries.
+Plex is optional. Aurral creates an **Aurral** music library in Plex Media Server, scans your flow downloads, and builds regular Plex playlists for each enabled flow and shared playlist. Playlists appear in Plex and Plexamp alongside your other libraries.
 
 Plex does not read Aurral's `.m3u` files. Playlist sync uses the Plex API after Plex indexes the audio files on disk.
 
@@ -16,13 +16,7 @@ Plex does not read Aurral's `.m3u` files. Playlist sync uses the Plex API after 
 5. Save settings, then click **Test connection**.
 6. After flows have downloaded tracks, click **Sync to Plex now** (or wait for the next playlist update cycle).
 
-Aurral registers the library at:
-
-```text
-<plex-visible-downloads>/aurral-weekly-flow
-```
-
-Track files live in flow subfolders under that path, for example `aurral-weekly-flow/<flow-id>/Artist/Album/track.flac`. M3U playlists for Navidrome stay in `aurral-weekly-flow/_playlists/` and are not used by Plex.
+Aurral registers the library at `<plex-visible-downloads>/aurral-weekly-flow`. Track files live in flow subfolders under that path. M3U playlists for Navidrome stay in `aurral-weekly-flow/_playlists/` and are not used by Plex.
 
 ## Plex vs Navidrome
 
@@ -35,13 +29,13 @@ You can run both at the same time. They use the same download tree but different
 | Path mismatch fix | **Use Navidrome paths in M3U files** / `M3U_PATH_MODE` | **Plex downloads path** (optional)                 |
 | Playlist names    | `[A] Flow name`, `[AS] Shared name`                    | Bare flow or playlist name                         |
 
-Navidrome's **Use Navidrome paths in M3U files** setting does not affect Plex. It only changes paths written inside `.m3u` files.
+Navidrome's M3U path settings do not affect Plex.
 
 ## Plex downloads path (optional)
 
-Leave this blank when Aurral and Plex share the same filesystem view (same host, or the same Docker volume mounted at the same path in both containers).
+Leave blank when Aurral and Plex share the same filesystem view — same host, or same Docker volume mounted at the same path in both containers.
 
-Set it when Plex runs in a **different container or host** and sees a different mount prefix than Aurral. Enter the downloads folder **as the Plex server sees it** — Aurral appends `/aurral-weekly-flow` when creating the library.
+Set it when Plex runs in a different container or host and sees a different mount prefix than Aurral. Enter the downloads folder as Plex sees it. Aurral appends `/aurral-weekly-flow` when creating the library.
 
 | Aurral writes to            | Plex sees                      | Plex downloads path |
 | --------------------------- | ------------------------------ | ------------------- |
@@ -50,24 +44,19 @@ Set it when Plex runs in a **different container or host** and sees a different 
 
 **Browse** shows folders as Aurral sees them. If Plex's mount differs, type Plex's path manually.
 
-This is the Plex equivalent of aligning library roots in shared storage — not the same as Navidrome's M3U host-path toggle.
+This is the Plex equivalent of aligning library roots — not the same as Navidrome's M3U path toggle.
 
 ## Sync behavior
 
-**Sync to Plex now**:
+**Sync to Plex now** ensures the Aurral library exists, triggers a Plex scan, builds or updates playlists from indexed tracks, and schedules background catch-up syncs while scanning continues.
 
-1. Ensures the **Aurral** music library exists at the configured path
-2. Triggers a Plex library scan
-3. Builds or updates playlists from tracks Plex has already indexed
-4. Schedules background catch-up syncs while scanning continues
+Plex music scans can take minutes. If sync returns immediately with zero indexed tracks, wait for the scan to finish. Catch-up runs automatically, or click **Sync to Plex now** again.
 
-Plex music scans can take minutes. If sync returns immediately with zero indexed tracks, wait for the scan to finish — catch-up runs automatically, or click **Sync to Plex now** again.
-
-Aurral skips no-op playlist rebuilds when the track set has not changed. Disabling a flow removes its Plex playlist on the next sync.
+Aurral skips no-op rebuilds when the track set has not changed. Disabling a flow removes its Plex playlist on the next sync.
 
 ## Mixed Docker setups
 
-When Aurral and Plex both run in Docker with the same `/data` mount, leave **Plex downloads path** empty and mount the shared root into both services:
+When Aurral and Plex both run in Docker with the same `/data` mount, leave **Plex downloads path** empty:
 
 ```yaml
 services:
@@ -82,8 +71,8 @@ services:
       - /srv/media:/data
 ```
 
-In Plex, you do not need to add the folder manually — Aurral creates the **Aurral** library via API. Confirm Plex can read `/data/downloads/aurral/aurral-weekly-flow` from inside the Plex container.
+In Plex, you do not need to add the folder manually — Aurral creates the **Aurral** library via API.
 
-If Aurral uses `PATH_MAPPINGS` for Lidarr reuse on Windows, that affects how Aurral reads files internally. It does not replace **Plex downloads path** when Plex's library mount differs from Aurral's.
+If Aurral uses `PATH_MAPPINGS` for Lidarr reuse on Windows, that affects how Aurral reads files internally. It does not replace **Plex downloads path**.
 
 See [Shared storage](/getting-started/storage/) and [Troubleshooting — Plex](/admin/troubleshooting/#plex-playlists-are-empty-or-tracks-are-missing).

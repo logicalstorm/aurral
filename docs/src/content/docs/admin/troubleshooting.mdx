@@ -5,8 +5,7 @@ description: Common setup and runtime issues.
 
 ## Lidarr will not connect
 
-- Use the URL Aurral can reach, not necessarily the URL your browser uses.
-- In Docker, that is often `http://lidarr:8686` when both containers share a network.
+- Use the URL Aurral can reach, not the URL your browser uses. In Docker that is often `http://lidarr:8686` when both containers share a network.
 - Confirm the API key in Lidarr.
 
 ## Discover is empty
@@ -18,29 +17,28 @@ description: Common setup and runtime issues.
 
 ## Playlists are not downloading
 
-- Confirm at least one download client is configured in **Settings → Downloads** (slskd and/or Prowlarr + NZBGet).
+- Confirm at least one download client is configured in **Settings → Downloads** (slskd and/or Prowlarr + SABnzbd/NZBGet).
 - For slskd: check connection and Soulseek login status.
-- For Usenet: confirm Prowlarr indexers are enabled in Aurral and NZBGet can reach completed files.
-- Open the **slskd** card and try disabling **Strict format only**, or switch preferred format to MP3 if FLAC matches are scarce.
+- For Usenet: confirm Prowlarr indexers are enabled and the download client can reach completed files.
+- Try disabling **Strict format only** on the slskd card, or switch preferred format to MP3 if FLAC matches are scarce.
 - Check job states on the Playlists page and **History**.
 
 ## Files do not appear in Navidrome
 
-- Confirm the shared root containing `DOWNLOAD_FOLDER` is mounted into Aurral, Navidrome, slskd, and NZBGet.
-- Confirm `DOWNLOAD_FOLDER` points to the mounted path Aurral writes, for example `/data/downloads/aurral`.
-- Confirm Navidrome can read the same folder and scans `aurral-weekly-flow`.
+- Confirm the shared root containing `DOWNLOAD_FOLDER` is mounted into Aurral, Navidrome, slskd, and your Usenet client.
+- Confirm `DOWNLOAD_FOLDER` points to the mounted path Aurral writes — typically `/data/downloads/aurral`.
+- Confirm Navidrome scans the `aurral-weekly-flow` folder.
 - Enable missing-track purging in Navidrome.
 
 ## Library reuse or download handoff fails on Windows
 
-Symptoms include logs such as `Lidarr track exists but file is not accessible from Aurral`, completed slskd or NZBGet files not moving, or **Test library access** failing while Lidarr itself works.
+Symptoms: logs like `Lidarr track exists but file is not accessible from Aurral`, completed slskd or Usenet files not moving, or **Test library access** failing while Lidarr itself works.
 
-- Mount the parent host folder into Aurral, not separate mounts for library and downloads. Example: `N:/ServerFolders/Music:/music`.
-- Set **Settings → Downloads → Downloads folder** to a path under that mount, for example `/music/Aurral`, or set `DOWNLOAD_FOLDER=/music/Aurral` in compose.
-- After changing compose `volumes` or `environment`, recreate the container with `docker compose up -d --force-recreate`. A simple restart does not remount volumes or reload env vars.
+- Mount the parent host folder into Aurral — not separate mounts for library and downloads. Example: `N:/ServerFolders/Music:/music`.
+- Set `DOWNLOAD_FOLDER` to a path under that mount, e.g. `/music/Aurral`.
+- After changing compose `volumes` or `environment`, recreate the container: `docker compose up -d --force-recreate`.
 - Run **Settings → Library → Lidarr → Test library access** to see the exact path Aurral cannot read.
-- If needed, set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose, or add mappings under **Settings → Downloads → Advanced remote path mappings**. Compose `PATH_MAPPINGS` work at runtime but are not shown in the UI.
-- If Navidrome sees the files at a different path than Aurral, enable **Settings → Playback → Navidrome → Use Navidrome paths in M3U files** and add a Navidrome path mapping, or set `M3U_PATH_MODE=remote` plus `M3U_PATH_MAPPINGS`.
+- If needed, set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose, or add mappings under **Settings → Downloads → Advanced remote path mappings**.
 - For NZBGet on Windows, set **Completed download path** in **Settings → Downloads → NZBGet** if Aurral cannot detect the folder automatically.
 
 See [Shared storage — Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
@@ -49,12 +47,12 @@ See [Shared storage — Windows and mixed Docker setups](/getting-started/storag
 
 Symptoms: flows or shared playlists appear in Navidrome after a scan, but playback fails or tracks are missing. Common on Windows when Aurral runs in Docker with path mappings and Navidrome runs natively.
 
-- Confirm **Test library access** passes in Lidarr settings (path mappings let Aurral read files).
-- Enable **Settings → Playback → Navidrome → Use Navidrome paths in M3U files** and add a Navidrome path mapping, or set `M3U_PATH_MODE=remote` plus `M3U_PATH_MAPPINGS` in compose and recreate the Aurral container.
-- Refresh playlists so `.m3u` files are rewritten by re-running or saving a flow, or by editing and saving a shared playlist.
-- Open a generated `.m3u` under `aurral-weekly-flow` and confirm track lines use paths Navidrome can open (for example `N:/ServerFolders/Music/...` on Windows, not `/music/...`).
+- Confirm **Test library access** passes in Lidarr settings.
+- Enable **Settings → Playback → Navidrome → Use Navidrome paths in M3U files** and add a Navidrome path mapping, or set `M3U_PATH_MODE=remote` plus `M3U_PATH_MAPPINGS` in compose and recreate.
+- Refresh playlists so `.m3u` files are rewritten: re-run or save a flow, or edit and save a shared playlist.
+- Open a generated `.m3u` under `aurral-weekly-flow` and confirm track lines use paths Navidrome can open.
 
-Leave **Use Navidrome paths in M3U files** off when Navidrome is in Docker with the same mounts as Aurral.
+Leave **Use Navidrome paths in M3U files** off when Navidrome runs in Docker with the same mounts as Aurral.
 
 See [Navidrome — Mixed Windows and Docker](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
 
@@ -63,10 +61,10 @@ See [Navidrome — Mixed Windows and Docker](/integrations/navidrome/#mixed-wind
 Symptoms: **Sync to Plex now** succeeds but playlists have no tracks, or the **Aurral** library in Plex stays empty after a scan.
 
 - Confirm Plex can read the flow download tree. From inside the Plex container or host, the path should exist: `<downloads>/aurral-weekly-flow/<flow-id>/...`.
-- If Plex and Aurral use different mounts, set **Settings → Playback → Plex → Plex downloads path** to the folder Plex sees (without `/aurral-weekly-flow`). Leave it blank when both services share the same path prefix.
-- Save settings, then run **Sync to Plex now** again. Initial music scans can take several minutes; Aurral runs background catch-up syncs while Plex indexes files.
-- Confirm flows have finished downloading tracks under `aurral-weekly-flow` before expecting Plex playlists to populate.
-- **Use Navidrome paths in M3U files** under Navidrome does not apply to Plex.
+- If Plex and Aurral use different mounts, set **Settings → Playback → Plex → Plex downloads path** to the folder Plex sees. Leave it blank when both share the same path prefix.
+- Save settings, then run **Sync to Plex now** again. Initial scans can take several minutes; Aurral runs background catch-up syncs while Plex indexes files.
+- Confirm flows have finished downloading before expecting Plex playlists to populate.
+- **Use Navidrome paths in M3U files** does not apply to Plex.
 
 See [Plex integration](/integrations/plex/).
 

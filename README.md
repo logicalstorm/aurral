@@ -56,7 +56,6 @@ Aurral only needs Lidarr to get started. It works best with the stack self-hoste
 | [Lidarr](https://github.com/Lidarr/Lidarr) | Library management, artist and album requests, queue status |
 | [slskd](https://github.com/slskd/slskd)    | Soulseek-backed downloads for flows and playlists           |
 | [Navidrome](https://www.navidrome.org)     | Streaming and playback via generated M3U playlists          |
-| [Plex](https://www.plex.tv)                | Flow playlists in Plexamp (optional)                        |
 
 ## Quick Start
 
@@ -70,14 +69,14 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
+      - PUID=1000
+      - PGID=1000
     volumes:
-      - ${MEDIA_ROOT:-/data}:/data
-      - ${CONFIG:-./config}:/config
+      - /data:/data
+      - ./config:/config
 ```
 
-Change `${MEDIA_ROOT:-/srv/media}` to the host path you use for media. For file reuse, slskd downloads, and generated playlists, mount the **same root directory** into Aurral, Lidarr, slskd, and your player (Navidrome or Plex) at the same container path (for example `/srv/media:/data`). See [shared storage](https://docs.aurral.org/getting-started/storage/).
+Change `/data:/data` to the host path you use for media. For file reuse, slskd downloads, and generated playlists, mount the **same root directory** into Aurral, Lidarr, slskd, and your player (Navidrome or Plex) at the same container path (for example `/data:/data`). See [shared storage](https://docs.aurral.org/getting-started/storage/).
 
 ```bash
 docker compose up -d
