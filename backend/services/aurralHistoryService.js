@@ -700,5 +700,10 @@ export const getAurralHistoryRequests = async (lidarrClient = null) => {
   await syncProcessingActivityHistory(lidarrClient);
   const cutoff = Date.now() - MAX_AGE_MS;
   const entries = dbOps.getAurralHistory({ since: cutoff, limit: 300 });
-  return entries.map(toHistoryRequestItem);
+  const now = Date.now();
+  const FAILED_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+  const visible = entries.filter(
+    (e) => e.status !== "failed" || (now - e.createdAt) < FAILED_RETENTION_MS,
+  );
+  return visible.map(toHistoryRequestItem);
 };
