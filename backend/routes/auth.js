@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { userOps } from "../db/helpers/index.js";
 import { createSession, deleteSession, getSessionByToken } from "../config/session-helpers.js";
 import { requireAuth } from "../middleware/requirePermission.js";
+import { getApiKey, rotateApiKey } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -68,6 +69,15 @@ router.get("/me", requireAuth, (req, res) => {
     user: session.user,
     expiresAt: session.expiresAt,
   });
+});
+
+router.get("/api-key", requireAuth, (req, res) => {
+  res.json({ apiKey: getApiKey() });
+});
+
+router.post("/api-key/rotate", requireAuth, (req, res) => {
+  const newKey = rotateApiKey();
+  res.json({ apiKey: newKey });
 });
 
 export default router;

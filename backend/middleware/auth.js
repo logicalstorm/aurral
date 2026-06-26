@@ -42,6 +42,44 @@ export const getAuthPassword = () => {
   return process.env.AUTH_PASSWORD ? process.env.AUTH_PASSWORD.split(",").map((p) => p.trim()) : [];
 };
 
+const API_KEY_SETTINGS_KEY = "apiKey";
+
+export const getApiKey = () => {
+  const settings = dbOps.getSettings();
+  const existing = settings.integrations?.general?.[API_KEY_SETTINGS_KEY];
+  if (existing && typeof existing === "string" && existing.length >= 32) return existing;
+  const key = crypto.randomBytes(32).toString("hex");
+  const next = {
+    ...settings,
+    integrations: {
+      ...(settings.integrations || {}),
+      general: {
+        ...(settings.integrations?.general || {}),
+        [API_KEY_SETTINGS_KEY]: key,
+      },
+    },
+  };
+  dbOps.updateSettings(next);
+  return key;
+};
+
+export const rotateApiKey = () => {
+  const settings = dbOps.getSettings();
+  const key = crypto.randomBytes(32).toString("hex");
+  const next = {
+    ...settings,
+    integrations: {
+      ...(settings.integrations || {}),
+      general: {
+        ...(settings.integrations?.general || {}),
+        [API_KEY_SETTINGS_KEY]: key,
+      },
+    },
+  };
+  dbOps.updateSettings(next);
+  return key;
+};
+
 export const isProxyAuthEnabled = () => {
   if (process.env.AUTH_PROXY_ENABLED === "true") return true;
   return !!process.env.AUTH_PROXY_HEADER;
@@ -273,6 +311,27 @@ export const resolveSessionUserFromToken = (token) => {
   return toSessionUser(getSessionByToken(token));
 };
 
+function resolveApiKeyUser(req) {
+  const headerKey = (req.headers["x-api-key"] || "").trim();
+  const queryKey = (req.query?.api_key || "").trim();
+  const incoming = headerKey || queryKey;
+  if (!incoming) return null;
+  try {
+    const storedKey = getApiKey();
+    if (safeCompare(incoming, storedKey)) {
+      return {
+        id: -1,
+        username: "api",
+        role: "admin",
+        permissions: buildPermissions("admin"),
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export const isAuthRequiredByConfig = () => {
   const settings = dbOps.getSettings();
   const onboardingDone = settings.onboardingComplete;
@@ -486,6 +545,8 @@ export function resolveRequestUser(req) {
   if (sessionUser) return sessionUser;
   const proxyUser = resolveProxyUser(req);
   if (proxyUser) return proxyUser;
+  const apiKeyUser = resolveApiKeyUser(req);
+  if (apiKeyUser) return apiKeyUser;
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Basic ")) {
     try {

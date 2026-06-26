@@ -22,6 +22,10 @@ export const logoutApi = () => postData("/auth/logout");
 
 export const getMe = () => getData("/auth/me");
 
+export const getApiKey = () => getData("/auth/api-key");
+
+export const rotateApiKey = () => postData("/auth/api-key/rotate");
+
 export const completeOnboarding = (payload) =>
   postData("/onboarding/complete", payload);
 
