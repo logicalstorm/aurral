@@ -1,24 +1,15 @@
 import { Navigate, useParams } from "react-router-dom";
-import {
-  buildActivityPath,
-  DEFAULT_ACTIVITY_SOURCE,
-  DEFAULT_ACTIVITY_VIEW,
-  resolveActivityPartialPath,
-  resolveLegacyHistoryPath,
-} from "../navigation/activityNavConfig";
+import { buildActivityPath, DEFAULT_ACTIVITY_VIEW } from "../navigation/activityNavConfig";
 
 export function LegacyHistoryRedirect() {
-  const { legacyTab } = useParams();
-  return <Navigate to={resolveLegacyHistoryPath(legacyTab)} replace />;
+  return <Navigate to="/activity/history" replace />;
 }
 
-export function ActivityPartialRedirect() {
-  const { view: segment } = useParams();
-  return <Navigate to={resolveActivityPartialPath(segment)} replace />;
+export function ActivitySourceRedirect() {
+  const { view } = useParams();
+  return <Navigate to={buildActivityPath(view)} replace />;
 }
 
 export function ActivityRootRedirect() {
-  return (
-    <Navigate to={buildActivityPath(DEFAULT_ACTIVITY_VIEW, DEFAULT_ACTIVITY_SOURCE)} replace />
-  );
+  return <Navigate to={buildActivityPath(DEFAULT_ACTIVITY_VIEW)} replace />;
 }

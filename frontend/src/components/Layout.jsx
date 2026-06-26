@@ -127,7 +127,7 @@ function Layout({ children }) {
   const mobileOverflowItems = useMemo(() => {
     const items = [
       { path: "/shows/all", label: "Shows", icon: Ticket },
-      { path: "/activity/queue/all", label: "Activity", icon: Activity },
+      { path: "/activity/queue", label: "Activity", icon: Activity },
       { path: "/profile", label: "Profile", icon: User },
       {
         path: `/settings/${DEFAULT_SETTINGS_TAB}`,

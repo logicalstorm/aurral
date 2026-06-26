@@ -1018,6 +1018,9 @@ async function handleFinalize(payload) {
         validation.reason || "Blocked for review",
         { transfer, sourcePath, validation },
       );
+      import("./aurralHistoryService.js")
+        .then(({ recordTrackJobBlocked }) => recordTrackJobBlocked(job, validation.reason))
+        .catch(() => {});
       return null;
     }
     recordPayloadOutcome(

@@ -344,6 +344,10 @@ export const syncTrackDownloadHistory = async () => {
       continue;
     }
 
+    if (job.status === "blocked") {
+      continue;
+    }
+
     const anchorTime = Math.max(
       Number(job.startedAt || 0),
       Number(job.createdAt || 0),
@@ -650,6 +654,20 @@ export const recordTrackJobFailed = (job, message = "Download failed") =>
     status: "failed",
     statusLabel: "Failed",
     title: `Failed to download ${job?.trackName || "track"}`,
+    subtitle: String(message || "").trim() || `${job?.artistName || "Artist"}`,
+  });
+
+export const recordTrackJobBlocked = (job, message = "Blocked for review") =>
+  recordTrackJobActivity({
+    jobId: job?.id,
+    trackName: job?.trackName,
+    artistName: job?.artistName,
+    playlistId: job?.playlistId || job?.playlistType,
+    downloadSource: job?.downloadSource,
+    downloadClient: job?.downloadClient,
+    status: "blocked",
+    statusLabel: "Review",
+    title: `Review needed for ${job?.trackName || "track"}`,
     subtitle: String(message || "").trim() || `${job?.artistName || "Artist"}`,
   });
 

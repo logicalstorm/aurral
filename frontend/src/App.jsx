@@ -16,7 +16,7 @@ import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
 import { useWebSocketChannel } from "./hooks/useWebSocket";
 import {
-  ActivityPartialRedirect,
+  ActivitySourceRedirect,
   ActivityRootRedirect,
   LegacyHistoryRedirect,
 } from "./navigation/ActivityRedirects";
@@ -195,13 +195,13 @@ function AppContent() {
                   }
                 />
                 <Route path="/flow" element={<Navigate to="/playlists" replace />} />
-                <Route path="/downloads" element={<Navigate to="/activity/queue/all" replace />} />
-                <Route path="/requests" element={<Navigate to="/activity/queue/all" replace />} />
-                <Route path="/history" element={<Navigate to="/activity/history/all" replace />} />
+                <Route path="/downloads" element={<Navigate to="/activity/queue" replace />} />
+                <Route path="/requests" element={<Navigate to="/activity/queue" replace />} />
+                <Route path="/history" element={<Navigate to="/activity/history" replace />} />
                 <Route path="/history/:legacyTab" element={<LegacyHistoryRedirect />} />
                 <Route path="/activity" element={<ActivityRootRedirect />} />
-                <Route path="/activity/:view" element={<ActivityPartialRedirect />} />
-                <Route path="/activity/:view/:source" element={<ActivityPage />} />
+                <Route path="/activity/:view" element={<ActivityPage />} />
+                <Route path="/activity/:view/:source" element={<ActivitySourceRedirect />} />
                 <Route path="/artist/:mbid/albums" element={<ArtistAlbumsPage />} />
                 <Route path="/artist/:mbid/release/:releaseMbid" element={<ReleasePage />} />
                 <Route path="/artist/:mbid/appears-on" element={<ArtistAppearsOnPage />} />

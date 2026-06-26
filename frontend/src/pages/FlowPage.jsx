@@ -22,8 +22,6 @@ import {
   generateFlowArtwork,
   reSearchSharedPlaylistTrack,
   reSearchMissingSharedPlaylistTracks,
-  approveBlockedJob,
-  denyBlockedJob,
 } from "../utils/api";
 import { CreatePlaylistModal, RenamePlaylistModal } from "../components/PlaylistModals";
 import PillToggle from "../components/PillToggle";
@@ -134,8 +132,6 @@ function FlowPage() {
   const [reSearchingMissingPlaylistId, setReSearchingMissingPlaylistId] = useState(null);
   const [savingToPlaylistId, setSavingToPlaylistId] = useState(null);
   const [deletingTrackId, setDeletingTrackId] = useState(null);
-  const [approvingTrackId, setApprovingTrackId] = useState(null);
-  const [denyingTrackId, setDenyingTrackId] = useState(null);
   const [tracksLoadingByFlowId, setTracksLoadingByFlowId] = useState({});
   const [tracksErrorByFlowId, setTracksErrorByFlowId] = useState({});
   const [tracksByFlowId, setTracksByFlowId] = useState({});
@@ -1054,38 +1050,6 @@ function FlowPage() {
     }
   };
 
-  const handleApproveBlockedJob = async (track) => {
-    const jobId = track?.id;
-    if (!jobId || approvingTrackId === jobId) return;
-    setApprovingTrackId(jobId);
-    try {
-      await approveBlockedJob(jobId);
-      showSuccess(`Approved ${track.trackName}`);
-      await fetchStatus();
-      await fetchFlowTracks(track.playlistType || selectedId, { showSpinner: false });
-    } catch (err) {
-      showError(err?.response?.data?.message || err?.message || "Failed to approve track");
-    } finally {
-      setApprovingTrackId(null);
-    }
-  };
-
-  const handleDenyBlockedJob = async (track) => {
-    const jobId = track?.id;
-    if (!jobId || denyingTrackId === jobId) return;
-    setDenyingTrackId(jobId);
-    try {
-      await denyBlockedJob(jobId);
-      showSuccess(`Denied ${track.trackName}`);
-      await fetchStatus();
-      await fetchFlowTracks(track.playlistType || selectedId, { showSpinner: false });
-    } catch (err) {
-      showError(err?.response?.data?.message || err?.message || "Failed to deny track");
-    } finally {
-      setDenyingTrackId(null);
-    }
-  };
-
   const handleReSearchMissingSharedPlaylistTracks = async (playlistId) => {
     if (!playlistId || reSearchingMissingPlaylistId) return;
     setReSearchingMissingPlaylistId(playlistId);
@@ -1364,10 +1328,6 @@ function FlowPage() {
               playlistMenuError={playlistMenuError}
               getDefaultPlaylistName={getDefaultTrackPlaylistName}
               onLoadPlaylists={loadPlaylistsForMenu}
-              approvingTrackId={approvingTrackId}
-              denyingTrackId={denyingTrackId}
-              onApproveTrack={handleApproveBlockedJob}
-              onDenyTrack={handleDenyBlockedJob}
               onAddTrackToPlaylist={handleAddTrackToPlaylist}
               onNavigateArtist={handleNavigateArtist}
             />
@@ -1389,14 +1349,10 @@ function FlowPage() {
               onLoadPlaylists={loadPlaylistsForMenu}
               reSearchingTrackIds={reSearchingTrackIds}
               deletingTrackId={deletingTrackId}
-              approvingTrackId={approvingTrackId}
-              denyingTrackId={denyingTrackId}
               onReSearchTrack={(track) =>
                 handleReSearchSharedPlaylistTrack(selectedPlaylist.id, track)
               }
               onDeleteTrack={(track) => handleDeleteSharedPlaylistTrack(selectedPlaylist.id, track)}
-              onApproveTrack={handleApproveBlockedJob}
-              onDenyTrack={handleDenyBlockedJob}
               onAddTrackToPlaylist={handleAddTrackToPlaylist}
               onMoveTrackToPlaylist={(track, target) =>
                 handleMoveTrackToPlaylist(track, target, selectedPlaylist.id)

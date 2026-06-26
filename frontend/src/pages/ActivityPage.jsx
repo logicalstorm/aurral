@@ -1,34 +1,40 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { Loader, Clock, CheckCircle2, AlertCircle, Music, RotateCcw } from "lucide-react";
-import { getRequests, triggerAlbumSearch, checkHealth } from "../utils/api";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Loader, Clock, CheckCircle2, AlertCircle, Music, RotateCcw, XCircle } from "lucide-react";
+import { getRequests, triggerAlbumSearch } from "../utils/api";
+import { approveBlockedJob, denyBlockedJob } from "../utils/api/endpoints/playlists";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { TAG_COLORS } from "./ArtistDetails/constants";
-import { PageSectionMobileNav } from "../components/PageSectionMobileNav";
 import {
-  ACTIVITY_VIEWS,
-  DEFAULT_ACTIVITY_SOURCE,
   DEFAULT_ACTIVITY_VIEW,
   buildActivityPath,
-  getActivitySourceItems,
-  matchesActivitySource,
   matchesActivityView,
-  normalizeActivitySource,
   normalizeActivityView,
-  getActivityRequestSource,
 } from "../navigation/activityNavConfig";
-
-const ACTIVITY_SOURCE_COLORS = {
-  all: "var(--aurral-gray)",
-  lidarr: TAG_COLORS[10],
-  slskd: TAG_COLORS[0],
-  usenet: TAG_COLORS[2],
-  aurral: TAG_COLORS[12],
-};
 
 const ACTIVITY_PAGE_SIZE = 25;
 const QUEUE_POLL_INTERVAL_MS = 15000;
 const HISTORY_POLL_INTERVAL_MS = 60000;
+
+const AURRAL_INTERNAL_KINDS = new Set([
+  "discovery_refresh",
+  "flow_generated",
+  "flow_generating",
+  "playlist_tracks_added",
+  "track_reused_aurral",
+]);
+
+const isAurralInternalRow = (request) =>
+  request?.source === "aurral" && AURRAL_INTERNAL_KINDS.has(request?.kind);
+
+const QUEUE_EMPTY_STATE = {
+  title: "Queue is empty",
+  message: "Active album requests and downloads will appear here.",
+};
+
+const HISTORY_EMPTY_STATE = {
+  title: "No activity yet",
+  message: "A chronological log of album requests, track downloads, and other activity will appear here.",
+};
 
 const getRequestIdentity = (request) =>
   String(
@@ -159,53 +165,6 @@ const buildHistoryListEntries = (requests) => {
   return [...entries, ...groupRequestsByDate(rest)];
 };
 
-const QUEUE_EMPTY_STATE_COPY = {
-  all: {
-    title: "Queue is empty",
-    message: "Active album requests, downloads, and jobs will appear here.",
-  },
-  lidarr: {
-    title: "No Lidarr downloads in progress",
-    message: "Album requests from Lidarr will appear here while they are active.",
-  },
-  slskd: {
-    title: "No slskd downloads in progress",
-    message: "Active Soulseek searches and downloads will appear here.",
-  },
-  usenet: {
-    title: "No Usenet downloads in progress",
-    message: "Active Usenet downloads will appear here.",
-  },
-  aurral: {
-    title: "No Aurral jobs in progress",
-    message: "Playlist updates, discovery refreshes, and other active work will appear here.",
-  },
-};
-
-const HISTORY_EMPTY_STATE_COPY = {
-  all: {
-    title: "No activity yet",
-    message:
-      "A chronological log of album requests, track downloads, and other activity will appear here.",
-  },
-  lidarr: {
-    title: "No Lidarr history",
-    message: "Completed and failed Lidarr album requests will appear here.",
-  },
-  slskd: {
-    title: "No slskd history",
-    message: "Completed and failed Soulseek downloads will appear here.",
-  },
-  usenet: {
-    title: "No Usenet history",
-    message: "Completed and failed Usenet downloads will appear here.",
-  },
-  aurral: {
-    title: "No Aurral history",
-    message: "Completed playlist updates, discovery refreshes, and other work will appear here.",
-  },
-};
-
 function RequestStatusBadge({ request }) {
   if (request.status === "completed" || request.status === "available") {
     return (
@@ -244,43 +203,31 @@ function RequestStatusBadge({ request }) {
 
 function ActivityPage() {
   const navigate = useNavigate();
-  const { view: viewParam, source: sourceParam } = useParams();
+  const { view: viewParam } = useParams();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [usenetActive, setUsenetActive] = useState(false);
   const [visibleCount, setVisibleCount] = useState(ACTIVITY_PAGE_SIZE);
   const [reSearchingAlbumIds, setReSearchingAlbumIds] = useState({});
+  const [approvingJobId, setApprovingJobId] = useState(null);
+  const [denyingJobId, setDenyingJobId] = useState(null);
   const fetchRequestsInFlightRef = useRef(false);
 
-  const sourceNavItems = useMemo(() => getActivitySourceItems(usenetActive), [usenetActive]);
   const activeView = normalizeActivityView(viewParam);
-  const activeSource = normalizeActivitySource(sourceParam, usenetActive);
   const isQueueView = activeView === "queue";
   const shouldRedirectView = viewParam && normalizeActivityView(viewParam) !== viewParam;
-  const shouldRedirectSource =
-    sourceParam && normalizeActivitySource(sourceParam, usenetActive) !== sourceParam;
-
-  const activeViewLabel =
-    ACTIVITY_VIEWS.find((entry) => entry.id === activeView)?.label || "Activity";
-  const activeSourceLabel =
-    sourceNavItems.find((entry) => entry.id === activeSource)?.label || "All";
 
   useDocumentTitle(
-    activeView === "queue" && activeSource === "all"
-      ? "Queue - Activity"
-      : activeView === "history" && activeSource === "all"
-        ? "Activity"
-        : `${activeSourceLabel} - ${activeViewLabel} - Activity`,
+    activeView === "queue" ? "Queue - Activity" : "Activity",
   );
 
   const filteredRequests = useMemo(
     () =>
       requests.filter(
         (request) =>
-          matchesActivityView(request, activeView) && matchesActivitySource(request, activeSource),
+          matchesActivityView(request, activeView) && !isAurralInternalRow(request),
       ),
-    [requests, activeView, activeSource],
+    [requests, activeView],
   );
 
   const sortedRequests = useMemo(
@@ -308,7 +255,7 @@ function ActivityPage() {
 
   useEffect(() => {
     setVisibleCount(ACTIVITY_PAGE_SIZE);
-  }, [activeView, activeSource]);
+  }, [activeView]);
 
   const fetchRequests = useCallback(async ({ silent = false } = {}) => {
     if (fetchRequestsInFlightRef.current) return;
@@ -329,20 +276,6 @@ function ActivityPage() {
         setLoading(false);
       }
     }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    checkHealth()
-      .then((health) => {
-        if (!cancelled) {
-          setUsenetActive(health?.usenetConfigured === true);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   useEffect(() => {
@@ -419,6 +352,32 @@ function ActivityPage() {
     }
   };
 
+  const handleApproveBlockedJob = async (jobId) => {
+    if (!jobId || approvingJobId === jobId) return;
+    setApprovingJobId(jobId);
+    try {
+      await approveBlockedJob(jobId);
+      setApprovingJobId(null);
+      fetchRequests({ silent: true });
+    } catch {
+      setError("Failed to approve track.");
+      setApprovingJobId(null);
+    }
+  };
+
+  const handleDenyBlockedJob = async (jobId) => {
+    if (!jobId || denyingJobId === jobId) return;
+    setDenyingJobId(jobId);
+    try {
+      await denyBlockedJob(jobId);
+      setDenyingJobId(null);
+      fetchRequests({ silent: true });
+    } catch {
+      setError("Failed to deny track.");
+      setDenyingJobId(null);
+    }
+  };
+
   const handleRowNavigate = (
     request,
     { isSlskd, isUsenet, isAurral, isAlbum, artistMbid, artistName, displayName },
@@ -454,12 +413,14 @@ function ActivityPage() {
       ((isSlskd || isUsenet) && request.playlistId) ||
       ((isAurral || isActivity) && request.href) ||
       (artistMbid && artistMbid !== "null" && artistMbid !== "undefined");
-    const requestSource = getActivityRequestSource(request);
-    const sourceColor = ACTIVITY_SOURCE_COLORS[requestSource];
     const timelineTime = formatTimelineTime(request.requestedAt);
     const canReSearch =
       request.canReSearch === true && request.albumId && !reSearchingAlbumIds[request.albumId];
     const isReSearching = Boolean(request.albumId && reSearchingAlbumIds[request.albumId]);
+    const isBlockedTrack =
+      request.kind === "track_download" && request.status === "blocked" && !!request.jobId;
+    const isApproving = approvingJobId === request.jobId;
+    const isDenying = denyingJobId === request.jobId;
     const displayRequest =
       isReSearching && request.status === "failed"
         ? {
@@ -472,8 +433,7 @@ function ActivityPage() {
     return (
       <article
         key={request.id || request.mbid}
-        className={`requests-page__row requests-page__row--${requestSource}${rowIndex % 2 === 1 ? " requests-page__row--alt" : ""}${canNavigate ? " is-clickable" : ""}`}
-        style={{ "--history-source-color": sourceColor }}
+        className={`requests-page__row${rowIndex % 2 === 1 ? " requests-page__row--alt" : ""}${canNavigate ? " is-clickable" : ""}`}
         onClick={() => {
           if (!canNavigate) return;
           handleRowNavigate(request, {
@@ -510,8 +470,46 @@ function ActivityPage() {
 
         <div className="requests-page__status" onClick={(event) => event.stopPropagation()}>
           <RequestStatusBadge request={displayRequest} />
-          {canReSearch && (
-            <div className="requests-page__actions">
+          <div className="requests-page__actions">
+            {isBlockedTrack && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-primary btn--icon requests-page__action"
+                  aria-label="Approve track"
+                  title="Approve"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleApproveBlockedJob(request.jobId);
+                  }}
+                  disabled={isApproving || isDenying}
+                >
+                  {isApproving ? (
+                    <Loader className="artist-icon-xs animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="artist-icon-xs" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn--icon requests-page__action"
+                  aria-label="Deny track"
+                  title="Deny"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleDenyBlockedJob(request.jobId);
+                  }}
+                  disabled={isApproving || isDenying}
+                >
+                  {isDenying ? (
+                    <Loader className="artist-icon-xs animate-spin" />
+                  ) : (
+                    <XCircle className="artist-icon-xs" />
+                  )}
+                </button>
+              </>
+            )}
+            {canReSearch && (
               <button
                 type="button"
                 className="btn btn-secondary btn--icon requests-page__action"
@@ -521,31 +519,24 @@ function ActivityPage() {
               >
                 <RotateCcw className="artist-icon-xs" />
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </article>
     );
   };
 
-  const emptyStateCopy = isQueueView ? QUEUE_EMPTY_STATE_COPY : HISTORY_EMPTY_STATE_COPY;
-  const emptyState = emptyStateCopy[activeSource] || emptyStateCopy.all;
-  const activityPath = buildActivityPath(activeView, activeSource);
-
-  if (!viewParam || !sourceParam) {
+  if (!viewParam) {
     return (
       <Navigate
-        to={buildActivityPath(
-          viewParam || DEFAULT_ACTIVITY_VIEW,
-          sourceParam || DEFAULT_ACTIVITY_SOURCE,
-        )}
+        to={buildActivityPath(DEFAULT_ACTIVITY_VIEW)}
         replace
       />
     );
   }
 
-  if (shouldRedirectView || shouldRedirectSource) {
-    return <Navigate to={activityPath} replace />;
+  if (shouldRedirectView) {
+    return <Navigate to={buildActivityPath(activeView)} replace />;
   }
 
   if (loading) {
@@ -567,35 +558,6 @@ function ActivityPage() {
         <h1 className="page-title">Activity</h1>
       </header>
 
-      <div className="requests-page__toolbar">
-        <div className="artist-tabs requests-page__tabs" role="tablist" aria-label="Source">
-          {sourceNavItems.map((entry) => (
-            <Link
-              key={entry.id}
-              to={buildActivityPath(activeView, entry.id)}
-              className={`artist-tab requests-page__tab--source${
-                activeSource === entry.id ? " is-active" : ""
-              }`}
-              style={{
-                "--history-source-color": ACTIVITY_SOURCE_COLORS[entry.id],
-              }}
-              role="tab"
-              aria-selected={activeSource === entry.id}
-            >
-              {entry.label}
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      <PageSectionMobileNav
-        sections={sourceNavItems}
-        activeId={activeSource}
-        label="Source"
-        selectId="activity-source-select"
-        getSectionPath={(source) => buildActivityPath(activeView, source)}
-      />
-
       {error && (
         <div className="artist-error-panel requests-page__error" role="alert">
           <AlertCircle className="artist-error-icon" aria-hidden="true" />
@@ -616,9 +578,13 @@ function ActivityPage() {
           <div className="search-empty-panel__icon" aria-hidden="true">
             <Music className="artist-icon-lg" />
           </div>
-          <h2 className="search-empty-panel__title">{emptyState.title}</h2>
-          <p className="search-empty-panel__message">{emptyState.message}</p>
-          {isQueueView && activeSource === "all" && (
+          <h2 className="search-empty-panel__title">
+            {isQueueView ? QUEUE_EMPTY_STATE.title : HISTORY_EMPTY_STATE.title}
+          </h2>
+          <p className="search-empty-panel__message">
+            {isQueueView ? QUEUE_EMPTY_STATE.message : HISTORY_EMPTY_STATE.message}
+          </p>
+          {isQueueView && (
             <button
               type="button"
               onClick={() => navigate("/")}

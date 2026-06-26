@@ -10,7 +10,6 @@ import { DEFAULT_SHOWS_FILTER, SHOWS_FILTERS } from "../navigation/showsNavConfi
 import {
   ACTIVITY_VIEWS,
   DEFAULT_ACTIVITY_VIEW,
-  DEFAULT_ACTIVITY_SOURCE,
   buildActivityPath,
 } from "../navigation/activityNavConfig";
 import { useDiscoverRecent } from "../hooks/useDiscoverRecent";
@@ -80,19 +79,6 @@ function Sidebar({ mode }) {
     }
     const segment = location.pathname.replace(/^\/activity\/?/, "").split("/")[0];
     return segment || DEFAULT_ACTIVITY_VIEW;
-  }, [isOnActivity, location.pathname]);
-
-  const activeActivitySource = useMemo(() => {
-    if (!isOnActivity) return DEFAULT_ACTIVITY_SOURCE;
-    if (location.pathname.startsWith("/history")) {
-      const legacySegment = location.pathname.replace(/^\/history\/?/, "").split("/")[0];
-      if (legacySegment && legacySegment !== "queue" && legacySegment !== "history") {
-        return legacySegment;
-      }
-      return DEFAULT_ACTIVITY_SOURCE;
-    }
-    const segments = location.pathname.replace(/^\/activity\/?/, "").split("/");
-    return segments[1] || DEFAULT_ACTIVITY_SOURCE;
   }, [isOnActivity, location.pathname]);
 
   const positionSidebarTooltip = useCallback((event) => {
@@ -177,7 +163,7 @@ function Sidebar({ mode }) {
         permission: "accessFlow",
       },
       {
-        path: buildActivityPath(DEFAULT_ACTIVITY_VIEW, "all"),
+        path: buildActivityPath(DEFAULT_ACTIVITY_VIEW),
         basePath: "/activity",
         label: "Activity",
         icon: Activity,
@@ -231,7 +217,7 @@ function Sidebar({ mode }) {
           const active = activeId === entry.id;
           const targetPath =
             item.section === "activity"
-              ? buildActivityPath(entry.id, activeActivitySource)
+              ? buildActivityPath(entry.id)
               : `${item.basePath}/${entry.id}`;
           return (
             <Link

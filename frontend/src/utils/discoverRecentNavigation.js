@@ -95,10 +95,10 @@ export function normalizeDiscoverPath(path) {
   let normalizedPathname = pathname;
   if (normalizedPathname === "/shows") normalizedPathname = "/shows/all";
   if (normalizedPathname === "/history") {
-    normalizedPathname = "/activity/history/all";
+    normalizedPathname = "/activity/history";
   }
   if (normalizedPathname === "/activity") {
-    normalizedPathname = "/activity/queue/all";
+    normalizedPathname = "/activity/queue";
   }
   if (!search) return normalizedPathname;
   const params = new URLSearchParams(search);
