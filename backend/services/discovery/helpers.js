@@ -1,4 +1,4 @@
-import { GENRE_KEYWORDS } from "../../config/constants.js";
+
 import {
   DISCOVERY_FLOWS_DEFAULT,
   DISCOVERY_FLOWS_MAX,
@@ -336,7 +336,7 @@ export const getSeedTagMapKey = (seed) =>
 export const normalizeSeedTagList = (tags) =>
   (Array.isArray(tags) ? tags : [])
     .slice(0, 15)
-    .map((tag) => String(tag || "").trim())
+    .map((tag) => String(tag || "").trim().replace(/-/g, " "))
     .filter(Boolean);
 
 export const INHERITED_TAG_MINIMUM = 3;

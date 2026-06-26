@@ -7,26 +7,6 @@ export const isVerboseConsoleEnabled = (env = process.env) =>
     String(env.AURRAL_VERBOSE_LOGS || "").trim().toLowerCase(),
   );
 
-export const GENRE_KEYWORDS = [
-  "rock",
-  "pop",
-  "electronic",
-  "metal",
-  "jazz",
-  "hip-hop",
-  "indie",
-  "alternative",
-  "punk",
-  "soul",
-  "r&b",
-  "folk",
-  "classical",
-  "blues",
-  "country",
-  "reggae",
-  "disco",
-  "funk",
-];
 
 export const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

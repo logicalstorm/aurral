@@ -1,7 +1,6 @@
-import { GENRE_KEYWORDS } from "../../config/constants.js";
+
 import {
   getDiscoveryNetworkConcurrency,
-  getLastfmFailureRatio,
   buildWeightedTopList,
   normalizeSeedTagList,
   getSeedTagMapKey,
@@ -13,13 +12,7 @@ import {
 import { recordDiscoveryUpdateProgress } from "./persistence.js";
 import { logger } from "../logger.js";
 import {
-  addRecommendationCandidate,
   applyHydratedCandidateTags,
-  buildDiscoverySeedList,
-  buildExistingArtistKeySet,
-  finalizeRecommendationAccumulator,
-  mergeResolvedRecommendations,
-  rerankRecommendations,
 } from "./recommendationPipeline.js";
 
 export const fetchArtistTagNames = async (artist, lastfmHealth) => {
@@ -80,7 +73,7 @@ export const collectSeedTagsAndGenres = async (
         }
 
         for (const tag of tags.slice(0, 15)) {
-          const name = String(tag?.name || "").trim();
+          const name = String(tag?.name || "").trim().replace(/-/g, " ");
           if (!name) continue;
           const tagWeight = parseInt(tag?.count || 0, 10) || 1;
           tagCounts.set(
@@ -88,15 +81,11 @@ export const collectSeedTagsAndGenres = async (
             (tagCounts.get(name) || 0) +
               tagWeight * Math.max(0.5, seed.weight || 1),
           );
-          const normalized = name.toLowerCase();
-          if (GENRE_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
-            genreCounts.set(
-              name,
-              (genreCounts.get(name) || 0) +
-                Math.max(1, Math.round(tagWeight / 25)) *
-                  Math.max(0.5, seed.weight || 1),
-            );
-          }
+          genreCounts.set(
+            name,
+            (genreCounts.get(name) || 0) +
+              tagWeight * Math.max(0.5, seed.weight || 1),
+          );
         }
       } catch (error) {
         logger.warn(

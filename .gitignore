@@ -14,6 +14,7 @@ logs/
 frontend/node_modules
 frontend/dist
 data/
+data.bk/
 dumps/
 backend/data/db.json
 backend/data/*
