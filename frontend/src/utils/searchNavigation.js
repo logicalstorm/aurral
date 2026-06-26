@@ -479,23 +479,28 @@ export function buildUnifiedSuggestionSections(data) {
   const seenArtistNames = new Set();
   const sections = [];
 
-  if (data.top) {
-    const identity = getResultIdentity(data.top);
-    if (identity) seen.add(identity);
-    if (data.top.type === "artist") {
-      const nameKey = normalizeSearchText(data.top.name);
-      if (nameKey) seenArtistNames.add(nameKey);
-    }
-    sections.push({ key: "top", label: "Top result", items: [data.top] });
+  const libraryArtists = dedupeItems(data.library?.artists || [], seen, seenArtistNames);
+  const libraryTracks = dedupeItems(data.library?.tracks || [], seen, seenArtistNames);
+  const libraryItems = [...libraryArtists, ...libraryTracks];
+  if (libraryItems.length > 0) {
+    sections.push({ key: "library", label: "Your Library", items: libraryItems });
   }
 
-  const libraryItems = dedupeItems(data.library?.tracks || [], seen, seenArtistNames);
-  if (libraryItems.length > 0) {
-    sections.push({
-      key: "library",
-      label: "Your Library",
-      items: libraryItems,
-    });
+  if (data.top) {
+    const identity = getResultIdentity(data.top);
+    const nameKey = data.top.type === "artist" ? normalizeSearchText(data.top.name) : null;
+    const isDuplicate =
+      (identity && seen.has(identity)) ||
+      (nameKey && seenArtistNames.has(nameKey));
+
+    if (isDuplicate) {
+      if (identity) seen.add(identity);
+      if (nameKey) seenArtistNames.add(nameKey);
+    } else {
+      if (identity) seen.add(identity);
+      if (nameKey) seenArtistNames.add(nameKey);
+      sections.push({ key: "top", label: "Search", items: [data.top] });
+    }
   }
 
   const artists = dedupeItems(data.catalog?.artists || [], seen, seenArtistNames);

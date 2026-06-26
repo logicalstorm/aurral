@@ -19,8 +19,8 @@ import {
 } from "../utils/api";
 import { getArtistRecordId } from "../utils/artistTaste";
 import {
-  buildMixedSuggestionItems,
-  getSearchResultKey,
+  buildUnifiedSuggestionSections,
+  flattenSuggestionSections,
   navigateFromSearchResult,
 } from "../utils/searchNavigation";
 import {
@@ -235,14 +235,8 @@ function GlobalSearch() {
         });
         if (generation !== searchGenerationRef.current) return;
         setLocalSearchConfigured(!!data?.localSearchConfigured);
-        const items = buildMixedSuggestionItems(data, SUGGEST_LIMIT + 3);
-        setSuggestionRows(
-          items.map((item, index) => ({
-            kind: "item",
-            key: getSearchResultKey(item, index),
-            item,
-          })),
-        );
+        const sections = buildUnifiedSuggestionSections(data);
+        setSuggestionRows(flattenSuggestionSections(sections));
         setSuggestionMode("unified");
         setSuggestionIndex(-1);
       } catch {
@@ -682,6 +676,13 @@ function GlobalSearch() {
                 </button>
               ))
             : suggestionRows.map((row) => {
+                if (row.kind === "header") {
+                  return (
+                    <div key={row.key} className="global-search__suggestion-group">
+                      {row.label}
+                    </div>
+                  );
+                }
                 selectableCursor += 1;
                 const highlighted = selectableCursor === suggestionIndex;
                 const item = row.item;

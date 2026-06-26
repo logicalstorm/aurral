@@ -167,9 +167,8 @@ export async function searchArtists(query, { limit = 24, offset = 0 } = {}) {
     limit,
   });
   const source = Array.isArray(data) ? data : [];
-  const items = source.map((entry, index) => ({
+  const items = source.map((entry) => ({
     ...toNormalizedArtist(entry),
-    score: Math.max(0, 100 - index),
   }));
   return {
     query,

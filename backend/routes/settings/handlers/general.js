@@ -1,7 +1,6 @@
 import { dbOps } from "../../../db/helpers/index.js";
 import {
   DEFAULT_METADATA_BASE_URL,
-  DEFAULT_SEARCH_URL,
   defaultData,
 } from "../../../config/constants.js";
 import { reconcileLocalNetworkBypassSetting } from "../../../middleware/auth.js";
@@ -35,17 +34,6 @@ export function registerGeneral(router) {
       }
       if (settings?.integrations?.musicbrainz) {
         delete settings.integrations.musicbrainz;
-      }
-      if (!settings?.integrations?.search) {
-        settings.integrations.search = {
-          url: DEFAULT_SEARCH_URL,
-          apiKey: "",
-        };
-      } else {
-        settings.integrations.search = {
-          url: settings.integrations.search.url || DEFAULT_SEARCH_URL,
-          apiKey: settings.integrations.search.apiKey || "",
-        };
       }
       if (!settings?.integrations?.metadata) {
         const legacyMusicbrainz = dbOps.getSettings()?.integrations?.musicbrainz || {};
@@ -112,27 +100,6 @@ export function registerGeneral(router) {
         }
       }
 
-      if (integrations?.search) {
-        const nextSearch = {
-          ...(currentSettings.integrations?.search || {}),
-          ...integrations.search,
-        };
-        const trimmedSearchUrl = String(nextSearch.url || "").trim();
-        if (trimmedSearchUrl) {
-          const urlValidation = validateExternalUrl(trimmedSearchUrl);
-          if (!urlValidation.valid) {
-            return res.status(400).json({
-              error: `Invalid search URL: ${urlValidation.error}`,
-            });
-          }
-          nextSearch.url = urlValidation.url.replace(/\/+$/, "");
-        } else {
-          nextSearch.url = "";
-        }
-        nextSearch.apiKey =
-          typeof nextSearch.apiKey === "string" ? nextSearch.apiKey.trim() : "";
-        integrations.search = nextSearch;
-      }
       if (integrations?.metadata) {
         const nextMetadata = {
           ...(currentSettings.integrations?.metadata || {}),
@@ -275,7 +242,7 @@ export function registerGeneral(router) {
         );
       }
 
-      const INTEGRATION_KEYS = ["lidarr", "navidrome", "slskd", "prowlarr", "nzbget", "lastfm", "ticketmaster", "metadata", "search", "general", "gotify", "webhookEvents"];
+      const INTEGRATION_KEYS = ["lidarr", "navidrome", "slskd", "prowlarr", "nzbget", "lastfm", "ticketmaster", "metadata", "general", "gotify", "webhookEvents"];
       let mergedIntegrations =
         currentSettings.integrations || defaultData.settings.integrations || {};
       if (integrations) {

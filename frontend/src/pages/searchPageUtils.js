@@ -22,7 +22,7 @@ export const UNIFIED_FILTER_OPTIONS = [
   { value: "all", label: "All" },
   { value: "artists", label: "Artists" },
   { value: "albums", label: "Albums" },
-  { value: "tracks", label: "Songs" },
+  { value: "singles", label: "Singles" },
 ];
 
 export function isAlbumCompilation(album) {

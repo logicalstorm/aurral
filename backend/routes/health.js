@@ -7,7 +7,6 @@ import {
   getTicketmasterApiKey,
   getMetadataProviderHealthSnapshot,
 } from "../services/apiClients/index.js";
-import { getSearchBaseUrl } from "../services/aurralSearchClient.js";
 import { APP_VERSION } from "../config/constants.js";
 import {
   resolveRequestUser,
@@ -246,7 +245,6 @@ function buildBootstrapPayload(req) {
     ticketmasterConfigured: !!getTicketmasterApiKey(),
     musicbrainzConfigured: !!settings.integrations?.metadata?.baseUrl,
     metadataConfigured: !!settings.integrations?.metadata?.baseUrl,
-    searchConfigured: !!getSearchBaseUrl(),
     slskdConfigured: downloadSources.slskd.configured,
     prowlarrConfigured: downloadSources.usenet.prowlarrConfigured,
     nzbgetConfigured: downloadSources.usenet.nzbgetConfigured,

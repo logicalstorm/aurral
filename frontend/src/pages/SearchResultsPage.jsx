@@ -46,6 +46,7 @@ import {
   ALBUM_RELEASE_TABS,
   UNIFIED_FILTER_OPTIONS,
   matchesAlbumReleaseTab,
+  isAlbumSingleOrEp,
   dedupeArtists,
   dedupeAlbums,
   ARTIST_IMAGE_HYDRATION_CONCURRENCY,
@@ -56,7 +57,10 @@ function SearchResultsPage() {
   const query = searchParams.get("q") || "";
   const type = searchParams.get("type");
   const rawFilter = searchParams.get("filter") || "all";
-  const activeFilter = rawFilter === "library" || rawFilter === "playlists" ? "all" : rawFilter;
+  const activeFilter =
+    rawFilter === "library" || rawFilter === "tracks"
+      ? "all"
+      : rawFilter;
   const [results, setResults] = useState([]);
   const [unifiedResults, setUnifiedResults] = useState(null);
   const [fullList, setFullList] = useState(null);
@@ -245,7 +249,6 @@ function SearchResultsPage() {
           setSearchTotalCount(
             (data?.catalog?.artists?.length || 0) +
               (data?.catalog?.albums?.length || 0) +
-              (data?.catalog?.tracks?.length || 0) +
               (data?.library?.tracks?.length || 0),
           );
           const imageMap = {};
@@ -510,10 +513,7 @@ function SearchResultsPage() {
       return undefined;
     }
     let cancelled = false;
-    const tracks = [
-      ...(unifiedResults.catalog?.tracks || []),
-      ...(unifiedResults.library?.tracks || []),
-    ];
+    const tracks = unifiedResults.library?.tracks || [];
     const albums = unifiedResults.catalog?.albums || [];
     const missingCoverIds = tracks
       .map((track) => track?.albumMbid)
@@ -1176,7 +1176,6 @@ function SearchResultsPage() {
         tracks: [],
         libraryTracks: [],
         topResult: null,
-        topPreviewTracks: [],
         mixedItems: [],
         isEmpty: true,
       };
@@ -1187,42 +1186,20 @@ function SearchResultsPage() {
     const albums = unifiedResults.catalog?.albums || [];
     const albumsWithId = dedupeAlbums(albums.filter((album) => album?.id));
 
-    const tracks = unifiedResults.catalog?.tracks || [];
-    const libraryTracks = unifiedResults.library?.tracks || [];
-
     const showArtists = activeFilter === "all" || activeFilter === "artists";
     const showAlbums = activeFilter === "all" || activeFilter === "albums";
-    const showTracks = activeFilter === "all" || activeFilter === "tracks";
+    const showSingles = activeFilter === "all" || activeFilter === "singles";
 
     const visibleArtistsWithId = showArtists ? artistsWithId : [];
-    const visibleAlbumsWithId = showAlbums ? albumsWithId : [];
-    const visibleTracks = showTracks ? [...libraryTracks, ...tracks] : [];
+    const visibleAlbumsWithId = showAlbums
+      ? albumsWithId.filter((album) => !isAlbumSingleOrEp(album))
+      : [];
+    const visibleSinglesWithId = showSingles
+      ? albumsWithId.filter(isAlbumSingleOrEp)
+      : [];
 
     const topResult =
       activeFilter === "all" ? resolveSearchTopResult(unifiedResults, searchLibraryFlags) : null;
-    const topPreviewTracks =
-      topResult?.type === "artist"
-        ? tracks
-            .filter(
-              (track) =>
-                (topResult.id && track.artistMbid === topResult.id) ||
-                (topResult.name &&
-                  track.artistName?.toLowerCase() === topResult.name.toLowerCase()),
-            )
-            .slice(0, 3)
-        : topResult?.type === "album"
-          ? tracks
-              .filter(
-                (track) =>
-                  (topResult.id &&
-                    (track.albumMbid === topResult.id || track.albumId === topResult.id)) ||
-                  (topResult.title &&
-                    topResult.artistName &&
-                    track.albumTitle?.toLowerCase() === topResult.title.toLowerCase() &&
-                    track.artistName?.toLowerCase() === topResult.artistName.toLowerCase()),
-              )
-              .slice(0, 4)
-          : [];
     const mixedItems =
       activeFilter === "all"
         ? buildMixedSearchPageItems(unifiedResults, {
@@ -1237,15 +1214,13 @@ function SearchResultsPage() {
         ? !topResult && mixedItems.length === 0
         : visibleArtistsWithId.length === 0 &&
           visibleAlbumsWithId.length === 0 &&
-          visibleTracks.length === 0;
+          visibleSinglesWithId.length === 0;
 
     return {
       artistsWithId: visibleArtistsWithId,
       albumsWithId: visibleAlbumsWithId,
-      tracks: visibleTracks,
-      libraryTracks,
+      singlesWithId: visibleSinglesWithId,
       topResult,
-      topPreviewTracks,
       mixedItems,
       isEmpty,
     };
@@ -1521,7 +1496,6 @@ function SearchResultsPage() {
                           libraryLookup={libraryLookup}
                           navigate={navigate}
                           query={trimmedQuery}
-                          previewTracks={unifiedView.topPreviewTracks}
                         />
                       )}
                       {unifiedView.mixedItems.length > 0 && (
@@ -1533,8 +1507,16 @@ function SearchResultsPage() {
                     </>
                   )}
 
-                  {activeFilter === "tracks" && unifiedView.tracks.length > 0 && (
-                    <SearchMixedResultList items={unifiedView.tracks} {...searchListProps} />
+                  {activeFilter === "singles" && unifiedView.singlesWithId.length > 0 && (
+                    <SearchAlbumResults
+                      albums={unifiedView.singlesWithId}
+                      albumCovers={albumCovers}
+                      canAddAlbum={canAddAlbum}
+                      pendingAlbumIds={pendingAlbumIds}
+                      onAlbumAction={handleAlbumAction}
+                      navigate={navigate}
+                      viewMode="grid"
+                    />
                   )}
 
                   {activeFilter === "artists" && unifiedView.artistsWithId.length > 0 && (

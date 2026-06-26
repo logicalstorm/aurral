@@ -33,7 +33,6 @@ export const UUID_REGEX =
 
 export const MUSICBRAINZ_API = "https://musicbrainz.org/ws/2";
 export const DEFAULT_METADATA_BASE_URL = "https://lidarrapi.brainzmash.cc";
-export const DEFAULT_SEARCH_URL = "https://search.aurral.org";
 export const LASTFM_API = "https://ws.audioscrobbler.com/2.0/";
 export const LISTENBRAINZ_API = "https://api.listenbrainz.org";
 export const APP_NAME = "Aurral";
@@ -124,10 +123,6 @@ export const defaultData = {
         baseUrl: DEFAULT_METADATA_BASE_URL,
         userAgentSuffix: "",
         enableNarrowFallbacks: true,
-      },
-      search: {
-        url: DEFAULT_SEARCH_URL,
-        apiKey: "",
       },
       general: { authUser: "", authPassword: "" },
       gotify: {
