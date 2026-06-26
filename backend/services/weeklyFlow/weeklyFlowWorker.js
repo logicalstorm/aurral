@@ -924,7 +924,7 @@ export class WeeklyFlowWorker {
 
             const flow = flowPlaylistConfig.getFlow(playlistType);
             const completed = done;
-            const { notifyWeeklyFlowDone } = await import("./notificationService.js");
+            const { notifyWeeklyFlowDone } = await import("../notificationService.js");
             notifyWeeklyFlowDone(
               playlistType,
               { completed, failed },

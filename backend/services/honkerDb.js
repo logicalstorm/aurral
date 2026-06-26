@@ -279,6 +279,19 @@ export function enqueueNotification(payload) {
 
 export function bootstrapHonkerSchedules() {
   const scheduler = getHonkerDb().scheduler();
+  const canonicalNames = new Set(SCHEDULED_SYSTEM_TASKS.map((t) => t.name));
+
+  try {
+    const rows = getHonkerDb().query("SELECT name FROM _honker_scheduler_tasks");
+    for (const row of rows) {
+      if (!canonicalNames.has(row.name)) {
+        try {
+          scheduler.remove(row.name);
+        } catch {}
+      }
+    }
+  } catch {}
+
   for (const task of SCHEDULED_SYSTEM_TASKS) {
     try {
       scheduler.remove(task.name);
