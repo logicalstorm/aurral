@@ -446,32 +446,6 @@ export function buildMixedSearchPageItems(
   return dedupeItems(candidates, seen, seenArtistNames).slice(0, limit);
 }
 
-export function buildMixedSuggestionItems(data, limit = 8, libraryFlags = {}) {
-  if (!data) return [];
-
-  const seen = new Set();
-  const seenArtistNames = new Set();
-  const result = [];
-
-  const topItem = data.top ? prepareSearchCandidates([data.top], libraryFlags)[0] : null;
-  if (topItem) {
-    result.push(topItem);
-    const identity = getResultIdentity(topItem);
-    if (identity) seen.add(identity);
-    if (topItem.type === "artist") {
-      const nameKey = normalizeSearchText(topItem.name);
-      if (nameKey) seenArtistNames.add(nameKey);
-    }
-  }
-
-  const candidates = prepareSearchCandidates(getSearchResultBuckets(data), libraryFlags);
-  for (const item of dedupeItems(candidates, seen, seenArtistNames)) {
-    if (result.length >= limit) break;
-    result.push(item);
-  }
-  return result.slice(0, limit);
-}
-
 export function buildUnifiedSuggestionSections(data) {
   if (!data) return [];
 
@@ -489,16 +463,14 @@ export function buildUnifiedSuggestionSections(data) {
   if (data.top) {
     const identity = getResultIdentity(data.top);
     const nameKey = data.top.type === "artist" ? normalizeSearchText(data.top.name) : null;
-    const isDuplicate =
+    const alreadyListed =
       (identity && seen.has(identity)) ||
       (nameKey && seenArtistNames.has(nameKey));
 
-    if (isDuplicate) {
-      if (identity) seen.add(identity);
-      if (nameKey) seenArtistNames.add(nameKey);
-    } else {
-      if (identity) seen.add(identity);
-      if (nameKey) seenArtistNames.add(nameKey);
+    if (identity) seen.add(identity);
+    if (nameKey) seenArtistNames.add(nameKey);
+
+    if (!alreadyListed) {
       sections.push({ key: "top", label: "Search", items: [data.top] });
     }
   }
