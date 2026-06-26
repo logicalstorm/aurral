@@ -15,7 +15,6 @@ export const normalizeSettings = (savedSettings) => {
   const lastfm = savedSettings.integrations?.lastfm || {};
   const legacyMusicbrainz = savedSettings.integrations?.musicbrainz || {};
   const metadata = savedSettings.integrations?.metadata || {};
-  const search = savedSettings.integrations?.search || {};
   const parsedAutoRefreshHours = parseInt(lastfm.discoveryAutoRefreshHours, 10);
   const normalizedAutoRefreshHours = [24, 168, 720].includes(parsedAutoRefreshHours)
     ? parsedAutoRefreshHours
