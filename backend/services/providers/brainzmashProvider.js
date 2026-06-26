@@ -162,14 +162,17 @@ export async function getAlbumTracksByAlbumMbid(albumMbid) {
 }
 
 export async function searchArtists(query, { limit = 24, offset = 0 } = {}) {
-  const data = await request("/search/artist", {
-    query,
-    limit,
-  });
-  const source = Array.isArray(data) ? data : [];
-  const items = source.map((entry) => ({
-    ...toNormalizedArtist(entry),
-  }));
+  let items = [];
+  try {
+    const data = await request("/search/artist", {
+      query,
+      limit,
+    });
+    const source = Array.isArray(data) ? data : [];
+    items = source.map((entry) => ({
+      ...toNormalizedArtist(entry),
+    }));
+  } catch {}
   return {
     query,
     count: items.length,

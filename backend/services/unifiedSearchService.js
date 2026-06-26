@@ -422,37 +422,47 @@ function mapBrainzmashAlbum(item) {
 async function searchBrainzmashCatalog(query, limit) {
   const RELEVANCE_THRESHOLD = 60;
   const trimmed = String(query || "").trim();
-  try {
-    const [artistResult, albumResult] = await Promise.all([
-      searchArtists(trimmed, { limit, offset: 0 }),
-      searchAlbums(trimmed, {
-        limit,
-        offset: 0,
-        releaseTypes: [],
-        sort: "relevance",
-      }),
-    ]);
 
-    const scoredArtists = (artistResult.items || [])
-      .map((artist) => ({
-        artist,
-        relevance: scoreTextMatch(trimmed, artist.name || ""),
-      }))
-      .filter((entry) => entry.relevance >= RELEVANCE_THRESHOLD)
-      .sort((a, b) => b.relevance - a.relevance);
+  const [artistSettled, albumSettled] = await Promise.allSettled([
+    searchArtists(trimmed, { limit, offset: 0 }),
+    searchAlbums(trimmed, {
+      limit,
+      offset: 0,
+      releaseTypes: [],
+      sort: "relevance",
+    }),
+  ]);
 
-    return {
-      artists: scoredArtists.map((entry) => {
-        const item = { ...entry.artist, score: entry.relevance };
-        return mapBrainzmashArtist(item);
-      }),
-      albums: (albumResult.items || []).map(mapBrainzmashAlbum),
-      tracks: [],
-    };
-  } catch (error) {
-    console.warn("[UnifiedSearch] BrainzMash catalog fallback failed:", error.message);
-    return { artists: [], albums: [], tracks: [] };
+  const artistResult =
+    artistSettled.status === "fulfilled" ? artistSettled.value : null;
+  const albumResult =
+    albumSettled.status === "fulfilled" ? albumSettled.value : null;
+
+  if (artistSettled.status === "rejected") {
+    console.warn("[UnifiedSearch] BrainzMash artist search failed:", artistSettled.reason?.message);
   }
+  if (albumSettled.status === "rejected") {
+    console.warn("[UnifiedSearch] BrainzMash album search failed:", albumSettled.reason?.message);
+  }
+
+  const scoredArtists = artistResult
+    ? (artistResult.items || [])
+        .map((artist) => ({
+          artist,
+          relevance: scoreTextMatch(trimmed, artist.name || ""),
+        }))
+        .filter((entry) => entry.relevance >= RELEVANCE_THRESHOLD)
+        .sort((a, b) => b.relevance - a.relevance)
+    : [];
+
+  return {
+    artists: scoredArtists.map((entry) => {
+      const item = { ...entry.artist, score: entry.relevance };
+      return mapBrainzmashArtist(item);
+    }),
+    albums: albumResult ? (albumResult.items || []).map(mapBrainzmashAlbum) : [],
+    tracks: [],
+  };
 }
 
 async function searchCatalog(query, limit) {
