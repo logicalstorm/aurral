@@ -471,6 +471,29 @@ export function getHonkerQueueDepth(queueName) {
   return Number(row?.count) || 0;
 }
 
+export function resetProcessingPipelineJobs() {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const tx = getHonkerDb().transaction();
+    const result = tx.query(
+      `SELECT COUNT(*) AS count FROM _honker_live WHERE queue = 'slskd-pipeline' AND state = 'processing'`,
+    );
+    const stuck = Number(result[0]?.count) || 0;
+    if (stuck > 0) {
+      tx.execute(
+        `UPDATE _honker_live
+         SET state = 'pending', run_at = ?
+         WHERE queue = 'slskd-pipeline'
+           AND state = 'processing'`,
+        [now],
+      );
+      console.log("[pipeline] reset", stuck, "stuck processing jobs to pending");
+    }
+    tx.commit();
+  } catch {
+  }
+}
+
 export const HONKER_QUEUE_NAMES = [
   "system-task",
   "weekly-flow-operation",

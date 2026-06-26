@@ -56,10 +56,18 @@ function mapPriority(addPaused) {
 
 function readConfigValue(entries, name) {
   const key = String(name || "").toLowerCase();
-  const entry = (Array.isArray(entries) ? entries : []).find(
-    (item) => String(item?.name || "").toLowerCase() === key,
-  );
-  return entry?.value ?? "";
+  if (Array.isArray(entries)) {
+    const entry = entries.find(
+      (item) => String(item?.name || "").toLowerCase() === key,
+    );
+    return entry?.value ?? "";
+  }
+  if (entries && typeof entries === "object") {
+    for (const [k, v] of Object.entries(entries)) {
+      if (String(k).toLowerCase() === key) return String(v ?? "");
+    }
+  }
+  return "";
 }
 
 export class SabnzbdClient {

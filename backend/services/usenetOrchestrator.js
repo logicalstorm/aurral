@@ -114,6 +114,7 @@ async function locateBestDownloadedAudio(historyItem, candidate, resolvedTrack, 
   const roots = uniqueResolvedPaths([
     historyItem?.FinalDir,
     historyItem?.DestDir,
+    historyItem?.storage,
     directories.completedPath,
     directories.destDir,
   ], clientKey);

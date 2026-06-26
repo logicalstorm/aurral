@@ -1,4 +1,4 @@
-import { getPipelineQueue, getWorkerId } from "./honkerDb.js";
+import { getPipelineQueue, getWorkerId, resetProcessingPipelineJobs } from "./honkerDb.js";
 import {
   continuePipeline,
   processPipelinePayload,
@@ -94,6 +94,7 @@ export function startSlskdOrchestratorWorker() {
   if (running || isHonkerShuttingDown()) return;
   if (!isAnyDownloadSourceConfigured()) return;
   console.log("[pipeline] worker starting");
+  resetProcessingPipelineJobs();
   running = true;
   stopRequested = false;
   enqueuePendingJobsWithoutBatch();
