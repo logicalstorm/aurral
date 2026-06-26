@@ -148,6 +148,13 @@ export class SabnzbdClient {
     return slots.find((s) => String(s.nzo_id) === id) || null;
   }
 
+  async deleteHistoryItem(nzoId) {
+    const id = String(nzoId || "").trim();
+    if (!id) return false;
+    await this.api("history", { name: "delete", value: id, del_files: 1 }).catch(() => {});
+    return true;
+  }
+
   async getDownloadDirectories() {
     const settings = getSettings();
     const result = await this.api("get_config", { section: "misc" }).catch(() => null);

@@ -291,6 +291,9 @@ async function handleUsenetPoll(payload, helpers) {
   if (job.status === "failed" || job.status === "done") return null;
   const pollAttempts = Number(payload.pollAttempts || 0) + 1;
   if (pollAttempts > MAX_POLL_ATTEMPTS) {
+    if (getUsenetClientKey() === "sabnzbd") {
+      sabnzbdClient.deleteHistoryItem(payload.nzbId).catch(() => {});
+    }
     if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload, { nzbId: null, history: null });
     return helpers.failOrTryNextSource(payload, job, "Usenet polling timed out");
   }
@@ -308,6 +311,9 @@ async function handleUsenetPoll(payload, helpers) {
       };
     }
     if (state === "failed") {
+      if (getUsenetClientKey() === "sabnzbd") {
+        sabnzbdClient.deleteHistoryItem(payload.nzbId).catch(() => {});
+      }
       if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload, { nzbId: null, history: null });
       return helpers.failOrTryNextSource(
         payload,
@@ -347,6 +353,9 @@ async function handleUsenetFinalize(payload, helpers) {
     const reason =
       found.validation?.reason ||
       "Usenet download completed, but no matching audio file was found";
+    if (getUsenetClientKey() === "sabnzbd") {
+      sabnzbdClient.deleteHistoryItem(payload.nzbId).catch(() => {});
+    }
     if (hasNextCandidate(payload)) return buildNextCandidatePayload(payload, { nzbId: null, history: null });
     return helpers.failOrTryNextSource(payload, job, reason);
   }
@@ -364,6 +373,9 @@ async function handleUsenetFinalize(payload, helpers) {
     found.filePath,
     finalPath,
   );
+  if (getUsenetClientKey() === "sabnzbd") {
+    sabnzbdClient.deleteHistoryItem(payload.nzbId).catch(() => {});
+  }
   return finalizePipelineJobSuccess({
     downloadTracker,
     job,
