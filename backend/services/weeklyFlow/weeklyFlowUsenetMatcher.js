@@ -146,6 +146,23 @@ function releaseKey(release) {
     .join("\0");
 }
 
+function artistPresent(title, context) {
+  const titleNorm = normalizeTitle(title);
+  const candidates = [context?.artistName, ...(context?.artistAliases || [])]
+    .map((a) => String(a || "").trim())
+    .filter(Boolean);
+  return candidates.some((name) => {
+    const stripped = normalizeTitle(name);
+    if (stripped && titleNorm.includes(stripped)) return true;
+    if (!stripped) {
+      const tokens = normalizeText(name).split(" ").filter(Boolean);
+      const titleTokens = normalizeText(title).split(" ").filter(Boolean);
+      return tokens.length > 0 && tokens.every((t) => titleTokens.includes(t));
+    }
+    return false;
+  });
+}
+
 export function rankUsenetReleases(releases, context, options = {}) {
   const albumName = readComparableAlbumName(context);
   const expectedYear = getYear(context?.releaseYear);
@@ -158,51 +175,50 @@ export function rankUsenetReleases(releases, context, options = {}) {
     if (seen.has(key)) continue;
     seen.add(key);
     const title = release.title;
-    const artistScore = scoreTextMatch(title, context?.artistName);
+
+    // Identity gate: must have artist AND (track OR album)
+    if (!hasAudioCategory(release)) {
+      ranked.push({
+        raw: { release, file: title, size: Number(release.size || 0), downloadUrl: release.downloadUrl, indexerId: release.indexerId, indexer: release.indexer, guid: release.guid },
+        score: 0,
+        resolvedAlbumName: null,
+        preDownloadValid: false,
+        scores: { artist: 0, track: 0, album: 0, year: 0, format: 0, size: 0 },
+      });
+      continue;
+    }
+
+    const hasArtist = artistPresent(title, context);
     const trackScore = scoreTextMatch(title, context?.trackName);
     const albumScore = albumName ? scoreTextMatch(title, albumName) : 0;
-    const yearScore = expectedYear && normalizeText(title).includes(expectedYear) ? 10 : 0;
-    const audioCategoryScore = hasAudioCategory(release) ? 10 : -30;
+    const hasTrack = trackScore >= 45;
+    const hasAlbum = albumScore >= 65;
+
+    if (!hasArtist || !(hasTrack || hasAlbum)) {
+      ranked.push({
+        raw: { release, file: title, size: Number(release.size || 0), downloadUrl: release.downloadUrl, indexerId: release.indexerId, indexer: release.indexer, guid: release.guid },
+        score: 0,
+        resolvedAlbumName: null,
+        preDownloadValid: false,
+        scores: { artist: hasArtist ? 100 : 0, track: trackScore, album: albumScore, year: 0, format: 0, size: 0 },
+      });
+      continue;
+    }
+
+    // Identity passed — tie-breakers only
+    const yearScore = expectedYear && normalizeText(title).includes(expectedYear) ? 5 : 0;
     const formatScore = scoreFormat(title);
     const sizeScore = scoreReleaseSize(release, context, options);
     const noiseScore = scoreNoise(title);
-    const yearPenalty = hasConflictingYear(title, expectedYear) ? -20 : 0;
-    const score =
-      artistScore * 0.35 +
-      Math.max(trackScore, albumScore) * 0.35 +
-      Math.min(trackScore, albumScore || trackScore) * 0.12 +
-      yearScore +
-      audioCategoryScore +
-      formatScore +
-      sizeScore +
-      noiseScore +
-      yearPenalty;
-    const preDownloadValid =
-      artistScore >= 45 &&
-      (trackScore >= 55 || albumScore >= 65) &&
-      audioCategoryScore >= 0 &&
-      score >= 62;
+    const yearPenalty = hasConflictingYear(title, expectedYear) ? -50 : 0;
+    const tieScore = yearScore + formatScore + sizeScore + noiseScore + yearPenalty;
+
     ranked.push({
-      raw: {
-        release,
-        file: title,
-        size: Number(release.size || 0),
-        downloadUrl: release.downloadUrl,
-        indexerId: release.indexerId,
-        indexer: release.indexer,
-        guid: release.guid,
-      },
-      score: Math.round(score),
-      resolvedAlbumName: albumScore >= 65 ? albumName : null,
-      preDownloadValid,
-      scores: {
-        artist: artistScore,
-        track: trackScore,
-        album: albumScore,
-        year: yearScore,
-        format: formatScore,
-        size: sizeScore,
-      },
+      raw: { release, file: title, size: Number(release.size || 0), downloadUrl: release.downloadUrl, indexerId: release.indexerId, indexer: release.indexer, guid: release.guid },
+      score: tieScore,
+      resolvedAlbumName: hasAlbum ? albumName : null,
+      preDownloadValid: true,
+      scores: { artist: 100, track: trackScore, album: albumScore, year: yearScore, format: formatScore, size: sizeScore },
     });
   }
   return ranked.sort((left, right) => {
@@ -242,15 +258,40 @@ export function selectRankedUsenetCandidates(ranked, limit = 5) {
 export function isAudioFile(filePath) {
   const ext = path.extname(String(filePath || "")).toLowerCase();
   return [
-    ".flac",
-    ".mp3",
-    ".m4a",
-    ".ogg",
-    ".wav",
-    ".aac",
-    ".opus",
-    ".alac",
-    ".ape",
-    ".wma",
+    ".flac", ".mp3", ".m4a", ".ogg", ".wav",
+    ".aac", ".opus", ".alac", ".ape", ".wma",
   ].includes(ext);
 }
+
+// ponytail: self-check — fails if the identity gate regresses
+function _check() {
+  const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+  const make = (t, c) => ({ title: t, downloadUrl: 'http://x', protocol: 'usenet', categories: [3040], guid: t, size: 5e6, ...c });
+  const ctx = (a, t, al) => ({ artistName: a, trackName: t, albumName: al });
+
+  const reject = (releases, context, why) => {
+    const r = rankUsenetReleases(releases, context);
+    assert(r.some(x => !x.preDownloadValid), `FAIL: should reject ${why}`);
+  };
+  const accept = (releases, context, why) => {
+    const r = rankUsenetReleases(releases, context);
+    assert(r.some(x => x.preDownloadValid), `FAIL: should accept ${why}`);
+  };
+
+  reject([make('Led Zeppelin - Gallows Pole (1970) FLAC')], ctx('Gallows', 'Outside Art', 'Grey Britain'), 'Led Zep substring');
+  reject([make('Various - Punk Comp (2005)')], ctx('Gallows', 'Outside Art'), 'no-artist noise');
+  reject([make('Gallows Pole (2010) FLAC')], ctx('Gallows', 'Outside Art'), 'artist-only no track');
+  accept([make('Gallows - Outside Art FLAC')], ctx('Gallows', 'Outside Art'), 'artist+track');
+  accept([make('Gallows - Grey Britain 2009')], ctx('Gallows', 'Outside Art', 'Grey Britain'), 'artist+album');
+  accept([make('Beatles - Abbey Road 1969 FLAC')], ctx('The Beatles', 'Come Together', 'Abbey Road'), 'The Beatles stripped');
+
+  const hasConflict = rankUsenetReleases(
+    [make('Gallows - Outside Art FLAC')],
+    { ...ctx('Gallows', 'Outside Art'), releaseYear: '2024' },
+  );
+  assert(hasConflict[0].preDownloadValid, 'tie-breaker should not affect identity gate');
+
+  console.log('[matcher] self-check OK');
+}
+
+if (process.argv[1]?.endsWith('weeklyFlowUsenetMatcher.js')) _check();
