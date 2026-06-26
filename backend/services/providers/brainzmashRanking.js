@@ -28,7 +28,7 @@ export function scoreTextMatch(left, right) {
     const bWords = b.split(" ").filter(Boolean).length;
     const wordRatio = Math.min(aWords, bWords) / Math.max(aWords, bWords, 1);
     if (wordRatio >= 0.6) return 92;
-    if (wordRatio >= 0.35) return 70;
+    if (wordRatio >= 0.25) return 70;
     return 45;
   }
   const leftWords = new Set(splitWords(a));

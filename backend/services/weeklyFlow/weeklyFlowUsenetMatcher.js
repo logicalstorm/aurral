@@ -50,7 +50,7 @@ function scoreTextMatch(left, right) {
     const bWords = b.split(" ").filter(Boolean).length;
     const ratio = Math.min(aWords, bWords) / Math.max(aWords, bWords, 1);
     if (ratio >= 0.6) return 92;
-    if (ratio >= 0.35) return 70;
+    if (ratio >= 0.25) return 70;
     return 45;
   }
   const leftWords = new Set(splitWords(a));
