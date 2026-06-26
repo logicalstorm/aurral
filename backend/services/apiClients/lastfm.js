@@ -1,4 +1,5 @@
 import axios from "axios";
+import https from "https";
 import createRateLimiter from "./rateLimiter.js";
 import createCache from "./simpleCache.js";
 import { logger } from "../logger.js";
@@ -9,7 +10,16 @@ const lastfmCache = createCache(300);
 
 const lastfmLimiter = createRateLimiter(200);
 
-const LASTFM_TIMEOUT_MS = 6000;
+const lastfmHttpsAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 30000,
+  maxSockets: 16,
+  maxFreeSockets: 8,
+  timeout: 15000,
+});
+
+const LASTFM_TIMEOUT_MS =
+  Math.max(3000, parseInt(process.env.AURRAL_LASTFM_TIMEOUT_MS, 10) || 0) || 15000;
 const LASTFM_MAX_RETRIES = 2;
 
 const lastfmInflightRequests = new Map();
@@ -72,6 +82,7 @@ export const lastfmRequest = lastfmLimiter.wrap(
               ...params,
             },
             timeout: timeoutMs,
+            httpsAgent: lastfmHttpsAgent,
           });
           lastfmCache.set(cacheKey, response.data);
           return response.data;

@@ -39,6 +39,12 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 | -------- | ------- |
 | `AURRAL_VERBOSE_LOGS` | Fuller server logs while troubleshooting. |
 
+## Last.fm tuning
+
+| Variable | Purpose |
+| -------- | ------- |
+| `AURRAL_LASTFM_TIMEOUT_MS` | Per-request timeout for Last.fm API calls in milliseconds. Default `15000`. Increase if focus playlists are missing tracks and logs show `ECONNABORTED` errors.
+
 ## Example
 
 ```yaml
