@@ -22,6 +22,7 @@ import {
 import {
   getListenHistoryCacheNamespace,
   getListenHistoryProfile,
+  getDefaultListenHistoryProfile,
   hasListenHistoryProfile,
 } from "../listeningHistory.js";
 import { enqueueDiscoveryRefresh } from "./refreshScheduler.js";
@@ -42,7 +43,16 @@ export async function getUserDiscovery(userId, limit = 50, offset = 0) {
   const listenHistoryProfile = getListenHistoryProfile(reqUser || {});
   const userCacheNamespace =
     getListenHistoryCacheNamespace(listenHistoryProfile);
-  const effectiveCacheNamespace = hasLastfmKey ? userCacheNamespace : null;
+  const defaultProfile = getDefaultListenHistoryProfile(dbOps.getSettings());
+  const globalNamespace = defaultProfile
+    ? getListenHistoryCacheNamespace(defaultProfile)
+    : null;
+  const identityMatches = userCacheNamespace && globalNamespace && userCacheNamespace === globalNamespace;
+  const effectiveCacheNamespace = identityMatches
+    ? null
+    : hasLastfmKey
+      ? userCacheNamespace
+      : null;
 
   if (
     hasListenHistoryProfile(listenHistoryProfile) &&

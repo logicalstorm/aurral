@@ -8,6 +8,7 @@ import {
   writeGeneratedPlaylistArtwork,
 } from "../playlistArtworkGenerator.js";
 import { resolveAurralDataDir } from "../../config/data-dir.js";
+import { logger } from "../logger.js";
 
 const DATA_DIR = resolveAurralDataDir();
 const DISCOVER_ARTWORK_DIR = path.join(DATA_DIR, "discover-artwork");
@@ -69,12 +70,6 @@ export async function generateDiscoverPlaylistArtwork(playlist, options = {}) {
   const style = options.style || getPlaylistArtworkStyle();
   await ensureDiscoverArtworkDirectory();
   const outputPath = getDiscoverArtworkFilePath(presetId, style);
-  if (options.force !== true) {
-    try {
-      await fs.access(outputPath);
-      return outputPath;
-    } catch {}
-  }
   return writeGeneratedPlaylistArtwork({
     outputPath,
     title,
@@ -108,12 +103,26 @@ export async function attachArtworkToDiscoverPlaylists(playlists = []) {
         hasArtwork: true,
       });
     } catch (error) {
-      console.warn(`[DiscoverArtwork] Failed for ${playlist.presetId}: ${error.message}`);
-      enriched.push({
-        ...playlist,
-        artworkStyle: style,
-        hasArtwork: false,
-      });
+      logger.warn('discovery', `[DiscoverArtwork] Failed for ${playlist.presetId}: ${error.message}`);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await generateDiscoverPlaylistArtwork(playlist, { style });
+        enriched.push({
+          ...playlist,
+          artworkStyle: style,
+          hasArtwork: true,
+        });
+      } catch (retryError) {
+        logger.warn('discovery', `[DiscoverArtwork] Retry also failed for ${playlist.presetId}: ${retryError.message}`);
+        enriched.push({
+          ...playlist,
+          artworkStyle: style,
+          hasArtwork: false,
+        });
+      }
+    }
+    if (enriched.length < list.length) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
 
@@ -162,7 +171,7 @@ export async function ensureDiscoverArtworkForPreset(presetId, { user } = {}) {
     await generateDiscoverPlaylistArtwork(playlist);
     return resolveDiscoverArtworkFile(presetId);
   } catch (error) {
-    console.warn(`[DiscoverArtwork] Lazy generate failed for ${presetId}: ${error.message}`);
+    logger.warn('discovery', `[DiscoverArtwork] Lazy generate failed for ${presetId}: ${error.message}`);
     return null;
   }
 }

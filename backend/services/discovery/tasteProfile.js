@@ -39,7 +39,6 @@ export const collectSeedTagsAndGenres = async (
   progressPhase = null,
 ) => {
   const tagCounts = new Map();
-  const genreCounts = new Map();
   const tagMap = new Map();
 
   if (progressPhase) {
@@ -81,11 +80,6 @@ export const collectSeedTagsAndGenres = async (
             (tagCounts.get(name) || 0) +
               tagWeight * Math.max(0.5, seed.weight || 1),
           );
-          genreCounts.set(
-            name,
-            (genreCounts.get(name) || 0) +
-              tagWeight * Math.max(0.5, seed.weight || 1),
-          );
         }
       } catch (error) {
         logger.warn(
@@ -99,9 +93,6 @@ export const collectSeedTagsAndGenres = async (
   return {
     tagMap,
     tagWeights: tagCounts,
-    genreWeights: genreCounts,
-    topTags: buildWeightedTopList(tagCounts, 20),
-    topGenres: buildWeightedTopList(genreCounts, 24),
   };
 };
 
@@ -111,7 +102,6 @@ export const buildTasteProfile = ({
   historyArtists = [],
   tagMap = new Map(),
   tagWeights = new Map(),
-  genreWeights = new Map(),
 } = {}) => {
   const recentIds = new Set(
     recentLibraryArtists
@@ -172,8 +162,8 @@ export const buildTasteProfile = ({
   return {
     tagMap,
     profileTagWeights,
-    topTags: buildWeightedTopList(tagWeights, 20),
-    topGenres: buildWeightedTopList(genreWeights, 24),
+    topTags: buildWeightedTopList(tagWeights, 24),
+    topGenres: buildWeightedTopList(tagWeights, 24),
     historySeeds: bucketedHistorySeeds,
     librarySeeds: bucketedLibrarySeeds,
   };

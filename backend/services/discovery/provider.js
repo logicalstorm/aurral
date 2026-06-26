@@ -74,17 +74,30 @@ export { DISCOVERY_QUALITY_ENRICHED };
 
 const pendingUserDiscoveryProfiles = new Map();
 
-const hasListeningHistoryUsers = () =>
-  userOps
-    .getAllListeningHistoryUsers()
-    .some((user) => hasListenHistoryProfile(user));
+const hasListeningHistoryUsers = () => {
+  const defaultProfile = getDefaultListenHistoryProfile(dbOps.getSettings());
+  const globalNamespace = defaultProfile
+    ? getListenHistoryCacheNamespace(defaultProfile)
+    : null;
+  return userOps.getAllListeningHistoryUsers().some((user) => {
+    const profile = getListenHistoryProfile(user);
+    if (!hasListenHistoryProfile(profile)) return false;
+    if (globalNamespace && getListenHistoryCacheNamespace(profile) === globalNamespace) return false;
+    return true;
+  });
+};
 
 const collectListeningHistoryRefreshProfiles = () => {
+  const defaultProfile = getDefaultListenHistoryProfile(dbOps.getSettings());
+  const globalNamespace = defaultProfile
+    ? getListenHistoryCacheNamespace(defaultProfile)
+    : null;
   const profiles = new Map();
   for (const user of userOps.getAllListeningHistoryUsers()) {
     const profile = getListenHistoryProfile(user);
     const cacheNamespace = getListenHistoryCacheNamespace(profile);
     if (!cacheNamespace || !hasListenHistoryProfile(profile)) continue;
+    if (globalNamespace && cacheNamespace === globalNamespace) continue;
     profiles.set(cacheNamespace, {
       profile,
       feedbackUserId: user.id || null,
@@ -570,7 +583,7 @@ export const updateDiscoveryCache = async (options = {}) => {
       'discovery',
       `Sampling tags/genres from ${profileSample.length} artists (${libraryArtists.length} library, ${historyArtists.length} history)...`,
     );
-    const { tagMap, tagWeights, genreWeights } =
+    const { tagMap, tagWeights } =
       getLastfmApiKey()
         ? await collectSeedTagsAndGenres(
             profileSample,
@@ -580,7 +593,6 @@ export const updateDiscoveryCache = async (options = {}) => {
         : {
             tagMap: new Map(),
             tagWeights: new Map(),
-            genreWeights: new Map(),
           };
     const tasteProfile = buildTasteProfile({
       recentLibraryArtists,
@@ -588,7 +600,6 @@ export const updateDiscoveryCache = async (options = {}) => {
       historyArtists,
       tagMap,
       tagWeights,
-      genreWeights,
     });
     const seeds = buildDiscoverySeedList({
       libraryArtists: tasteProfile.librarySeeds,
@@ -782,7 +793,6 @@ export const updateDiscoveryCache = async (options = {}) => {
       globalTop: discoveryCache.globalTop || [],
       fallbackGenres: [],
       fallbackGenrePools: {},
-      discoverPlaylists: discoveryCache.discoverPlaylists || [],
       lastUpdated: recommendationRunStartedAt,
       recommendationQuality: DISCOVERY_QUALITY_ENRICHED,
       isEnriching: false,
@@ -838,9 +848,11 @@ export const updateDiscoveryCache = async (options = {}) => {
           .map((artist) => artist.artistName)
           .filter(Boolean),
       });
-      emitDiscoveryDataUpdate(discoveryData, {
-        progressMessage: "Discovery refresh completed",
-      });
+      logger.info('discovery', "Global refresh complete. Starting playlist build.");
+      emitDiscoveryDataUpdate(
+        { ...discoveryData, discoverPlaylists: discoveryCache.discoverPlaylists || [] },
+        { progressMessage: "Discovery refresh completed" },
+      );
     }
 
     const { recordDiscoveryUpdated } =

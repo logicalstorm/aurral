@@ -111,11 +111,15 @@ function DiscoverPage() {
         .filter(Boolean),
     );
 
-    const sortedGenres = [...data.topGenres];
+    const genres = [...data.topGenres];
+    for (let i = genres.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [genres[i], genres[j]] = [genres[j], genres[i]];
+    }
     const candidatePool = [...(data.recommendations || [])].slice(8);
 
-    for (const genre of sortedGenres) {
-      if (sections.length >= 4) break;
+    for (const genre of genres) {
+      if (sections.length >= 12) break;
 
       const genreArtists = candidatePool.filter((artist) => {
         const artistId = getArtistId(artist);

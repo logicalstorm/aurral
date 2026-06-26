@@ -103,8 +103,8 @@ export const getDiscoveryUserRefreshDelaySeconds = () => {
   const parsed = Number(
     process.env.AURRAL_DISCOVERY_USER_REFRESH_DELAY_SECONDS,
   );
-  if (!Number.isFinite(parsed)) return 300;
-  return Math.max(30, Math.min(3600, Math.floor(parsed)));
+  if (!Number.isFinite(parsed)) return 10;
+  return Math.max(5, Math.min(3600, Math.floor(parsed)));
 };
 
 export const normalizeTextList = (value) => {

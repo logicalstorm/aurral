@@ -1,6 +1,7 @@
 import { dbOps } from "../../db/helpers/index.js";
 import { getLastfmApiKey } from "../apiClients/index.js";
 import { libraryManager } from "../libraryManager.js";
+import { logger } from "../logger.js";
 import { buildExistingArtistKeySet } from "./recommendationPipeline.js";
 import { websocketService } from "../websocketService.js";
 import { withHonkerLock } from "../honkerDb.js";
@@ -117,11 +118,23 @@ export const runQueuedDiscoverPlaylistBuild = async (payload = {}) => {
         }
         dbOps.updateDiscoveryCache(playlistData, cacheNamespace);
 
+        try {
+          const { attachArtworkToDiscoverPlaylists } =
+            await import("./playlistArtworkBuilder.js");
+          discoveryCache.discoverPlaylists = await attachArtworkToDiscoverPlaylists(discoverPlaylists);
+          dbOps.updateDiscoveryCache(
+            { discoverPlaylists: discoveryCache.discoverPlaylists },
+            cacheNamespace,
+          );
+        } catch (error) {
+          logger.warn('discovery', `[DiscoverPlaylistBuild] Artwork generation failed: ${error.message}`);
+        }
+
         if (payload?.publishUpdate !== false) {
           emitDiscoveryUpdateLocal(
             {
               ...baseDiscoveryData,
-              discoverPlaylists,
+              discoverPlaylists: discoveryCache.discoverPlaylists,
             },
             {
               phase: "playlists_completed",
@@ -129,6 +142,7 @@ export const runQueuedDiscoverPlaylistBuild = async (payload = {}) => {
             },
           );
         }
+        logger.info('discovery', `Discover playlists built: ${discoverPlaylists.length} playlists.`);
         return { built: true, playlistCount: discoverPlaylists.length };
       } finally {
         if (discoveryPlaylistBuildTokens.get(buildKey) === buildToken) {
