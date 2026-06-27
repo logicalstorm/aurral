@@ -95,16 +95,16 @@ export const ArtistCard = memo(
     }, [navigateTo, hasValidMbid, artist.name, isInLibrary, onNavigate]);
 
     return (
-      <div className="artist-discover-card artist-discover-card--artist">
-        <div
-          role="button"
-          tabIndex={hasValidMbid ? 0 : -1}
-          onClick={handleClick}
-          onKeyDown={(event) => handleCoverKeyDown(event, handleClick)}
-          className={`artist-discover-card__cover${hasValidMbid ? "" : " is-disabled"}`}
-          aria-label={`Open ${artist.name}`}
-          aria-disabled={!hasValidMbid}
-        >
+      <div
+        role="button"
+        tabIndex={hasValidMbid ? 0 : -1}
+        onClick={handleClick}
+        onKeyDown={(event) => handleCoverKeyDown(event, handleClick)}
+        className={`artist-discover-card artist-discover-card--artist${hasValidMbid ? "" : " is-disabled"}`}
+        aria-label={`Open ${artist.name}`}
+        aria-disabled={!hasValidMbid}
+      >
+        <div className="artist-discover-card__cover">
           <ArtistImage
             src={artist.image || artist.imageUrl}
             mbid={artist.id}
@@ -113,21 +113,19 @@ export const ArtistCard = memo(
             className="artist-discover-card__image"
             showLoading={false}
             enablePreviewPlayback={hasValidMbid}
+            isInLibrary={isInLibrary}
           />
         </div>
 
         <div className="artist-discover-card__content">
           <div className="artist-discover-card__text">
             <div className="artist-card-title-row--discover">
-              <button
-                type="button"
-                onClick={handleClick}
+              <span
                 className={`artist-card-title--discover${hasValidMbid ? "" : " is-disabled"}`}
                 title={artist.name}
-                disabled={!hasValidMbid}
               >
                 {artist.name}
-              </button>
+              </span>
               {isInLibrary && <SearchLibraryCheck size="discover" />}
             </div>
             {artistMetaText ? (
@@ -141,14 +139,16 @@ export const ArtistCard = memo(
               </p>
             )}
           </div>
-          <ArtistContextMenu
-            artist={artist}
-            isInLibrary={isInLibrary}
-            canAddArtist={canAddArtist}
-            onAddToLibrary={onAddToLibrary}
-            onFeedback={onFeedback}
-            feedbackUsed={feedbackUsed}
-          />
+          <div onClick={(event) => event.stopPropagation()} role="none">
+            <ArtistContextMenu
+              artist={artist}
+              isInLibrary={isInLibrary}
+              canAddArtist={canAddArtist}
+              onAddToLibrary={onAddToLibrary}
+              onFeedback={onFeedback}
+              feedbackUsed={feedbackUsed}
+            />
+          </div>
         </div>
       </div>
     );
@@ -278,15 +278,17 @@ export const AlbumCard = memo(
     const canOpen = Boolean(releaseGroupMbid && artistMbid);
 
     return (
-      <div className="artist-discover-card artist-discover-card--album">
+      <div
+        role="button"
+        tabIndex={canOpen ? 0 : -1}
+        onClick={handleClick}
+        onKeyDown={(event) => handleCoverKeyDown(event, handleClick)}
+        className={`artist-discover-card artist-discover-card--album${canOpen ? "" : " is-disabled"}`}
+        aria-label={`Open ${album.albumName}`}
+        aria-disabled={!canOpen}
+      >
         <div className="artist-discover-card__cover-wrap">
-          <button
-            type="button"
-            onClick={handleClick}
-            className={`artist-discover-card__cover${canOpen ? "" : " is-disabled"}`}
-            disabled={!canOpen}
-            aria-label={`Open ${album.albumName}`}
-          >
+          <div className={`artist-discover-card__cover${canOpen ? "" : " is-disabled"}`}>
             {coverUrl ? (
               <img
                 src={coverUrl}
@@ -300,7 +302,7 @@ export const AlbumCard = memo(
                 <Music className="artist-icon-lg" />
               </div>
             )}
-          </button>
+          </div>
           {isComplete ? (
             <div className="artist-discover-card__action">
               <span className="artist-release-card__status" title="In library">
@@ -328,15 +330,12 @@ export const AlbumCard = memo(
         <div className="artist-discover-card__content">
           <div className="artist-discover-card__text">
             <div className="artist-card-title-row--discover">
-              <button
-                type="button"
-                onClick={handleClick}
+              <span
                 className={`artist-card-title--discover${canOpen ? "" : " is-disabled"}`}
                 title={album.albumName}
-                disabled={!canOpen}
               >
                 {album.albumName}
-              </button>
+              </span>
             </div>
             <p className="artist-card-meta--discover" title={albumArtistText}>
               {albumArtistText}

@@ -53,6 +53,7 @@ const ArtistImage = ({
   showLoading = true,
   enableBackendFallback = true,
   enablePreviewPlayback = false,
+  isInLibrary = false,
   loading = "lazy",
 }) => {
   const [currentSrc, setCurrentSrc] = useState(src);
@@ -67,6 +68,7 @@ const ArtistImage = ({
       mbid,
       artistName,
       enabled: enablePreviewPlayback,
+      isInLibrary,
     });
 
   const fetchBackendCover = useCallback(
@@ -284,6 +286,7 @@ ArtistImage.propTypes = {
   showLoading: PropTypes.bool,
   enableBackendFallback: PropTypes.bool,
   enablePreviewPlayback: PropTypes.bool,
+  isInLibrary: PropTypes.bool,
   loading: PropTypes.oneOf(["eager", "lazy"]),
 };
 

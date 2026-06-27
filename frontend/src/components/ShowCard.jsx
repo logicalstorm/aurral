@@ -178,59 +178,63 @@ const ShowCard = memo(({ show }) => {
         <article className="artist-show-card--discover-mobile is-disabled">{mobileContent}</article>
       )}
 
-      <article className={`artist-show-card--discover-desktop${eventUrl ? "" : " is-disabled"}`}>
-        {eventUrl ? (
-          <a
-            href={eventUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="artist-show-card__image-link--discover"
-            aria-label={`Open tickets for ${eventLabel}`}
-          >
-            <ShowImage
-              show={show}
-              eventLabel={eventLabel}
-              distanceLabel={distanceLabel}
-              variant="desktop"
-            />
-          </a>
-        ) : (
+      {eventUrl ? (
+        <a
+          href={eventUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="artist-show-card--discover-desktop"
+          aria-label={`Open tickets for ${eventLabel}`}
+        >
           <ShowImage
             show={show}
             eventLabel={eventLabel}
             distanceLabel={distanceLabel}
             variant="desktop"
           />
-        )}
-        <div className="artist-show-card__body--discover">
-          <div className="artist-show-card__body-heading">
-            <p className="artist-show-card__body-artist--discover artist-truncate">{artistLabel}</p>
-            <h3 className="artist-show-card__body-title--discover">
-              {eventUrl ? (
-                <a
-                  href={eventUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="artist-show-card__body-title-link--discover artist-truncate"
-                  title={eventLabel}
-                >
-                  {eventLabel}
-                </a>
-              ) : (
+          <div className="artist-show-card__body--discover">
+            <div className="artist-show-card__body-heading">
+              <p className="artist-show-card__body-artist--discover artist-truncate">{artistLabel}</p>
+              <h3 className="artist-show-card__body-title--discover">
                 <span
                   className="artist-show-card__body-title-text--discover artist-truncate"
                   title={eventLabel}
                 >
                   {eventLabel}
                 </span>
-              )}
-            </h3>
+              </h3>
+            </div>
+            <div className="artist-show-card__body-details--discover">
+              <ShowMetaDetails showDate={showDate} showLocation={showLocation} variant="body" />
+            </div>
           </div>
-          <div className="artist-show-card__body-details--discover">
-            <ShowMetaDetails showDate={showDate} showLocation={showLocation} variant="body" />
+        </a>
+      ) : (
+        <article className="artist-show-card--discover-desktop is-disabled">
+          <ShowImage
+            show={show}
+            eventLabel={eventLabel}
+            distanceLabel={distanceLabel}
+            variant="desktop"
+          />
+          <div className="artist-show-card__body--discover">
+            <div className="artist-show-card__body-heading">
+              <p className="artist-show-card__body-artist--discover artist-truncate">{artistLabel}</p>
+              <h3 className="artist-show-card__body-title--discover">
+                <span
+                  className="artist-show-card__body-title-text--discover artist-truncate"
+                  title={eventLabel}
+                >
+                  {eventLabel}
+                </span>
+              </h3>
+            </div>
+            <div className="artist-show-card__body-details--discover">
+              <ShowMetaDetails showDate={showDate} showLocation={showLocation} variant="body" />
+            </div>
           </div>
-        </div>
-      </article>
+        </article>
+      )}
     </>
   );
 });

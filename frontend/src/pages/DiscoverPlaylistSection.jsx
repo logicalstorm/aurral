@@ -415,17 +415,25 @@ export function DiscoverPlaylistSection({
             Number(playlist.trackCount) > 0 && !failedArtworkIds[playlist.presetId];
 
           return (
-            <div key={playlist.presetId} className="artist-discover-shelf-card">
+            <div
+              key={playlist.presetId}
+              className={`artist-discover-shelf-card${isExpanded ? " is-expanded" : ""}`}
+            >
               <div
-                className={`artist-discover-card artist-discover-card--playlist${isExpanded ? " is-expanded" : ""}`}
+                role="button"
+                tabIndex={0}
+                className="artist-discover-card artist-discover-card--playlist"
+                onClick={() => handleToggle(playlist.presetId)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    handleToggle(playlist.presetId);
+                  }
+                }}
+                aria-expanded={isExpanded}
+                aria-label={`${isExpanded ? "Collapse" : "Expand"} ${playlist.name}`}
               >
-                <button
-                  type="button"
-                  className="artist-discover-card__cover"
-                  onClick={() => handleToggle(playlist.presetId)}
-                  aria-expanded={isExpanded}
-                  aria-label={`${isExpanded ? "Collapse" : "Expand"} ${playlist.name}`}
-                >
+                <div className="artist-discover-card__cover">
                   {showArtwork ? (
                     <img
                       src={getDiscoverArtworkUrl(playlist.presetId, artworkVersion)}
@@ -444,19 +452,16 @@ export function DiscoverPlaylistSection({
                       <CoverIcon className="artist-icon-lg" />
                     </div>
                   )}
-                </button>
+                </div>
                 <div className="artist-discover-card__content">
                   <div className="artist-discover-card__text">
                     <div className="artist-card-title-row--discover">
-                      <button
-                        type="button"
+                      <span
                         className="artist-card-title--discover"
                         title={playlist.name}
-                        onClick={() => handleToggle(playlist.presetId)}
-                        aria-expanded={isExpanded}
                       >
                         {playlist.name}
-                      </button>
+                      </span>
                       {playlist.adoptedFlowId ? (
                         <CheckCircle2
                           className="artist-library-check--discover"
@@ -476,15 +481,17 @@ export function DiscoverPlaylistSection({
                       </p>
                     ) : null}
                   </div>
-                  <DiscoverPlaylistContextMenu
-                    playlist={playlist}
-                    canAdopt={canAdopt}
-                    adoptingFlowId={adoptingFlowId}
-                    adoptingPlaylistId={adoptingPlaylistId}
-                    onAdoptFlow={handleAdoptFlow}
-                    onAdoptPlaylist={handleAdoptPlaylist}
-                    triggerVariant="icon"
-                  />
+                  <div onClick={(event) => event.stopPropagation()} role="none">
+                    <DiscoverPlaylistContextMenu
+                      playlist={playlist}
+                      canAdopt={canAdopt}
+                      adoptingFlowId={adoptingFlowId}
+                      adoptingPlaylistId={adoptingPlaylistId}
+                      onAdoptFlow={handleAdoptFlow}
+                      onAdoptPlaylist={handleAdoptPlaylist}
+                      triggerVariant="icon"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

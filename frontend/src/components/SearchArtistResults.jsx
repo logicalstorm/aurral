@@ -6,24 +6,13 @@ import { useImageGradientColors } from "../hooks/useImageGradientColors";
 import { getArtistFeedbackFlags } from "../utils/discoveryFeedback";
 import { getArtistRecordId } from "../utils/artistTaste";
 
-const handleCoverKeyDown = (event, onClick) => {
-  if (event.key !== "Enter" && event.key !== " ") return;
-  event.preventDefault();
-  onClick();
-};
-
-function TagRecommendedArtistCover({ artist, artistId, artistImages, onClick }) {
+function TagRecommendedArtistCover({ artist, artistId, artistImages, isInLibrary }) {
   const coverSrc = artistImages[artistId] || artist.image || artist.imageUrl || "";
   const gradientColors = useImageGradientColors(coverSrc);
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(event) => handleCoverKeyDown(event, onClick)}
       className="artist-discover-card__cover artist-discover-card__cover--recommended"
-      aria-label={`Open ${artist.name}`}
       style={
         gradientColors
           ? {
@@ -42,6 +31,7 @@ function TagRecommendedArtistCover({ artist, artistId, artistImages, onClick }) 
         showLoading={false}
         enableBackendFallback={false}
         enablePreviewPlayback
+        isInLibrary={isInLibrary}
       />
     </div>
   );
@@ -51,7 +41,7 @@ TagRecommendedArtistCover.propTypes = {
   artist: PropTypes.object.isRequired,
   artistId: PropTypes.string,
   artistImages: PropTypes.object.isRequired,
-  onClick: PropTypes.func.isRequired,
+  isInLibrary: PropTypes.bool,
 };
 
 function SearchArtistResults({
@@ -139,23 +129,24 @@ function SearchArtistResults({
             className={`artist-discover-card artist-discover-card--artist${
               isRecommendedTagResult ? " artist-discover-card--recommended" : ""
             }`}
+            onClick={() => openArtist(artist)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openArtist(artist);
+              }
+            }}
+            tabIndex={0}
           >
             {isRecommendedTagResult ? (
               <TagRecommendedArtistCover
                 artist={artist}
                 artistId={artistId}
                 artistImages={artistImages}
-                onClick={() => openArtist(artist)}
+                isInLibrary={!!libraryLookup[artistId]}
               />
             ) : (
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => openArtist(artist)}
-                onKeyDown={(event) => handleCoverKeyDown(event, () => openArtist(artist))}
-                className="artist-discover-card__cover"
-                aria-label={`Open ${artist.name}`}
-              >
+              <div className="artist-discover-card__cover">
                 <ArtistImage
                   src={artistImages[artistId] || artist.image || artist.imageUrl}
                   mbid={artistId}
@@ -165,6 +156,7 @@ function SearchArtistResults({
                   showLoading={false}
                   enableBackendFallback={false}
                   enablePreviewPlayback
+                  isInLibrary={!!libraryLookup[artistId]}
                 />
               </div>
             )}
@@ -173,7 +165,6 @@ function SearchArtistResults({
               <div className="artist-discover-card__text">
                 <div className="artist-card-title-row--discover">
                   <h3
-                    onClick={() => openArtist(artist)}
                     className="artist-card-title--discover"
                     title={artist.name}
                   >
@@ -193,18 +184,20 @@ function SearchArtistResults({
                 ) : null}
               </div>
 
-              <ArtistContextMenu
-                artist={artist}
-                isInLibrary={!!libraryLookup[artistId]}
-                canAddArtist={canAddArtist}
-                onAddToLibrary={onAddArtistToLibrary}
-                onFeedback={onArtistFeedback}
-                feedbackUsed={
-                  artistFeedbackLookup
-                    ? getArtistFeedbackFlags(artistFeedbackLookup, artist)
-                    : undefined
-                }
-              />
+              <div onClick={(event) => event.stopPropagation()} role="none">
+                <ArtistContextMenu
+                  artist={artist}
+                  isInLibrary={!!libraryLookup[artistId]}
+                  canAddArtist={canAddArtist}
+                  onAddToLibrary={onAddArtistToLibrary}
+                  onFeedback={onArtistFeedback}
+                  feedbackUsed={
+                    artistFeedbackLookup
+                      ? getArtistFeedbackFlags(artistFeedbackLookup, artist)
+                      : undefined
+                  }
+                />
+              </div>
             </div>
           </article>
         );

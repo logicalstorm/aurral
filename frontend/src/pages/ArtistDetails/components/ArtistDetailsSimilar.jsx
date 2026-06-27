@@ -130,19 +130,34 @@ export function ArtistDetailsSimilar({
             {similarArtists.map((similar) => {
               const artistId = getArtistRecordId(similar);
               return (
-                <div key={similar.id} className="artist-similar-card">
-                  <div
-                    className="artist-similar-avatar"
-                    onClick={() =>
+                <div
+                  key={similar.id}
+                  className="artist-similar-card"
+                  onClick={() =>
+                    onArtistClick(
+                      similar.id,
+                      similar.name,
+                      typeof libraryLookup[artistId] === "boolean"
+                        ? libraryLookup[artistId]
+                        : undefined,
+                    )
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
                       onArtistClick(
                         similar.id,
                         similar.name,
                         typeof libraryLookup[artistId] === "boolean"
                           ? libraryLookup[artistId]
                           : undefined,
-                      )
+                      );
                     }
-                  >
+                  }}
+                  tabIndex={0}
+                  role="button"
+                >
+                  <div className="artist-similar-avatar">
                     <ArtistImage
                       src={similar.image}
                       mbid={getArtistRecordId(similar)}
@@ -151,6 +166,7 @@ export function ArtistDetailsSimilar({
                       className=""
                       loading="eager"
                       enablePreviewPlayback
+                      isInLibrary={!!libraryLookup[artistId]}
                     />
 
                     {similar.match && (
@@ -158,34 +174,25 @@ export function ArtistDetailsSimilar({
                     )}
                   </div>
                   <div className="artist-similar-name-row">
-                    <div
-                      className="artist-similar-name-block"
-                      onClick={() =>
-                        onArtistClick(
-                          similar.id,
-                          similar.name,
-                          typeof libraryLookup[artistId] === "boolean"
-                            ? libraryLookup[artistId]
-                            : undefined,
-                        )
-                      }
-                    >
+                    <div className="artist-similar-name-block">
                       <h3 className="artist-similar-name">{similar.name}</h3>
                       {artistId && libraryLookup[artistId] && <SearchLibraryCheck size="sm" />}
                     </div>
-                    <ArtistContextMenu
-                      artist={similar}
-                      isInLibrary={!!libraryLookup[artistId]}
-                      canAddArtist={canAddArtist}
-                      onAddToLibrary={onAddToLibrary}
-                      onFeedback={onArtistFeedback}
-                      feedbackUsed={
-                        artistFeedbackLookup
-                          ? getArtistFeedbackFlags(artistFeedbackLookup, similar)
-                          : undefined
-                      }
-                      buttonClassName="btn btn-icon-square artist-context-menu__trigger"
-                    />
+                    <div onClick={(event) => event.stopPropagation()} role="none">
+                      <ArtistContextMenu
+                        artist={similar}
+                        isInLibrary={!!libraryLookup[artistId]}
+                        canAddArtist={canAddArtist}
+                        onAddToLibrary={onAddToLibrary}
+                        onFeedback={onArtistFeedback}
+                        feedbackUsed={
+                          artistFeedbackLookup
+                            ? getArtistFeedbackFlags(artistFeedbackLookup, similar)
+                            : undefined
+                        }
+                        buttonClassName="btn btn-icon-square artist-context-menu__trigger"
+                      />
+                    </div>
                   </div>
                 </div>
               );

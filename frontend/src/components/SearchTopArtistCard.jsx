@@ -43,7 +43,7 @@ function getPreviewLabel(item, previewTracks) {
   return null;
 }
 
-function TopResultArtwork({ item, artistImages, albumCovers }) {
+function TopResultArtwork({ item, artistImages, albumCovers, isInLibrary }) {
   if (item.type === "artist") {
     const artistId = getArtistRecordId(item);
     return (
@@ -56,6 +56,7 @@ function TopResultArtwork({ item, artistImages, albumCovers }) {
         showLoading={false}
         enableBackendFallback={false}
         enablePreviewPlayback
+        isInLibrary={isInLibrary}
       />
     );
   }
@@ -162,7 +163,7 @@ function SearchTopArtistCard({
               isArtist ? "" : " search-top-artist__image-wrap--square"
             }`}
           >
-            <TopResultArtwork item={result} artistImages={artistImages} albumCovers={albumCovers} />
+            <TopResultArtwork item={result} artistImages={artistImages} albumCovers={albumCovers} isInLibrary={isInLibrary} />
           </span>
 
           <span className="search-top-artist__copy">
@@ -208,6 +209,7 @@ TopResultArtwork.propTypes = {
   item: PropTypes.object.isRequired,
   artistImages: PropTypes.object.isRequired,
   albumCovers: PropTypes.object.isRequired,
+  isInLibrary: PropTypes.bool,
 };
 
 export default SearchTopArtistCard;

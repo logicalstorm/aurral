@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
 import { useAudioQueue } from "./useAudioQueue";
-import { getArtistPreview } from "../utils/api";
-import { normalizePreviewTrack } from "../utils/audioQueue";
+import { getArtistPreview, getLibraryArtist, getLibraryTracks } from "../utils/api";
+import { isDownloadedLibraryAlbum, normalizePreviewTrack, normalizeQueueTrack } from "../utils/audioQueue";
 
-export function useArtistPreviewPlayback({ mbid, artistName, enabled = true } = {}) {
+export function useArtistPreviewPlayback({ mbid, artistName, enabled = true, isInLibrary = false } = {}) {
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const { playQueue, togglePlayPause, matchesSource, isPlaying, isLoading } = useAudioQueue();
 
@@ -31,6 +31,48 @@ export function useArtistPreviewPlayback({ mbid, artistName, enabled = true } = 
 
     setIsLoadingPreview(true);
     try {
+      if (isInLibrary) {
+        const libraryArtist = await getLibraryArtist(mbid);
+        const albums = Array.isArray(libraryArtist?.albums) ? libraryArtist.albums : [];
+        const downloaded = albums.filter((album) =>
+          isDownloadedLibraryAlbum(album),
+        );
+        if (downloaded.length > 0) {
+          const queue = [];
+          const seen = new Set();
+          for (const album of downloaded) {
+            const tracks = await getLibraryTracks(album.id, album.mbid || album.foreignAlbumId, {
+              artistName,
+              albumTitle: album.title,
+            });
+            for (const track of Array.isArray(tracks) ? tracks : []) {
+              if (!track?.preview_url || !track?.streamPath) continue;
+              const key = track.id ?? track.mbid ?? `lib-${album.id}-${track.trackNumber}`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              queue.push(
+                normalizeQueueTrack({
+                  id: key,
+                  title: track.title || track.trackName,
+                  artist: artistName,
+                  album: album.title,
+                  src: track.preview_url,
+                  streamFormat: track.streamFormat,
+                  quality: track.quality,
+                }),
+              );
+            }
+          }
+          if (queue.length > 0) {
+            return playQueue(queue, {
+              source,
+              shuffle: false,
+              updateShufflePreference: false,
+            });
+          }
+        }
+      }
+
       const data = await getArtistPreview(mbid, artistName);
       const tracks = (Array.isArray(data?.tracks) ? data.tracks : [])
         .filter((track) => track?.preview_url)
@@ -49,6 +91,7 @@ export function useArtistPreviewPlayback({ mbid, artistName, enabled = true } = 
     canPlayArtistPreview,
     isArtistPreviewSource,
     isLoadingPreview,
+    isInLibrary,
     mbid,
     playQueue,
     source,

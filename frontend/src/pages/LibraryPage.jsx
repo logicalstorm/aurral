@@ -319,6 +319,8 @@ function LibraryPage() {
                       alt={artistName}
                       className="artist-image-fill"
                       showLoading={false}
+                      enablePreviewPlayback
+                      isInLibrary
                     />
                     {isMonitored && (
                       <span

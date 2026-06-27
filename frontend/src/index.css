@@ -5171,6 +5171,8 @@ textarea {
   cursor: default;
   padding: 0.5rem;
   transition: background-color 0.18s ease;
+  color: inherit;
+  text-decoration: none;
 }
 
 .artist-show-card--discover-mobile:not(.is-disabled):hover,
@@ -5214,13 +5216,6 @@ textarea {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.artist-show-card__image-link--discover {
-  display: block;
-  min-width: 0;
-  color: inherit;
-  text-decoration: none;
 }
 
 .artist-show-card__image--discover-overlay {
@@ -5355,18 +5350,9 @@ textarea {
   line-height: 1.25;
 }
 
-.artist-show-card__body-title-link--discover,
 .artist-show-card__body-title-text--discover {
   display: block;
   color: var(--aurral-white);
-}
-
-.artist-show-card__body-title-link--discover {
-  transition: opacity 0.18s ease;
-}
-
-.artist-show-card__body-title-link--discover:hover {
-  opacity: 0.8;
 }
 
 .artist-show-card__body-details--discover {
