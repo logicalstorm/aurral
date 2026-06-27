@@ -22,7 +22,7 @@ export function getSearchResultKey(item, index = 0) {
 
 export function buildArtistFocusState(item, overrides = {}) {
   const state = { ...overrides };
-  if (item?.artistName) state.artistName = item.artistName;
+  if (item?.artistName || item?.name) state.artistName = item.artistName || item.name;
   if (typeof item?.inLibrary === "boolean") state.inLibrary = item.inLibrary;
   return state;
 }
