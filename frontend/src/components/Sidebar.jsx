@@ -180,14 +180,36 @@ function Sidebar({ mode }) {
   const translateClass = mode === "hidden" ? "-translate-x-full" : "translate-x-0";
 
   const renderSubnav = (item, activeId) => {
-    if (isIcons || !item.subnav?.length || !isNavItemActive(item)) {
+    if (isIcons || !isNavItemActive(item)) {
+      return null;
+    }
+    if (!item.subnav?.length && item.section !== "discover") {
       return null;
     }
 
     if (item.section === "discover") {
+      const isRecommendedActive =
+        location.pathname === "/search" && location.search === "?type=recommended";
+      const isTrendingActive =
+        location.pathname === "/search" && location.search === "?type=trending";
       return (
-        <nav className="sidebar-subnav" aria-label={`${item.label} recent pages`}>
-          {item.subnav.map((entry) => {
+        <nav className="sidebar-subnav" aria-label={`${item.label} views`}>
+          <Link
+            to="/search?type=recommended"
+            className={`sidebar-subnav-link${isRecommendedActive ? " is-active" : ""}`}
+            aria-current={isRecommendedActive ? "page" : undefined}
+          >
+            Recommended
+          </Link>
+          <Link
+            to="/search?type=trending"
+            className={`sidebar-subnav-link${isTrendingActive ? " is-active" : ""}`}
+            aria-current={isTrendingActive ? "page" : undefined}
+          >
+            Trending
+          </Link>
+          {item.subnav.length > 0 && <hr className="sidebar-subnav-separator" />}
+          {item.subnav.slice(0, 3).map((entry) => {
             const active = activeId === entry.id;
             return (
               <Link
@@ -204,9 +226,11 @@ function Sidebar({ mode }) {
               </Link>
             );
           })}
-          <button type="button" className="sidebar-subnav-action" onClick={clearRecentPages}>
-            Clear recent
-          </button>
+          {item.subnav.length > 0 && (
+            <button type="button" className="sidebar-subnav-action" onClick={clearRecentPages}>
+              Clear recent
+            </button>
+          )}
         </nav>
       );
     }
@@ -236,7 +260,7 @@ function Sidebar({ mode }) {
 
   const getNavGroupClassName = (item, active) => {
     const classes = ["sidebar-nav-group"];
-    if (active && item.subnav?.length && !isIcons) {
+    if (active && (item.subnav?.length || item.section === "discover") && !isIcons) {
       classes.push("is-expanded");
     } else if (active) {
       classes.push("is-active-row");

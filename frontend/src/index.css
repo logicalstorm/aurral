@@ -1684,6 +1684,13 @@ textarea {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.sidebar-subnav-separator {
+  height: 4px;
+  border: none;
+  background: var(--aurral-surface);
+  margin: 0.25rem 0rem;
+}
+
 .global-search {
   position: relative;
   flex: 1;

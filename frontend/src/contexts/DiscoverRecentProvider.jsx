@@ -53,7 +53,7 @@ function DiscoverFlowLocationSync({
       return;
     }
 
-    if (discoverFlowActive && isDiscoverBrowsePath(pathname) && shouldTrackDiscoverPath(path)) {
+    if (isDiscoverBrowsePath(pathname) && shouldTrackDiscoverPath(path)) {
       addRecentPage(normalizedPath, location.state || {});
     }
   }, [addRecentPage, discoverFlowActive, location, recentPages, setDiscoverFlowActive]);
@@ -138,9 +138,18 @@ export function DiscoverRecentProvider({ children }) {
     [discoverFlowActive, location, visibleRecentPages],
   );
 
+  const isDiscoverDiscoverSubnavPage = useMemo(() => {
+    const sp = new URLSearchParams(location.search);
+    const type = sp.get("type");
+    return location.pathname === "/search" && (type === "recommended" || type === "trending");
+  }, [location.pathname, location.search]);
+
   const isDiscoverSectionActive = useMemo(
-    () => shouldKeepDiscoverSectionActive(location, visibleRecentPages, discoverFlowActive),
-    [discoverFlowActive, location, visibleRecentPages],
+    () =>
+      isDiscoverDiscoverSubnavPage ||
+      isDiscoverBrowsePath(location.pathname) ||
+      shouldKeepDiscoverSectionActive(location, visibleRecentPages, discoverFlowActive),
+    [discoverFlowActive, isDiscoverDiscoverSubnavPage, location, visibleRecentPages],
   );
 
   const value = useMemo(
