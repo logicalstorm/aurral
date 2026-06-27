@@ -19,7 +19,7 @@ import {
 } from "../utils/discoverRecentNavigation";
 import { useStorageHealth } from "../hooks/useStorageHealth";
 
-function Sidebar({ mode }) {
+function Sidebar({ mode, width = 208 }) {
   const location = useLocation();
   const { user } = useAuth();
   const hasFlowAccess = user?.role === "admin" || !!user?.permissions?.accessFlow;
@@ -272,7 +272,7 @@ function Sidebar({ mode }) {
     <aside
       className={`sidebar-shell ${translateClass}`}
       style={{
-        width: isIcons ? "56px" : "208px",
+        width: `${width}px`,
       }}
     >
       <div className="sidebar-logo-row">
@@ -414,6 +414,7 @@ function Sidebar({ mode }) {
 
 Sidebar.propTypes = {
   mode: PropTypes.oneOf(["full", "icons", "hidden"]).isRequired,
+  width: PropTypes.number,
 };
 
 export default Sidebar;

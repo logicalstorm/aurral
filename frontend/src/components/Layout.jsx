@@ -21,7 +21,9 @@ import { useAuth } from "../contexts/AuthContext";
 import { useAudioQueue } from "../hooks/useAudioQueue";
 import { DEFAULT_SETTINGS_TAB } from "../pages/Settings/settingsTabsConfig";
 
-const VALID_SIDEBAR_MODES = ["full", "icons", "hidden"];
+const SIDEBAR_THRESHOLD = 100;
+const SIDEBAR_MIN = 56;
+const SIDEBAR_MAX = 400;
 
 function Layout({ children }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -33,18 +35,23 @@ function Layout({ children }) {
   });
   const mainScrollRef = useRef(null);
   const scrollbarFadeTimeoutRef = useRef(null);
-  const [sidebarMode, setSidebarMode] = useState(() => {
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
     try {
-      const stored = localStorage.getItem("sidebarMode");
-      if (stored === "hidden") {
-        const visible = localStorage.getItem("sidebarVisibleMode");
-        return visible === "full" || visible === "icons" ? visible : "icons";
-      }
-      return VALID_SIDEBAR_MODES.includes(stored) ? stored : "full";
+      const w = parseInt(localStorage.getItem("sidebarWidth"), 10);
+      return w >= SIDEBAR_MIN && w <= SIDEBAR_MAX ? w : 208;
     } catch {
-      return "full";
+      return 208;
     }
   });
+  const [lastFullWidth, setLastFullWidth] = useState(() => {
+    try {
+      const w = parseInt(localStorage.getItem("sidebarFullWidth"), 10);
+      return w >= SIDEBAR_THRESHOLD && w <= SIDEBAR_MAX ? w : 208;
+    } catch {
+      return 208;
+    }
+  });
+  const [isResizing, setIsResizing] = useState(false);
   const location = useLocation();
   const { authRequired, logout, user } = useAuth();
   const { isActive: isPlayerActive } = useAudioQueue();
@@ -52,6 +59,8 @@ function Layout({ children }) {
     location.pathname,
   );
   const isSettingsRoute = location.pathname.startsWith("/settings");
+
+  const sidebarMode = sidebarWidth < SIDEBAR_THRESHOLD ? "icons" : "full";
 
   const updateMainScrollbar = useCallback(() => {
     const node = mainScrollRef.current;
@@ -142,17 +151,56 @@ function Layout({ children }) {
     );
   }, [user]);
 
-  const handleSetSidebarMode = useCallback((newMode) => {
-    setSidebarMode(newMode);
-    try {
-      localStorage.setItem("sidebarMode", newMode);
-      localStorage.setItem("sidebarVisibleMode", newMode);
-    } catch {}
+  const handleResizeStart = useCallback((event) => {
+    event.preventDefault();
+    setIsResizing(true);
+    const sidebar = document.querySelector(".sidebar-shell");
+    const leftOffset = sidebar ? sidebar.getBoundingClientRect().left : 4;
+
+    const handleMouseMove = (e) => {
+      const newWidth = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, e.clientX - leftOffset));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      setSidebarWidth((current) => {
+        if (current >= SIDEBAR_THRESHOLD) {
+          try {
+            localStorage.setItem("sidebarFullWidth", String(current));
+          } catch {}
+        }
+        try {
+          localStorage.setItem("sidebarWidth", String(current));
+        } catch {}
+        return current;
+      });
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
   }, []);
 
   const toggleSidebarPin = useCallback(() => {
-    handleSetSidebarMode(sidebarMode === "icons" ? "full" : "icons");
-  }, [handleSetSidebarMode, sidebarMode]);
+    if (sidebarWidth < SIDEBAR_THRESHOLD) {
+      const restoreTo = lastFullWidth;
+      setSidebarWidth(restoreTo);
+      try {
+        localStorage.setItem("sidebarWidth", String(restoreTo));
+      } catch {}
+    } else {
+      setLastFullWidth(sidebarWidth);
+      try {
+        localStorage.setItem("sidebarFullWidth", String(sidebarWidth));
+      } catch {}
+      setSidebarWidth(SIDEBAR_MIN);
+      try {
+        localStorage.setItem("sidebarWidth", String(SIDEBAR_MIN));
+      } catch {}
+    }
+  }, [sidebarWidth, lastFullWidth]);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -192,8 +240,18 @@ function Layout({ children }) {
   );
 
   return (
-    <div className="app-shell" data-sidebar-mode={sidebarMode}>
-      <Sidebar mode={sidebarMode} />
+    <div
+      className="app-shell"
+      data-sidebar-mode={sidebarMode}
+      data-resizing={isResizing || undefined}
+      style={{ "--sidebar-width": `${sidebarWidth}px` }}
+    >
+      <Sidebar mode={sidebarMode} width={sidebarWidth} />
+
+      <div
+        className={`sidebar-resize-handle${isResizing ? " is-active" : ""}`}
+        onMouseDown={handleResizeStart}
+      />
 
       <div
         className={`app-content${

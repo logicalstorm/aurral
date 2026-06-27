@@ -1386,6 +1386,28 @@ textarea {
     width 0.3s ease;
 }
 
+[data-resizing] .sidebar-shell,
+[data-resizing] .app-content {
+  transition: none;
+}
+
+.sidebar-resize-handle {
+  position: fixed;
+  inset-block: var(--aurral-space-outer);
+  left: calc(var(--sidebar-width) + var(--aurral-space-outer) - 2px);
+  width: 4px;
+  cursor: col-resize;
+  z-index: 51;
+  display: none;
+  transition: background 0.15s ease;
+}
+
+@media (min-width: 768px) {
+  .sidebar-resize-handle {
+    display: block;
+  }
+}
+
 .sidebar-logo-row {
   position: relative;
   display: flex;
@@ -2314,12 +2336,9 @@ textarea {
     padding: var(--aurral-space-outer) var(--aurral-space-outer) var(--aurral-space-outer) 0;
   }
 
-  .app-content--sidebar-full {
-    margin-left: calc(208px + 0.5rem);
-  }
-
+  .app-content--sidebar-full,
   .app-content--sidebar-icons {
-    margin-left: calc(56px + 0.5rem);
+    margin-left: calc(var(--sidebar-width) + 0.5rem);
   }
 
   .app-main {
