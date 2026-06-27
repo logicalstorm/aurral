@@ -158,11 +158,13 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
     playlists = [],
     loading = false,
     saving = false,
+    disabled = false,
     error = "",
     defaultNewPlaylistName = "Playlist",
     excludedPlaylistIds = [],
     triggerLabel = "Add to playlist",
     triggerVariant = "expand",
+    icon: TriggerIcon = Plus,
     onLoadPlaylists,
     onSelect,
     onOpenChange,
@@ -261,13 +263,13 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
           title={triggerVariant === "compact" ? triggerLabel : undefined}
           aria-label={triggerLabel}
           aria-expanded={open}
-          disabled={saving}
+          disabled={saving || disabled}
         >
           {triggerVariant === "compact" ? (
             saving ? (
               <Loader className="artist-icon-xs animate-spin" />
             ) : (
-              <Plus className="artist-icon-xs" />
+              <TriggerIcon className="artist-icon-xs" />
             )
           ) : (
             <>
@@ -275,7 +277,7 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
                 {saving ? (
                   <Loader className="artist-icon-xs animate-spin" />
                 ) : (
-                  <Plus className="artist-icon-xs" />
+                  <TriggerIcon className="artist-icon-xs" />
                 )}
               </span>
               <span className="artist-playlist-trigger__label">{triggerLabel}</span>

@@ -132,6 +132,7 @@ function FlowPage() {
   const [reSearchingMissingPlaylistId, setReSearchingMissingPlaylistId] = useState(null);
   const [savingToPlaylistId, setSavingToPlaylistId] = useState(null);
   const [deletingTrackId, setDeletingTrackId] = useState(null);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [tracksLoadingByFlowId, setTracksLoadingByFlowId] = useState({});
   const [tracksErrorByFlowId, setTracksErrorByFlowId] = useState({});
   const [tracksByFlowId, setTracksByFlowId] = useState({});
@@ -1080,6 +1081,153 @@ function FlowPage() {
       state: { artistName: track.artistName },
     });
   };
+
+  const handleBulkDelete = async (tracks) => {
+    if (!selectedPlaylist) return;
+    setBulkActionLoading(true);
+    let removed = 0;
+    const failed = [];
+    for (const track of tracks) {
+      if (!track?.id) continue;
+      try {
+        await deleteSharedPlaylistTrack(selectedPlaylist.id, track.id);
+        removed++;
+      } catch {
+        failed.push(track.trackName || "unknown");
+      }
+    }
+    if (removed > 0) {
+      showSuccess(`Removed ${removed} track${removed !== 1 ? "s" : ""}`);
+    }
+    if (failed.length > 0) {
+      showError(`Failed to remove: ${failed.join(", ")}`);
+    }
+    setBulkActionLoading(false);
+    await fetchStatus();
+    await fetchFlowTracks(selectedPlaylist.id, { showSpinner: false });
+  };
+
+  const handleBulkReSearch = async (tracks) => {
+    if (!selectedPlaylist) return;
+    setBulkActionLoading(true);
+    let requeued = 0;
+    for (const track of tracks) {
+      if (!track?.id) continue;
+      const canReSearch = track.status === "done" || track.status === "failed";
+      if (!canReSearch || reSearchingTrackIds[track.id]) continue;
+      setReSearchingTrackIds((prev) => ({ ...prev, [track.id]: true }));
+      setTracksByFlowId((prev) => {
+        const existing = Array.isArray(prev[selectedPlaylist.id]) ? prev[selectedPlaylist.id] : [];
+        return {
+          ...prev,
+          [selectedPlaylist.id]: existing.map((entry) =>
+            entry?.id === track.id
+              ? { ...entry, status: "pending", error: null, streamUrl: null }
+              : entry,
+          ),
+        };
+      });
+      try {
+        await reSearchSharedPlaylistTrack(selectedPlaylist.id, track.id);
+        requeued++;
+      } catch {
+        /* track stays in reSearching state */
+      }
+    }
+    if (requeued > 0) {
+      showSuccess(`Re-searching ${requeued} track${requeued !== 1 ? "s" : ""}`);
+    }
+    setBulkActionLoading(false);
+    await fetchStatus();
+    await fetchFlowTracks(selectedPlaylist.id, { showSpinner: false });
+  };
+
+  const handleBulkAddToPlaylist = async (tracks, target) => {
+    const payloads = tracks
+      .map((t) => buildTrackForPlaylistModal(t))
+      .filter(Boolean);
+    if (payloads.length === 0) {
+      showError("No valid tracks to add");
+      return;
+    }
+    setBulkActionLoading(true);
+    try {
+      if (target?.mode === "new") {
+        const name =
+          String(target?.name || "").trim() || getNextPlaylistName("Playlist");
+        const response = await createSharedPlaylist({ name, tracks: payloads });
+        showSuccess(
+          `Added ${payloads.length} track${payloads.length !== 1 ? "s" : ""} to ${response?.playlist?.name || name}`,
+        );
+      } else {
+        const targetPlaylist = sharedPlaylists.find(
+          (p) => p.id === target?.playlistId,
+        );
+        await addSharedPlaylistTracks(target.playlistId, { tracks: payloads });
+        showSuccess(
+          `Added ${payloads.length} track${payloads.length !== 1 ? "s" : ""} to ${targetPlaylist?.name || "playlist"}`,
+        );
+      }
+      await fetchStatus();
+      if (selectedId) {
+        await fetchFlowTracks(selectedId, { showSpinner: false });
+      }
+    } catch (err) {
+      showError(
+        err.response?.data?.message || err.message || "Failed to add tracks",
+      );
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkMoveToPlaylist = async (tracks, target) => {
+    if (!selectedPlaylist) return;
+    const payloads = tracks
+      .map((t) => buildTrackForPlaylistModal(t))
+      .filter(Boolean);
+    if (payloads.length === 0) {
+      showError("No valid tracks to move");
+      return;
+    }
+    setBulkActionLoading(true);
+    try {
+      if (target?.mode === "new") {
+        const name =
+          String(target?.name || "").trim() || getNextPlaylistName("Playlist");
+        await createSharedPlaylist({ name, tracks: payloads });
+        for (const track of tracks) {
+          if (track?.id) {
+            await deleteSharedPlaylistTrack(selectedPlaylist.id, track.id);
+          }
+        }
+        showSuccess(
+          `Moved ${payloads.length} track${payloads.length !== 1 ? "s" : ""} to ${name}`,
+        );
+      } else {
+        const targetPlaylist = sharedPlaylists.find(
+          (p) => p.id === target?.playlistId,
+        );
+        await addSharedPlaylistTracks(target.playlistId, { tracks: payloads });
+        for (const track of tracks) {
+          if (track?.id) {
+            await deleteSharedPlaylistTrack(selectedPlaylist.id, track.id);
+          }
+        }
+        showSuccess(
+          `Moved ${payloads.length} track${payloads.length !== 1 ? "s" : ""} to ${targetPlaylist?.name || "playlist"}`,
+        );
+      }
+      await fetchStatus();
+      await fetchFlowTracks(selectedPlaylist.id, { showSpinner: false });
+    } catch (err) {
+      showError(
+        err.response?.data?.message || err.message || "Failed to move tracks",
+      );
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
   if (loading && !status) {
     return (
       <div className="flow-page__loading">
@@ -1340,6 +1488,12 @@ function FlowPage() {
               activityHint={selectedActivityMessage}
               emptyMessage="No tracks in this playlist yet."
               useTrackContextMenu
+              allowBulkEdit
+              bulkActionLoading={bulkActionLoading}
+              onBulkDelete={handleBulkDelete}
+              onBulkReSearch={handleBulkReSearch}
+              onBulkAddToPlaylist={handleBulkAddToPlaylist}
+              onBulkMoveToPlaylist={handleBulkMoveToPlaylist}
               playlists={sharedPlaylists}
               playlistsLoading={playlistsLoading}
               playlistSavingKey={playlistMenuSavingKey}

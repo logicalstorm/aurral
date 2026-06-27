@@ -10925,6 +10925,13 @@ textarea {
   text-align: center;
 }
 
+.flow-page__tracks-table-head .flow-page__tracks-table-checkbox-head {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.5rem 0.25rem;
+}
+
 .flow-page__tracks-table-status-head,
 .flow-page__tracks-table-status-cell {
   width: 1.5rem;
@@ -11092,6 +11099,32 @@ textarea {
   align-items: center;
   gap: 0.5rem;
   margin-left: auto;
+  position: relative;
+}
+
+.flow-page__bulk-menu-anchor {
+  position: absolute;
+  pointer-events: none;
+}
+
+.flow-page__bulk-count {
+  font-size: 0.8125rem;
+  color: var(--aurral-gray);
+  font-variant-numeric: tabular-nums;
+}
+
+.flow-page__tracks-table-checkbox-head {
+  text-align: center;
+  vertical-align: middle;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.flow-page__tracks-table-checkbox-head input[type="checkbox"],
+.flow-page__tracks-table-checkbox {
+  cursor: pointer;
+  accent-color: var(--aurral-accent);
+  vertical-align: middle;
 }
 
 .flow-page__tracks-body {

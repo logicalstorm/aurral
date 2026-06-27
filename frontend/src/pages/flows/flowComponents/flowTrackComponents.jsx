@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useState } from "react";
+import { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import {
   Loader2,
   ListMusic,
@@ -11,6 +11,7 @@ import {
   ArrowDown,
   Plus,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import { getFlowTrackDisplayNumber, sortFlowTracks } from "../../../utils/flowTrackSort";
 import { Link } from "react-router-dom";
@@ -18,6 +19,55 @@ import { useAudioQueue } from "../../../hooks/useAudioQueue";
 import { normalizeFlowTrack } from "../../../utils/audioQueue";
 import { TrackPlaylistMenu, TrackPlaylistSubmenu } from "../../ArtistDetails/components/TrackPlaylistMenu";
 import { getTrackStatusMeta } from "./MoreMenu";
+
+function BulkPlaylistAction({
+  icon: Icon,
+  label,
+  track,
+  playlists,
+  loading,
+  saving,
+  disabled,
+  error,
+  defaultNewPlaylistName,
+  excludedPlaylistIds,
+  onSelect,
+}) {
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+  const handleOpen = useCallback((e) => {
+    e.stopPropagation();
+    menuRef.current?.open(buttonRef.current);
+  }, []);
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="btn btn-secondary btn-sm"
+        onClick={handleOpen}
+        disabled={disabled}
+      >
+        <Icon className="artist-icon-sm" />
+        <span>{label}</span>
+      </button>
+      <span className="flow-page__bulk-menu-anchor">
+        <TrackPlaylistMenu
+          ref={menuRef}
+          track={track}
+        playlists={playlists}
+        loading={loading}
+        saving={saving}
+        error={error}
+        defaultNewPlaylistName={defaultNewPlaylistName}
+        excludedPlaylistIds={excludedPlaylistIds}
+        triggerVariant="hidden"
+        onSelect={onSelect}
+      />
+      </span>
+    </>
+  );
+}
 
 function FlowTrackPlaylistMenus({
   track,
@@ -359,6 +409,12 @@ export function FlowTracksPanel({
   showPlaybackControls = true,
   hideAlbumColumn = false,
   hideStatusColumn = false,
+  allowBulkEdit = false,
+  onBulkDelete,
+  onBulkReSearch,
+  onBulkAddToPlaylist,
+  onBulkMoveToPlaylist,
+  bulkActionLoading = false,
 }) {
   const [sortKey, setSortKey] = useState("index");
   const [sortDirection, setSortDirection] = useState("asc");
@@ -370,6 +426,14 @@ export function FlowTracksPanel({
   useEffect(() => {
     setSortKey("index");
     setSortDirection("asc");
+  }, [trackOrderKey]);
+
+  const [editMode, setEditMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  useEffect(() => {
+    setEditMode(false);
+    setSelectedIds(new Set());
   }, [trackOrderKey]);
 
   const {
@@ -386,6 +450,36 @@ export function FlowTracksPanel({
     () => sortFlowTracks(tracks, sortKey, sortDirection),
     [tracks, sortKey, sortDirection],
   );
+
+  const selectedCount = selectedIds.size;
+  const allSelected = tracks.length > 0 && selectedCount === sortedTracks.length;
+
+  const selectedTracks = useMemo(
+    () => sortedTracks.filter((t) => selectedIds.has(t.id)),
+    [sortedTracks, selectedIds],
+  );
+
+  const handleToggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(sortedTracks.map((t) => t.id)));
+    }
+  };
+
+  const handleToggleTrack = (trackId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(trackId)) next.delete(trackId);
+      else next.add(trackId);
+      return next;
+    });
+  };
+
+  const handleExitEditMode = () => {
+    setEditMode(false);
+    setSelectedIds(new Set());
+  };
 
   const playableTracks = useMemo(
     () =>
@@ -449,7 +543,7 @@ export function FlowTracksPanel({
 
   return (
     <div className="flow-page__tracks">
-      {showPlaybackControls || headerActions ? (
+      {showPlaybackControls || headerActions || allowBulkEdit ? (
         <div className="flow-page__tracks-toolbar">
           {showPlaybackControls ? (
             <div className="flow-page__tracks-toolbar-start">
@@ -478,16 +572,107 @@ export function FlowTracksPanel({
                 <Shuffle className="artist-icon-md" />
               </button>
             </div>
-          ) : headerActions ? (
+          ) : headerActions && !editMode ? (
             <div className="flow-page__tracks-toolbar-start flow-page__tracks-toolbar-start--full">
               {headerActions}
             </div>
           ) : null}
-          {showPlaybackControls && headerActions ? (
-            <div className="flow-page__tracks-toolbar-actions">
-              {headerActions}
-            </div>
-          ) : null}
+          <div className="flow-page__tracks-toolbar-actions">
+            {editMode ? (
+              <>
+                {selectedCount > 0 ? (
+                  <span className="flow-page__bulk-count">
+                    {selectedCount} selected
+                  </span>
+                ) : null}
+                {onBulkDelete ? (
+                  <button
+                    type="button"
+                    onClick={() => onBulkDelete(selectedTracks)}
+                    className="btn btn-ghost-danger btn-icon btn-sm"
+                    disabled={bulkActionLoading || !selectedCount}
+                    aria-label="Remove selected"
+                  >
+                    <Trash2 className="artist-icon-sm" />
+                  </button>
+                ) : null}
+                {onBulkReSearch ? (
+                  <button
+                    type="button"
+                    onClick={() => onBulkReSearch(selectedTracks)}
+                    className="btn btn-secondary btn-sm"
+                    disabled={bulkActionLoading || !selectedCount}
+                  >
+                    <Search className="artist-icon-sm" />
+                    <span>Re-search</span>
+                  </button>
+                ) : null}
+                {onBulkAddToPlaylist ? (
+                  <BulkPlaylistAction
+                    icon={Plus}
+                    label="Copy"
+                    track={selectedTracks[0]}
+                    playlists={playlists}
+                    loading={playlistsLoading}
+                    saving={bulkActionLoading}
+                    disabled={!selectedCount || bulkActionLoading}
+                    error={playlistMenuError}
+                    defaultNewPlaylistName={
+                      getDefaultPlaylistName?.(selectedTracks[0]) || "Playlist"
+                    }
+                    excludedPlaylistIds={excludedPlaylistIds}
+                    onSelect={(target) => {
+                      onBulkAddToPlaylist(selectedTracks, target);
+                      handleExitEditMode();
+                    }}
+                  />
+                ) : null}
+                {onBulkMoveToPlaylist ? (
+                  <BulkPlaylistAction
+                    icon={ListMusic}
+                    label="Move"
+                    track={selectedTracks[0]}
+                    playlists={playlists}
+                    loading={playlistsLoading}
+                    saving={bulkActionLoading}
+                    disabled={!selectedCount || bulkActionLoading}
+                    error={playlistMenuError}
+                    defaultNewPlaylistName={
+                      getDefaultPlaylistName?.(selectedTracks[0]) || "Playlist"
+                    }
+                    excludedPlaylistIds={excludedPlaylistIds}
+                    onSelect={(target) => {
+                      onBulkMoveToPlaylist(selectedTracks, target);
+                      handleExitEditMode();
+                    }}
+                  />
+                ) : null}
+                <button
+                  type="button"
+                  onClick={handleExitEditMode}
+                  className="btn btn-secondary btn-sm"
+                  disabled={bulkActionLoading}
+                >
+                  Done
+                </button>
+              </>
+            ) : (
+              <>
+                {headerActions}
+                {allowBulkEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditMode(true)}
+                    className="btn btn-secondary btn-icon btn-sm"
+                    aria-label="Edit tracks"
+                    title="Edit tracks"
+                  >
+                    <Pencil className="artist-icon-sm" />
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
         </div>
       ) : null}
 
@@ -519,14 +704,26 @@ export function FlowTracksPanel({
           >
             <thead className="flow-page__tracks-table-head">
               <tr>
-                <FlowTracksSortHeader
-                  label="#"
-                  sortKey="index"
-                  activeSortKey={sortKey}
-                  sortDirection={sortDirection}
-                  onSort={handleSort}
-                  className="flow-page__tracks-table-index"
-                />
+                {editMode ? (
+                  <th className="flow-page__tracks-table-index flow-page__tracks-table-checkbox-head" scope="col">
+                    <input
+                      type="checkbox"
+                      className="flow-page__tracks-table-checkbox"
+                      checked={allSelected}
+                      onChange={handleToggleSelectAll}
+                      aria-label="Select all tracks"
+                    />
+                  </th>
+                ) : (
+                  <FlowTracksSortHeader
+                    label="#"
+                    sortKey="index"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    className="flow-page__tracks-table-index"
+                  />
+                )}
                 <FlowTracksSortHeader
                   label="Song"
                   sortKey="song"
@@ -597,7 +794,17 @@ export function FlowTracksPanel({
                     className={`flow-page__tracks-table-row${isCurrent ? " is-current" : ""}`}
                   >
                     <td className="flow-page__tracks-table-index">
-                      {showPlaybackControls ? (
+                      {editMode ? (
+                        <div className="flow-page__tracks-table-index-inner">
+                          <input
+                            type="checkbox"
+                            className="flow-page__tracks-table-checkbox"
+                            checked={selectedIds.has(track.id)}
+                            onChange={() => handleToggleTrack(track.id)}
+                            aria-label={`Select ${track.trackName}`}
+                          />
+                        </div>
+                      ) : showPlaybackControls ? (
                         <div className="flow-page__tracks-table-index-inner">
                           <span className="flow-page__tracks-table-index-number">
                             {trackDisplayNumber}
@@ -666,6 +873,7 @@ export function FlowTracksPanel({
                       </td>
                     )}
                     <td className="flow-page__tracks-table-actions-cell">
+                      {editMode ? null : (
                       <div className="flow-page__tracks-actions">
                         <FlowTrackPlaylistMenus
                           track={track}
@@ -733,6 +941,7 @@ export function FlowTracksPanel({
                           }
                         </FlowTrackPlaylistMenus>
                       </div>
+                      )}
                     </td>
                   </tr>
                 );
