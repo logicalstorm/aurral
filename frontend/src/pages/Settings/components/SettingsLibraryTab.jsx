@@ -4,6 +4,10 @@ export function SettingsLibraryTab({
   settings,
   updateSettings,
   health,
+  lidarrRootFolders,
+  loadingLidarrRootFolders,
+  setLoadingLidarrRootFolders,
+  setLidarrRootFolders,
   lidarrProfiles,
   loadingLidarrProfiles,
   setLoadingLidarrProfiles,
@@ -32,6 +36,10 @@ export function SettingsLibraryTab({
           settings={settings}
           updateSettings={updateSettings}
           health={health}
+          lidarrRootFolders={lidarrRootFolders}
+          loadingLidarrRootFolders={loadingLidarrRootFolders}
+          setLoadingLidarrRootFolders={setLoadingLidarrRootFolders}
+          setLidarrRootFolders={setLidarrRootFolders}
           lidarrProfiles={lidarrProfiles}
           loadingLidarrProfiles={loadingLidarrProfiles}
           setLoadingLidarrProfiles={setLoadingLidarrProfiles}

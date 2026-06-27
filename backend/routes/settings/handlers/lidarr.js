@@ -46,6 +46,27 @@ export function registerLidarr(router) {
     }
   });
 
+  router.get("/lidarr/root-folders", async (req, res) => {
+    try {
+      const { lidarrClient } = await import("../../../services/lidarrClient.js");
+      const { resolveLidarrTestCredentials } =
+        await import("../../../services/lidarrTestSession.js");
+      const { url, apiKey } = resolveLidarrTestCredentials(req.query, lidarrClient);
+      const { fetchRootFolders } = await import(
+        "../../../services/lidarrSettingsService.js"
+      );
+      const rootFolders = await fetchRootFolders({ url, apiKey });
+      res.json(rootFolders);
+    } catch (error) {
+      logger.error("settings", "Failed to fetch Lidarr root folders:", error);
+      res.status(error.statusCode || 500).json({
+        error: "Failed to fetch Lidarr root folders",
+        message: error.message,
+        details: error.response?.data,
+      });
+    }
+  });
+
   router.get("/lidarr/tags", async (req, res) => {
     try {
       const { lidarrClient } = await import("../../../services/lidarrClient.js");

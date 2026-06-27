@@ -28,6 +28,13 @@ export async function fetchMetadataProfiles(credentials) {
   );
 }
 
+export async function fetchRootFolders(credentials) {
+  const { url, apiKey } = resolve(credentials);
+  return withTemporaryLidarrClient(url, apiKey, (client) =>
+    client.getRootFolders(),
+  );
+}
+
 export async function fetchTags(credentials) {
   const { url, apiKey } = resolve(credentials);
   return withTemporaryLidarrClient(url, apiKey, (client) =>

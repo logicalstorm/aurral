@@ -98,6 +98,10 @@ function SettingsPage() {
             settings={data.settings}
             updateSettings={data.updateSettings}
             health={data.health}
+            lidarrRootFolders={data.lidarrRootFolders}
+            loadingLidarrRootFolders={data.loadingLidarrRootFolders}
+            setLoadingLidarrRootFolders={data.setLoadingLidarrRootFolders}
+            setLidarrRootFolders={data.setLidarrRootFolders}
             lidarrProfiles={data.lidarrProfiles}
             loadingLidarrProfiles={data.loadingLidarrProfiles}
             setLoadingLidarrProfiles={data.setLoadingLidarrProfiles}

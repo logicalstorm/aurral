@@ -26,6 +26,11 @@ export const getAppSettings = () => getData("/settings");
 
 export const updateAppSettings = (settings) => postData("/settings", settings);
 
+export const getLidarrRootFolders = (url, apiKey) =>
+  getData("/settings/lidarr/root-folders", {
+    params: lidarrCredentialParams(url, apiKey),
+  });
+
 export const getLidarrProfiles = (url, apiKey) =>
   getData("/settings/lidarr/profiles", {
     params: lidarrCredentialParams(url, apiKey),

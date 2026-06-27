@@ -3,6 +3,7 @@ import api, {
   checkHealth,
   getAppSettings,
   updateAppSettings,
+  getLidarrRootFolders,
   getLidarrProfiles,
   getLidarrMetadataProfiles,
   getLidarrTags,
@@ -140,6 +141,8 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const [discoveryProgressMessage, setDiscoveryProgressMessage] = useState("");
   const [discoveryProgress, setDiscoveryProgress] = useState(null);
   const [clearingCache, setClearingCache] = useState(false);
+  const [lidarrRootFolders, setLidarrRootFolders] = useState([]);
+  const [loadingLidarrRootFolders, setLoadingLidarrRootFolders] = useState(false);
   const [lidarrProfiles, setLidarrProfiles] = useState([]);
   const [loadingLidarrProfiles, setLoadingLidarrProfiles] = useState(false);
   const [lidarrMetadataProfiles, setLidarrMetadataProfiles] = useState([]);
@@ -222,20 +225,24 @@ export function useSettingsData(showSuccess, showError, showInfo) {
 
       const lidarr = updatedSettings.integrations?.lidarr || {};
       if (lidarr.url && lidarr.apiKey) {
+        setLoadingLidarrRootFolders(true);
         setLoadingLidarrProfiles(true);
         setLoadingLidarrMetadataProfiles(true);
         setLoadingLidarrTags(true);
         try {
-          const [profiles, metadataProfiles, tags] = await Promise.all([
+          const [rootFolders, profiles, metadataProfiles, tags] = await Promise.all([
+            getLidarrRootFolders(lidarr.url, lidarr.apiKey),
             getLidarrProfiles(lidarr.url, lidarr.apiKey),
             getLidarrMetadataProfiles(lidarr.url, lidarr.apiKey),
             getLidarrTags(lidarr.url, lidarr.apiKey),
           ]);
+          setLidarrRootFolders(Array.isArray(rootFolders) ? rootFolders : []);
           setLidarrProfiles(profiles);
           setLidarrMetadataProfiles(metadataProfiles);
           setLidarrTags(Array.isArray(tags) ? tags : []);
         } catch {
         } finally {
+          setLoadingLidarrRootFolders(false);
           setLoadingLidarrProfiles(false);
           setLoadingLidarrMetadataProfiles(false);
           setLoadingLidarrTags(false);
@@ -424,6 +431,10 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     clearingCache,
     handleRefreshDiscovery,
     handleClearCache,
+    lidarrRootFolders,
+    setLidarrRootFolders,
+    loadingLidarrRootFolders,
+    setLoadingLidarrRootFolders,
     lidarrProfiles,
     setLidarrProfiles,
     loadingLidarrProfiles,

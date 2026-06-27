@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
 import { SettingsArrFieldSet, SettingsArrFormGroup } from "./arr/SettingsArrLayout";
 import {
+  getLidarrRootFolders,
   getLidarrMetadataProfiles,
   getLidarrProfiles,
   getLidarrTags,
@@ -14,6 +15,10 @@ export function LidarrSettingsSection({
   settings,
   updateSettings,
   health,
+  lidarrRootFolders,
+  loadingLidarrRootFolders,
+  setLoadingLidarrRootFolders,
+  setLidarrRootFolders,
   lidarrProfiles,
   loadingLidarrProfiles,
   setLoadingLidarrProfiles,
@@ -36,6 +41,7 @@ export function LidarrSettingsSection({
 }) {
   const [lidarrTestLatencyMs, setLidarrTestLatencyMs] = useState(null);
 
+  const safeLidarrRootFolders = Array.isArray(lidarrRootFolders) ? lidarrRootFolders : [];
   const safeLidarrProfiles = Array.isArray(lidarrProfiles) ? lidarrProfiles : [];
   const safeLidarrMetadataProfiles = Array.isArray(lidarrMetadataProfiles)
     ? lidarrMetadataProfiles
@@ -69,21 +75,28 @@ export function LidarrSettingsSection({
       setLidarrTestLatencyMs(Math.round(performance.now() - startTime));
       if (result.success) {
         showSuccess(`Lidarr connection successful! (${result.instanceName || "Lidarr"})`);
+        setLoadingLidarrRootFolders(true);
         setLoadingLidarrProfiles(true);
         setLoadingLidarrMetadataProfiles(true);
         setLoadingLidarrTags(true);
         try {
-          const [profiles, metadataProfiles, tags] = await Promise.all([
+          const [rootFolders, profiles, metadataProfiles, tags] = await Promise.all([
+            getLidarrRootFolders(url, apiKey),
             getLidarrProfiles(url, apiKey),
             getLidarrMetadataProfiles(url, apiKey),
             getLidarrTags(url, apiKey),
           ]);
+          const nextRootFolders = Array.isArray(rootFolders) ? rootFolders : [];
           const nextProfiles = Array.isArray(profiles) ? profiles : [];
           const nextMetadataProfiles = Array.isArray(metadataProfiles) ? metadataProfiles : [];
           const nextTags = Array.isArray(tags) ? tags : [];
+          setLidarrRootFolders(nextRootFolders);
           setLidarrProfiles(nextProfiles);
           setLidarrMetadataProfiles(nextMetadataProfiles);
           setLidarrTags(nextTags);
+          if (nextRootFolders.length > 0) {
+            showInfo(`Loaded ${nextRootFolders.length} root folder(s)`);
+          }
           if (nextProfiles.length > 0) {
             showInfo(`Loaded ${nextProfiles.length} quality profile(s)`);
           }
@@ -95,6 +108,7 @@ export function LidarrSettingsSection({
           }
         } catch {
         } finally {
+          setLoadingLidarrRootFolders(false);
           setLoadingLidarrProfiles(false);
           setLoadingLidarrMetadataProfiles(false);
           setLoadingLidarrTags(false);
@@ -114,7 +128,7 @@ export function LidarrSettingsSection({
   };
 
   const refreshingProfilesTags =
-    loadingLidarrProfiles || loadingLidarrMetadataProfiles || loadingLidarrTags;
+    loadingLidarrRootFolders || loadingLidarrProfiles || loadingLidarrMetadataProfiles || loadingLidarrTags;
 
   const handleRefreshProfilesAndTags = async () => {
     const url = settings.integrations?.lidarr?.url;
@@ -123,25 +137,32 @@ export function LidarrSettingsSection({
       showError("Please enter Lidarr URL and API key first");
       return;
     }
+    setLoadingLidarrRootFolders(true);
     setLoadingLidarrProfiles(true);
     setLoadingLidarrMetadataProfiles(true);
     setLoadingLidarrTags(true);
     try {
-      const [profiles, metadataProfiles, tags] = await Promise.all([
+      const [rootFolders, profiles, metadataProfiles, tags] = await Promise.all([
+        getLidarrRootFolders(url, apiKey),
         getLidarrProfiles(url, apiKey),
         getLidarrMetadataProfiles(url, apiKey),
         getLidarrTags(url, apiKey),
       ]);
+      const nextRootFolders = Array.isArray(rootFolders) ? rootFolders : [];
       const nextProfiles = Array.isArray(profiles) ? profiles : [];
       const nextMetadataProfiles = Array.isArray(metadataProfiles) ? metadataProfiles : [];
       const nextTags = Array.isArray(tags) ? tags : [];
+      setLidarrRootFolders(nextRootFolders);
       setLidarrProfiles(nextProfiles);
       setLidarrMetadataProfiles(nextMetadataProfiles);
       setLidarrTags(nextTags);
-      if (nextProfiles.length === 0 && nextMetadataProfiles.length === 0 && nextTags.length === 0) {
-        showInfo("No profiles or tags found in Lidarr");
+      if (nextRootFolders.length === 0 && nextProfiles.length === 0 && nextMetadataProfiles.length === 0 && nextTags.length === 0) {
+        showInfo("No root folders, profiles, or tags found in Lidarr");
       } else {
         const parts = [];
+        if (nextRootFolders.length > 0) {
+          parts.push(`${nextRootFolders.length} root folder(s)`);
+        }
         if (nextProfiles.length > 0) {
           parts.push(`${nextProfiles.length} quality profile(s)`);
         }
@@ -157,6 +178,7 @@ export function LidarrSettingsSection({
       const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message;
       showError(`Failed to load profiles and tags: ${errorMsg}`);
     } finally {
+      setLoadingLidarrRootFolders(false);
       setLoadingLidarrProfiles(false);
       setLoadingLidarrMetadataProfiles(false);
       setLoadingLidarrTags(false);
@@ -274,6 +296,34 @@ export function LidarrSettingsSection({
       </SettingsArrFieldSet>
 
       <SettingsArrFieldSet legend="Defaults">
+        <SettingsArrFormGroup label="Default Root Folder" labelFor="lidarr-root-folder">
+          <SettingsSelect
+            id="lidarr-root-folder"
+            value={settings.integrations?.lidarr?.rootFolderPath || ""}
+            onChange={(e) =>
+              updateLidarr({ rootFolderPath: e.target.value || null })
+            }
+            disabled={loadingLidarrRootFolders}
+          >
+            <option value="">
+              {loadingLidarrRootFolders
+                ? "Loading root folders..."
+                : safeLidarrRootFolders.length === 0
+                  ? "No root folders available (test connection first)"
+                  : "Select a root folder"}
+            </option>
+            {safeLidarrRootFolders.map((folder) => (
+              <option key={folder.path} value={folder.path}>
+                {folder.path}
+              </option>
+            ))}
+          </SettingsSelect>
+          <p className="settings-page__section-note">
+            Users can set their own default in Profile → Library Defaults, which overrides
+            this instance-wide setting.
+          </p>
+        </SettingsArrFormGroup>
+
         <SettingsArrFormGroup label="Default Quality Profile" labelFor="lidarr-quality-profile">
           <SettingsSelect
             id="lidarr-quality-profile"

@@ -628,13 +628,15 @@ export class LidarrClient {
     const safeQualityProfiles = mapQualityProfiles(qualityProfiles);
     const currentSettings = settings || dbOps.getSettings();
 
-    const legacyRootFolderPath = normalizeRootFolderPath(currentSettings.rootFolderPath);
+    const globalRootFolderPath = normalizeRootFolderPath(
+      currentSettings.integrations?.lidarr?.rootFolderPath || currentSettings.rootFolderPath,
+    );
     const legacyQualityProfileId = normalizeProfileId(
       currentSettings.integrations?.lidarr?.qualityProfileId,
     );
 
     const fallbackRootFolder =
-      findRootFolder(safeRootFolders, legacyRootFolderPath) || safeRootFolders[0];
+      findRootFolder(safeRootFolders, globalRootFolderPath) || safeRootFolders[0];
     const fallbackQualityProfile =
       findQualityProfile(safeQualityProfiles, legacyQualityProfileId) || safeQualityProfiles[0];
 

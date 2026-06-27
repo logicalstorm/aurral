@@ -128,6 +128,7 @@ export {
   browsePaths,
   getAppSettings,
   updateAppSettings,
+  getLidarrRootFolders,
   getLidarrProfiles,
   getLidarrMetadataProfiles,
   getLidarrTags,
