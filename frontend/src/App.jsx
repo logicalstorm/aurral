@@ -80,6 +80,10 @@ function AppContent() {
   const { isAuthenticated, user } = useAuth();
   const { showSuccess, showError } = useToast();
 
+  const PROXY_AUTH_KEY = "aurral:proxy-auth";
+  const RELOAD_TS_KEY = "aurral:proxy-reload-ts";
+  const RELOAD_COOLDOWN_MS = 10000;
+
   useWebSocketChannel("discovery", (msg) => {
     if (msg.type !== "discovery_update") return;
 
@@ -139,9 +143,21 @@ function AppContent() {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (isHealthy === false && isAuthenticated) {
-      window.location.reload();
+    if (isHealthy === null) return;
+
+    if (isHealthy === true) {
+      globalThis?.sessionStorage?.removeItem(RELOAD_TS_KEY);
+      return;
     }
+
+    const isProxyAuth = globalThis?.sessionStorage?.getItem(PROXY_AUTH_KEY) === "1";
+    if (!isAuthenticated && !isProxyAuth) return;
+
+    const lastReload = Number(globalThis?.sessionStorage?.getItem(RELOAD_TS_KEY) || 0);
+    if (Date.now() - lastReload < RELOAD_COOLDOWN_MS) return;
+
+    globalThis?.sessionStorage?.setItem(RELOAD_TS_KEY, String(Date.now()));
+    window.location.reload();
   }, [isHealthy, isAuthenticated]);
 
   return (

@@ -12,6 +12,7 @@ import {
 
 const AuthContext = createContext(null);
 const AUTH_RECOVERY_RELOAD_KEY = "aurral:auth-recovery-reload";
+const PROXY_AUTH_KEY = "aurral:proxy-auth";
 
 const resetClientCache = async () => {
   const registrations = globalThis?.navigator?.serviceWorker
@@ -49,11 +50,14 @@ export const AuthProvider = ({ children }) => {
       setAuthRequired(isRequired);
 
       if (isRequired && bootstrap.user) {
+        globalThis?.sessionStorage?.setItem(PROXY_AUTH_KEY, "1");
         setUser(bootstrap.user);
         setIsAuthenticated(true);
         setIsLoading(false);
         return;
       }
+
+      globalThis?.sessionStorage?.removeItem(PROXY_AUTH_KEY);
 
       if (!isRequired) {
         setUser(
