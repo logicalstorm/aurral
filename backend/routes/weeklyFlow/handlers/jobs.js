@@ -29,6 +29,7 @@ import {
 } from "../../../services/playlistDownloadUtils.js";
 import path from "path";
 import fs from "fs/promises";
+import { invalidateRequestsCache } from "../../requests.js";
 
 export function registerJobs(router) {
   router.get("/status", noCache, (req, res) => {
@@ -202,6 +203,10 @@ export function registerJobs(router) {
     try {
       const committedPath = await commitImportToPlaylistLibrary(sourcePath, finalPath);
       downloadTracker.setDone(job.id, committedPath, job.albumName);
+      import("../../../services/aurralHistoryService.js")
+        .then(({ recordTrackJobCompleted }) => recordTrackJobCompleted(job))
+        .catch(() => {});
+      invalidateRequestsCache();
       res.json({ success: true, path: committedPath });
     } catch (error) {
       res.status(500).json({ error: "Import failed", message: error.message });
@@ -218,6 +223,12 @@ export function registerJobs(router) {
       await fs.rm(sourcePath, { force: true }).catch(() => {});
     }
     downloadTracker.setPending(job.id, "Denied by user", { asRetryCycle: false });
+    import("../../../services/aurralHistoryService.js")
+      .then(({ recordTrackJobFailed }) =>
+        recordTrackJobFailed(job, "Denied by user — will retry"),
+      )
+      .catch(() => {});
+    invalidateRequestsCache();
     weeklyFlowWorker.wake();
     res.json({ success: true });
   });

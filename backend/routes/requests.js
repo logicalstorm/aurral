@@ -202,4 +202,9 @@ router.delete("/:mbid", requireAuth, requirePermission("deleteArtist"), async (r
   }
 });
 
+export const invalidateRequestsCache = () => {
+  lastRequestsResponse = null;
+  lastRequestsAt = 0;
+};
+
 export default router;
