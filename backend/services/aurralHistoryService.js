@@ -357,6 +357,7 @@ export const syncTrackDownloadHistory = async () => {
     }
 
     if (job.status === "blocked") {
+      recordTrackJobBlocked(job, job.error || "Blocked for review");
       continue;
     }
 
