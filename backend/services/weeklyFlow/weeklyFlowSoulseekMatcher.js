@@ -1270,15 +1270,22 @@ function bestArtistTag(common) {
   return values.filter(Boolean).join(" ");
 }
 
-function readDownloadDurationValidation(parsed, expectedDuration) {
+function readDownloadDurationValidation(parsed, expectedDuration, titleScore = 0, artistScore = 0) {
   const durationSeconds = Number(parsed?.format?.duration || 0);
   const actualDurationMs = durationSeconds > 0 ? Math.round(durationSeconds * 1000) : null;
   const durationDiffMs =
     expectedDuration > 0 && actualDurationMs != null
       ? Math.abs(actualDurationMs - expectedDuration)
       : null;
+
+  if (durationDiffMs == null) return { actualDurationMs, durationValid: true };
+
+  if (titleScore >= 85 && artistScore >= 85) {
+    const relaxedThreshold = Math.max(60000, expectedDuration * 0.45);
+    return { actualDurationMs, durationValid: durationDiffMs <= relaxedThreshold };
+  }
+
   const durationValid =
-    durationDiffMs == null ||
     durationDiffMs <= 25000 ||
     durationDiffMs <= Math.max(12000, expectedDuration * 0.18);
   return { actualDurationMs, durationValid };
@@ -1343,6 +1350,8 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
   const { actualDurationMs, durationValid } = readDownloadDurationValidation(
     parsed,
     expectedDuration,
+    titleScore,
+    artistScore,
   );
   const valid = matchCheck.valid && durationValid;
   const blocked = matchCheck.valid && !durationValid;

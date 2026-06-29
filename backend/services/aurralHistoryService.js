@@ -308,14 +308,19 @@ const buildHistoryJobFromEntry = (entry) => ({
 export const syncTrackDownloadHistory = async () => {
   const { downloadTracker } = await import("./weeklyFlow/weeklyFlowDownloadTracker.js");
   const cutoff = Date.now() - MAX_AGE_MS;
-  const pendingEntries = dbOps
+  const trackEntries = dbOps
     .getAurralHistory({ since: cutoff, limit: 300 })
     .filter(
       (entry) =>
         entry.kind === "track_download" &&
-        (entry.status === "processing" || entry.status === "pending"),
+        (entry.status === "processing" || entry.status === "pending" || entry.status === "blocked"),
     );
-  if (!pendingEntries.length) return;
+  if (!trackEntries.length) return;
+
+  const pendingEntries = trackEntries.filter(
+    (entry) => entry.status === "processing" || entry.status === "pending",
+  );
+  const blockedEntries = trackEntries.filter((entry) => entry.status === "blocked");
 
   for (const entry of pendingEntries) {
     const jobId = String(entry.metadata?.jobId || "").trim();
@@ -364,6 +369,39 @@ export const syncTrackDownloadHistory = async () => {
     const message = "Download timed out";
     downloadTracker.setFailed(jobId, message);
     recordTrackJobFailed(job, message);
+  }
+
+  for (const entry of blockedEntries) {
+    const jobId = String(entry.metadata?.jobId || "").trim();
+    const fakeJob = buildHistoryJobFromEntry(entry);
+
+    if (!jobId) {
+      if (Date.now() - Number(entry.createdAt || 0) >= STALE_TRACK_JOB_MS) {
+        recordTrackJobFailed(fakeJob, "Download no longer active");
+      }
+      continue;
+    }
+
+    const job = downloadTracker.getJob(jobId);
+    if (!job) {
+      recordTrackJobFailed(fakeJob, "Download no longer active");
+      continue;
+    }
+
+    if (job.status === "done") {
+      recordTrackJobCompleted(job);
+      continue;
+    }
+
+    if (job.status === "failed") {
+      recordTrackJobFailed(job, job.error || "Download failed");
+      continue;
+    }
+
+    if (job.status === "pending" || job.status === "downloading") {
+      recordTrackJobFailed(job, "Denied by user — will retry");
+      continue;
+    }
   }
 };
 

@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { Loader, Clock, CheckCircle2, AlertCircle, Music, RotateCcw, XCircle, Play, Pause } from "lucide-react";
 import { getRequests, triggerAlbumSearch } from "../utils/api";
 import { approveBlockedJob, denyBlockedJob, getStagingStreamUrl } from "../utils/api/endpoints/playlists";
+import { useAudioQueue } from "../hooks/useAudioQueue";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
   DEFAULT_ACTIVITY_VIEW,
@@ -212,9 +213,9 @@ function ActivityPage() {
   const [approvingJobId, setApprovingJobId] = useState(null);
   const [denyingJobId, setDenyingJobId] = useState(null);
   const [jobErrors, setJobErrors] = useState({});
-  const [playingJobId, setPlayingJobId] = useState(null);
-  const audioRef = useRef(new Audio());
   const fetchRequestsInFlightRef = useRef(false);
+
+  const { playTrack, currentTrack, isPlaying, togglePlayPause } = useAudioQueue();
 
   const activeView = normalizeActivityView(viewParam);
   const isQueueView = activeView === "queue";
@@ -317,13 +318,6 @@ function ActivityPage() {
     return () => clearInterval(interval);
   }, [isQueueView, fetchRequests]);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    const onEnded = () => setPlayingJobId(null);
-    audio.addEventListener("ended", onEnded);
-    return () => audio.removeEventListener("ended", onEnded);
-  }, []);
-
   const navigateToArtist = (request, isAlbum, artistMbid, artistName, displayName) => {
     if (!artistMbid || artistMbid === "null" || artistMbid === "undefined") {
       return;
@@ -369,12 +363,18 @@ function ActivityPage() {
     setApprovingJobId(jobId);
     try {
       await approveBlockedJob(jobId);
+      setRequests((prev) =>
+        prev.map((r) =>
+          r.jobId === jobId
+            ? { ...r, status: "completed", statusLabel: "Downloaded", title: `Downloaded ${r.title?.replace(/^Review needed for /, "") || "track"}` }
+            : r,
+        ),
+      );
       setApprovingJobId(null);
       setJobErrors((prev) => {
         const { [jobId]: _, ...rest } = prev;
         return rest;
       });
-      fetchRequests({ silent: true });
     } catch {
       setJobErrors((prev) => ({ ...prev, [jobId]: "Failed to approve" }));
       setApprovingJobId(null);
@@ -386,33 +386,36 @@ function ActivityPage() {
     setDenyingJobId(jobId);
     try {
       await denyBlockedJob(jobId);
+      setRequests((prev) =>
+        prev.map((r) =>
+          r.jobId === jobId
+            ? { ...r, status: "failed", statusLabel: "Denied", title: `Denied ${r.title?.replace(/^Review needed for /, "") || "track"}` }
+            : r,
+        ),
+      );
       setDenyingJobId(null);
       setJobErrors((prev) => {
         const { [jobId]: _, ...rest } = prev;
         return rest;
       });
-      fetchRequests({ silent: true });
     } catch {
       setJobErrors((prev) => ({ ...prev, [jobId]: "Failed to deny" }));
       setDenyingJobId(null);
     }
   };
 
-  const togglePlay = (jobId) => {
-    const audio = audioRef.current;
-    if (playingJobId === jobId) {
-      audio.pause();
-      audio.currentTime = 0;
-      setPlayingJobId(null);
+  const handleReviewPreview = (jobId, trackName, artistName) => {
+    const trackId = String(jobId);
+    if (currentTrack?.id === trackId) {
+      togglePlayPause();
       return;
     }
-    if (playingJobId) {
-      audio.pause();
-      audio.currentTime = 0;
-    }
-    audio.src = getStagingStreamUrl(jobId);
-    audio.load();
-    audio.play().then(() => setPlayingJobId(jobId)).catch(() => setPlayingJobId(null));
+    playTrack({
+      id: trackId,
+      src: getStagingStreamUrl(jobId),
+      title: trackName || "Track",
+      artist: artistName || "Artist",
+    });
   };
 
   const handleRowNavigate = (
@@ -458,7 +461,8 @@ function ActivityPage() {
       request.kind === "track_download" && request.status === "blocked" && !!request.jobId;
     const isApproving = approvingJobId === request.jobId;
     const isDenying = denyingJobId === request.jobId;
-    const isThisPlaying = playingJobId === request.jobId;
+    const isThisPlaying = currentTrack?.id === request.jobId && isPlaying;
+    const trackName = request.title?.replace(/^Review needed for /, "") || "track";
     const jobError = jobErrors[request.jobId];
     const displayRequest =
       isReSearching && request.status === "failed"
@@ -519,7 +523,7 @@ function ActivityPage() {
                   title={isThisPlaying ? "Pause" : "Preview"}
                   onClick={(event) => {
                     event.stopPropagation();
-                    togglePlay(request.jobId);
+                    handleReviewPreview(request.jobId, trackName, artistName);
                   }}
                 >
                   {isThisPlaying ? (
