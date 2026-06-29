@@ -315,7 +315,6 @@ export const syncTrackDownloadHistory = async () => {
         entry.kind === "track_download" &&
         (entry.status === "processing" || entry.status === "pending" || entry.status === "blocked"),
     );
-  if (!trackEntries.length) return;
 
   const pendingEntries = trackEntries.filter(
     (entry) => entry.status === "processing" || entry.status === "pending",
@@ -402,6 +401,14 @@ export const syncTrackDownloadHistory = async () => {
       recordTrackJobFailed(job, "Denied by user — will retry");
       continue;
     }
+  }
+
+  const historyJobIds = new Set(
+    trackEntries.map((entry) => entry.metadata?.jobId).filter(Boolean),
+  );
+  for (const job of downloadTracker.getByStatus("blocked")) {
+    if (historyJobIds.has(job.id)) continue;
+    recordTrackJobBlocked(job, job.error || "Blocked for review");
   }
 };
 
