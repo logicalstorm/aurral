@@ -24,6 +24,7 @@ export const EMPTY_FLOW_STATS = {
   done: 0,
   pending: 0,
   downloading: 0,
+  blocked: 0,
   failed: 0,
 };
 
@@ -36,7 +37,7 @@ export const getPlaylistDownloadProgressPct = (stats, trackCount = 0) => {
   const done = flowNumber(stats?.done);
   const total = Math.max(
     flowNumber(trackCount),
-    flowNumber(stats?.pending) + flowNumber(stats?.downloading) + done,
+    flowNumber(stats?.pending) + flowNumber(stats?.downloading) + flowNumber(stats?.blocked) + done,
   );
   if (total <= 0) return null;
   return Math.min(100, Math.round((done / total) * 100));
@@ -74,19 +75,21 @@ export const buildFlowStatsFromJobs = (jobs) => {
     if (!job?.status) continue;
     stats[job.status] = (stats[job.status] || 0) + 1;
   }
-  stats.total = stats.pending + stats.downloading + stats.done;
+  stats.total = stats.pending + stats.downloading + stats.blocked + stats.done;
   return stats;
 };
 
 export const sanitizeFlowStats = (stats) => {
   const pending = flowNumber(stats?.pending);
   const downloading = flowNumber(stats?.downloading);
+  const blocked = flowNumber(stats?.blocked);
   const done = flowNumber(stats?.done);
   const failed = flowNumber(stats?.failed);
   return {
-    total: pending + downloading + done,
+    total: pending + downloading + blocked + done,
     pending,
     downloading,
+    blocked,
     done,
     failed,
   };
@@ -110,14 +113,16 @@ export const getCombinedActivityStats = (status) => {
   const shared = status?.sharedStats || EMPTY_FLOW_STATS;
   const pending = flowNumber(flow.pending) + flowNumber(shared.pending);
   const downloading = flowNumber(flow.downloading) + flowNumber(shared.downloading);
+  const blocked = flowNumber(flow.blocked) + flowNumber(shared.blocked);
   const done = flowNumber(flow.done) + flowNumber(shared.done);
   const failed = flowNumber(flow.failed) + flowNumber(shared.failed);
   return {
     pending,
     downloading,
+    blocked,
     done,
     failed,
-    total: pending + downloading + done,
+    total: pending + downloading + blocked + done,
   };
 };
 

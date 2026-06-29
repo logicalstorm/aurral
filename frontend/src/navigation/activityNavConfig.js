@@ -12,7 +12,10 @@ export function normalizeActivityView(view) {
 
 export function isActivityQueueItem(request) {
   return (
-    request?.inQueue === true || request?.status === "processing" || request?.status === "pending"
+    request?.inQueue === true ||
+    request?.status === "processing" ||
+    request?.status === "pending" ||
+    request?.status === "blocked"
   );
 }
 

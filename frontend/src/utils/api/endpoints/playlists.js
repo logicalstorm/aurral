@@ -11,6 +11,9 @@ import {
 export const getFlowTrackStreamUrl = (jobId) =>
   buildAuthenticatedApiUrl(`/playlists/stream/${encodeURIComponent(jobId)}`);
 
+export const getStagingStreamUrl = (jobId) =>
+  buildAuthenticatedApiUrl(`/playlists/staging-stream/${encodeURIComponent(jobId)}`);
+
 export const getFlowArtworkUrl = (playlistId, version) =>
   buildAuthenticatedApiUrl(
     `/playlists/artwork/${encodeURIComponent(playlistId)}`,

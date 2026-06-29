@@ -36,6 +36,7 @@ function aggregateStats(statsByType, ids) {
     total: 0,
     pending: 0,
     downloading: 0,
+    blocked: 0,
     done: 0,
     failed: 0,
   };
@@ -44,10 +45,11 @@ function aggregateStats(statsByType, ids) {
     if (!stats) continue;
     base.pending += Number(stats.pending || 0);
     base.downloading += Number(stats.downloading || 0);
+    base.blocked += Number(stats.blocked || 0);
     base.done += Number(stats.done || 0);
     base.failed += Number(stats.failed || 0);
   }
-  base.total = base.pending + base.downloading + base.done + base.failed;
+  base.total = base.pending + base.downloading + base.blocked + base.done + base.failed;
   return base;
 }
 
@@ -121,6 +123,7 @@ export function getWeeklyFlowStatusSnapshot({
     const jobTotal =
       Number(playlistStats?.pending || 0) +
       Number(playlistStats?.downloading || 0) +
+      Number(playlistStats?.blocked || 0) +
       Number(playlistStats?.done || 0);
     return {
       id: playlist.id,

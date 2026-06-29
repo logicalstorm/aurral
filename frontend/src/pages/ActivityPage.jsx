@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
-import { Loader, Clock, CheckCircle2, AlertCircle, Music, RotateCcw, XCircle } from "lucide-react";
+import { Loader, Clock, CheckCircle2, AlertCircle, Music, RotateCcw, XCircle, Play, Pause } from "lucide-react";
 import { getRequests, triggerAlbumSearch } from "../utils/api";
-import { approveBlockedJob, denyBlockedJob } from "../utils/api/endpoints/playlists";
+import { approveBlockedJob, denyBlockedJob, getStagingStreamUrl } from "../utils/api/endpoints/playlists";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import {
   DEFAULT_ACTIVITY_VIEW,
@@ -211,6 +211,9 @@ function ActivityPage() {
   const [reSearchingAlbumIds, setReSearchingAlbumIds] = useState({});
   const [approvingJobId, setApprovingJobId] = useState(null);
   const [denyingJobId, setDenyingJobId] = useState(null);
+  const [jobErrors, setJobErrors] = useState({});
+  const [playingJobId, setPlayingJobId] = useState(null);
+  const audioRef = useRef(new Audio());
   const fetchRequestsInFlightRef = useRef(false);
 
   const activeView = normalizeActivityView(viewParam);
@@ -269,7 +272,9 @@ function ActivityPage() {
       setRequests((previous) => mergeActivityRequests(previous, data));
       setError(null);
     } catch {
-      setError("Failed to load activity.");
+      if (!silent) {
+        setError("Failed to load activity.");
+      }
     } finally {
       fetchRequestsInFlightRef.current = false;
       if (!silent) {
@@ -311,6 +316,13 @@ function ActivityPage() {
     }, intervalMs);
     return () => clearInterval(interval);
   }, [isQueueView, fetchRequests]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    const onEnded = () => setPlayingJobId(null);
+    audio.addEventListener("ended", onEnded);
+    return () => audio.removeEventListener("ended", onEnded);
+  }, []);
 
   const navigateToArtist = (request, isAlbum, artistMbid, artistName, displayName) => {
     if (!artistMbid || artistMbid === "null" || artistMbid === "undefined") {
@@ -358,9 +370,13 @@ function ActivityPage() {
     try {
       await approveBlockedJob(jobId);
       setApprovingJobId(null);
+      setJobErrors((prev) => {
+        const { [jobId]: _, ...rest } = prev;
+        return rest;
+      });
       fetchRequests({ silent: true });
     } catch {
-      setError("Failed to approve track.");
+      setJobErrors((prev) => ({ ...prev, [jobId]: "Failed to approve" }));
       setApprovingJobId(null);
     }
   };
@@ -371,11 +387,32 @@ function ActivityPage() {
     try {
       await denyBlockedJob(jobId);
       setDenyingJobId(null);
+      setJobErrors((prev) => {
+        const { [jobId]: _, ...rest } = prev;
+        return rest;
+      });
       fetchRequests({ silent: true });
     } catch {
-      setError("Failed to deny track.");
+      setJobErrors((prev) => ({ ...prev, [jobId]: "Failed to deny" }));
       setDenyingJobId(null);
     }
+  };
+
+  const togglePlay = (jobId) => {
+    const audio = audioRef.current;
+    if (playingJobId === jobId) {
+      audio.pause();
+      audio.currentTime = 0;
+      setPlayingJobId(null);
+      return;
+    }
+    if (playingJobId) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    audio.src = getStagingStreamUrl(jobId);
+    audio.load();
+    audio.play().then(() => setPlayingJobId(jobId)).catch(() => setPlayingJobId(null));
   };
 
   const handleRowNavigate = (
@@ -421,6 +458,8 @@ function ActivityPage() {
       request.kind === "track_download" && request.status === "blocked" && !!request.jobId;
     const isApproving = approvingJobId === request.jobId;
     const isDenying = denyingJobId === request.jobId;
+    const isThisPlaying = playingJobId === request.jobId;
+    const jobError = jobErrors[request.jobId];
     const displayRequest =
       isReSearching && request.status === "failed"
         ? {
@@ -475,6 +514,22 @@ function ActivityPage() {
               <>
                 <button
                   type="button"
+                  className="btn btn-secondary btn--icon requests-page__action"
+                  aria-label={isThisPlaying ? "Pause preview" : "Play preview"}
+                  title={isThisPlaying ? "Pause" : "Preview"}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    togglePlay(request.jobId);
+                  }}
+                >
+                  {isThisPlaying ? (
+                    <Pause className="artist-icon-xs" />
+                  ) : (
+                    <Play className="artist-icon-xs" />
+                  )}
+                </button>
+                <button
+                  type="button"
                   className="btn btn-primary btn--icon requests-page__action"
                   aria-label="Approve track"
                   title="Approve"
@@ -508,6 +563,9 @@ function ActivityPage() {
                   )}
                 </button>
               </>
+            )}
+            {jobError && (
+              <span className="requests-page__inline-error">{jobError}</span>
             )}
             {canReSearch && (
               <button
