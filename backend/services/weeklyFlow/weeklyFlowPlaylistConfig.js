@@ -287,6 +287,8 @@ const normalizeFlow = (flow) => {
     tags,
     relatedArtists,
     discoverPresetId: String(flow?.discoverPresetId || "").trim() || null,
+    type: flow?.type || null,
+    tag: flow?.tag || null,
     createdAt:
       flow?.createdAt != null && Number.isFinite(Number(flow.createdAt))
         ? Number(flow.createdAt)
@@ -597,6 +599,8 @@ export const flowPlaylistConfig = {
     scheduleTime,
     ownerUserId = null,
     discoverPresetId = null,
+    type = null,
+    tag = null,
   }) {
     const flows = getStoredFlows();
     assertUniqueFlowName(flows, name);
@@ -610,6 +614,8 @@ export const flowPlaylistConfig = {
       tags,
       relatedArtists,
       discoverPresetId,
+      type,
+      tag,
       scheduleDays,
       scheduleTime,
       ownerUserId,

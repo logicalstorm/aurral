@@ -12,6 +12,7 @@ export function isDiscoverHomePath(pathname) {
 export function isDiscoverBrowsePath(pathname) {
   if (!pathname) return false;
   if (pathname.startsWith("/artist/")) return true;
+  if (pathname.startsWith("/discover/")) return true;
   if (pathname === "/search") return true;
   return false;
 }
@@ -177,6 +178,7 @@ export function buildDiscoverRecentLabel(path, state = {}) {
     return "Search";
   }
 
+  if (pathname.startsWith("/discover/playlists")) return "Playlists";
   if (pathname.startsWith("/shows")) return "Shows";
   if (pathname.startsWith("/playlists")) return "Playlist";
   if (pathname === "/library") return "Library";

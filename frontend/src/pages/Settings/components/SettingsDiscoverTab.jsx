@@ -55,15 +55,12 @@ export function SettingsDiscoverTab({
   const [lastfmBannerDismissed, setLastfmBannerDismissed] = useState(
     readLastfmDiscoverBannerDismissed,
   );
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const autoRefreshHours = settings.integrations?.lastfm?.discoveryAutoRefreshHours || 168;
   const discoveryMode = settings.integrations?.lastfm?.discoveryMode || "balanced";
   const discoveryRecommendationsPerRefresh =
     settings.integrations?.lastfm?.discoveryRecommendationsPerRefresh ?? 200;
-  const discoveryFlowsPerRefresh = settings.integrations?.lastfm?.discoveryFlowsPerRefresh ?? 9;
-  const baseDiscoverFlowCount = 5;
-  const focusFlowCount = Math.max(0, discoveryFlowsPerRefresh - baseDiscoverFlowCount);
+  const discoveryPersonalizedEnabled = settings.integrations?.lastfm?.discoveryPersonalizedEnabled !== false;
   const discoveryProvider =
     health?.discovery?.provider === "listenbrainz-fallback" ? "ListenBrainz fallback" : "Last.fm";
   const isListenBrainzFallback = health?.discovery?.provider === "listenbrainz-fallback";
@@ -176,18 +173,6 @@ export function SettingsDiscoverTab({
           ) : null}
 
           {!isListenBrainzFallback ? (
-            <div className="arr-advanced-toggle">
-              <button
-                type="button"
-                className="arr-link arr-link--button"
-                onClick={() => setShowAdvanced((current) => !current)}
-              >
-                {showAdvanced ? "Hide advanced" : "Show advanced"}
-              </button>
-            </div>
-          ) : null}
-
-          {!isListenBrainzFallback && showAdvanced ? (
             <>
               <SettingsArrFormGroup
                 label="Recommended artists"
@@ -213,27 +198,23 @@ export function SettingsDiscoverTab({
                 />
               </SettingsArrFormGroup>
               <SettingsArrFormGroup
-                label="Generated flows"
-                labelFor="discover-flows"
-                help={`Includes Discover Weekly, Trending Mix, Library Blend, Listening History, and Release Radar, plus ${focusFlowCount} auto-generated focus playlists.`}
+                label="Recommended playlists"
+                labelFor="discover-personalized"
+                help="Generate personalized playlists (Discover Weekly, Trending Mix, Library Blend, Listening History, Release Radar). When disabled, only editorial playlists are shown."
               >
-                <SettingsInput
-                  id="discover-flows"
-                  type="number"
-                  min={5}
-                  max={32}
-                  step={1}
-                  value={discoveryFlowsPerRefresh}
-                  onChange={(e) => {
-                    const raw = Number(e.target.value);
-                    const value = Number.isFinite(raw)
-                      ? Math.max(5, Math.min(32, Math.floor(raw)))
-                      : 9;
-                    updateLastfmDiscovery({
-                      discoveryFlowsPerRefresh: value,
-                    });
-                  }}
-                />
+                <label className="artist-checkbox-label">
+                  <input
+                    id="discover-personalized"
+                    type="checkbox"
+                    className="artist-checkbox"
+                    checked={discoveryPersonalizedEnabled}
+                    onChange={(e) => {
+                      updateLastfmDiscovery({
+                        discoveryPersonalizedEnabled: e.target.checked,
+                      });
+                    }}
+                  />
+                </label>
               </SettingsArrFormGroup>
             </>
           ) : null}

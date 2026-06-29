@@ -1,9 +1,4 @@
 
-import {
-  DISCOVERY_FLOWS_DEFAULT,
-  DISCOVERY_FLOWS_MAX,
-  BASE_DISCOVER_FLOW_COUNT,
-} from "../../config/discoverPlaylistPresets.js";
 import { dbOps } from "../../db/helpers/index.js";
 
 export const LASTFM_PERIODS = [
@@ -46,18 +41,12 @@ export const getDiscoveryRecommendationsPerRefresh = () => {
   return Math.min(DISCOVERY_RECOMMENDATIONS_MAX, Math.max(50, parsed));
 };
 
-export const getDiscoveryFlowsPerRefresh = () => {
+export const isDiscoveryPersonalizedEnabled = () => {
   const settings = dbOps.getSettings();
-  const parsed = parseInt(
-    settings.integrations?.lastfm?.discoveryFlowsPerRefresh,
-    10,
-  );
-  if (!Number.isFinite(parsed)) return DISCOVERY_FLOWS_DEFAULT;
-  return Math.min(DISCOVERY_FLOWS_MAX, Math.max(BASE_DISCOVER_FLOW_COUNT, parsed));
+  const value = settings.integrations?.lastfm?.discoveryPersonalizedEnabled;
+  if (typeof value === "boolean") return value;
+  return true;
 };
-
-export const getMaxFocusPlaylists = () =>
-  Math.max(0, getDiscoveryFlowsPerRefresh() - BASE_DISCOVER_FLOW_COUNT);
 
 export const getDiscoveryAutoRefreshHours = () => {
   const settings = dbOps.getSettings();

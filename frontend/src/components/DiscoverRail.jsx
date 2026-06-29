@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export function DiscoverRail({
   title,
+  subtitle,
   mobileTitle,
   onViewAll,
   afterTitle,
@@ -57,6 +58,9 @@ export function DiscoverRail({
             <span className="artist-section-title--discover-mobile">{mobileTitle || title}</span>
             <span className="artist-section-title--discover-desktop">{title}</span>
           </h2>
+          {subtitle ? (
+            <p className="artist-discover-rail__subtitle">{subtitle}</p>
+          ) : null}
           {onViewAll ? (
             <button
               type="button"
@@ -103,6 +107,7 @@ export function DiscoverRail({
 
 DiscoverRail.propTypes = {
   title: PropTypes.string.isRequired,
+  subtitle: PropTypes.string,
   mobileTitle: PropTypes.string,
   onViewAll: PropTypes.func,
   afterTitle: PropTypes.node,

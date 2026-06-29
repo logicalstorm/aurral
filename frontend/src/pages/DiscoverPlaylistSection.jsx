@@ -374,6 +374,7 @@ export function DiscoverPlaylistSection({
   return (
     <DiscoverRail
       title="Playlists for you"
+      onViewAll={() => navigate("/discover/playlists")}
       afterTitle={
         playlistsUpdating ? (
           <span className="artist-discover-hero__updated artist-discover-hero__updated--refreshing">

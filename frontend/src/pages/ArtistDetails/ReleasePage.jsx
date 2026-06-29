@@ -7,6 +7,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { ArtistDetailsReleaseTrackList } from "./components/ArtistDetailsReleaseTrackList";
+import { extractTwoToneGradientFromImage } from "../../utils/imageColors";
 import {
   buildSharedPlaylistTrackPayload,
   buildLastfmAlbumUrl,
@@ -111,6 +112,28 @@ function ReleasePage() {
   const [playlistModalError, setPlaylistModalError] = useState("");
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
   const downloadStatusPollInFlightRef = useRef(false);
+
+  const [heroColor, setHeroColor] = useState(null);
+  const colorRequestRef = useRef(null);
+
+  useEffect(() => {
+    if (!coverUrl) {
+      setHeroColor(null);
+      return;
+    }
+    const url = coverUrl;
+    colorRequestRef.current = url;
+    extractTwoToneGradientFromImage(url).then((result) => {
+      if (colorRequestRef.current === url && result?.top) {
+        setHeroColor(result.top);
+      }
+    });
+    return () => {
+      if (colorRequestRef.current === url) {
+        colorRequestRef.current = null;
+      }
+    };
+  }, [coverUrl]);
 
   const releaseTitle = release.title || "Release";
   const pageTitle = artistName ? `${releaseTitle} — ${artistName}` : releaseTitle;
@@ -461,7 +484,14 @@ function ReleasePage() {
   };
 
   return (
-    <div className="artist-details-page release-page">
+    <div
+      className="artist-details-page release-page"
+      style={
+        heroColor
+          ? { background: `linear-gradient(180deg, ${heroColor} 0%, ${heroColor} 120px, #121212 400px)` }
+          : undefined
+      }
+    >
       <div className="artist-page-header">
         <div>
           <div className="artist-title-link release-page__title-nav">

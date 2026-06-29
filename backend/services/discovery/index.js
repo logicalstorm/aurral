@@ -1,12 +1,11 @@
 export {
   getDiscoveryAutoRefreshHours,
-  getDiscoveryFlowsPerRefresh,
-  getMaxFocusPlaylists,
   getDiscoveryMode,
   getLocalDiscoveryPreferences,
   getDiscoveryRecommendationsPerRefresh,
   getDiscoveryRecommendationPoolLimit,
   getDiscoveryUserRefreshDelaySeconds,
+  isDiscoveryPersonalizedEnabled,
   DISCOVERY_QUALITY_INITIAL,
   DISCOVERY_QUALITY_ENRICHING,
   DISCOVERY_QUALITY_ENRICHED,

@@ -44,7 +44,7 @@ export const defaultData = {
         discoveryPeriod: "1month",
         discoveryAutoRefreshHours: 168,
         discoveryRecommendationsPerRefresh: 200,
-        discoveryFlowsPerRefresh: 9,
+        discoveryPersonalizedEnabled: true,
         discoveryMode: "balanced",
       },
       slskd: {

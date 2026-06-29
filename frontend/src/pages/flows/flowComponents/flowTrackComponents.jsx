@@ -72,6 +72,7 @@ function BulkPlaylistAction({
 function FlowTrackPlaylistMenus({
   track,
   useTrackContextMenu,
+  playlistTriggerVariant = "compact",
   playlists,
   playlistsLoading,
   playlistSavingKey,
@@ -124,7 +125,7 @@ function FlowTrackPlaylistMenus({
       {onAddTrackToPlaylist ? (
         <TrackPlaylistMenu
           {...sharedMenuProps}
-          triggerVariant="compact"
+          triggerVariant={playlistTriggerVariant}
           onSelect={(target) => onAddTrackToPlaylist(track, target)}
         />
       ) : null}
@@ -393,6 +394,7 @@ export function FlowTracksPanel({
   deletingTrackId = null,
   reSearchingTrackIds = {},
   useTrackContextMenu = false,
+  playlistTriggerVariant = "compact",
   playlists = [],
   playlistsLoading = false,
   playlistSavingKey = "",
@@ -658,7 +660,6 @@ export function FlowTracksPanel({
               </>
             ) : (
               <>
-                {headerActions}
                 {allowBulkEdit ? (
                   <button
                     type="button"
@@ -878,6 +879,7 @@ export function FlowTracksPanel({
                         <FlowTrackPlaylistMenus
                           track={track}
                           useTrackContextMenu={useTrackContextMenu}
+                          playlistTriggerVariant={playlistTriggerVariant}
                           playlists={playlists}
                           playlistsLoading={playlistsLoading}
                           playlistSavingKey={playlistSavingKey}

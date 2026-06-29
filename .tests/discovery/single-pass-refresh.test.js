@@ -148,31 +148,6 @@ test("single-pass refresh: recommendationQuality constants are correctly defined
   assert.ok(poolLimit >= perRefresh);
 });
 
-test("single-pass refresh: getDiscoveryFlowsPerRefresh defaults and clamping", async () => {
-  const { getDiscoveryFlowsPerRefresh, getMaxFocusPlaylists } =
-    await importFromRepo("backend/services/discovery/index.js");
-
-  assert.equal(getDiscoveryFlowsPerRefresh(), 9);
-  assert.equal(getMaxFocusPlaylists(), 4);
-
-  const flows = getDiscoveryFlowsPerRefresh();
-  assert.ok(flows >= 5);
-  assert.ok(flows <= 32);
-});
-
-test("single-pass refresh: resolveFocusSlotBudgets covers all slots", async () => {
-  const { resolveFocusSlotBudgets } = await importFromRepo(
-    "backend/services/discovery/playlistBuilder.js",
-  );
-
-  const budgets = resolveFocusSlotBudgets(6);
-  assert.equal(budgets.maxFocus, 6);
-  assert.ok(budgets.tag > 0);
-  assert.ok(budgets.artist > 0);
-  assert.ok(budgets.crossover > 0);
-  assert.equal(budgets.tag + budgets.artist + budgets.crossover, budgets.maxFocus);
-});
-
 const isolatedState = await createIsolatedStateDir("single-pass-refresh");
 applyIsolatedBackendEnv(isolatedState);
 

@@ -33,6 +33,8 @@ const ReleasePage = lazy(() => import("./pages/ArtistDetails/ReleasePage"));
 const ArtistAppearsOnPage = lazy(() => import("./pages/ArtistDetails/ArtistAppearsOnPage"));
 const ActivityPage = lazy(() => import("./pages/ActivityPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
+const DiscoverPlaylistsPage = lazy(() => import("./pages/DiscoverPlaylistsPage"));
+const DiscoverPlaylistDetailPage = lazy(() => import("./pages/DiscoverPlaylistDetailPage"));
 
 const PageLoader = () => (
   <div className="app-loading">
@@ -201,6 +203,8 @@ function AppContent() {
                 <Route path="/shows/:filter" element={<ShowsPage />} />
                 <Route path="/search" element={<SearchResultsPage />} />
                 <Route path="/discover" element={<Navigate to="/" replace />} />
+                <Route path="/discover/playlists/:presetId" element={<DiscoverPlaylistDetailPage />} />
+                <Route path="/discover/playlists" element={<DiscoverPlaylistsPage />} />
                 <Route path="/library" element={<LibraryPage />} />
                 <Route
                   path="/playlists"

@@ -23,18 +23,36 @@ export const DISCOVER_PLAYLIST_PRESETS = [
     size: 30,
     deepDive: false,
   },
+  {
+    id: "focus-listening-history",
+    name: "Listening History",
+    description: "",
+    mix: { discover: 0, mix: 0, trending: 0, focus: 100 },
+    size: 20,
+    deepDive: false,
+    tags: [],
+    relatedArtists: [],
+  },
 ];
 
-export const BASE_DISCOVER_FLOW_COUNT = DISCOVER_PLAYLIST_PRESETS.length + 2;
-export const DISCOVERY_FLOWS_DEFAULT = 9;
-export const DISCOVERY_FLOWS_MAX = 32;
-
 export const FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS = {
-  "discover-weekly": "#4363d8",
-  "trending-mix": "#f032e6",
-  "library-blend": "#3cb44b",
-  "focus-listening-history": "#f58231",
-  "release-radar": "#e6194B",
+  "discover-weekly": "#e6194B",
+  "trending-mix": "#3cb44b",
+  "library-blend": "#ffe119",
+  "focus-listening-history": "#4363d8",
+  "release-radar": "#f58231",
+  "top-rock": "#911eb4",
+  "top-indie": "#42d4f4",
+  "top-hiphop": "#f032e6",
+  "top-electronic": "#bfef45",
+  "top-pop": "#fabed4",
+  "top-rnb": "#469990",
+  "top-metal": "#dcbeff",
+  "top-jazz": "#9A6324",
+  "era-80s": "#fffac8",
+  "era-90s": "#800000",
+  "mood-chill": "#aaffc3",
+  "mood-energetic": "#808000",
 };
 
 export const isFixedDiscoverPlaylistPreset = (presetId) =>

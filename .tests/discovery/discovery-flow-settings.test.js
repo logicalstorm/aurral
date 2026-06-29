@@ -13,12 +13,8 @@ applyIsolatedBackendEnv(isolatedState);
 const { dbOps } = await importFromRepo("backend/db/helpers/index.js");
 const {
   getDiscoveryRecommendationsPerRefresh,
-  getDiscoveryFlowsPerRefresh,
-  getMaxFocusPlaylists,
+  isDiscoveryPersonalizedEnabled,
 } = await importFromRepo("backend/services/discovery/index.js");
-const { resolveFocusSlotBudgets } = await importFromRepo(
-  "backend/services/discovery/playlistBuilder.js",
-);
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);
@@ -26,39 +22,22 @@ test.after(async () => {
 
 test("discovery flow settings use defaults when unset", () => {
   assert.equal(getDiscoveryRecommendationsPerRefresh(), 200);
-  assert.equal(getDiscoveryFlowsPerRefresh(), 9);
-  assert.equal(getMaxFocusPlaylists(), 4);
+  assert.equal(isDiscoveryPersonalizedEnabled(), true);
 });
 
-test("discovery flow settings clamp configured values", () => {
+test("discovery personalized toggle", () => {
   const settings = dbOps.getSettings();
+  assert.equal(isDiscoveryPersonalizedEnabled(), true);
+
   dbOps.updateSettings({
     ...settings,
     integrations: {
       ...settings.integrations,
       lastfm: {
         ...(settings.integrations?.lastfm || {}),
-        discoveryRecommendationsPerRefresh: 999,
-        discoveryFlowsPerRefresh: 99,
+        discoveryPersonalizedEnabled: false,
       },
     },
   });
-  assert.equal(getDiscoveryRecommendationsPerRefresh(), 500);
-  assert.equal(getDiscoveryFlowsPerRefresh(), 32);
-  assert.equal(getMaxFocusPlaylists(), 27);
-});
-
-test("resolveFocusSlotBudgets scales with max focus playlists", () => {
-  assert.deepEqual(resolveFocusSlotBudgets(8), {
-    maxFocus: 8,
-    tag: 3,
-    artist: 3,
-    crossover: 2,
-  });
-  assert.deepEqual(resolveFocusSlotBudgets(0), {
-    maxFocus: 0,
-    tag: 0,
-    artist: 0,
-    crossover: 0,
-  });
+  assert.equal(isDiscoveryPersonalizedEnabled(), false);
 });

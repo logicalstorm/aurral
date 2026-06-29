@@ -195,6 +195,13 @@ function Sidebar({ mode, width = 208 }) {
       return (
         <nav className="sidebar-subnav" aria-label={`${item.label} views`}>
           <Link
+            to="/discover/playlists"
+            className={`sidebar-subnav-link${location.pathname.startsWith("/discover/playlists") ? " is-active" : ""}`}
+            aria-current={location.pathname.startsWith("/discover/playlists") ? "page" : undefined}
+          >
+            Playlists
+          </Link>
+          <Link
             to="/search?type=recommended"
             className={`sidebar-subnav-link${isRecommendedActive ? " is-active" : ""}`}
             aria-current={isRecommendedActive ? "page" : undefined}
