@@ -106,7 +106,8 @@ db.exec(`
     slskd_search_id TEXT,
     slskd_batch_id TEXT,
     remote_username TEXT,
-    remote_filename TEXT
+    remote_filename TEXT,
+    denied_remote_sources TEXT
   );
 
   CREATE TABLE IF NOT EXISTS deezer_mbid_cache (
@@ -258,6 +259,9 @@ if (!tableColumns.includes("indexer_id")) {
 }
 if (!tableColumns.includes("indexer_name")) {
   tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN indexer_name TEXT");
+}
+if (!tableColumns.includes("denied_remote_sources")) {
+  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN denied_remote_sources TEXT");
 }
 
 const userColumns = db

@@ -199,7 +199,16 @@ async function handleUsenetSearch(payload, helpers) {
     }
   }
   const ranked = rankUsenetReleases(aggregated, resolvedTrack);
-  const candidates = selectRankedUsenetCandidates(ranked, MAX_DOWNLOAD_CANDIDATES).map((entry) => ({
+  const deniedSources = Array.isArray(job.deniedRemoteSources) ? job.deniedRemoteSources : [];
+  const deniedSourceGuidSet = new Set(
+    deniedSources
+      .filter((entry) => Array.isArray(entry) && entry[0] === "usenet")
+      .map((entry) => String(entry[1] || "").trim()),
+  );
+  const filteredRanked = deniedSourceGuidSet.size > 0
+    ? ranked.filter((entry) => !deniedSourceGuidSet.has(String(entry?.raw?.guid || "").trim()))
+    : ranked;
+  const candidates = selectRankedUsenetCandidates(filteredRanked, MAX_DOWNLOAD_CANDIDATES).map((entry) => ({
     raw: entry.raw,
     score: entry.score,
     scores: entry.scores,

@@ -11,6 +11,16 @@ import {
   stringifyStringListJson,
 } from "../playlistDownloadUtils.js";
 
+const parseDeniedSources = (raw) => {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
 const JOBS_TABLE = "playlist_download_jobs";
 
 function rowToJob(row) {
@@ -53,6 +63,7 @@ function rowToJob(row) {
     slskdBatchId: row.slskd_batch_id || null,
     remoteUsername: row.remote_username || null,
     remoteFilename: row.remote_filename || null,
+    deniedRemoteSources: parseDeniedSources(row.denied_remote_sources),
     retryCycle: false,
   };
 }
@@ -150,6 +161,12 @@ const updateDownloadMetaStmt = db.prepare(`
       indexer_name = COALESCE(?, indexer_name),
       remote_username = COALESCE(?, remote_username),
       remote_filename = COALESCE(?, remote_filename)
+  WHERE id = ?
+`);
+
+const updateDeniedSourcesStmt = db.prepare(`
+  UPDATE ${JOBS_TABLE}
+  SET denied_remote_sources = ?
   WHERE id = ?
 `);
 
@@ -836,6 +853,24 @@ export class WeeklyFlowDownloadTracker {
     if (stagingPath) job.stagingPath = stagingPath;
     this._update(job);
     this._applyStatusDelta(job.playlistType, previousStatus, job.status);
+    return true;
+  }
+
+  recordDeniedSource(id, source, key) {
+    const job = this.jobs.get(id);
+    if (!job) return false;
+    const safeSource = String(source || "").trim();
+    const safeKey = String(key || "").trim();
+    if (!safeSource || !safeKey) return false;
+    const sources = Array.isArray(job.deniedRemoteSources) ? [...job.deniedRemoteSources] : [];
+    const duplicate = sources.some(
+      (entry) => Array.isArray(entry) && entry[0] === safeSource && entry[1] === safeKey,
+    );
+    if (duplicate) return false;
+    sources.push([safeSource, safeKey]);
+    job.deniedRemoteSources = sources;
+    updateDeniedSourcesStmt.run(JSON.stringify(sources), id);
+    this._touchRevision();
     return true;
   }
 

@@ -754,7 +754,20 @@ async function handleSearch(payload) {
       (entry) => !eligibleKeys.has(`${entry.raw?.user || ""}\0${entry.raw?.file || ""}`),
     ),
   ];
-  const candidates = selectRankedMatchAttempts(candidatePool, MAX_DOWNLOAD_CANDIDATES).map(
+  const deniedSources = Array.isArray(job.deniedRemoteSources) ? job.deniedRemoteSources : [];
+  const deniedSourceKeys = new Set(
+    deniedSources
+      .filter((entry) => Array.isArray(entry) && entry[0] === "slskd")
+      .map((entry) => String(entry[1] || "").trim().toLowerCase()),
+  );
+  const filteredPool = deniedSourceKeys.size > 0
+    ? candidatePool.filter((entry) => {
+        const user = String(entry?.raw?.user || "").trim().toLowerCase();
+        const file = String(entry?.raw?.file || "").trim().toLowerCase();
+        return !deniedSourceKeys.has(`${user}\0${file}`);
+      })
+    : candidatePool;
+  const candidates = selectRankedMatchAttempts(filteredPool, MAX_DOWNLOAD_CANDIDATES).map(
     (entry) => ({
       raw: entry.raw,
       score: entry.score,
