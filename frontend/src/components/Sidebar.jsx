@@ -24,7 +24,7 @@ function Sidebar({ mode, width = 208 }) {
   const { user } = useAuth();
   const hasFlowAccess = user?.role === "admin" || !!user?.permissions?.accessFlow;
   const canAccessSettings = user?.role === "admin" || !!user?.permissions?.accessSettings;
-  const { hasActivity: hasRequestActivity } = useFlowWorkerActivity({
+  const { hasReview: hasReviewAlert } = useFlowWorkerActivity({
     enabled: hasFlowAccess,
   });
   const { hasFailure: hasStorageFailure } = useStorageHealth({
@@ -250,6 +250,7 @@ function Sidebar({ mode, width = 208 }) {
             item.section === "activity"
               ? buildActivityPath(entry.id)
               : `${item.basePath}/${entry.id}`;
+          const showReviewAlert = item.section === "activity" && entry.id === "review" && hasReviewAlert;
           return (
             <Link
               key={entry.id}
@@ -257,7 +258,10 @@ function Sidebar({ mode, width = 208 }) {
               className={`sidebar-subnav-link${active ? " is-active" : ""}`}
               aria-current={active ? "page" : undefined}
             >
-              {entry.label}
+              {showReviewAlert ? (
+                <span className="sidebar-subnav-link__alert" aria-hidden="true" />
+              ) : null}
+              <span>{entry.label}</span>
             </Link>
           );
         })}
@@ -295,7 +299,7 @@ function Sidebar({ mode, width = 208 }) {
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = isNavItemActive(item);
-              const showActivityDot = item.section === "activity" && hasRequestActivity;
+              const showActivityDot = item.section === "activity" && hasReviewAlert;
               const activeSubnavId =
                 item.section === "discover"
                   ? discoverRecentPages.find((entry) => entry.path === activeDiscoverRecentPath)?.id

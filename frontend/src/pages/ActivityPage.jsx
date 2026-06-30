@@ -32,6 +32,11 @@ const QUEUE_EMPTY_STATE = {
   message: "Active album requests and downloads will appear here.",
 };
 
+const REVIEW_EMPTY_STATE = {
+  title: "No tracks to review",
+  message: "Downloaded tracks that need your approval will appear here.",
+};
+
 const HISTORY_EMPTY_STATE = {
   title: "No activity yet",
   message: "A chronological log of album requests, track downloads, and other activity will appear here.",
@@ -219,10 +224,14 @@ function ActivityPage() {
 
   const activeView = normalizeActivityView(viewParam);
   const isQueueView = activeView === "queue";
+  const isReviewView = activeView === "review";
+  const isListLikeView = isQueueView || isReviewView;
   const shouldRedirectView = viewParam && normalizeActivityView(viewParam) !== viewParam;
 
   useDocumentTitle(
-    activeView === "queue" ? "Queue - Activity" : "Activity",
+    isQueueView ? "Queue - Activity"
+    : isReviewView ? "Review - Activity"
+    : "Activity",
   );
 
   const filteredRequests = useMemo(
@@ -247,7 +256,7 @@ function ActivityPage() {
   const hasMoreItems = visibleCount < sortedRequests.length;
 
   const listEntries = useMemo(() => {
-    if (isQueueView) {
+    if (isListLikeView) {
       return visibleRequests.map((request) => ({
         type: "item",
         request,
@@ -255,7 +264,7 @@ function ActivityPage() {
       }));
     }
     return buildHistoryListEntries(visibleRequests);
-  }, [isQueueView, visibleRequests]);
+  }, [isListLikeView, visibleRequests]);
 
   useEffect(() => {
     setVisibleCount(ACTIVITY_PAGE_SIZE);
@@ -311,12 +320,12 @@ function ActivityPage() {
   }, [fetchRequests]);
 
   useEffect(() => {
-    const intervalMs = isQueueView ? QUEUE_POLL_INTERVAL_MS : HISTORY_POLL_INTERVAL_MS;
+    const intervalMs = isListLikeView ? QUEUE_POLL_INTERVAL_MS : HISTORY_POLL_INTERVAL_MS;
     const interval = setInterval(() => {
       fetchRequests({ silent: true });
     }, intervalMs);
     return () => clearInterval(interval);
-  }, [isQueueView, fetchRequests]);
+  }, [isListLikeView, fetchRequests]);
 
   const navigateToArtist = (request, isAlbum, artistMbid, artistName, displayName) => {
     if (!artistMbid || artistMbid === "null" || artistMbid === "undefined") {
@@ -641,10 +650,14 @@ function ActivityPage() {
             <Music className="artist-icon-lg" />
           </div>
           <h2 className="search-empty-panel__title">
-            {isQueueView ? QUEUE_EMPTY_STATE.title : HISTORY_EMPTY_STATE.title}
+            {isQueueView ? QUEUE_EMPTY_STATE.title
+            : isReviewView ? REVIEW_EMPTY_STATE.title
+            : HISTORY_EMPTY_STATE.title}
           </h2>
           <p className="search-empty-panel__message">
-            {isQueueView ? QUEUE_EMPTY_STATE.message : HISTORY_EMPTY_STATE.message}
+            {isQueueView ? QUEUE_EMPTY_STATE.message
+            : isReviewView ? REVIEW_EMPTY_STATE.message
+            : HISTORY_EMPTY_STATE.message}
           </p>
           {isQueueView && (
             <button

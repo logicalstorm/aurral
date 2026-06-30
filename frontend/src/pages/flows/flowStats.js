@@ -136,3 +136,9 @@ export const hasFlowWorkerActivity = (status) => {
   const stats = getCombinedActivityStats(status);
   return stats.pending > 0 || stats.downloading > 0;
 };
+
+export const hasReviewActivity = (status) => {
+  if (!status) return false;
+  const stats = getCombinedActivityStats(status);
+  return stats.blocked > 0;
+};

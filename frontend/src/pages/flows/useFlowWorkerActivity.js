@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { getFlowStatus } from "../../utils/api";
 import { useWebSocketChannel } from "../../hooks/useWebSocket";
-import { hasFlowWorkerActivity } from "./flowStats";
+import { hasFlowWorkerActivity, hasReviewActivity } from "./flowStats";
 
 const POLL_INTERVAL_MS = 4000;
 const WS_RECENT_MS = 3000;
@@ -87,6 +87,7 @@ export function useFlowWorkerActivity({ enabled = true } = {}) {
   }, [enabled, fetchStatus]);
 
   const hasActivity = useMemo(() => hasFlowWorkerActivity(status), [status]);
+  const hasReview = useMemo(() => hasReviewActivity(status), [status]);
 
-  return { hasActivity, status };
+  return { hasActivity, hasReview, status };
 }

@@ -1,5 +1,6 @@
 export const ACTIVITY_VIEWS = [
   { id: "queue", label: "Queue" },
+  { id: "review", label: "Review" },
   { id: "history", label: "History" },
 ];
 
@@ -14,13 +15,13 @@ export function isActivityQueueItem(request) {
   return (
     request?.inQueue === true ||
     request?.status === "processing" ||
-    request?.status === "pending" ||
-    request?.status === "blocked"
+    request?.status === "pending"
   );
 }
 
 export function matchesActivityView(request, view) {
   if (view === "queue") return isActivityQueueItem(request);
+  if (view === "review") return request?.status === "blocked";
   return !isActivityQueueItem(request);
 }
 

@@ -332,9 +332,10 @@ function TrackStatusDot({ status }) {
   const normalized = String(status || "").toLowerCase();
   const isLinkable = normalized !== "done";
   if (isLinkable) {
+    const targetPath = normalized === "blocked" ? "/activity/review" : "/downloads";
     return (
       <Link
-        to="/downloads"
+        to={targetPath}
         className={`flow-page__track-status-dot flow-page__track-status-dot--link ${meta.className}`}
         title={`${meta.label} — view activity`}
         aria-label={`${meta.label}, view activity`}
