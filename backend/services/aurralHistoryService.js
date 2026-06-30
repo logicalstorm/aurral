@@ -746,6 +746,21 @@ export const getAurralHistoryRequests = async (lidarrClient = null) => {
   await syncProcessingActivityHistory(lidarrClient);
   const cutoff = Date.now() - MAX_AGE_MS;
   const entries = dbOps.getAurralHistory({ since: cutoff, limit: 300 });
+  const entryIds = new Set(entries.map((e) => e.id));
+
+  const { downloadTracker } = await import("./weeklyFlow/weeklyFlowDownloadTracker.js");
+  const activeStatuses = new Set(["blocked", "pending", "downloading"]);
+  for (const job of downloadTracker.getAll()) {
+    if (!activeStatuses.has(job.status)) continue;
+    const historyId = stableId("track_download", job.id);
+    if (entryIds.has(historyId)) continue;
+    const row = dbOps.getAurralHistoryById(historyId);
+    if (row) {
+      entries.push(row);
+      entryIds.add(historyId);
+    }
+  }
+
   const now = Date.now();
   const FAILED_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
   const visible = entries.filter(
