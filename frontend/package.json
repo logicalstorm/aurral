@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@fullhuman/postcss-purgecss": "^8.0.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@types/react": "^19.2.16",
     "@types/react-dom": "^19.2.3",
