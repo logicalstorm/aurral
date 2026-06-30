@@ -148,6 +148,40 @@ export function ReleaseRadarRecipeFields({
   );
 }
 
+export function EditorialRecipeFields({
+  draft,
+  inputClassName = "flow-page__field-control",
+  errorMessage,
+  onDraftChange,
+  onClearError,
+  tag = "",
+}) {
+  const tagLabel = tag ? tag.charAt(0).toUpperCase() + tag.slice(1) : "";
+  return (
+    <div className="flow-page__form">
+      <div className="flow-page__preset-recipe">
+        <p className="flow-page__preset-recipe-label">
+          {tagLabel ? `${tagLabel} picks` : "Curated picks"}
+        </p>
+        <p className="flow-page__preset-recipe-desc">
+          The top tracks from Last.fm&rsquo;s {tag || "genre"} chart right now,
+          refreshed on your schedule below.
+        </p>
+      </div>
+      <FlowScheduleFields
+        draft={draft}
+        inputClassName={inputClassName}
+        onDraftChange={onDraftChange}
+        onClearError={onClearError}
+        sizeLabel="Tracks"
+      />
+      {errorMessage ? (
+        <div className="flow-page__error-text">{errorMessage}</div>
+      ) : null}
+    </div>
+  );
+}
+
 export function FlowFormFields({
   draft,
   remaining,

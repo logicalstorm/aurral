@@ -408,6 +408,7 @@ const scheduleDiscoverPlaylistBuild = ({
   listenHistoryProfile = null,
   historyTopArtists = [],
   publishUpdate = true,
+  progressExtra = {},
 } = {}) => {
   if (!getLastfmApiKey()) return;
 
@@ -426,7 +427,7 @@ const scheduleDiscoverPlaylistBuild = ({
 
   enqueueDiscoveryPlaylistBuildJob(payload);
   if (publishUpdate) {
-    recordDiscoverPlaylistBuildProgress("Updating recommended playlists...");
+    recordDiscoverPlaylistBuildProgress("Updating recommended playlists...", progressExtra);
   }
 };
 
@@ -847,12 +848,19 @@ export const updateDiscoveryCache = async (options = {}) => {
           .slice(0, 3)
           .map((artist) => artist.artistName)
           .filter(Boolean),
+        progressExtra: {
+          recommendations: discoveryData.recommendations || [],
+          globalTop: discoveryData.globalTop || [],
+          basedOn: discoveryData.basedOn || [],
+          topTags: discoveryData.topTags || [],
+          topGenres: discoveryData.topGenres || [],
+          fallbackGenres: discoveryData.fallbackGenres || [],
+          discoverPlaylists: discoveryCache.discoverPlaylists || [],
+          provider: discoveryData.provider || DISCOVERY_PROVIDER_LASTFM,
+          lastUpdated: discoveryData.lastUpdated,
+        },
       });
       logger.info('discovery', "Global refresh complete. Starting playlist build.");
-      emitDiscoveryDataUpdate(
-        { ...discoveryData, discoverPlaylists: discoveryCache.discoverPlaylists || [] },
-        { progressMessage: "Discovery refresh completed" },
-      );
     }
 
     const { recordDiscoveryUpdated } =

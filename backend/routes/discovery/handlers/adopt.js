@@ -1,5 +1,5 @@
 import { requireAuth, requirePermission } from "../../../middleware/requirePermission.js";
-import { SLSKD_NOT_CONFIGURED_MESSAGE, handleDiscoverAdoptError } from "./utils.js";
+import { handleDiscoverAdoptError } from "./utils.js";
 
 export function registerAdopt(router) {
   router.post(
@@ -11,14 +11,6 @@ export function registerAdopt(router) {
         const presetId = String(req.body?.presetId || "").trim();
         if (!presetId) {
           return res.status(400).json({ error: "presetId is required" });
-        }
-
-        const { slskdClient } = await import("../../../services/slskdClient.js");
-        if (!slskdClient.isConfigured()) {
-          return res.status(400).json({
-            error: "slskd not configured",
-            message: SLSKD_NOT_CONFIGURED_MESSAGE,
-          });
         }
 
         const { adoptDiscoverPresetAsFlow } =
@@ -44,14 +36,6 @@ export function registerAdopt(router) {
         const presetId = String(req.body?.presetId || "").trim();
         if (!presetId) {
           return res.status(400).json({ error: "presetId is required" });
-        }
-
-        const { slskdClient } = await import("../../../services/slskdClient.js");
-        if (!slskdClient.isConfigured()) {
-          return res.status(400).json({
-            error: "slskd not configured",
-            message: SLSKD_NOT_CONFIGURED_MESSAGE,
-          });
         }
 
         const { adoptDiscoverPresetAsPlaylist } =

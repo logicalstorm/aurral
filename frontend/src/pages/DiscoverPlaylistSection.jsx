@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
-import { CheckCircle2, Crosshair, ListMusic, Loader, Sparkles } from "lucide-react";
+import { CheckCircle2, Crosshair, ListMusic, Sparkles } from "lucide-react";
 import { DiscoverPlaylistContextMenu } from "../components/DiscoverPlaylistContextMenu";
 import { DiscoverRail } from "../components/DiscoverRail";
+import DiscoveryStatusPill from "../components/DiscoveryStatusPill";
 import { FlowTracksPanel } from "./FlowPageComponents";
 import {
   adoptDiscoverPlaylistAsFlow,
@@ -376,12 +377,10 @@ export function DiscoverPlaylistSection({
       title="Playlists for you"
       onViewAll={() => navigate("/discover/playlists")}
       afterTitle={
-        playlistsUpdating ? (
-          <span className="artist-discover-hero__updated artist-discover-hero__updated--refreshing">
-            <Loader className="artist-discover-hero__updated-icon animate-spin" />
-            {playlistsUpdateMessage || "Updating playlists..."}
-          </span>
-        ) : null
+        <DiscoveryStatusPill
+          playlistsUpdating={playlistsUpdating}
+          playlistsUpdateMessage={playlistsUpdateMessage}
+        />
       }
       footer={
         expandedPlaylist ? (

@@ -4,7 +4,7 @@ export const DISCOVER_PLAYLIST_PRESETS = [
     name: "Discover Weekly",
     description: "Fresh picks from your recommendation profile",
     mix: { discover: 100, mix: 0, trending: 0, focus: 0 },
-    size: 30,
+    size: 20,
     deepDive: false,
   },
   {
@@ -12,7 +12,7 @@ export const DISCOVER_PLAYLIST_PRESETS = [
     name: "Trending Mix",
     description: "Tracks from globally trending artists",
     mix: { discover: 0, mix: 0, trending: 100, focus: 0 },
-    size: 30,
+    size: 20,
     deepDive: false,
   },
   {
@@ -20,7 +20,7 @@ export const DISCOVER_PLAYLIST_PRESETS = [
     name: "Library Blend",
     description: "Tracks from artists in your library",
     mix: { discover: 0, mix: 100, trending: 0, focus: 0 },
-    size: 30,
+    size: 20,
     deepDive: false,
   },
   {
@@ -49,10 +49,24 @@ export const FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS = {
   "top-rnb": "#469990",
   "top-metal": "#dcbeff",
   "top-jazz": "#9A6324",
+  "top-punk": "#3b82f6",
+  "top-blues": "#1e3a8a",
+  "top-folk": "#d97706",
+  "top-country": "#b45309",
+  "top-reggae": "#22c55e",
+  "top-soul": "#9333ea",
+  "top-funk": "#f97316",
+  "top-latin": "#ef4444",
+  "era-60s": "#fbbf24",
+  "era-70s": "#d946ef",
   "era-80s": "#fffac8",
   "era-90s": "#800000",
+  "era-00s": "#94a3b8",
   "mood-chill": "#aaffc3",
   "mood-energetic": "#808000",
+  "mood-ambient": "#818cf8",
+  "mood-party": "#ec4899",
+  "mood-rainy": "#64748b",
 };
 
 export const isFixedDiscoverPlaylistPreset = (presetId) =>
@@ -66,7 +80,7 @@ export const RELEASE_RADAR_PRESET = {
   name: "Release Radar",
   description: "Up to one track from each recent album missing in your library",
   mix: { discover: 100, mix: 0, trending: 0, focus: 0 },
-  size: 30,
+  size: 20,
   deepDive: false,
 };
 

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useDiscoverData } from "./useDiscoverData";
 import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
 import { DiscoverPlaylistContextMenu } from "../components/DiscoverPlaylistContextMenu";
+import DiscoveryStatusPill from "../components/DiscoveryStatusPill";
 import {
   adoptDiscoverPlaylistAsFlow,
   adoptDiscoverPlaylistAsStatic,
@@ -57,6 +58,12 @@ export default function DiscoverPlaylistsPage() {
   const { data, error } = useDiscoverData();
   const navigate = useDiscoverNavigation();
   const { showSuccess, showError } = useToast();
+
+  const isUpdating = data?.isUpdating || false;
+  const playlistsUpdating = data?.playlistsUpdating || false;
+  const updateProgressMessage = data?.updateProgressMessage;
+  const playlistsUpdateMessage = data?.playlistsUpdateMessage;
+  const lastUpdated = data?.lastUpdated;
 
   const visiblePlaylists = useMemo(
     () => sortDiscoverPlaylists(data?.discoverPlaylists || []),
@@ -131,30 +138,37 @@ export default function DiscoverPlaylistsPage() {
     [navigate, showError, showSuccess],
   );
 
-  if (error && visiblePlaylists.length === 0) {
-    return (
-      <div className="discover-playlists-page">
-        <header className="discover-playlists-page__header">
-          <h1 className="page-title">Playlists for you</h1>
-        </header>
-        <div className="arr-page__empty">
-          <p>{error}</p>
-        </div>
-      </div>
-    );
-  }
-
   if (visiblePlaylists.length === 0) {
     return (
       <div className="discover-playlists-page">
         <header className="discover-playlists-page__header">
-          <h1 className="page-title">Playlists for you</h1>
+          <div className="discover-playlists-page__title-row">
+            <h1 className="page-title">Playlists for you</h1>
+            <DiscoveryStatusPill
+              isUpdating={isUpdating}
+              playlistsUpdating={playlistsUpdating}
+              lastUpdated={lastUpdated}
+              updateProgressMessage={updateProgressMessage}
+              playlistsUpdateMessage={playlistsUpdateMessage}
+            />
+          </div>
         </header>
-        <div className="arr-page__empty">
-          <Loader className="animate-spin artist-icon-md" />
-          <p>Run a discovery refresh to generate playlists.</p>
-          <Link to="/settings?tab=discover" className="arr-link">Open Discovery Settings</Link>
-        </div>
+        {isUpdating || playlistsUpdating ? (
+          <div className="arr-page__empty">
+            <Loader className="animate-spin artist-icon-md" />
+            <p>{playlistsUpdating ? (playlistsUpdateMessage || "Building playlists...") : (updateProgressMessage || "Refreshing discovery...")}</p>
+          </div>
+        ) : error ? (
+          <div className="arr-page__empty">
+            <p>{error}</p>
+          </div>
+        ) : (
+          <div className="arr-page__empty">
+            <Loader className="animate-spin artist-icon-md" />
+            <p>Run a discovery refresh to generate playlists.</p>
+            <Link to="/settings?tab=discover" className="arr-link">Open Discovery Settings</Link>
+          </div>
+        )}
       </div>
     );
   }
@@ -162,7 +176,16 @@ export default function DiscoverPlaylistsPage() {
   return (
     <div className="discover-playlists-page">
       <header className="discover-playlists-page__header">
-        <h1 className="page-title">Playlists for you</h1>
+        <div className="discover-playlists-page__title-row">
+          <h1 className="page-title">Playlists for you</h1>
+          <DiscoveryStatusPill
+            isUpdating={isUpdating}
+            playlistsUpdating={playlistsUpdating}
+            lastUpdated={lastUpdated}
+            updateProgressMessage={updateProgressMessage}
+            playlistsUpdateMessage={playlistsUpdateMessage}
+          />
+        </div>
         <p className="page-subtitle">{visiblePlaylists.length} playlists</p>
       </header>
 

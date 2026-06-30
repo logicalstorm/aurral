@@ -20,7 +20,10 @@ const resolveDiscoverAdoptContext = (user, presetId) => {
   const userCacheNamespace = getListenHistoryCacheNamespace(listenHistoryProfile);
   const effectiveCacheNamespace = getLastfmApiKey() ? userCacheNamespace : null;
   const discoveryCache = getDiscoveryCache(effectiveCacheNamespace);
-  const cachedPlaylist = getCachedDiscoverPlaylist(discoveryCache, presetId);
+  let cachedPlaylist = getCachedDiscoverPlaylist(discoveryCache, presetId);
+  if (!cachedPlaylist && effectiveCacheNamespace) {
+    cachedPlaylist = getCachedDiscoverPlaylist(getDiscoveryCache(), presetId);
+  }
   return { cachedPlaylist };
 };
 

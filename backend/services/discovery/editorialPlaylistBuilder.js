@@ -1,5 +1,5 @@
 import { lastfmRequest, getLastfmApiKey } from "../apiClients/index.js";
-import { EDITORIAL_PLAYLIST_PRESETS } from "../../config/editorialPlaylistPresets.js";
+import { EDITORIAL_PLAYLIST_POOL, selectEditorialPresets } from "../../config/editorialPlaylistPresets.js";
 import { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } from "../../config/discoverPlaylistPresets.js";
 import { logger } from "../logger.js";
 
@@ -100,9 +100,10 @@ export async function generateEditorialPlaylists() {
     return [];
   }
 
+  const presets = selectEditorialPresets();
   const playlists = [];
-  for (let i = 0; i < EDITORIAL_PLAYLIST_PRESETS.length; i += EDITORIAL_BUILD_CONCURRENCY) {
-    const batch = EDITORIAL_PLAYLIST_PRESETS.slice(i, i + EDITORIAL_BUILD_CONCURRENCY);
+  for (let i = 0; i < presets.length; i += EDITORIAL_BUILD_CONCURRENCY) {
+    const batch = presets.slice(i, i + EDITORIAL_BUILD_CONCURRENCY);
     const results = await Promise.all(batch.map(buildPlaylistFromPreset));
     playlists.push(...results.filter(Boolean));
   }
@@ -118,6 +119,6 @@ export async function generateEditorialPlaylists() {
       enriched[i]?.albumName || null;
   }
 
-  logger.info("discovery", `[EditorialPlaylists] Built ${playlists.length}/${EDITORIAL_PLAYLIST_PRESETS.length} playlists`);
+  logger.info("discovery", `[EditorialPlaylists] Built ${playlists.length}/${presets.length} playlists`);
   return playlists;
 }

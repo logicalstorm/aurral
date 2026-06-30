@@ -13258,6 +13258,12 @@ textarea {
   gap: 0.5rem;
   margin-bottom: var(--aurral-space-section);
 }
+.discover-playlists-page__title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
 .discover-playlists-page__cover-label {
   position: absolute;
   bottom: 4px;

@@ -129,6 +129,15 @@ export function useDiscoverData() {
             isUpdating: false,
             configured: true,
             stale: false,
+            recommendations: Array.isArray(msg.recommendations) ? msg.recommendations : prev?.recommendations,
+            globalTop: Array.isArray(msg.globalTop) ? msg.globalTop : prev?.globalTop,
+            basedOn: Array.isArray(msg.basedOn) ? msg.basedOn : prev?.basedOn,
+            topTags: Array.isArray(msg.topTags) ? msg.topTags : prev?.topTags,
+            topGenres: Array.isArray(msg.topGenres) ? msg.topGenres : prev?.topGenres,
+            fallbackGenres: Array.isArray(msg.fallbackGenres) ? msg.fallbackGenres : prev?.fallbackGenres,
+            discoverPlaylists: Array.isArray(msg.discoverPlaylists) ? msg.discoverPlaylists : prev?.discoverPlaylists,
+            provider: msg.provider || prev?.provider || "lastfm",
+            lastUpdated: msg.lastUpdated || prev?.lastUpdated || null,
           }),
         );
         return;
@@ -290,10 +299,9 @@ export function useDiscoverData() {
   ]);
 
   useEffect(() => {
-    if (!isDiscoverySocketConnected) return;
     if (!data?.playlistsUpdating) return;
     fetchAndApplyDiscovery(true);
-  }, [authUser?.id, isDiscoverySocketConnected, data?.playlistsUpdating, fetchAndApplyDiscovery]);
+  }, [authUser?.id, data?.playlistsUpdating, fetchAndApplyDiscovery]);
 
   useEffect(() => {
     if (!data?.isUpdating && !data?.isEnriching) return;

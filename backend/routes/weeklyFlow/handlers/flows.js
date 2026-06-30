@@ -1,6 +1,5 @@
 import fsp from "fs/promises";
 import { downloadTracker } from "../../../services/weeklyFlow/weeklyFlowDownloadTracker.js";
-import { slskdClient } from "../../../services/slskdClient.js";
 import { playlistManager } from "../../../services/weeklyFlow/weeklyFlowPlaylistManager.js";
 import {
   buildSharedTrackIdentity,
@@ -17,7 +16,6 @@ import {
 } from "../../../services/weeklyFlow/weeklyFlowValidation.js";
 import {
   DEFAULT_LIMIT,
-  SLSKD_NOT_CONFIGURED_MESSAGE,
   validateFlowPayload,
   markFlowMutationToken,
   getAccessibleFlow,
@@ -35,12 +33,6 @@ export function registerFlows(router) {
         return res.status(404).json({ error: "Flow not found" });
       }
 
-      if (!slskdClient.isConfigured()) {
-        return res.status(400).json({
-          error: "slskd not configured",
-          message: SLSKD_NOT_CONFIGURED_MESSAGE,
-        });
-      }
       const unavailableError = getUnavailableFlowSourceError(flow.mix);
       if (unavailableError) {
         return res.status(400).json({
@@ -258,13 +250,6 @@ export function registerFlows(router) {
             message: unavailableError,
           });
         }
-        if (!slskdClient.isConfigured()) {
-          return res.status(400).json({
-            error: "slskd not configured",
-            message: SLSKD_NOT_CONFIGURED_MESSAGE,
-          });
-        }
-
         flowPlaylistConfig.setEnabled(flowId, true);
         flowPlaylistConfig.scheduleNextRun(flowId);
 

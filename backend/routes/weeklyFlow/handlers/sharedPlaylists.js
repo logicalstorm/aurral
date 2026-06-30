@@ -1,13 +1,11 @@
 import { randomUUID } from "crypto";
 import { downloadTracker } from "../../../services/weeklyFlow/weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "../../../services/weeklyFlow/weeklyFlowWorker.js";
-import { slskdClient } from "../../../services/slskdClient.js";
 import {
   dedupeSharedTracks,
 } from "../../../services/weeklyFlow/weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "../../../services/weeklyFlow/weeklyFlowOperationQueue.js";
 import {
-  SLSKD_NOT_CONFIGURED_MESSAGE,
   getAccessibleSharedPlaylist,
 } from "./utils.js";
 
@@ -92,13 +90,6 @@ export function registerSharedPlaylists(router) {
           message: "Import file must include at least one track",
         });
       }
-      if (!slskdClient.isConfigured()) {
-        return res.status(400).json({
-          error: "slskd not configured",
-          message: SLSKD_NOT_CONFIGURED_MESSAGE,
-        });
-      }
-
       const result = await weeklyFlowOperationQueue.enqueuePayload({
         kind: "shared-playlist-create",
         label: "shared-playlist:import",

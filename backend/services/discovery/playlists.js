@@ -112,23 +112,11 @@ export const runQueuedDiscoverPlaylistBuild = async (payload = {}) => {
           return { skipped: true, reason: "stale_build" };
         }
 
-        const playlistData = { discoverPlaylists };
-        if (!cacheNamespace) {
-          discoveryCache.discoverPlaylists = discoverPlaylists;
-        }
-        dbOps.updateDiscoveryCache(playlistData, cacheNamespace);
-
-        try {
-          const { attachArtworkToDiscoverPlaylists } =
-            await import("./playlistArtworkBuilder.js");
-          discoveryCache.discoverPlaylists = await attachArtworkToDiscoverPlaylists(discoverPlaylists);
-          dbOps.updateDiscoveryCache(
-            { discoverPlaylists: discoveryCache.discoverPlaylists },
-            cacheNamespace,
-          );
-        } catch (error) {
-          logger.warn('discovery', `[DiscoverPlaylistBuild] Artwork generation failed: ${error.message}`);
-        }
+        discoveryCache.discoverPlaylists = discoverPlaylists;
+        dbOps.updateDiscoveryCache(
+          { discoverPlaylists },
+          cacheNamespace,
+        );
 
         if (payload?.publishUpdate !== false) {
           emitDiscoveryUpdateLocal(

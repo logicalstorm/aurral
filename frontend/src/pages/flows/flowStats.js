@@ -3,6 +3,9 @@ export const RELEASE_RADAR_PRESET_ID = "release-radar";
 export const isReleaseRadarFlow = (flow) =>
   String(flow?.discoverPresetId || "").trim() === RELEASE_RADAR_PRESET_ID;
 
+export const isEditorialFlow = (flow) =>
+  String(flow?.type || "").trim() === "editorial";
+
 const flowNumber = (value) => Number(value || 0);
 
 export const getFlowDisplayTrackCount = (flow, stats, trackListLength = 0) => {

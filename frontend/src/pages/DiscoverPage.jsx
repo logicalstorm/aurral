@@ -4,9 +4,10 @@ import {
   Loader,
   Music,
   Sparkles,
-  Clock,
   LayoutTemplate,
-} from "lucide-react";import { useDocumentTitle } from "../hooks/useDocumentTitle";
+} from "lucide-react";
+import DiscoveryStatusPill from "../components/DiscoveryStatusPill";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuth } from "../contexts/AuthContext";
 import { getArtistFeedbackFlags } from "../utils/discoveryFeedback";
 import { getArtistRecordId } from "../utils/artistTaste";
@@ -918,20 +919,11 @@ function DiscoverPage() {
             <div className="artist-discover-hero__title-wrap">
               <div className="artist-discover-hero__title-row">
                 <h1 className="page-title">Discover</h1>
-                {(isUpdating || lastUpdated) && (
-                  <span
-                    className={`artist-discover-hero__updated${isUpdating ? " artist-discover-hero__updated--refreshing" : ""}`}
-                  >
-                    {isUpdating ? (
-                      <Loader className="artist-discover-hero__updated-icon animate-spin" />
-                    ) : (
-                      <Clock className="artist-discover-hero__updated-icon" />
-                    )}
-                    {isUpdating
-                      ? updateProgressMessage || "Refreshing discovery..."
-                      : `Updated ${new Date(lastUpdated).toLocaleDateString()}`}
-                  </span>
-                )}
+                <DiscoveryStatusPill
+                  isUpdating={isUpdating}
+                  lastUpdated={lastUpdated}
+                  updateProgressMessage={updateProgressMessage}
+                />
               </div>
               <p className="artist-discover-hero__description">
                 Your daily mix, curated from your library.

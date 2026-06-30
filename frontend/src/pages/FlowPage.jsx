@@ -35,6 +35,7 @@ import {
   getFlowDisplayTrackCount,
   getSharedPlaylistTrackCount,
   isReleaseRadarFlow,
+  isEditorialFlow,
 } from "./flows/flowStats";
 import { getPlaylistRunActivity } from "./flows/flowRunActivity";
 import {
@@ -53,6 +54,7 @@ import {
   FlowImportReviewModal,
   FlowFormFields,
   ReleaseRadarRecipeFields,
+  EditorialRecipeFields,
   FlowTracksPanel,
   MoreMenu,
 } from "./FlowPageComponents";
@@ -60,6 +62,7 @@ import {
   NEW_FLOW_TEMPLATE,
   buildFlowFromForm,
   buildReleaseRadarFlowFromForm,
+  buildEditorialFlowFromForm,
   buildSharedTracklistPayload,
   buildTrackForPlaylistModal,
   downloadFlowShareBundle,
@@ -71,6 +74,7 @@ import {
   getUnavailableFlowSourceMessage,
   isFlowDirty,
   isReleaseRadarFlowDirty,
+  isEditorialFlowDirty,
   normalizeMixPercent,
   normalizeNameKey,
   parseFlowImportFile,
@@ -196,7 +200,7 @@ function FlowPage() {
     setSimpleErrors(({ [flow.id]: _, ...prev }) => prev);
     try {
       const draft = simpleDrafts[flow.id] || flowToForm(flow);
-      if (!isReleaseRadarFlow(flow)) {
+      if (!isReleaseRadarFlow(flow) && !isEditorialFlow(flow)) {
         const sourceError = getUnavailableFlowSourceMessage(draft, disabledFlowSources);
         if (sourceError) {
           throw new Error(sourceError);
@@ -204,6 +208,8 @@ function FlowPage() {
       }
       const payload = isReleaseRadarFlow(flow)
         ? buildReleaseRadarFlowFromForm(flow, draft)
+        : isEditorialFlow(flow)
+        ? buildEditorialFlowFromForm(flow, draft)
         : buildFlowFromForm(draft);
       const response = await updateFlow(flow.id, payload);
       const updatedFlow = response?.flow || {
@@ -232,7 +238,7 @@ function FlowPage() {
     setSimpleErrors(({ [flow.id]: _, ...prev }) => prev);
     try {
       const currentDraft = simpleDrafts[flow.id] ?? flowToForm(flow);
-      if (!isReleaseRadarFlow(flow)) {
+      if (!isReleaseRadarFlow(flow) && !isEditorialFlow(flow)) {
         const sourceError = getUnavailableFlowSourceMessage(currentDraft, disabledFlowSources);
         if (sourceError) {
           throw new Error(sourceError);
@@ -245,6 +251,11 @@ function FlowPage() {
       const payload = isReleaseRadarFlow(flow)
         ? {
             ...buildReleaseRadarFlowFromForm(flow, currentDraft),
+            name: nextName,
+          }
+        : isEditorialFlow(flow)
+        ? {
+            ...buildEditorialFlowFromForm(flow, currentDraft),
             name: nextName,
           }
         : buildFlowFromForm({
@@ -1307,6 +1318,8 @@ function FlowPage() {
     selectedFlow && simpleDraft
       ? isReleaseRadarFlow(selectedFlow)
         ? isReleaseRadarFlowDirty(selectedFlow, simpleDraft)
+        : isEditorialFlow(selectedFlow)
+        ? isEditorialFlowDirty(selectedFlow, simpleDraft)
         : isFlowDirty(selectedFlow, simpleDraft)
       : false;
   const flowCanExport = Number(selectedStats?.total || 0) > 0;
@@ -1522,6 +1535,27 @@ function FlowPage() {
                 draft={simpleDraft}
                 inputClassName="flow-page__field-control"
                 errorMessage={simpleError}
+                onDraftChange={(updater) =>
+                  setSimpleDrafts((prev) => {
+                    const base = prev[selectedFlow.id] ?? flowToForm(selectedFlow);
+                    return {
+                      ...prev,
+                      [selectedFlow.id]: updater(base),
+                    };
+                  })
+                }
+                onClearError={() => {
+                  if (simpleErrors[selectedFlow.id]) {
+                    setSimpleErrors(({ [selectedFlow.id]: _, ...prev }) => prev);
+                  }
+                }}
+              />
+            ) : isEditorialFlow(selectedFlow) ? (
+              <EditorialRecipeFields
+                draft={simpleDraft}
+                inputClassName="flow-page__field-control"
+                errorMessage={simpleError}
+                tag={selectedFlow?.tag || ""}
                 onDraftChange={(updater) =>
                   setSimpleDrafts((prev) => {
                     const base = prev[selectedFlow.id] ?? flowToForm(selectedFlow);

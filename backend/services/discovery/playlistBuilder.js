@@ -12,7 +12,7 @@ import { generateEditorialPlaylists, enrichTracksWithAlbums } from "./editorialP
 
 const PLAYLIST_BUILD_CONCURRENCY = Math.max(
   1,
-  Math.min(3, Math.floor(Number(process.env.AURRAL_DISCOVERY_PLAYLIST_BUILD_CONCURRENCY) || 1)),
+  Math.min(6, Math.floor(Number(process.env.AURRAL_DISCOVERY_PLAYLIST_BUILD_CONCURRENCY) || 3)),
 );
 
 const serializeTrack = (track) => ({
@@ -232,15 +232,18 @@ export async function generateDiscoverPlaylists({
     }
   }
 
-  await Promise.all(playlists.map(enrichPlaylistTracks));
-
-  let editorialPlaylists = [];
-  try {
-    editorialPlaylists = await generateEditorialPlaylists();
-    playlists.push(...editorialPlaylists);
-  } catch (error) {
-    console.warn(`[DiscoverPlaylists] Editorial playlists failed: ${error.message}`);
-  }
+  const [_, editorialPlaylists] = await Promise.all([
+    Promise.all(playlists.map(enrichPlaylistTracks)),
+    (async () => {
+      try {
+        return await generateEditorialPlaylists();
+      } catch (error) {
+        console.warn(`[DiscoverPlaylists] Editorial playlists failed: ${error.message}`);
+        return [];
+      }
+    })(),
+  ]);
+  playlists.push(...editorialPlaylists);
 
   onProgress?.({ completed: totalSteps, total: totalSteps });
 

@@ -344,6 +344,34 @@ export const isReleaseRadarFlowDirty = (flow, draft) => {
   return JSON.stringify(base) !== JSON.stringify(next);
 };
 
+export const isEditorialFlowDirty = (flow, draft) => {
+  const base = normalizeScheduleDraftForCompare(flowToForm(flow));
+  const next = normalizeScheduleDraftForCompare(draft);
+  return JSON.stringify(base) !== JSON.stringify(next);
+};
+
+export const buildEditorialFlowFromForm = (flow, draft) => {
+  const sizeValue = Number(draft?.size);
+  if (!Number.isFinite(sizeValue) || sizeValue <= 0) {
+    throw new Error("Tracks must be a positive number");
+  }
+  const scheduleDays = normalizeScheduleDays(draft?.scheduleDays);
+  if (scheduleDays.length === 0) {
+    throw new Error("Select at least one day for this flow schedule");
+  }
+  return {
+    name: String(flow?.name ?? "").trim(),
+    size: Math.round(sizeValue),
+    mix: flow?.mix || DEFAULT_MIX,
+    tags: normalizeFlowEntryList(flow?.tags),
+    relatedArtists: normalizeFlowEntryList(flow?.relatedArtists),
+    deepDive: flow?.deepDive === true,
+    scheduleDays,
+    scheduleTime: normalizeScheduleTime(draft?.scheduleTime),
+    tag: flow?.tag || null,
+  };
+};
+
 export const buildReleaseRadarFlowFromForm = (flow, draft) => {
   const sizeValue = Number(draft?.size);
   if (!Number.isFinite(sizeValue) || sizeValue <= 0) {

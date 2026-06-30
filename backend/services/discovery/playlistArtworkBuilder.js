@@ -81,49 +81,41 @@ export async function generateDiscoverPlaylistArtwork(playlist, options = {}) {
   });
 }
 
+const ARTWORK_CONCURRENCY = 3;
+
+async function attemptArtworkForPlaylist(playlist, style) {
+  if (!playlist?.presetId || playlist.trackCount <= 0) return playlist;
+  try {
+    await generateDiscoverPlaylistArtwork(playlist, { style });
+    return { ...playlist, artworkStyle: style, hasArtwork: true };
+  } catch (error) {
+    logger.warn('discovery', `[DiscoverArtwork] Failed for ${playlist.presetId}: ${error.message}`);
+    try {
+      await generateDiscoverPlaylistArtwork(playlist, { style });
+      return { ...playlist, artworkStyle: style, hasArtwork: true };
+    } catch (retryError) {
+      logger.warn('discovery', `[DiscoverArtwork] Retry also failed for ${playlist.presetId}: ${retryError.message}`);
+      return { ...playlist, artworkStyle: style, hasArtwork: false };
+    }
+  }
+}
+
 export async function attachArtworkToDiscoverPlaylists(playlists = []) {
   const list = Array.isArray(playlists) ? playlists : [];
   if (list.length === 0) return list;
 
   const style = getPlaylistArtworkStyle();
   await ensureDiscoverArtworkDirectory();
-  await pruneObsoleteDiscoverArtwork(list.map((playlist) => playlist?.presetId).filter(Boolean));
+  pruneObsoleteDiscoverArtwork(list.map((p) => p?.presetId).filter(Boolean)).catch((err) =>
+    logger.warn('discovery', `[DiscoverArtwork] Prune failed: ${err.message}`),
+  );
 
+  const concurrency = Math.min(ARTWORK_CONCURRENCY, list.length);
   const enriched = [];
-  for (const playlist of list) {
-    if (!playlist?.presetId || playlist.trackCount <= 0) {
-      enriched.push(playlist);
-      continue;
-    }
-    try {
-      await generateDiscoverPlaylistArtwork(playlist, { style });
-      enriched.push({
-        ...playlist,
-        artworkStyle: style,
-        hasArtwork: true,
-      });
-    } catch (error) {
-      logger.warn('discovery', `[DiscoverArtwork] Failed for ${playlist.presetId}: ${error.message}`);
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        await generateDiscoverPlaylistArtwork(playlist, { style });
-        enriched.push({
-          ...playlist,
-          artworkStyle: style,
-          hasArtwork: true,
-        });
-      } catch (retryError) {
-        logger.warn('discovery', `[DiscoverArtwork] Retry also failed for ${playlist.presetId}: ${retryError.message}`);
-        enriched.push({
-          ...playlist,
-          artworkStyle: style,
-          hasArtwork: false,
-        });
-      }
-    }
-    if (enriched.length < list.length) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
+  for (let i = 0; i < list.length; i += concurrency) {
+    const batch = list.slice(i, i + concurrency);
+    const results = await Promise.all(batch.map((p) => attemptArtworkForPlaylist(p, style)));
+    enriched.push(...results);
   }
 
   return enriched;
