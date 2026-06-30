@@ -8834,15 +8834,6 @@ textarea {
   align-items: center;
   justify-content: flex-end;
   gap: 0.5rem;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
-}
-
-.flow-page__tracks-table-row:hover .flow-page__tracks-actions,
-.flow-page__tracks-table-row:focus-within .flow-page__tracks-actions {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .flow-page__import-modal-header-row {
@@ -8859,9 +8850,8 @@ textarea {
 }
 
 .flow-page__tracks {
-  overflow: hidden;
-  background: var(--aurral-surface-mid);
-  border-radius: 0;
+  background: rgba(18, 18, 18, 0.45);
+  border-radius: var(--aurral-radius);
 }
 
 .flow-page__tracks-toolbar {
@@ -8869,7 +8859,7 @@ textarea {
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 0.75rem 0.625rem;
-  background: var(--aurral-surface-mid);
+  background: transparent;
 }
 
 .flow-page__tracks-toolbar-start {
@@ -8918,8 +8908,7 @@ textarea {
 }
 
 .flow-page__tracks-body {
-  overflow: auto;
-  max-height: 55vh;
+  overflow: visible;
 }
 
 .flow-page__tracks-loading,
@@ -8945,23 +8934,23 @@ textarea {
 }
 
 .flow-page__tracks-table-head th.flow-page__tracks-table-song {
-  width: 36%;
+  width: 42%;
 }
 
 .flow-page__tracks-table-head th.flow-page__tracks-table-artist {
-  width: 28%;
+  width: 32%;
 }
 
 .flow-page__tracks-table-head th.flow-page__tracks-table-album {
-  width: 24%;
+  width: 18%;
 }
 
 .flow-page__tracks-table--no-album th.flow-page__tracks-table-song {
-  width: 48%;
+  width: 52%;
 }
 
 .flow-page__tracks-table--no-album th.flow-page__tracks-table-artist {
-  width: 42%;
+  width: 38%;
 }
 
 .flow-page__tracks-table-song,
@@ -8984,7 +8973,8 @@ textarea {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: var(--aurral-surface);
+  background: rgba(18, 18, 18, 0.7);
+  backdrop-filter: blur(8px);
 }
 
 .flow-page__tracks-table-head th {
@@ -9021,19 +9011,16 @@ textarea {
 }
 
 .flow-page__tracks-table-row {
-  color: var(--aurral-gray-light);
+  background: transparent;
 }
 
 .flow-page__tracks-table-row td {
-  padding: 0.5rem 0.75rem;
+  padding: 0.625rem 1rem;
 }
 
-.flow-page__tracks-table-row:nth-child(even) {
-  background: var(--aurral-surface);
-}
-
-.flow-page__tracks-table-row:nth-child(odd) {
-  background: var(--aurral-surface-mid);
+.flow-page__tracks-table-row:hover,
+.flow-page__tracks-table-row.is-current {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .flow-page__tracks-artist-link {
