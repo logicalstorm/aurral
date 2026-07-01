@@ -309,7 +309,7 @@ export function FlowFormFields({
             </label>
             <CommaTokenInput
               value={draft.includeTags}
-              placeholder="lofi, indie"
+              placeholder="lofi, indie, 80s"
               fetchSuggestions={fetchFlowTagSuggestions}
               suggestionLabel="Genre tag suggestions"
               onChange={(nextValue) =>
