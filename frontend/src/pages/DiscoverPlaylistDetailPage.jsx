@@ -177,6 +177,16 @@ export default function DiscoverPlaylistDetailPage() {
 
   const heroColor = extractedColor || playlist?.artworkColor || "#555";
 
+  const handleNavigateArtist = useCallback(
+    (track) => {
+      if (!track?.artistMbid) return;
+      navigate(`/artist/${track.artistMbid}`, {
+        state: { artistName: track.artistName },
+      });
+    },
+    [navigate],
+  );
+
   const handleAdoptFlow = useCallback(
     async () => {
       if (!playlist) return;
@@ -336,6 +346,7 @@ export default function DiscoverPlaylistDetailPage() {
         getDefaultPlaylistName={getDefaultPlaylistName}
         onLoadPlaylists={loadSharedPlaylists}
         onAddTrackToPlaylist={handleAddTrackToPlaylist}
+        onNavigateArtist={handleNavigateArtist}
       />
     </div>
   );
