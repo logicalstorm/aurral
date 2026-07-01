@@ -5092,58 +5092,8 @@ textarea {
   display: none;
 }
 
-.discover-playlist-expanded {
-  width: 100%;
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--aurral-border);
-}
-
 .discover-playlist-cards {
   display: contents;
-}
-
-.discover-playlist-toolbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  width: 100%;
-}
-
-.discover-playlist-toolbar__meta {
-  display: grid;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.discover-playlist-toolbar__title-row {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.discover-playlist-toolbar__title {
-  margin: 0;
-  min-width: 0;
-  color: var(--aurral-white);
-  font-size: 1rem;
-  font-weight: 800;
-  line-height: 1.3;
-}
-
-.discover-playlist-toolbar__track-count {
-  flex-shrink: 0;
-  color: var(--aurral-gray-light);
-  font-size: 0.8125rem;
-  white-space: nowrap;
-}
-
-.discover-playlist-toolbar__actions {
-  display: flex;
-  flex-shrink: 0;
-  align-items: flex-start;
 }
 
 .discover-playlist-add-button {
@@ -5162,49 +5112,6 @@ textarea {
 .flow-page__tracks-toolbar-start--full {
   flex: 1;
   min-width: 0;
-}
-
-.artist-discover-card--playlist .artist-discover-card__image,
-.artist-discover-card--playlist .artist-media-placeholder--discover {
-  transition:
-    transform 0.3s ease,
-    filter 0.22s ease;
-}
-
-.artist-discover-card--playlist .artist-discover-card__cover::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  border-radius: inherit;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.22s ease;
-}
-
-.artist-discover-card--playlist.is-expanded .artist-discover-card__cover::after {
-  opacity: 1;
-}
-
-.artist-discover-card--playlist.is-expanded .artist-discover-card__image,
-.artist-discover-card--playlist.is-expanded .artist-media-placeholder--discover {
-  filter: brightness(1.06);
-}
-
-.discover-playlist-flow-meta__pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.discover-playlist-flow-meta__pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.3rem 0.65rem;
-  border-radius: var(--aurral-radius-round);
-  background: var(--aurral-overlay);
-  color: var(--aurral-white);
-  font-size: 0.75rem;
 }
 
 .artist-discover-shelf-card {
