@@ -1,6 +1,7 @@
 import { lastfmRequest, getLastfmApiKey } from "../apiClients/index.js";
 import { getDiscoveryCache } from "../discovery/index.js";
 import { normalizeWeightMap } from "./weeklyFlowPlaylistConfig.js";
+import { getDiscoveryFeedback } from "../discovery/feedback.js";
 const _MBID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LASTFM_HARVEST_CONCURRENCY = 12;
 const ARTIST_TOP_TRACKS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -235,6 +236,18 @@ export class WeeklyFlowPlaylistSource {
     return [artist?.id, artist?.mbid, artist?.foreignArtistId, artist?.name, artist?.artistName]
       .map((value) => this._artistKey(value))
       .filter(Boolean);
+  }
+
+  _buildFeedbackExcludeKeys(ownerUserId) {
+    if (ownerUserId == null) return [];
+    const feedback = getDiscoveryFeedback(String(ownerUserId));
+    const keys = new Set();
+    for (const entry of feedback) {
+      if (entry.action !== "less_like_this") continue;
+      if (entry.artistId) keys.add(this._artistKey(entry.artistId));
+      if (entry.artistName) keys.add(this._artistKey(entry.artistName));
+    }
+    return [...keys];
   }
 
   _trackArtistKey(track) {
@@ -1652,10 +1665,18 @@ export class WeeklyFlowPlaylistSource {
     }
     const mix = flow?.mix || { discover: 34, mix: 33, trending: 33, focus: 0 };
     const _sourceTargets = this._buildSourceTargets(targetSize, mix);
+    const feedbackExcludeKeys = this._buildFeedbackExcludeKeys(flow?.ownerUserId);
+    const mergedOptions = {
+      ...options,
+      excludeArtistKeys: [
+        ...(Array.isArray(options?.excludeArtistKeys) ? options.excludeArtistKeys : options?.excludeArtistKeys ? [options.excludeArtistKeys] : []),
+        ...feedbackExcludeKeys,
+      ],
+    };
     const { candidateMap, excludeArtistKeys } = await this._harvestFlowSources(
       flow,
       _sourceTargets,
-      options,
+      mergedOptions,
     );
     return this._assembleFlowPlan({
       candidateMap,
@@ -1679,10 +1700,18 @@ export class WeeklyFlowPlaylistSource {
     const mix = flow?.mix || { discover: 34, mix: 33, trending: 33, focus: 0 };
     const _sourceTargets = this._buildSourceTargets(targetSize, mix);
     const reserveTargets = this._buildSourceTargets(reserveSize, mix);
+    const feedbackExcludeKeys = this._buildFeedbackExcludeKeys(flow?.ownerUserId);
+    const mergedOptions = {
+      ...options,
+      excludeArtistKeys: [
+        ...(Array.isArray(options?.excludeArtistKeys) ? options.excludeArtistKeys : options?.excludeArtistKeys ? [options.excludeArtistKeys] : []),
+        ...feedbackExcludeKeys,
+      ],
+    };
     const { candidateMap, excludeArtistKeys } = await this._harvestFlowSources(
       flow,
       reserveTargets,
-      options,
+      mergedOptions,
     );
     return this._assembleFlowPlan({
       candidateMap,
