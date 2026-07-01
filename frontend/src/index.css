@@ -21,8 +21,8 @@
   --aurral-radius: 10px;
   --aurral-radius-sm: 6px;
   --aurral-radius-round: 9999px;
-  --aurral-danger: #f87171;
-  --aurral-warning: #f3ab30;
+  --aurral-danger: #ef4444;
+  --aurral-warning: #f59e0b;
   --aurral-focus: rgba(132, 204, 22, 0.42);
   --aurral-border: color-mix(in srgb, var(--aurral-white) 8%, transparent);
   --aurral-border-strong: color-mix(in srgb, var(--aurral-white) 14%, transparent);
@@ -8752,7 +8752,7 @@ textarea {
 }
 
 .flow-page__track-status-dot--downloading {
-  background: var(--aurral-gray-light);
+  background: #60a5fa;
 }
 
 .flow-page__track-status-dot--failed {
@@ -8760,7 +8760,7 @@ textarea {
 }
 
 .flow-page__track-status-dot--blocked {
-  background: #fb923c;
+  background: #a78bfa;
 }
 
 .flow-page__track-status-dot--link {
