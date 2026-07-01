@@ -8969,14 +8969,6 @@ textarea {
   white-space: nowrap;
 }
 
-.flow-page__tracks-table-head {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: rgba(18, 18, 18, 0.7);
-  backdrop-filter: blur(8px);
-}
-
 .flow-page__tracks-table-head th {
   padding: 0.5rem 0.75rem;
   color: var(--aurral-gray-light);
