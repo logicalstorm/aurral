@@ -2,7 +2,6 @@ import { libraryManager } from "../../../services/libraryManager.js";
 import { dbOps } from "../../../db/helpers/index.js";
 import { noCache } from "../../../middleware/cache.js";
 import { requireAuth, requirePermission } from "../../../middleware/requirePermission.js";
-import { hasPermission } from "../../../middleware/auth.js";
 import {
   parseLidarrSearchContext,
   resolveAlbumSearchOutcome,
@@ -422,66 +421,60 @@ export const getAllDownloadStatuses = async () => {
 };
 
 export function registerDownloads(router) {
-  router.post(
-    "/downloads/album",
-    requireAuth,
-    requirePermission("addAlbum"),
-    async (req, res) => {
-      try {
-        const { albumId } = req.body;
+  router.post("/downloads/album", requireAuth, requirePermission("addAlbum"), async (req, res) => {
+    try {
+      const { albumId } = req.body;
 
-        if (!albumId) {
-          return res.status(400).json({ error: "albumId is required" });
-        }
+      if (!albumId) {
+        return res.status(400).json({ error: "albumId is required" });
+      }
 
-        const { lidarrClient } = await import("../../../services/lidarrClient.js");
-        if (!lidarrClient || !lidarrClient.isConfigured()) {
-          return res.status(400).json({ error: "Lidarr is not configured" });
-        }
+      const { lidarrClient } = await import("../../../services/lidarrClient.js");
+      if (!lidarrClient || !lidarrClient.isConfigured()) {
+        return res.status(400).json({ error: "Lidarr is not configured" });
+      }
 
-        const album = await libraryManager.getAlbumById(albumId);
-        if (!album) {
-          return res.status(404).json({ error: "Album not found" });
-        }
+      const album = await libraryManager.getAlbumById(albumId);
+      if (!album) {
+        return res.status(404).json({ error: "Album not found" });
+      }
 
-        const artist = album.artistId ? await libraryManager.getArtistById(album.artistId) : null;
-        if (artist) {
-          await libraryManager.ensureArtistMonitored(artist);
-        }
-        if (!album.monitored) {
-          await libraryManager.updateAlbum(albumId, { monitored: true });
-        }
+      const artist = album.artistId ? await libraryManager.getArtistById(album.artistId) : null;
+      if (artist) {
+        await libraryManager.ensureArtistMonitored(artist);
+      }
+      if (!album.monitored) {
+        await libraryManager.updateAlbum(albumId, { monitored: true });
+      }
 
-        const settings = dbOps.getSettings();
-        const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+      const settings = dbOps.getSettings();
+      const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
 
-        if (searchOnAdd) {
-          await lidarrClient.request("/command", "POST", {
-            name: "AlbumSearch",
-            albumIds: [parseInt(albumId, 10)],
-          });
-          await libraryManager.ensureRequestedAlbumMonitoring(artist.id, albumId);
-          libraryManager.scheduleRequestedAlbumMonitoringRepair(artist.id, albumId);
-        }
-        invalidateAllDownloadStatusesCache();
-
-        const { recordAlbumRequested } = await import("../../../services/aurralHistoryService.js");
-        recordAlbumRequested({
-          albumId,
-          albumName: album.albumName,
-          artistName: artist?.artistName || album.artistName,
-          artistMbid: artist?.mbid || artist?.foreignArtistId,
-          searching: searchOnAdd,
+      if (searchOnAdd) {
+        await lidarrClient.request("/command", "POST", {
+          name: "AlbumSearch",
+          albumIds: [parseInt(albumId, 10)],
         });
+        await libraryManager.ensureRequestedAlbumMonitoring(artist.id, albumId);
+        libraryManager.scheduleRequestedAlbumMonitoringRepair(artist.id, albumId);
+      }
+      invalidateAllDownloadStatusesCache();
 
-          res.json({
-            success: true,
-            message: searchOnAdd
-              ? "Album search triggered"
-              : "Album added to library",
-          });
+      const { recordAlbumRequested } = await import("../../../services/aurralHistoryService.js");
+      recordAlbumRequested({
+        albumId,
+        albumName: album.albumName,
+        artistName: artist?.artistName || album.artistName,
+        artistMbid: artist?.mbid || artist?.foreignArtistId,
+        searching: searchOnAdd,
+      });
+
+      res.json({
+        success: true,
+        message: searchOnAdd ? "Album search triggered" : "Album added to library",
+      });
     } catch (error) {
-      console.error("Error initiating album download:", error);
+      logger.error("library", "Error initiating album download:", error.message);
       res.status(500).json({
         error: "Failed to initiate album download",
         message: error.message,
@@ -544,7 +537,10 @@ export function registerDownloads(router) {
           message: "Album search triggered",
         });
       } catch (error) {
-        logger.error("downloads", `Failed to trigger album search ${req.body?.albumId}:`, { message: error.message });        res.status(500).json({
+        logger.error("downloads", `Failed to trigger album search ${req.body?.albumId}:`, {
+          message: error.message,
+        });
+        res.status(500).json({
           error: "Failed to trigger album search",
           message: error.message,
         });

@@ -5,15 +5,15 @@ description: Usenet-backed downloads for flows and playlists.
 
 Usenet downloads use **Prowlarr** for indexer search and **SABnzbd** or **NZBGet** as the download client. Aurral treats each client as a peer — only one needs to be configured for Usenet to work.
 
-Both the download client and Prowlarr must be enabled and connected in **Settings → Downloads**.
+Both the download client and Prowlarr must be enabled and connected — the download client in **Settings → Download Clients** and Prowlarr in **Settings → Indexers**.
 
 ## Setup overview
 
 1. Run Prowlarr with at least one Usenet audio indexer configured.
 2. Run SABnzbd or NZBGet with a category Aurral can use (default `aurral`).
 3. Mount the shared `/data` root into Aurral and your download client so Aurral can read completed files.
-4. In **Settings → Downloads**, enable **Prowlarr**, enter URL and API key, then **Test connection** and **Refresh indexers**. Enable each indexer and set priority.
-5. Enable **SABnzbd** or **NZBGet**, enter URL and credentials, then **Test connection**.
+4. In **Settings → Indexers**, enable **Prowlarr**, enter URL and API key, then **Test connection** and **Refresh indexers**. Enable each indexer and set priority.
+5. In **Settings → Download Clients**, enable **SABnzbd** or **NZBGet**, enter URL and credentials, then **Test connection**.
 6. Save settings.
 
 ## Prowlarr
@@ -53,7 +53,7 @@ Open the **NZBGet** card under **Download clients**:
 
 Aurral polls NZBGet until the download completes, then imports the best audio file into your `DOWNLOAD_FOLDER` under `aurral-weekly-flow`.
 
-If NZBGet runs on Windows and reports host paths, mount the parent folder into Aurral and add a path mapping under **Settings → Downloads → Advanced remote path mappings**. See [Shared storage](/getting-started/storage/#windows-and-mixed-docker-setups).
+If NZBGet runs on Windows and reports host paths, mount the parent folder into Aurral and add a path mapping under **Settings → System → Remote Path Mappings**. See [Shared storage](/getting-started/storage/#windows-and-mixed-docker-setups).
 
 ## Download source priority and fallback
 

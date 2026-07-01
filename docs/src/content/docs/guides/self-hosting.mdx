@@ -66,7 +66,7 @@ For a discovery-heavy setup, keep Lidarr and Aurral defaults conservative. The i
 | Tags              | Use an Aurral tag for discovery-driven additions      |
 | Quality profile   | Pick the profile you actually want long term          |
 
-In Aurral onboarding, you can optionally apply **Davo's Community Lidarr Guide** — an Aurral-friendly quality profile, custom formats, and naming scheme. You can also apply it later from **Settings → Library → Lidarr**.
+In Aurral onboarding, you can optionally apply **Davo's Community Lidarr Guide** — an Aurral-friendly quality profile, custom formats, and naming scheme. You can also apply it later from **Settings → Lidarr**.
 
 Map this to Aurral by setting default album monitoring to `none` while still adding the artist. The artist library becomes a set of taste anchors. Albums become deliberate commitments.
 
@@ -80,7 +80,7 @@ If you want Soulseek-backed **album** downloads inside Lidarr:
 4. Add slskd in Lidarr as both an indexer and download client.
 5. Align download paths or configure remote path mapping so imports land in `/data/music`.
 
-For **Aurral flows and playlists**, connect download clients in **Settings → Downloads**:
+For **Aurral flows and playlists**, connect download clients in **Settings → Download Clients**:
 
 - **slskd** for Soulseek — Aurral sends searches, selects the best candidate, and moves completed files from slskd's download directory into your `DOWNLOAD_FOLDER`.
 - **Prowlarr + SABnzbd/NZBGet** for Usenet — Aurral searches indexers via Prowlarr, queues NZBs in the download client, and imports completed files the same way. See [Usenet](/integrations/usenet/).

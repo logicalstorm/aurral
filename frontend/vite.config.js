@@ -32,9 +32,9 @@ export default defineConfig(({ mode }) => {
           navigateFallbackDenylist: [/^\/oidc\//, /^\/api\//, /^\/logout$/],
         },
         manifest: {
-          name: "Aurral - Artist Request Manager",
+          name: "Aurral - Music Discovery",
           short_name: "Aurral",
-          description: "Simple and elegant artist request manager",
+          description: "Self-hosted music discovery for the Lidarr stack",
           theme_color: "#ffffff",
           background_color: "#ffffff",
           display: "standalone",

@@ -38,9 +38,10 @@ const __dirname = path.dirname(__filename);
 
 process.on("uncaughtException", (error) => {
   logger.error("system", "Uncaught Exception:", error);
+  process.exit(1);
 });
 
-process.on("unhandledRejection", (reason, promise) => {
+process.on("unhandledRejection", (reason) => {
   logger.error("system", "Unhandled Rejection:", reason);
 });
 
@@ -106,11 +107,7 @@ app.use(
         ],
         connectSrc: ["'self'", "ws:", "wss:", "https://api.github.com"],
         mediaSrc: ["'self'", "https://*.dzcdn.net", "https://*.deezer.com"],
-        frameSrc: [
-          "'self'",
-          "https://www.youtube-nocookie.com",
-          "https://www.youtube.com",
-        ],
+        frameSrc: ["'self'", "https://www.youtube-nocookie.com", "https://www.youtube.com"],
         frameAncestors: null,
         upgradeInsecureRequests: null,
       },
@@ -252,22 +249,13 @@ const broadcastWeeklyFlowStatus = async () => {
       if (!client._lastWeeklyFlowStatusPayloadByChannel) {
         client._lastWeeklyFlowStatusPayloadByChannel = new Map();
       }
-      if (
-        client._lastWeeklyFlowStatusPayloadByChannel.get(channel) ===
-        cached.payload
-      ) {
+      if (client._lastWeeklyFlowStatusPayloadByChannel.get(channel) === cached.payload) {
         return null;
       }
-      client._lastWeeklyFlowStatusPayloadByChannel.set(
-        channel,
-        cached.payload,
-      );
+      client._lastWeeklyFlowStatusPayloadByChannel.set(channel, cached.payload);
       return cached.message;
     };
-    websocketService.broadcastPerClient(
-      "weekly-flow",
-      buildPayload("weekly-flow"),
-    );
+    websocketService.broadcastPerClient("weekly-flow", buildPayload("weekly-flow"));
     websocketService.broadcastPerClient("playlists", buildPayload("playlists"));
   } catch (error) {
     logger.warn("system", "Failed to broadcast weekly flow status:", { message: error.message });

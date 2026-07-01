@@ -39,7 +39,7 @@ Open `http://localhost:3001` and follow onboarding.
 | Host media root  | `/data`        | Shared library, downloads, and generated flows |
 | Host config dir  | `/config`      | Aurral database, settings, users, and jobs     |
 
-`DOWNLOAD_FOLDER` is set during onboarding or in **Settings → Downloads → Downloads folder**. It must live inside the `/data` mount — typically `/data/downloads/aurral`.
+`DOWNLOAD_FOLDER` is set during onboarding or in **Settings → System**. It must live inside your shared media tree — the same mount shared across Aurral, Lidarr, and your download clients. When that mount is at `/data`, the typical path is `/data/downloads/aurral`.
 
 :::note
 `/config` replaces the older `/app/backend/data` path from Aurral v1. Existing databases in either location are detected automatically on startup.

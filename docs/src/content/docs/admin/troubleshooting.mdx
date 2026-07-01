@@ -17,7 +17,7 @@ description: Common setup and runtime issues.
 
 ## Playlists are not downloading
 
-- Confirm at least one download client is configured in **Settings → Downloads** (slskd and/or Prowlarr + SABnzbd/NZBGet).
+- Confirm at least one download client is configured in **Settings → Download Clients** and/or an indexer in **Settings → Indexers** (slskd and/or Prowlarr + SABnzbd/NZBGet).
 - For slskd: check connection and Soulseek login status.
 - For Usenet: confirm Prowlarr indexers are enabled and the download client can reach completed files.
 - Try disabling **Strict format only** on the slskd card, or switch preferred format to MP3 if FLAC matches are scarce.
@@ -37,9 +37,9 @@ Symptoms: logs like `Lidarr track exists but file is not accessible from Aurral`
 - Mount the parent host folder into Aurral — not separate mounts for library and downloads. Example: `N:/ServerFolders/Music:/music`.
 - Set `DOWNLOAD_FOLDER` to a path under that mount, e.g. `/music/Aurral`.
 - After changing compose `volumes` or `environment`, recreate the container: `docker compose up -d --force-recreate`.
-- Run **Settings → Library → Lidarr → Test library access** to see the exact path Aurral cannot read.
-- If needed, set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose, or add mappings under **Settings → Downloads → Advanced remote path mappings**.
-- For NZBGet on Windows, set **Completed download path** in **Settings → Downloads → NZBGet** if Aurral cannot detect the folder automatically.
+- Run **Settings → Lidarr → Test library access** to see the exact path Aurral cannot read.
+- If needed, set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose, or add mappings under **Settings → System → Remote Path Mappings**.
+- For NZBGet on Windows, set **Completed download path** in **Settings → Download Clients → NZBGet** if Aurral cannot detect the folder automatically.
 
 See [Shared storage — Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
 

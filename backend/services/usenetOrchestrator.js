@@ -310,7 +310,7 @@ async function handleUsenetPoll(payload, helpers) {
   const historyItem = await client.getHistoryItem(payload.nzbId);
   if (historyItem) {
     const state = classifyHistoryStatus(historyItem);
-    console.log("[usenet] poll history status:", state, "raw:", historyItem?.Status || historyItem?.status || "(none)", "nzbId:", payload.nzbId);
+    logger.slskd("debug", "usenet poll history status", { state, raw: historyItem?.Status || historyItem?.status, nzbId: payload.nzbId });
     if (state === "success") {
       return {
         ...payload,
@@ -394,7 +394,7 @@ async function handleUsenetFinalize(payload, helpers) {
 }
 
 export async function processUsenetPipelinePayload(payload, helpers = {}) {
-  console.log("[usenet] phase:", payload.phase, "jobId:", payload.jobId, "source:", payload.source);
+  logger.slskd("debug", "usenet pipeline phase", { phase: payload.phase, jobId: payload.jobId, source: payload.source });
   switch (payload.phase) {
     case "search":
       return handleUsenetSearch(payload, helpers);
