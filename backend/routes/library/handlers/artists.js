@@ -9,7 +9,7 @@ import { logger } from "../../../services/logger.js";
 export function registerArtists(router) {
   router.get("/artists", cacheMiddleware(120), async (req, res) => {
     try {
-      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 250, 1), 1000);
+      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10000, 1), 10000);
       const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
       const artists = await libraryManager.getAllArtists();
       const paged = artists.slice(offset, offset + limit);

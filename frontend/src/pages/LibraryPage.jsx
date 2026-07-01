@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { ArrowDown, ArrowUp, ChevronDown, Loader, Music, AlertCircle, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, LayoutGrid, List, Loader, Music, AlertCircle, Search } from "lucide-react";
 import { getLibraryArtists } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
 
@@ -56,6 +56,14 @@ function LibraryPage() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [retryKey, setRetryKey] = useState(0);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [gridColumns, setGridColumns] = useState(() => {
+    const saved = localStorage.getItem("libraryGridColumns");
+    const val = parseInt(saved, 10);
+    return val >= 2 && val <= 10 ? val : 6;
+  });
+  const [viewMode, setViewMode] = useState(() =>
+    localStorage.getItem("libraryViewMode") || "grid"
+  );
   const sentinelRef = useRef(null);
   const toolbarRef = useRef(null);
   const navigate = useNavigate();
@@ -152,6 +160,23 @@ function LibraryPage() {
     return sortArtists(filtered, sortKey, sortDirection);
   }, [artists, searchTerm, sortKey, sortDirection]);
 
+  const groupedArtists = useMemo(() => {
+    if (viewMode !== "list") return null;
+    const groups = new Map();
+    for (const artist of filteredArtists) {
+      const letter = (getArtistName(artist)[0] || "#").toUpperCase();
+      const key = /^[A-Z]$/.test(letter) ? letter : "#";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(artist);
+    }
+    return [...groups.entries()].sort(([a], [b]) => {
+      if (a === "#" && b === "#") return 0;
+      if (a === "#") return -1;
+      if (b === "#") return 1;
+      return a.localeCompare(b);
+    });
+  }, [filteredArtists, viewMode]);
+
   const navigateToArtist = useCallback(
     (artist) => {
       const routeId = getArtistRouteId(artist);
@@ -239,6 +264,39 @@ function LibraryPage() {
               />
               {!searchTerm && <div className="global-search__placeholder">Search library...</div>}
             </div>
+
+          </div>
+
+          <div className="library-page__view-controls">
+            {viewMode === "grid" && (
+              <input
+                type="range"
+                min="2"
+                max="10"
+                value={gridColumns}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setGridColumns(val);
+                  localStorage.setItem("libraryGridColumns", String(val));
+                }}
+                className="library-page__grid-slider"
+                aria-label="Grid columns"
+                title={`${gridColumns} columns`}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const next = viewMode === "grid" ? "list" : "grid";
+                setViewMode(next);
+                localStorage.setItem("libraryViewMode", next);
+              }}
+              className="btn btn-icon-square library-page__view-toggle"
+              aria-label={viewMode === "grid" ? "Switch to list view" : "Switch to grid view"}
+              title={viewMode === "grid" ? "List view" : "Grid view"}
+            >
+              {viewMode === "grid" ? <List className="artist-icon-sm" /> : <LayoutGrid className="artist-icon-sm" />}
+            </button>
           </div>
         </div>
       </header>
@@ -292,8 +350,60 @@ function LibraryPage() {
             </p>
           )}
 
-          <div className="artist-albums-grid">
-            {filteredArtists.slice(0, visibleCount).map((artist) => {
+          <div
+            className={viewMode === "list" ? "library-page__list" : "artist-albums-grid"}
+            style={viewMode === "grid" ? { gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` } : undefined}
+          >
+            {viewMode === "list" && groupedArtists
+              ? groupedArtists.map(([letter, group]) => (
+                  <div key={letter} className="library-page__list-group">
+                    <span className="library-page__list-letter">{letter}</span>
+                    <div className="library-page__list-items">
+                      {group.map((artist) => {
+                        const artistName = getArtistName(artist) || "Unknown Artist";
+                        const routeId = getArtistRouteId(artist);
+                        const monitorOption =
+                          artist.addOptions?.monitor ||
+                          artist.monitorNewItems ||
+                          artist.monitorOption ||
+                          "none";
+                        const isMonitored = artist.monitored && monitorOption !== "none";
+                        return (
+                          <button
+                            type="button"
+                            key={artist.id}
+                            className="artist-release-card"
+                            onClick={() => navigateToArtist(artist)}
+                            disabled={!routeId}
+                            aria-label={`Open ${artistName}`}
+                          >
+                            <div className="artist-release-card__cover">
+                              <ArtistImage
+                                mbid={routeId}
+                                artistName={artistName}
+                                alt={artistName}
+                                className="artist-image-fill"
+                                showLoading={false}
+                                enablePreviewPlayback
+                                isInLibrary
+                              />
+                              {isMonitored && (
+                                <span
+                                  className="library-page__monitored-dot artist-status-dot artist-status-dot--complete"
+                                  title="Monitored"
+                                />
+                              )}
+                            </div>
+                            <span className="artist-release-card__title" title={artistName}>
+                              {artistName}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
+              : filteredArtists.slice(0, visibleCount).map((artist) => {
               const artistName = getArtistName(artist) || "Unknown Artist";
               const routeId = getArtistRouteId(artist);
               const monitorOption =
