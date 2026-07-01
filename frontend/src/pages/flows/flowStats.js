@@ -40,7 +40,7 @@ export const getPlaylistDownloadProgressPct = (stats, trackCount = 0) => {
   const done = flowNumber(stats?.done);
   const total = Math.max(
     flowNumber(trackCount),
-    flowNumber(stats?.pending) + flowNumber(stats?.downloading) + flowNumber(stats?.blocked) + done,
+    flowNumber(stats?.pending) + flowNumber(stats?.downloading) + flowNumber(stats?.blocked) + done + flowNumber(stats?.failed),
   );
   if (total <= 0) return null;
   return Math.min(100, Math.round((done / total) * 100));
@@ -78,7 +78,7 @@ export const buildFlowStatsFromJobs = (jobs) => {
     if (!job?.status) continue;
     stats[job.status] = (stats[job.status] || 0) + 1;
   }
-  stats.total = stats.pending + stats.downloading + stats.blocked + stats.done;
+  stats.total = stats.pending + stats.downloading + stats.blocked + stats.done + stats.failed;
   return stats;
 };
 
@@ -89,7 +89,7 @@ export const sanitizeFlowStats = (stats) => {
   const done = flowNumber(stats?.done);
   const failed = flowNumber(stats?.failed);
   return {
-    total: pending + downloading + blocked + done,
+    total: pending + downloading + blocked + done + failed,
     pending,
     downloading,
     blocked,
@@ -125,7 +125,7 @@ export const getCombinedActivityStats = (status) => {
     blocked,
     done,
     failed,
-    total: pending + downloading + blocked + done,
+    total: pending + downloading + blocked + done + failed,
   };
 };
 

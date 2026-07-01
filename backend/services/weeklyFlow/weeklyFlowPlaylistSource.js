@@ -1716,16 +1716,35 @@ export class WeeklyFlowPlaylistSource {
     if (!getLastfmApiKey()) {
       throw new Error("Last.fm API key not configured");
     }
-    const discoveryCache = this._resolveDiscoveryCache(options);
-    const globalTop = discoveryCache.globalTop || [];
-    const candidates = this._filterArtistsByKeySet(globalTop, options?.excludeArtistKeys);
-    if (!Array.isArray(candidates) || candidates.length === 0) {
-      throw new Error("No trending artists available. Update discovery cache first.");
-    }
-    return this._harvestTopTracksFromArtists(candidates, limit, {
-      ...options,
-      reason: options?.reason || "From trending artists",
+    const trackData = await lastfmRequest("chart.getTopTracks", {
+      limit: Math.max(limit * 3, 50),
     });
+    const tracks = trackData?.tracks?.track
+      ? Array.isArray(trackData.tracks.track)
+        ? trackData.tracks.track
+        : [trackData.tracks.track]
+      : [];
+    const result = [];
+    const seen = new Set();
+    for (const track of tracks) {
+      if (result.length >= limit) break;
+      const artistName = (track.artist?.name || track.artist?.["#text"] || "").trim();
+      const trackName = track?.name?.trim();
+      if (!artistName || !trackName) continue;
+      const key = artistName.toLowerCase();
+      if (!key || seen.has(key)) continue;
+      if (options?.excludeArtistKeys?.has(key)) continue;
+      seen.add(key);
+      const trackEntry = this._buildTrackEntry({
+        artistName,
+        trackName,
+        albumName: track?.album?.title || track?.album?.["#text"] || null,
+        artistMbid: track?.artist?.mbid || null,
+        reason: options?.reason || "From trending tracks",
+      });
+      if (trackEntry) result.push(trackEntry);
+    }
+    return this._filterTracksByArtists(result, null, options?.excludeArtistKeys);
   }
 
   async getTagTracks(tag, limit, options = {}) {

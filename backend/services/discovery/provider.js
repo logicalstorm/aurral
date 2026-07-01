@@ -622,56 +622,24 @@ export const updateDiscoveryCache = async (options = {}) => {
         50,
       );
       try {
-        const trendingArtists = [];
-        const trackData = await lastfmRequest("chart.getTopTracks", {
+        const topData = await lastfmRequest("chart.getTopArtists", {
           limit: getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 60 : 100,
         });
-        if (trackData && !trackData.error) lastfmHealth.success++; else lastfmHealth.failure++;
-        if (trackData?.tracks?.track) {
-          const tracks = Array.isArray(trackData.tracks.track)
-            ? trackData.tracks.track
-            : [trackData.tracks.track];
-          for (const track of tracks) {
-            const artist = buildTrendingArtistEntry(track?.artist);
-            if (!artist) continue;
-            if (!artist.image) {
-              artist.image = pickLastfmImage(track?.image);
-            }
-            const trackName = String(track?.name || "").trim();
-            if (trackName) {
-              artist.sampleTrack = {
-                trackName,
-                albumName:
-                  String(
-                    track?.album?.title || track?.album?.["#text"] || "",
-                  ).trim() || null,
-              };
-            }
-            trendingArtists.push(artist);
+        if (topData && !topData.error) lastfmHealth.success++; else lastfmHealth.failure++;
+        const trendingArtists = [];
+        if (topData?.artists?.artist) {
+          const topArtists = Array.isArray(topData.artists.artist)
+            ? topData.artists.artist
+            : [topData.artists.artist];
+          for (const artist of topArtists) {
+            const entry = buildTrendingArtistEntry(artist);
+            if (entry) trendingArtists.push(entry);
           }
         }
         let globalTop = mergeResolvedRecommendations(
           trendingArtists,
           existingArtistKeys,
         ).slice(0, 32);
-        if (globalTop.length < 12) {
-          const topData = await lastfmRequest("chart.getTopArtists", {
-            limit: getLastfmFailureRatio(lastfmHealth) >= 0.3 ? 60 : 100,
-          });
-          if (topData && !topData.error) lastfmHealth.success++; else lastfmHealth.failure++;
-          if (topData?.artists?.artist) {
-            const topArtists = Array.isArray(topData.artists.artist)
-              ? topData.artists.artist
-              : [topData.artists.artist];
-            globalTop = mergeResolvedRecommendations(
-              [
-                ...globalTop,
-                ...topArtists.map(buildTrendingArtistEntry).filter(Boolean),
-              ],
-              existingArtistKeys,
-            ).slice(0, 32);
-          }
-        }
 
         const globalFailureRatio = getLastfmFailureRatio(lastfmHealth);
         const maxGlobalResolve =
@@ -698,7 +666,7 @@ export const updateDiscoveryCache = async (options = {}) => {
           .slice(0, 32);
         logger.info(
           'discovery',
-          `Found ${discoveryCache.globalTop.length} trending artists (from top tracks).`,
+          `Found ${discoveryCache.globalTop.length} trending artists.`,
         );
       } catch (e) {
         logger.error('discovery', `Failed to fetch Global Top: ${e.message}`);
@@ -816,7 +784,7 @@ export const updateDiscoveryCache = async (options = {}) => {
     );
     logger.info(
       'discovery',
-      `Discovery data written to database: ${discoveryData.recommendations.length} recommendations, ${discoveryData.topGenres.length} genres, ${discoveryData.globalTop.length} trending`,
+      `Discovery data written to database: ${discoveryData.recommendations.length} recommendations, ${discoveryData.topGenres.length} genres, ${discoveryData.globalTop.length} trending artists`,
     );
 
     logger.info('discovery', "Discovery cache updated successfully.");
