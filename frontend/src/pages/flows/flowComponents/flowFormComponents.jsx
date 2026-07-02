@@ -1,5 +1,13 @@
 import { ChevronDown } from "lucide-react";
-import { MixSlider, getFocusDraftValidation, CommaTokenInput, fetchFlowTagSuggestions, fetchFlowArtistSuggestions, WEEKDAY_OPTIONS, SCHEDULE_HOUR_OPTIONS } from "./MixSlider.jsx";
+import {
+  MixSlider,
+  getFocusDraftValidation,
+  CommaTokenInput,
+  fetchFlowTagSuggestions,
+  fetchFlowArtistSuggestions,
+  WEEKDAY_OPTIONS,
+  SCHEDULE_HOUR_OPTIONS,
+} from "./MixSlider.jsx";
 
 export { MixSlider };
 
@@ -15,9 +23,13 @@ export function FlowScheduleFields({
     if (onClearError) onClearError();
   };
   const scheduleDays = Array.isArray(draft?.scheduleDays)
-    ? [...new Set(draft.scheduleDays.map((entry) => Number(entry)).filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))].sort(
-        (a, b) => a - b
-      )
+    ? [
+        ...new Set(
+          draft.scheduleDays
+            .map((entry) => Number(entry))
+            .filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6),
+        ),
+      ].sort((a, b) => a - b)
     : [];
   const scheduleTime = String(draft?.scheduleTime || "00:00");
 
@@ -25,9 +37,7 @@ export function FlowScheduleFields({
     <div className="flow-page__form-section">
       <div className="flow-page__schedule-row">
         <div className="flow-page__field">
-          <label className="flow-page__field-label">
-            {sizeLabel}
-          </label>
+          <label className="flow-page__field-label">{sizeLabel}</label>
           <div className="flow-page__field-round">
             <input
               type="number"
@@ -43,9 +53,7 @@ export function FlowScheduleFields({
           </div>
         </div>
         <div className="flow-page__field">
-          <label className="flow-page__field-label">
-            Update hour
-          </label>
+          <label className="flow-page__field-label">Update hour</label>
           <div className="flow-page__field-round flow-page__field-round--select">
             <select
               className={`${inputClassName} flow-page__field-select`}
@@ -67,9 +75,7 @@ export function FlowScheduleFields({
           </div>
         </div>
         <div className="flow-page__field flow-page__field--schedule-days">
-          <label className="flow-page__field-label">
-            Update days
-          </label>
+          <label className="flow-page__field-label">Update days</label>
           <div className="flow-page__weekday-grid">
             {WEEKDAY_OPTIONS.map((day) => {
               const checked = scheduleDays.includes(day.id);
@@ -86,12 +92,16 @@ export function FlowScheduleFields({
                     disabled={checked && scheduleDays.length === 1}
                     onChange={() =>
                       updateDraft((prev) => {
-                        const current = Array.isArray(prev?.scheduleDays)
-                          ? prev.scheduleDays
-                          : [];
-                        const normalized = [...new Set(current
-                          .map((entry) => Number(entry))
-                          .filter((entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6))];
+                        const current = Array.isArray(prev?.scheduleDays) ? prev.scheduleDays : [];
+                        const normalized = [
+                          ...new Set(
+                            current
+                              .map((entry) => Number(entry))
+                              .filter(
+                                (entry) => Number.isFinite(entry) && entry >= 0 && entry <= 6,
+                              ),
+                          ),
+                        ];
                         if (checked && normalized.length === 1) {
                           return prev;
                         }
@@ -128,10 +138,9 @@ export function ReleaseRadarRecipeFields({
       <div className="flow-page__preset-recipe">
         <p className="flow-page__preset-recipe-label">New releases</p>
         <p className="flow-page__preset-recipe-desc">
-          Finds recent albums from artists in your library that you do not have
-          yet, then picks a standout track from each release. The track limit is
-          a maximum; if fewer albums qualify, the playlist will be shorter. It
-          refreshes on your schedule below.
+          Finds recent albums from artists in your library that you do not have yet, then picks a
+          standout track from each release. The track limit is a maximum; if fewer albums qualify,
+          the playlist will be shorter. It refreshes on your schedule below.
         </p>
       </div>
       <FlowScheduleFields
@@ -141,9 +150,7 @@ export function ReleaseRadarRecipeFields({
         onClearError={onClearError}
         sizeLabel="Max tracks"
       />
-      {errorMessage ? (
-        <div className="flow-page__error-text">{errorMessage}</div>
-      ) : null}
+      {errorMessage ? <div className="flow-page__error-text">{errorMessage}</div> : null}
     </div>
   );
 }
@@ -164,8 +171,8 @@ export function EditorialRecipeFields({
           {tagLabel ? `${tagLabel} picks` : "Curated picks"}
         </p>
         <p className="flow-page__preset-recipe-desc">
-          The top tracks from Last.fm&rsquo;s {tag || "genre"} chart right now,
-          refreshed on your schedule below.
+          The top tracks from Last.fm&rsquo;s {tag || "genre"} chart right now, refreshed on your
+          schedule below.
         </p>
       </div>
       <FlowScheduleFields
@@ -175,9 +182,7 @@ export function EditorialRecipeFields({
         onClearError={onClearError}
         sizeLabel="Tracks"
       />
-      {errorMessage ? (
-        <div className="flow-page__error-text">{errorMessage}</div>
-      ) : null}
+      {errorMessage ? <div className="flow-page__error-text">{errorMessage}</div> : null}
     </div>
   );
 }
@@ -197,12 +202,13 @@ export function FlowFormFields({
     if (onClearError) onClearError();
   };
   const normalizedMix = normalizeMixPercent(draft?.mix);
-  const totalSize = Number.isFinite(Number(remaining)) && Number(remaining) > 0 ? Math.round(Number(remaining)) : 0;
+  const totalSize =
+    Number.isFinite(Number(remaining)) && Number(remaining) > 0 ? Math.round(Number(remaining)) : 0;
   const { focusEnabled, focusValidationError } = getFocusDraftValidation(
     draft,
     normalizeMixPercent,
   );
-  
+
   const mixScaled = (() => {
     const entries = [
       { key: "discover", value: normalizedMix.discover },
@@ -240,9 +246,7 @@ export function FlowFormFields({
       />
 
       <div className="flow-page__form-section">
-        <div className="flow-page__field-label flow-page__field-label--section">
-          Source mix
-        </div>
+        <div className="flow-page__field-label flow-page__field-label--section">Source mix</div>
 
         <div>
           <MixSlider
@@ -290,26 +294,24 @@ export function FlowFormFields({
         </div>
       </div>
 
-      <div className={`flow-page__form-section${focusEnabled ? "" : " flow-page__form-section--dimmed"}`}>
+      <div
+        className={`flow-page__form-section${focusEnabled ? "" : " flow-page__form-section--dimmed"}`}
+      >
         <div className="flow-page__field">
           <div className="flow-page__field-label flow-page__field-label--section">
-            Focus filters
+            Focus filters (comma separated)
           </div>
           {focusValidationError ? (
-            <div className="flow-page__warning-text">
-              {focusValidationError}
-            </div>
+            <div className="flow-page__warning-text">{focusValidationError}</div>
           ) : null}
         </div>
 
         <div className="flow-page__form-grid">
           <div className="flow-page__field">
-            <label className="flow-page__field-label">
-              Genre tags (separate by comma)
-            </label>
+            <label className="flow-page__field-label">Tags (genre, decade, mood)</label>
             <CommaTokenInput
               value={draft.includeTags}
-              placeholder="lofi, indie, 80s"
+              placeholder="indie, 80s, happy"
               fetchSuggestions={fetchFlowTagSuggestions}
               suggestionLabel="Genre tag suggestions"
               onChange={(nextValue) =>
@@ -322,9 +324,7 @@ export function FlowFormFields({
           </div>
 
           <div className="flow-page__field">
-            <label className="flow-page__field-label">
-              Related artists (separate by comma)
-            </label>
+            <label className="flow-page__field-label">Related artists</label>
             <CommaTokenInput
               value={draft.includeRelatedArtists}
               placeholder="artist a, artist b"
@@ -340,9 +340,8 @@ export function FlowFormFields({
           </div>
         </div>
       </div>
-      
+
       {errorMessage && <div className="flow-page__error-text">{errorMessage}</div>}
     </div>
   );
 }
-
