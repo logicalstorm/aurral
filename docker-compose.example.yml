@@ -12,7 +12,7 @@ services:
       - ${CONFIG:-./config}:/config
 
   lidarr:
-    image: lscr.io/linuxserver/lidarr:latest
+    image: lscr.io/linuxserver/lidarr:nightly
     restart: unless-stopped
     ports:
       - "8686:8686"

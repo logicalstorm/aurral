@@ -6,6 +6,7 @@ import { getLibraryArtists } from "../utils/api";
 import ArtistImage from "../components/ArtistImage";
 
 const PAGE_SIZE = 48;
+const ALPHABET = ["#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
 const SORT_OPTIONS = [
   { value: "name", label: "Name" },
   { value: "added", label: "Date Added" },
@@ -64,6 +65,8 @@ function LibraryPage() {
   const [viewMode, setViewMode] = useState(() =>
     localStorage.getItem("libraryViewMode") || "grid"
   );
+  const [activeLetter, setActiveLetter] = useState(null);
+  const activeLetterRef = useRef(null);
   const sentinelRef = useRef(null);
   const toolbarRef = useRef(null);
   const navigate = useNavigate();
@@ -176,6 +179,30 @@ function LibraryPage() {
       return a.localeCompare(b);
     });
   }, [filteredArtists, viewMode]);
+
+  const scrollToLetter = useCallback((letter) => {
+    document.getElementById(`library-group-${letter}`)?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    if (viewMode !== "list" || !groupedArtists) return;
+
+    const handleScroll = () => {
+      const headers = document.querySelectorAll(".library-page__list-letter");
+      let active = null;
+      for (const h of headers) {
+        if (h.getBoundingClientRect().top <= 140) active = h.textContent.trim();
+      }
+      if (active !== activeLetterRef.current) {
+        activeLetterRef.current = active;
+        setActiveLetter(active);
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [viewMode, groupedArtists]);
 
   const navigateToArtist = useCallback(
     (artist) => {
@@ -355,8 +382,27 @@ function LibraryPage() {
             style={viewMode === "grid" ? { gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` } : undefined}
           >
             {viewMode === "list" && groupedArtists
-              ? groupedArtists.map(([letter, group]) => (
-                  <div key={letter} className="library-page__list-group">
+              ? <>
+                  <nav className="library-page__alphabet" aria-label="Jump to letter">
+                    {ALPHABET.map((letter) => {
+                      const isActive = activeLetter === letter;
+                      const isPresent = groupedArtists.some(([l]) => l === letter);
+                      return (
+                        <button
+                          key={letter}
+                          type="button"
+                          className={`library-page__alphabet-letter${isActive ? " is-active" : ""}${!isPresent ? " is-missing" : ""}`}
+                          onClick={() => scrollToLetter(letter)}
+                          disabled={!isPresent}
+                          aria-label={`Jump to ${letter}`}
+                        >
+                          {letter}
+                        </button>
+                      );
+                    })}
+                  </nav>
+                  {groupedArtists.map(([letter, group]) => (
+                  <div key={letter} id={`library-group-${letter}`} className="library-page__list-group">
                     <span className="library-page__list-letter">{letter}</span>
                     <div className="library-page__list-items">
                       {group.map((artist) => {
@@ -402,7 +448,8 @@ function LibraryPage() {
                       })}
                     </div>
                   </div>
-                ))
+                ))}
+                </>
               : filteredArtists.slice(0, visibleCount).map((artist) => {
               const artistName = getArtistName(artist) || "Unknown Artist";
               const routeId = getArtistRouteId(artist);
