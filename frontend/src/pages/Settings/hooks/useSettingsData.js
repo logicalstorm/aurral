@@ -258,6 +258,10 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   useEffect(() => {
     if (!refreshingDiscovery) return;
 
+    let stopped = false;
+    let timeoutId = null;
+    const startedAt = Date.now();
+
     const pollHealth = async () => {
       try {
         const healthData = await refreshHealth();
@@ -265,11 +269,16 @@ export function useSettingsData(showSuccess, showError, showInfo) {
           setDiscoveryProgressMessage((current) => current || "Discovery refresh completed");
         }
       } catch {}
+      if (stopped) return;
+      const delay = Date.now() - startedAt < 60000 ? 3000 : 10000;
+      timeoutId = setTimeout(pollHealth, delay);
     };
 
     pollHealth();
-    const intervalId = setInterval(pollHealth, 3000);
-    return () => clearInterval(intervalId);
+    return () => {
+      stopped = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [refreshingDiscovery, refreshHealth]);
 
   const updateSettings = useCallback(

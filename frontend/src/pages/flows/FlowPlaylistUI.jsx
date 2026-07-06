@@ -11,7 +11,7 @@ import {
   Upload,
 } from "lucide-react";
 import PillToggle from "../../components/PillToggle";
-import { PlaylistArtworkThumb } from "../FlowPageComponents";
+import { PlaylistArtworkThumb } from "./flowComponents/flowRemainingComponents.jsx";
 import {
   formatTrackCountLabel,
   getFlowDisplayTrackCount,

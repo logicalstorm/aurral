@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import PropTypes from "prop-types";
 import { Library, Sparkles, Activity, AudioWaveform, Ticket, Settings } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
-import { getBootstrapStatus } from "../utils/api";
 import { useFlowWorkerActivity } from "../pages/flows/useFlowWorkerActivity";
 import { DEFAULT_SETTINGS_TAB, SETTINGS_NAV_TABS } from "../pages/Settings/settingsTabsConfig";
 import { DEFAULT_SHOWS_FILTER, SHOWS_FILTERS } from "../navigation/showsNavConfig";
@@ -21,7 +20,7 @@ import { useStorageHealth } from "../hooks/useStorageHealth";
 
 function Sidebar({ mode, width = 208 }) {
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, bootstrap } = useAuth();
   const hasFlowAccess = user?.role === "admin" || !!user?.permissions?.accessFlow;
   const canAccessSettings = user?.role === "admin" || !!user?.permissions?.accessSettings;
   const { hasReview: hasReviewAlert } = useFlowWorkerActivity({
@@ -53,8 +52,6 @@ function Sidebar({ mode, width = 208 }) {
     if (!canAccessSettings) return [];
     return SETTINGS_NAV_TABS;
   }, [canAccessSettings]);
-
-  const activityViewItems = useMemo(() => ACTIVITY_VIEWS, []);
 
   const activeSettingsTab = useMemo(() => {
     if (!isOnSettings) return null;
@@ -102,24 +99,10 @@ function Sidebar({ mode, width = 208 }) {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    const loadBootstrapStatus = async () => {
-      try {
-        const bootstrap = await getBootstrapStatus();
-        if (!cancelled) {
-          setTicketmasterConfigured(!!bootstrap.ticketmasterConfigured);
-        }
-      } catch {
-        if (!cancelled) {
-          setTicketmasterConfigured(true);
-        }
-      }
-    };
-    loadBootstrapStatus();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (bootstrap) {
+      setTicketmasterConfigured(!!bootstrap.ticketmasterConfigured);
+    }
+  }, [bootstrap]);
 
   const isNavItemActive = useCallback(
     (item) => {
@@ -168,14 +151,14 @@ function Sidebar({ mode, width = 208 }) {
         label: "Activity",
         icon: Activity,
         section: "activity",
-        subnav: activityViewItems,
+        subnav: ACTIVITY_VIEWS,
       },
     ];
     return items.filter(
       (item) =>
         !item.permission || user?.role === "admin" || !!user?.permissions?.[item.permission],
     );
-  }, [discoverRecentPages, activityViewItems, ticketmasterConfigured, user]);
+  }, [discoverRecentPages, ticketmasterConfigured, user]);
 
   const translateClass = mode === "hidden" ? "-translate-x-full" : "translate-x-0";
 

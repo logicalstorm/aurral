@@ -6,8 +6,8 @@ import { weeklyFlowWorker } from "../../../services/weeklyFlow/weeklyFlowWorker.
 import { noCache } from "../../../middleware/cache.js";
 import { hasPermission, verifyTokenAuth } from "../../../middleware/auth.js";
 import {
-  resolveExistingWeeklyFlowTrackPath,
-} from "../../../services/weeklyFlow/weeklyFlowPaths.js";
+  resolveExistingTrackPath as resolveExistingWeeklyFlowTrackPath,
+} from "../../../services/playlistPaths.js";
 import {
   AUDIO_CONTENT_TYPES,
   canAccessPlaylistType,

@@ -79,6 +79,32 @@ const getDiscoverNearbyShowsStorageKey = (userId, locationMode, zip) => {
   return `${base}:${locationKey}`;
 };
 
+export const DISCOVER_CACHE_FRESH_TTL_MS = 5 * 60 * 1000;
+
+const markStoredAt = (key) => {
+  try {
+    localStorage.setItem(`${key}:at`, String(Date.now()));
+  } catch {}
+};
+
+const isStoredFresh = (key) => {
+  try {
+    const at = Number(localStorage.getItem(`${key}:at`));
+    return Number.isFinite(at) && Date.now() - at < DISCOVER_CACHE_FRESH_TTL_MS;
+  } catch {
+    return false;
+  }
+};
+
+export const isStoredDiscoveryFresh = (userId) =>
+  isStoredFresh(getDiscoveryCacheStorageKey(userId));
+
+export const isStoredRecentlyAddedFresh = (userId) =>
+  isStoredFresh(getDiscoverRecentlyAddedStorageKey(userId));
+
+export const isStoredRecentReleasesFresh = (userId) =>
+  isStoredFresh(getDiscoverRecentReleasesStorageKey(userId));
+
 export const readStoredNearbyLocation = () => {
   try {
     const storedMode = localStorage.getItem(DISCOVER_NEARBY_MODE_KEY);
@@ -113,6 +139,7 @@ export const writeStoredRecentlyAdded = (value, userId) => {
       getDiscoverRecentlyAddedStorageKey(userId),
       JSON.stringify(value),
     );
+    markStoredAt(getDiscoverRecentlyAddedStorageKey(userId));
   } catch {
     console.warn("Failed to write discover recently-added");
   }
@@ -140,6 +167,7 @@ export const writeStoredRecentReleases = (value, userId) => {
       getDiscoverRecentReleasesStorageKey(userId),
       JSON.stringify(value),
     );
+    markStoredAt(getDiscoverRecentReleasesStorageKey(userId));
   } catch {
     console.warn("Failed to write discover recent-releases");
   }
@@ -281,6 +309,7 @@ export const writeStoredDiscoveryData = (value, userId) => {
         ),
       }),
     );
+    markStoredAt(getDiscoveryCacheStorageKey(userId));
   } catch {
     console.warn("Failed to write discover discovery-data");
   }

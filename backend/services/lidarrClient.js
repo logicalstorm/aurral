@@ -134,7 +134,9 @@ export class LidarrClient {
     this._artistByMbidCache = new Map();
     this._artistByMbidInflight = new Map();
     this._albumCache = new Map();
+    this._albumMbidIndex = null;
     this._statusCache = new Map();
+    this._inflightGets = new Map();
     this._httpAgent = new http.Agent({
       keepAlive: true,
       maxSockets: LIDARR_MAX_CONCURRENT,
@@ -303,6 +305,23 @@ export class LidarrClient {
   }
 
   async request(endpoint, method = "GET", data = null, skipConfigUpdate = false, options = {}) {
+    const dedupeKey =
+      method === "GET" && (endpoint === "/artist" || endpoint.startsWith("/album"))
+        ? endpoint
+        : null;
+    if (!dedupeKey) {
+      return this._request(endpoint, method, data, skipConfigUpdate, options);
+    }
+    const inflight = this._inflightGets.get(dedupeKey);
+    if (inflight) return inflight;
+    const promise = this._request(endpoint, method, data, skipConfigUpdate, options).finally(() => {
+      this._inflightGets.delete(dedupeKey);
+    });
+    this._inflightGets.set(dedupeKey, promise);
+    return promise;
+  }
+
+  async _request(endpoint, method = "GET", data = null, skipConfigUpdate = false, options = {}) {
     if (!skipConfigUpdate) {
       this.updateConfig();
     }
@@ -360,6 +379,7 @@ export class LidarrClient {
       this._artistListCache = null;
       this._invalidateArtistIndexes();
       this._albumCache = new Map();
+      this._albumMbidIndex = null;
     }
     if (method !== "GET" && endpoint.startsWith("/command")) {
       this._statusCache.delete("/command");
@@ -1048,9 +1068,28 @@ export class LidarrClient {
     }
   }
 
-  async getAlbumByMbid(albumMbid) {
+  async getAllAlbums() {
     const albums = await this.request("/album");
-    return albums.find((a) => a.foreignAlbumId === albumMbid);
+    return Array.isArray(albums) ? albums : [];
+  }
+
+  async getAlbumMbidIndex() {
+    const albums = await this.getAllAlbums();
+    if (this._albumMbidIndex && this._albumMbidIndex.source === albums) {
+      return this._albumMbidIndex.map;
+    }
+    const map = new Map();
+    for (const album of albums) {
+      const mbid = String(album?.foreignAlbumId || "").trim();
+      if (mbid) map.set(mbid, album);
+    }
+    this._albumMbidIndex = { source: albums, map };
+    return map;
+  }
+
+  async getAlbumByMbid(albumMbid) {
+    const index = await this.getAlbumMbidIndex();
+    return index.get(String(albumMbid || "").trim());
   }
 
   async updateAlbum(albumId, updates) {

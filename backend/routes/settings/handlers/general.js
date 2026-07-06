@@ -29,6 +29,7 @@ export function registerGeneral(router) {
   router.get("/", noCache, (req, res) => {
     try {
       const settings = dbOps.getSettings();
+      const legacyMusicbrainz = settings?.integrations?.musicbrainz || {};
       if (settings?.integrations?.coverArtArchive) {
         delete settings.integrations.coverArtArchive;
       }
@@ -36,7 +37,6 @@ export function registerGeneral(router) {
         delete settings.integrations.musicbrainz;
       }
       if (!settings?.integrations?.metadata) {
-        const legacyMusicbrainz = dbOps.getSettings()?.integrations?.musicbrainz || {};
         settings.integrations.metadata = {
           provider: "brainzmash",
           baseUrl: String(legacyMusicbrainz.customUrl || "").trim().replace(/\/ws\/2\/?$/, "") ||

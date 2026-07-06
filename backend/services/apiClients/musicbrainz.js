@@ -34,7 +34,6 @@ const SECONDARY_RELEASE_TYPES = [
   "Spokenword",
   "Other",
 ];
-const itunesAlbumArtCache = createCache(24 * 60 * 60);
 
 const shouldEmitThrottledLog = (logMap, key, throttleMs = 15000) => {
   const now = Date.now();
@@ -201,12 +200,6 @@ const musicbrainzRequestWithRetry = async (
 export const musicbrainzRequest = async (endpoint, params = {}) =>
   legacyMusicbrainzRequest(endpoint, params);
 
-const normalizeItunesArtworkUrl = (url) =>
-  String(url || "")
-    .trim()
-    .replace(/\/100x100([a-z]+)(?=[/?#]|$)/i, "/600x600$1")
-    .replace(/\/\d+x\d+([a-z]+)(?=[/?#]|$)/i, "/600x600$1");
-
 export async function fetchCoverArtArchiveReleaseGroup(releaseGroupMbid) {
   if (!releaseGroupMbid) return null;
   try {
@@ -223,8 +216,6 @@ export async function fetchCoverArtArchiveReleaseGroup(releaseGroupMbid) {
     return { imageUrl: null, types: [], transientError: true };
   }
 }
-
-const ALLOWED_PRIMARY_TYPES = new Set(["album", "ep", "single"]);
 
 function normalizeArtistReleaseTypeSelection(selectedReleaseTypes = []) {
   const list = Array.isArray(selectedReleaseTypes) ? selectedReleaseTypes : [];
@@ -553,12 +544,6 @@ export async function searchMusicbrainzRecordings(query, { limit = 5 } = {}) {
     return [];
   }
 }
-
-export const clearMusicbrainzCache = () => {
-  mbCache.flushAll();
-  musicbrainzArtistNameCache.flushAll();
-  musicbrainzReleaseGroupsCache.flushAll();
-};
 
 export { PRIMARY_RELEASE_TYPES, SECONDARY_RELEASE_TYPES };
 export { mbCache, musicbrainzArtistNameCache, musicbrainzReleaseGroupsCache };

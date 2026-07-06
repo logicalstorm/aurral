@@ -535,13 +535,6 @@ export async function deezerGetAlbumTracks(deezerAlbumId) {
   });
 }
 
-export const clearDeezerCache = () => {
-  deezerArtistCache.flushAll();
-  deezerBioCache.flushAll();
-  deezerAlbumCache.flushAll();
-  deezerAlbumTrackCache.flushAll();
-  deezerPreviewMatchCache.flushAll();
-};
 export async function enrichReleaseGroupsWithDeezer(
   mbReleaseGroups,
   artistName,

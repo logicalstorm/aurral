@@ -40,21 +40,21 @@ async function processSystemTask(payload = {}) {
     }
     case "playlist-startup-migration": {
       const [
-        { migrateLegacyWeeklyFlowPaths, resolveWeeklyFlowRoot },
+        { migrateLegacyPaths, resolvePlaylistRoot },
         trackerModule,
         { playlistManager },
       ] = await Promise.all([
-        import("./weeklyFlow/weeklyFlowPaths.js"),
+        import("./playlistPaths.js"),
         import("./weeklyFlow/weeklyFlowDownloadTracker.js"),
         import("./weeklyFlow/weeklyFlowPlaylistManager.js"),
       ]);
-      const result = await migrateLegacyWeeklyFlowPaths(
-        resolveWeeklyFlowRoot(),
+      const result = await migrateLegacyPaths(
+        resolvePlaylistRoot(),
         trackerModule.downloadTracker,
       );
       if (result.migrated > 0) {
         console.log(
-          `[Playlists] Migrated ${result.migrated} legacy track paths to ${resolveWeeklyFlowRoot()}`,
+          `[Playlists] Migrated ${result.migrated} legacy track paths to ${resolvePlaylistRoot()}`,
         );
       }
       playlistManager.updateConfig(false);

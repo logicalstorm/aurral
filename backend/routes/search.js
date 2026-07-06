@@ -58,31 +58,4 @@ router.get("/unified", noCache, async (req, res) => {
   }
 });
 
-router.get("/artists", noCache, async (req, res) => {
-  try {
-    const { query, limit = 24, offset = 0 } = req.query;
-    if (!String(query || "").trim()) {
-      return res.status(400).json({ error: "Query parameter is required" });
-    }
-    const result = await searchArtists(query, limit, offset);
-    return res.json({
-      artists: result.items.map((artist) => ({
-        id: artist.id,
-        name: artist.name,
-        "sort-name": artist.sortName,
-        image: artist.imageUrl,
-        imageUrl: artist.imageUrl,
-        listeners: null,
-      })),
-      count: result.count,
-      offset: result.offset,
-    });
-  } catch (error) {
-    res.status(500).json({
-      error: "Failed to search artists",
-      message: error.message,
-    });
-  }
-});
-
 export default router;

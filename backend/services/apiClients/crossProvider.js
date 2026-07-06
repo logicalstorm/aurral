@@ -215,9 +215,4 @@ export async function youtubeFindTopSongVideo(artistName, trackTitle) {
   }
 }
 
-export const clearCrossProviderCache = () => {
-  wikiBioCache.flushAll();
-  wikidataTitleCache.flushAll();
-  youtubeVideoCache.flushAll();
-};
 export { youtubeVideoCache };

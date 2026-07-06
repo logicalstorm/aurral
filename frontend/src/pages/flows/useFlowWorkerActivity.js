@@ -4,6 +4,7 @@ import { useWebSocketChannel } from "../../hooks/useWebSocket";
 import { hasFlowWorkerActivity, hasReviewActivity } from "./flowStats";
 
 const POLL_INTERVAL_MS = 4000;
+const IDLE_POLL_INTERVAL_MS = 30000;
 const WS_RECENT_MS = 3000;
 
 export function useFlowWorkerActivity({ enabled = true } = {}) {
@@ -60,18 +61,23 @@ export function useFlowWorkerActivity({ enabled = true } = {}) {
     }
   }, [enabled, isFlowSocketConnected, fetchStatus]);
 
+  const hasActivity = useMemo(() => hasFlowWorkerActivity(status), [status]);
+  const hasReview = useMemo(() => hasReviewActivity(status), [status]);
+  const isActive = hasActivity || hasReview;
+
   useEffect(() => {
     if (!enabled) return;
 
     const poll = () => {
+      if (document.hidden) return;
       const hasRecentWsUpdate = Date.now() - lastFlowWsMessageAtRef.current < WS_RECENT_MS;
       if (isFlowSocketConnected && hasRecentWsUpdate) return;
       fetchStatus();
     };
 
-    const interval = setInterval(poll, POLL_INTERVAL_MS);
+    const interval = setInterval(poll, isActive ? POLL_INTERVAL_MS : IDLE_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [enabled, isFlowSocketConnected, fetchStatus]);
+  }, [enabled, isFlowSocketConnected, isActive, fetchStatus]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -85,9 +91,6 @@ export function useFlowWorkerActivity({ enabled = true } = {}) {
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [enabled, fetchStatus]);
-
-  const hasActivity = useMemo(() => hasFlowWorkerActivity(status), [status]);
-  const hasReview = useMemo(() => hasReviewActivity(status), [status]);
 
   return { hasActivity, hasReview, status };
 }

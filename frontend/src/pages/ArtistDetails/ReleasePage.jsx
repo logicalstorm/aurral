@@ -22,7 +22,6 @@ import {
   addSharedPlaylistTracks,
   createSharedPlaylist,
   getDownloadStatus,
-  getFlowStatus,
   getLibraryTracks,
   getReleaseGroupCover,
   getReleaseGroupDetails,
@@ -30,6 +29,7 @@ import {
   lookupAlbumsInLibraryBatch,
   requestAlbumFromSearch,
 } from "../../utils/api";
+import { useSharedPlaylists } from "../../hooks/useSharedPlaylists";
 
 const getReleaseTypeLabel = (release) => {
   const types = [
@@ -107,9 +107,13 @@ function ReleasePage() {
   const [libraryInfo, setLibraryInfo] = useState(null);
   const [downloadStatus, setDownloadStatus] = useState(null);
   const [requestingAlbum, setRequestingAlbum] = useState(false);
-  const [sharedPlaylists, setSharedPlaylists] = useState([]);
-  const [playlistModalLoading, setPlaylistModalLoading] = useState(false);
-  const [playlistModalError, setPlaylistModalError] = useState("");
+  const {
+    sharedPlaylists,
+    setSharedPlaylists,
+    playlistsLoading: playlistModalLoading,
+    playlistsError: playlistModalError,
+    loadSharedPlaylists,
+  } = useSharedPlaylists();
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
   const downloadStatusPollInFlightRef = useRef(false);
 
@@ -327,27 +331,6 @@ function ReleasePage() {
     isComplete,
     showError,
   ]);
-
-  const loadSharedPlaylists = useCallback(async () => {
-    setPlaylistModalLoading(true);
-    try {
-      const data = await getFlowStatus();
-      const playlists = Array.isArray(data?.sharedPlaylists) ? data.sharedPlaylists : [];
-      setSharedPlaylists(playlists);
-      return playlists;
-    } catch (err) {
-      const message =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        err.message ||
-        "Failed to load playlists";
-      setPlaylistModalError(message);
-      showError(message);
-      return null;
-    } finally {
-      setPlaylistModalLoading(false);
-    }
-  }, [showError]);
 
   const getDefaultTrackPlaylistName = useCallback(
     (track) =>

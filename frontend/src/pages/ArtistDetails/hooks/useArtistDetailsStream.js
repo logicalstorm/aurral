@@ -147,35 +147,20 @@ export function useArtistDetailsStream(
 
   useEffect(() => {
     albumCoversRef.current = albumCovers;
-  }, [albumCovers]);
-
-  useEffect(() => {
     fulfilledCoverIdsRef.current = fulfilledCoverIds;
-  }, [fulfilledCoverIds]);
+    artistRef.current = artist;
+    libraryAlbumsRef.current = libraryAlbums;
+    selectedReleaseTypesRef.current = selectedReleaseTypes;
+    visibleCoverIdsRef.current = visibleCoverIds;
+  });
 
   useEffect(() => {
     if (artistNameFromNav) artistNameRef.current = artistNameFromNav;
   }, [artistNameFromNav]);
 
   useEffect(() => {
-    artistRef.current = artist;
-  }, [artist]);
-
-  useEffect(() => {
-    libraryAlbumsRef.current = libraryAlbums;
-  }, [libraryAlbums]);
-
-  useEffect(() => {
     if (artistName) artistNameRef.current = artistName;
   }, [artistName]);
-
-  useEffect(() => {
-    selectedReleaseTypesRef.current = selectedReleaseTypes;
-  }, [selectedReleaseTypes, selectedReleaseTypesKey]);
-
-  useEffect(() => {
-    visibleCoverIdsRef.current = visibleCoverIds;
-  }, [visibleCoverIds, visibleCoverIdsKey]);
 
   useEffect(() => {
     if (!mbid) return;

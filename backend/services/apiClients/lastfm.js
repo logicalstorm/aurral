@@ -217,8 +217,4 @@ export function resetLastfmApiCallCount() {
   _lastfmApiCallCountByMethod.clear();
 }
 
-export const clearLastfmCache = () => {
-  lastfmCache.flushAll();
-};
-
 export { lastfmCache };

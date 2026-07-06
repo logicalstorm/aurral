@@ -3,9 +3,7 @@ export {
   getTicketmasterApiKey,
   getMusicBrainzContact,
   getMusicbrainzApiBaseUrl,
-  getMusicbrainzApiBaseUrls,
   getMetadataProviderHealthSnapshot,
-  __setMetadataProviderHealthStateForTests,
 } from "./config.js";
 
 export { musicbrainzRequest, fetchCoverArtArchiveReleaseGroup } from "./musicbrainz.js";

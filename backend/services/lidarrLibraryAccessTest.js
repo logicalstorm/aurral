@@ -9,7 +9,7 @@ import {
   resolveLocalPath,
 } from "./pathMappings.js";
 import { pathsShareDevice } from "./weeklyFlow/weeklyFlowFileReuse.js";
-import { resolveWeeklyFlowRoot } from "./weeklyFlow/weeklyFlowPaths.js";
+import { resolvePlaylistRoot as resolveWeeklyFlowRoot } from "./playlistPaths.js";
 function step(id, status, label, extra = {}) {
   return { id, status, label, ...extra };
 }

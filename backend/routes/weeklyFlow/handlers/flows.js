@@ -7,8 +7,8 @@ import {
 } from "../../../services/weeklyFlow/weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "../../../services/weeklyFlow/weeklyFlowOperationQueue.js";
 import {
-  remapLegacyWeeklyFlowPath,
-} from "../../../services/weeklyFlow/weeklyFlowPaths.js";
+  remapLegacyPath as remapLegacyWeeklyFlowPath,
+} from "../../../services/playlistPaths.js";
 import { weeklyFlowWorker } from "../../../services/weeklyFlow/weeklyFlowWorker.js";
 import { schedulePlaylistMbidEnrichment } from "../../../services/playlistMbidEnrichmentService.js";
 import {

@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { FlowTracksPanel } from "./FlowPageComponents";
+import { FlowTracksPanel } from "./flows/flowComponents/flowTrackComponents.jsx";
 import {
   adoptDiscoverPlaylistAsFlow,
   adoptDiscoverPlaylistAsStatic,
   addSharedPlaylistTracks,
   createSharedPlaylist,
   getDiscoverArtworkUrl,
-  getFlowStatus,
 } from "../utils/api";
+import { useSharedPlaylists } from "../hooks/useSharedPlaylists";
 import { useDiscoverData } from "./useDiscoverData";
 import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
 import { useToast } from "../contexts/ToastContext";
@@ -68,32 +68,15 @@ export default function DiscoverPlaylistDetailPage() {
   const [adoptingPlaylistId, setAdoptingPlaylistId] = useState(null);
   const [failedArtwork, setFailedArtwork] = useState(false);
 
-  const [sharedPlaylists, setSharedPlaylists] = useState([]);
-  const [playlistsLoading, setPlaylistsLoading] = useState(false);
+  const {
+    sharedPlaylists,
+    setSharedPlaylists,
+    playlistsLoading,
+    playlistsError: playlistMenuError,
+    setPlaylistsError: setPlaylistMenuError,
+    loadSharedPlaylists,
+  } = useSharedPlaylists();
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
-  const [playlistMenuError, setPlaylistMenuError] = useState("");
-
-  const loadSharedPlaylists = useCallback(async () => {
-    setPlaylistsLoading(true);
-    setPlaylistMenuError("");
-    try {
-      const data = await getFlowStatus();
-      const nextPlaylists = Array.isArray(data?.sharedPlaylists) ? data.sharedPlaylists : [];
-      setSharedPlaylists(nextPlaylists);
-      return nextPlaylists;
-    } catch (error) {
-      const message =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        error.message ||
-        "Failed to load playlists";
-      setPlaylistMenuError(message);
-      showError(message);
-      return null;
-    } finally {
-      setPlaylistsLoading(false);
-    }
-  }, [showError]);
 
   const getDefaultPlaylistName = useCallback(
     (track) => reserveUniquePlaylistName(sharedPlaylists, `${track?.artistName || "Artist"} Picks`),

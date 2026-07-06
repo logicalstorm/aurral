@@ -1,10 +1,9 @@
 import { playlistManager } from "../../../services/weeklyFlow/weeklyFlowPlaylistManager.js";
-import { noCache } from "../../../middleware/cache.js";
 import { hasPermission, verifyTokenAuth } from "../../../middleware/auth.js";
 import { canAccessPlaylistType } from "./utils.js";
 
 export function registerArtworkServe(router) {
-  router.get("/artwork/:playlistId", noCache, async (req, res) => {
+  router.get("/artwork/:playlistId", async (req, res) => {
     if (!verifyTokenAuth(req)) {
       return res
         .status(401)
@@ -28,6 +27,7 @@ export function registerArtworkServe(router) {
     const { getArtworkContentTypeForExtension } =
       await import("../../../services/playlistArtworkGenerator.js");
     res.type(getArtworkContentTypeForExtension(artwork.extension));
+    res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
     res.sendFile(artwork.safePath);
   });
 }

@@ -74,6 +74,7 @@ export function useArtistDetailsLibrary({
   const [customizeQualityProfileId, setCustomizeQualityProfileId] = useState("");
   const [customizeTagId, setCustomizeTagId] = useState("");
   const reSearchOverridesRef = useRef({});
+  const downloadStatusesRef = useRef({});
   const unmonitoredAtRef = useRef({});
   const libraryAlbumIdsRef = useRef([]);
   const viewedArtistIdRef = useRef(artist?.id || null);
@@ -1001,6 +1002,10 @@ export function useArtistDetailsLibrary({
   }, [artist?.id, libraryArtist, libraryAlbums, requestingAlbum, setLibraryAlbums]);
 
   useEffect(() => {
+    downloadStatusesRef.current = downloadStatuses;
+  }, [downloadStatuses]);
+
+  useEffect(() => {
     if (!libraryArtist) return;
     const viewedArtistId = artist?.id || null;
     const libraryArtistId = libraryArtist.id;
@@ -1025,7 +1030,18 @@ export function useArtistDetailsLibrary({
         console.error("Failed to refresh albums:", err);
       }
     };
-    const interval = setInterval(refreshAlbums, 30000);
+    let tick = 0;
+    const interval = setInterval(() => {
+      tick += 1;
+      if (document.hidden) return;
+      const hasActiveDownloads = Object.values(downloadStatusesRef.current).some(
+        (s) =>
+          s &&
+          (s.status === "downloading" || s.status === "processing" || s.status === "adding"),
+      );
+      if (!hasActiveDownloads && tick % 4 !== 0) return;
+      refreshAlbums();
+    }, 30000);
     return () => clearInterval(interval);
   }, [artist?.id, libraryArtist, setLibraryAlbums]);
 

@@ -1,8 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect, Suspense, lazy, useRef } from "react";
 import Layout from "./components/Layout";
-import Login from "./pages/Login";
-import Onboarding from "./pages/Onboarding";
 import { getBootstrapStatus } from "./utils/api";
 import { getAppBasePath } from "./utils/basePath.js";
 import { DISCOVERY_MANUAL_REFRESH_KEY } from "./utils/discoverRecentNavigation.js";
@@ -21,6 +19,8 @@ import {
   LegacyHistoryRedirect,
 } from "./navigation/ActivityRedirects";
 
+const Login = lazy(() => import("./pages/Login"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
 const ShowsPage = lazy(() => import("./pages/ShowsPage"));
@@ -42,23 +42,33 @@ const PageLoader = () => (
   </div>
 );
 
+const ScreenLoader = () => (
+  <div className="app-loading app-loading--screen">
+    <div className="app-loading__spinner app-loading__spinner--lg" />
+  </div>
+);
+
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading, authRequired, onboardingRequired } = useAuth();
 
   if (isLoading) {
-    return (
-      <div className="app-loading app-loading--screen">
-        <div className="app-loading__spinner app-loading__spinner--lg" />
-      </div>
-    );
+    return <ScreenLoader />;
   }
 
   if (onboardingRequired) {
-    return <Onboarding />;
+    return (
+      <Suspense fallback={<ScreenLoader />}>
+        <Onboarding />
+      </Suspense>
+    );
   }
 
   if (authRequired && !isAuthenticated) {
-    return <Login />;
+    return (
+      <Suspense fallback={<ScreenLoader />}>
+        <Login />
+      </Suspense>
+    );
   }
 
   return children;
@@ -79,7 +89,7 @@ function AppContent() {
   const [appVersion, setAppVersion] = useState(null);
   const discoveryToastShownRef = useRef(false);
   const healthCheckInFlightRef = useRef(false);
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, bootstrap } = useAuth();
   const { showSuccess, showError } = useToast();
 
   const PROXY_AUTH_KEY = "aurral:proxy-auth";
@@ -109,6 +119,13 @@ function AppContent() {
       }, 1000);
     }
   });
+
+  useEffect(() => {
+    if (!bootstrap) return;
+    setIsHealthy(bootstrap.status === "ok");
+    setRootFolderConfigured(bootstrap.rootFolderConfigured || false);
+    setAppVersion(bootstrap.appVersion || null);
+  }, [bootstrap]);
 
   useEffect(() => {
     const checkApiHealth = async () => {

@@ -67,10 +67,6 @@ export function hasSlskdSearchCandidates(aggregated, resolvedTrack, searchOption
   );
 }
 
-export function shouldStopSlskdSearching(aggregated, resolvedTrack, searchOptions) {
-  return hasSlskdSearchCandidates(aggregated, resolvedTrack, searchOptions);
-}
-
 const _MAX_EMPTY_POLL_ATTEMPTS = 60;
 const MAX_POLL_ATTEMPTS = 600;
 
@@ -680,14 +676,14 @@ async function runSearchQuery(
   }
   const completed = await slskdClient.waitForSearch(created.id, undefined, {
     earlyExitWhen: (data) =>
-      shouldStopSlskdSearching(
+      hasSlskdSearchCandidates(
         probeAggregatedResults(aggregated, slskdClient.flattenSearchResults(data), seen),
         resolvedTrack,
         searchOptions,
       ),
   });
   const results = slskdClient.flattenSearchResults(completed);
-  const shouldCancel = shouldStopSlskdSearching(
+  const shouldCancel = hasSlskdSearchCandidates(
     probeAggregatedResults(aggregated, results, seen),
     resolvedTrack,
     searchOptions,

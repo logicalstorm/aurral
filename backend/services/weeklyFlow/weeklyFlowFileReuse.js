@@ -4,9 +4,9 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { buildSharedTrackIdentity } from "./weeklyFlowPlaylistConfig.js";
 import { libraryManager } from "../libraryManager.js";
 import {
-  remapLegacyWeeklyFlowPath,
-  resolveWeeklyFlowRoot,
-} from "./weeklyFlowPaths.js";
+  remapLegacyPath as remapLegacyWeeklyFlowPath,
+  resolvePlaylistRoot as resolveWeeklyFlowRoot,
+} from "../playlistPaths.js";
 import { getPathMappings, resolveLocalPath } from "../pathMappings.js";
 
 export const EXISTING_FILE_MODES = new Set(["download", "reuse"]);

@@ -31,11 +31,13 @@ export const AuthProvider = ({ children }) => {
   const [authRequired, setAuthRequired] = useState(false);
   const [onboardingRequired, setOnboardingRequired] = useState(false);
   const [user, setUser] = useState(null);
+  const [bootstrap, setBootstrap] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const checkAuthStatus = useCallback(async () => {
     try {
       const bootstrap = await getBootstrapStatus();
+      setBootstrap(bootstrap);
       const isOnboarding = !!bootstrap.onboardingRequired;
       setOnboardingRequired(isOnboarding);
 
@@ -95,6 +97,7 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(false);
       }
     } catch {
+      setBootstrap(null);
       setUser(null);
       setIsAuthenticated(false);
     } finally {
@@ -174,13 +177,14 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated,
         isLoading,
         user,
+        bootstrap,
         login,
         logout,
         authRequired,
         onboardingRequired,
         refreshAuth: checkAuthStatus,
         hasPermission,
-      }), [isAuthenticated, isLoading, user, login, logout, authRequired, onboardingRequired, checkAuthStatus, hasPermission])}
+      }), [isAuthenticated, isLoading, user, bootstrap, login, logout, authRequired, onboardingRequired, checkAuthStatus, hasPermission])}
     >
       {children}
     </AuthContext.Provider>

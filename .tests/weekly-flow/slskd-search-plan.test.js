@@ -5,7 +5,7 @@ import { importFromRepo } from "../helpers/backendTestHarness.js";
 
 const {
   buildSlskdSearchTierGroups,
-  shouldStopSlskdSearching,
+  hasSlskdSearchCandidates,
 } = await importFromRepo("backend/services/slskdOrchestrator.js");
 
 const fataTrack = {
@@ -41,19 +41,19 @@ test("buildSlskdSearchTierGroups uses a short album-first search plan", () => {
   );
 });
 
-test("shouldStopSlskdSearching only stops when valid candidates exist", () => {
+test("hasSlskdSearchCandidates is false when no results are valid candidates", () => {
   const rawResults = Array.from({ length: 60 }, (_, index) => ({
     user: `user-${index}`,
     file: `music\\Artist\\Album\\Track ${index}.flac`,
   }));
 
   assert.equal(
-    shouldStopSlskdSearching(rawResults, fataTrack, { preferredFormat: "flac" }),
+    hasSlskdSearchCandidates(rawResults, fataTrack, { preferredFormat: "flac" }),
     false,
   );
 });
 
-test("shouldStopSlskdSearching does not stop on a small result set without valid candidates", () => {
+test("hasSlskdSearchCandidates is false for a small result set without valid candidates", () => {
   const rawResults = [
     {
       user: "user-1",
@@ -62,12 +62,12 @@ test("shouldStopSlskdSearching does not stop on a small result set without valid
   ];
 
   assert.equal(
-    shouldStopSlskdSearching(rawResults, fataTrack, { preferredFormat: "flac" }),
+    hasSlskdSearchCandidates(rawResults, fataTrack, { preferredFormat: "flac" }),
     false,
   );
 });
 
-test("shouldStopSlskdSearching waits for a small floor of valid candidates", () => {
+test("hasSlskdSearchCandidates waits for a small floor of valid candidates", () => {
   const validResults = Array.from({ length: 3 }, (_, index) => ({
     user: `valid-user-${index}`,
     file: `music\\From Autumn to Ashes\\The Fiction We Live\\01 The After Dinner Payback.flac`,
@@ -76,13 +76,13 @@ test("shouldStopSlskdSearching waits for a small floor of valid candidates", () 
   }));
 
   assert.equal(
-    shouldStopSlskdSearching(validResults.slice(0, 1), fataTrack, {
+    hasSlskdSearchCandidates(validResults.slice(0, 1), fataTrack, {
       preferredFormat: "flac",
     }),
     false,
   );
   assert.equal(
-    shouldStopSlskdSearching(validResults, fataTrack, {
+    hasSlskdSearchCandidates(validResults, fataTrack, {
       preferredFormat: "flac",
     }),
     true,

@@ -11,8 +11,6 @@ import {
   addArtistToLibrary,
   addSharedPlaylistTracks,
   createSharedPlaylist,
-  getBootstrapStatus,
-  getFlowStatus,
   getTagSuggestions,
   requestAlbumFromSearch,
   searchUnified,
@@ -42,6 +40,8 @@ import {
   isSuggestionInLibrary,
   buildTrackPlaylistPayload,
 } from "../utils/globalSearchUtils";
+import { useDebouncedTask } from "../hooks/useDebouncedTask";
+import { useSharedPlaylists } from "../hooks/useSharedPlaylists";
 function GlobalSearch() {
   const [searchQuery, setSearchQuery] = useState("");
   const [lastfmConfigured, setLastfmConfigured] = useState(true);
@@ -54,19 +54,22 @@ function GlobalSearch() {
   const [recentSearches, setRecentSearches] = useState(() => readRecentSearches());
   const searchContainerRef = useRef(null);
   const inputRef = useRef(null);
-  const debounceRef = useRef(null);
-  const searchGenerationRef = useRef(0);
+  const { schedule: scheduleSuggest, cancel: cancelSuggest } = useDebouncedTask();
   const navigate = useNavigate();
   const location = useLocation();
-  const { hasPermission } = useAuth();
+  const { hasPermission, bootstrap } = useAuth();
   const { showSuccess, showError } = useToast();
+  const {
+    sharedPlaylists,
+    setSharedPlaylists,
+    playlistsLoading: playlistModalLoading,
+    playlistsError: playlistModalError,
+    loadSharedPlaylists,
+  } = useSharedPlaylists();
   const canAddArtist = hasPermission("addArtist");
   const canAddAlbum = hasPermission("addAlbum");
   const [pendingArtistIds, setPendingArtistIds] = useState({});
   const [pendingAlbumIds, setPendingAlbumIds] = useState({});
-  const [sharedPlaylists, setSharedPlaylists] = useState([]);
-  const [playlistModalLoading, setPlaylistModalLoading] = useState(false);
-  const [playlistModalError, setPlaylistModalError] = useState("");
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
 
   const selectableRows = useMemo(() => {
@@ -110,24 +113,10 @@ function GlobalSearch() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    const loadBootstrapStatus = async () => {
-      try {
-        const bootstrap = await getBootstrapStatus();
-        if (!cancelled) {
-          setLastfmConfigured(!!bootstrap.lastfmConfigured);
-        }
-      } catch {
-        if (!cancelled) {
-          setLastfmConfigured(true);
-        }
-      }
-    };
-    loadBootstrapStatus();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (bootstrap) {
+      setLastfmConfigured(!!bootstrap.lastfmConfigured);
+    }
+  }, [bootstrap]);
 
   useEffect(() => {
     setSearchQuery("");
@@ -156,25 +145,17 @@ function GlobalSearch() {
 
     if (isTagShortcut) {
       if (tagPart.length < 2) {
-        if (debounceRef.current) {
-          clearTimeout(debounceRef.current);
-          debounceRef.current = null;
-        }
-        searchGenerationRef.current += 1;
+        cancelSuggest();
         setLoadingSuggestions(false);
         closeAutocomplete();
         return;
       }
 
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      const generation = searchGenerationRef.current + 1;
-      searchGenerationRef.current = generation;
-      debounceRef.current = setTimeout(async () => {
-        debounceRef.current = null;
+      scheduleSuggest(async (isCurrent) => {
         setLoadingSuggestions(true);
         try {
           const data = await getTagSuggestions(tagPart, TAG_SUGGESTIONS_LIMIT);
-          if (generation !== searchGenerationRef.current) return;
+          if (!isCurrent()) return;
           const raw = data.tags || [];
           const seen = new Set();
           const tags = raw.filter((tag) => {
@@ -195,66 +176,52 @@ function GlobalSearch() {
           setSuggestionMode("tag");
           setSuggestionIndex(-1);
         } catch {
-          if (generation === searchGenerationRef.current) {
+          if (isCurrent()) {
             closeAutocomplete();
           }
         } finally {
-          if (generation === searchGenerationRef.current) {
+          if (isCurrent()) {
             setLoadingSuggestions(false);
           }
         }
       }, AUTOCOMPLETE_DEBOUNCE_MS);
 
-      return () => {
-        if (debounceRef.current) clearTimeout(debounceRef.current);
-        searchGenerationRef.current += 1;
-      };
+      return cancelSuggest;
     }
 
     if (trimmed.length < 2) {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
-      searchGenerationRef.current += 1;
+      cancelSuggest();
       setLoadingSuggestions(false);
       closeAutocomplete();
       return;
     }
 
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    const generation = searchGenerationRef.current + 1;
-    searchGenerationRef.current = generation;
-    debounceRef.current = setTimeout(async () => {
-      debounceRef.current = null;
+    scheduleSuggest(async (isCurrent) => {
       setLoadingSuggestions(true);
       try {
         const data = await searchUnified(trimmed, {
           mode: "suggest",
           limit: SUGGEST_LIMIT,
         });
-        if (generation !== searchGenerationRef.current) return;
+        if (!isCurrent()) return;
         setLocalSearchConfigured(!!data?.localSearchConfigured);
         const sections = buildUnifiedSuggestionSections(data);
         setSuggestionRows(flattenSuggestionSections(sections));
         setSuggestionMode("unified");
         setSuggestionIndex(-1);
       } catch {
-        if (generation === searchGenerationRef.current) {
+        if (isCurrent()) {
           closeAutocomplete();
         }
       } finally {
-        if (generation === searchGenerationRef.current) {
+        if (isCurrent()) {
           setLoadingSuggestions(false);
         }
       }
     }, AUTOCOMPLETE_DEBOUNCE_MS);
 
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      searchGenerationRef.current += 1;
-    };
-  }, [searchQuery, closeAutocomplete, lastfmConfigured]);
+    return cancelSuggest;
+  }, [searchQuery, closeAutocomplete, lastfmConfigured, scheduleSuggest, cancelSuggest]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -345,28 +312,6 @@ function GlobalSearch() {
       }),
     );
   }, []);
-
-  const loadSharedPlaylists = useCallback(async () => {
-    setPlaylistModalLoading(true);
-    setPlaylistModalError("");
-    try {
-      const data = await getFlowStatus();
-      const playlists = Array.isArray(data?.sharedPlaylists) ? data.sharedPlaylists : [];
-      setSharedPlaylists(playlists);
-      return playlists;
-    } catch (err) {
-      const message =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        err.message ||
-        "Failed to load playlists";
-      setPlaylistModalError(message);
-      showError(message);
-      return null;
-    } finally {
-      setPlaylistModalLoading(false);
-    }
-  }, [showError]);
 
   const handleArtistAction = useCallback(
     async (artist) => {

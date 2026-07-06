@@ -224,20 +224,6 @@ export async function applyLidarrCommunityGuide(lidarrClient) {
   const desiredPrimaryTypes = ["Album", "EP", "Single"];
   const desiredSecondaryTypes = ["Studio", "Soundtrack", "Remix", "DJ-mix", "Compilation"];
 
-  const normalizeTypeName = (value) =>
-    String(value || "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-
-  const getTypeName = (item) => {
-    if (!item) return "";
-    if (typeof item === "string") return item;
-    if (typeof item.name === "string") return item.name;
-    if (typeof item.value === "string") return item.value;
-    if (typeof item.albumType?.name === "string") return item.albumType.name;
-    return "";
-  };
-
   const applyTypeSelection = (available, desired) => {
     if (!Array.isArray(available) || available.length === 0) {
       return desired.map((name) => ({ name, allowed: true }));

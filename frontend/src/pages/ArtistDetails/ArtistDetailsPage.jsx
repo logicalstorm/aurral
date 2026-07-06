@@ -29,7 +29,6 @@ import {
   getArtistDetails,
   getArtistOverrides,
   getArtistPreview,
-  getFlowStatus,
   getSimilarArtistsForArtist,
   createSharedPlaylist,
   updateArtistOverrides,
@@ -40,6 +39,7 @@ import {
   reserveUniquePlaylistName,
 } from "./utils";
 import { useArtistTasteFeedback } from "../../hooks/useArtistTasteFeedback";
+import { useSharedPlaylists } from "../../hooks/useSharedPlaylists";
 
 const MBID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -67,9 +67,13 @@ function ArtistDetailsPage() {
     musicbrainzId: "",
     deezerArtistId: "",
   });
-  const [sharedPlaylists, setSharedPlaylists] = useState([]);
-  const [playlistModalLoading, setPlaylistModalLoading] = useState(false);
-  const [playlistModalError, setPlaylistModalError] = useState("");
+  const {
+    sharedPlaylists,
+    setSharedPlaylists,
+    playlistsLoading: playlistModalLoading,
+    playlistsError: playlistModalError,
+    loadSharedPlaylists,
+  } = useSharedPlaylists();
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
   const [visibleReleaseGroupCoverIds, setVisibleReleaseGroupCoverIds] = useState([]);
   const [visibleAppearsOnCoverIds, setVisibleAppearsOnCoverIds] = useState([]);
@@ -318,27 +322,6 @@ function ArtistDetailsPage() {
       setCoverImages(cover?.images || []);
     } finally {
       setLoadingCover(false);
-    }
-  };
-
-  const loadSharedPlaylists = async () => {
-    setPlaylistModalLoading(true);
-    try {
-      const data = await getFlowStatus();
-      const playlists = Array.isArray(data?.sharedPlaylists) ? data.sharedPlaylists : [];
-      setSharedPlaylists(playlists);
-      return playlists;
-    } catch (err) {
-      const message =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        err.message ||
-        "Failed to load playlists";
-      setPlaylistModalError(message);
-      showError(message);
-      return null;
-    } finally {
-      setPlaylistModalLoading(false);
     }
   };
 

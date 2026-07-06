@@ -1,9 +1,30 @@
-import { getData, postData, patchData, deleteData, fetchInflightOnce, bootstrapInflight, lidarrCredentialParams } from "../core.js";
+import { getData, postData, patchData, deleteData, fetchInflightOnce, bootstrapInflight, lidarrCredentialParams, AUTH_INVALID_EVENT } from "../core.js";
 
 export const checkHealth = () => getData("/health");
 
-export const getBootstrapStatus = () =>
-  fetchInflightOnce(bootstrapInflight, "bootstrap", () => getData("/health/bootstrap"));
+const BOOTSTRAP_CACHE_TTL_MS = 25_000;
+let bootstrapCache = null;
+
+const invalidateBootstrapCache = () => {
+  bootstrapCache = null;
+};
+
+if (typeof window !== "undefined") {
+  window.addEventListener(AUTH_INVALID_EVENT, invalidateBootstrapCache);
+}
+
+export const getBootstrapStatus = () => {
+  if (bootstrapCache && Date.now() - bootstrapCache.at < BOOTSTRAP_CACHE_TTL_MS) {
+    return Promise.resolve(bootstrapCache.value);
+  }
+  return fetchInflightOnce(bootstrapInflight, "bootstrap", () => {
+    const at = Date.now();
+    return getData("/health/bootstrap").then((value) => {
+      bootstrapCache = { at, value };
+      return value;
+    });
+  });
+};
 
 export const browseFilesystem = (pathValue) =>
   getData("/filesystem/browse", {
@@ -15,10 +36,17 @@ export const ensureFilesystemPath = (pathValue) =>
     path: pathValue,
   });
 
-export const loginApi = (username, password) =>
-  postData("/auth/login", { username, password });
+export const loginApi = async (username, password) => {
+  const result = await postData("/auth/login", { username, password });
+  invalidateBootstrapCache();
+  return result;
+};
 
-export const logoutApi = () => postData("/auth/logout");
+export const logoutApi = async () => {
+  const result = await postData("/auth/logout");
+  invalidateBootstrapCache();
+  return result;
+};
 
 export const getMe = () => getData("/auth/me");
 
@@ -26,8 +54,11 @@ export const getApiKey = () => getData("/auth/api-key");
 
 export const rotateApiKey = () => postData("/auth/api-key/rotate");
 
-export const completeOnboarding = (payload) =>
-  postData("/onboarding/complete", payload);
+export const completeOnboarding = async (payload) => {
+  const result = await postData("/onboarding/complete", payload);
+  invalidateBootstrapCache();
+  return result;
+};
 
 export const testLidarrOnboarding = (url, apiKey) =>
   getData("/onboarding/lidarr/test", {

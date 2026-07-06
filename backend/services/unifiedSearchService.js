@@ -8,11 +8,7 @@ import { searchAlbums, searchArtists } from "./providers/brainzmashProvider.js";
 import { flowPlaylistConfig } from "./weeklyFlow/weeklyFlowPlaylistConfig.js";import { getCachedArtists } from "./libraryManager.js";
 import { getDiscoveryCache } from "./discovery/index.js";
 import { compareSearchResults, getLocalMatchThreshold } from "./searchRanking.js";
-
-function parsePositiveInt(value, fallback) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
+import { parsePositiveInt } from "./searchService.js";
 
 const unifiedSearchCache = createCache(60);
 
@@ -539,11 +535,7 @@ function getSearchContext(user) {
   return context;
 }
 
-export function clearSearchContextCache(userId) {
-  if (userId) {
-    searchContextCache.flushAll();
-    return;
-  }
+export function clearSearchContextCache() {
   searchContextCache.flushAll();
 }
 

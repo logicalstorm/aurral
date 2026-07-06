@@ -12,7 +12,7 @@ import {
   repairReusableTrackLinks,
   reuseTrackForPlaylist,
 } from "./weeklyFlowFileReuse.js";
-import { resolveWeeklyFlowRoot } from "./weeklyFlowPaths.js";
+import { resolvePlaylistRoot as resolveWeeklyFlowRoot } from "../playlistPaths.js";
 import { startSlskdOrchestratorWorker } from "../slskdOrchestratorWorker.js";
 import { enqueuePlaylistRetryJob, withHonkerLock } from "../honkerDb.js";
 import {

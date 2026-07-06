@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { dbOps, userOps } from "../../db/helpers/index.js";
 import {
   lastfmRequest,
@@ -63,7 +64,7 @@ import {
   recordDiscoverPlaylistBuildProgress,
   clearDiscoverPlaylistBuildProgress,
   getDiscoveryPlaylistBuildStatus,
-  discoveryPlaylistBuildTokens,
+  setDiscoveryPlaylistBuildToken,
   getDiscoveryPlaylistBuildKey,
   isGlobalDiscoveryRefreshInProgress,
 } from "./persistence.js";
@@ -413,8 +414,8 @@ const scheduleDiscoverPlaylistBuild = ({
   if (!getLastfmApiKey()) return;
 
   const buildKey = getDiscoveryPlaylistBuildKey(cacheNamespace);
-  const buildToken = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  discoveryPlaylistBuildTokens.set(buildKey, buildToken);
+  const buildToken = randomUUID();
+  setDiscoveryPlaylistBuildToken(buildKey, buildToken);
 
   const payload = {
     cacheNamespace,
@@ -458,11 +459,12 @@ export const updateDiscoveryCache = async (options = {}) => {
     .catch((err) => { logger.warn('discovery', err); });
 
   try {
-    const { libraryManager } = await import("../libraryManager.js");
+    const { libraryManager, getCachedArtists } = await import("../libraryManager.js");
     recordDiscoveryUpdateProgress("loading_sources", "Loading library artists", 12);
+    const cachedArtists = getCachedArtists();
     const [recentLibraryArtists, allLibraryArtistsRaw] = await Promise.all([
       libraryManager.getRecentArtists(40),
-      libraryManager.getAllArtists(),
+      cachedArtists.length > 0 ? cachedArtists : libraryManager.getAllArtists(),
     ]);
     const allLibraryArtists = Array.isArray(allLibraryArtistsRaw)
       ? allLibraryArtistsRaw

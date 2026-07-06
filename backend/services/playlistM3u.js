@@ -6,9 +6,9 @@ import {
 } from "./weeklyFlow/weeklyFlowPlaylistConfig.js";
 import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
 import {
-  remapLegacyWeeklyFlowPath,
-  resolveWeeklyFlowRoot,
-} from "./weeklyFlow/weeklyFlowPaths.js";import { getM3uPathMode, normalizeM3uPathMode, resolveM3uTrackPath } from "./playlistM3uPaths.js";
+  remapLegacyPath as remapLegacyWeeklyFlowPath,
+  resolvePlaylistRoot as resolveWeeklyFlowRoot,
+} from "./playlistPaths.js";import { getM3uPathMode, normalizeM3uPathMode, resolveM3uTrackPath } from "./playlistM3uPaths.js";
 
 export function formatExtinf(durationSeconds, title, artist) {
   const duration = Math.max(0, Math.floor(Number(durationSeconds) || 0));

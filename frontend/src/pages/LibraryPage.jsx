@@ -19,6 +19,11 @@ const getArtistName = (artist) =>
 const getArtistRouteId = (artist) =>
   String(artist?.foreignArtistId || artist?.mbid || artist?.id || "").trim();
 
+const letterKeyFor = (artist) => {
+  const letter = (getArtistName(artist)[0] || "#").toUpperCase();
+  return /^[A-Z]$/.test(letter) ? letter : "#";
+};
+
 const getAddedTime = (artist) => {
   const time = Date.parse(artist?.added || artist?.addedAt || "");
   return Number.isFinite(time) ? time : null;
@@ -163,12 +168,16 @@ function LibraryPage() {
     return sortArtists(filtered, sortKey, sortDirection);
   }, [artists, searchTerm, sortKey, sortDirection]);
 
+  const visibleArtists = useMemo(
+    () => filteredArtists.slice(0, visibleCount),
+    [filteredArtists, visibleCount],
+  );
+
   const groupedArtists = useMemo(() => {
     if (viewMode !== "list") return null;
     const groups = new Map();
-    for (const artist of filteredArtists) {
-      const letter = (getArtistName(artist)[0] || "#").toUpperCase();
-      const key = /^[A-Z]$/.test(letter) ? letter : "#";
+    for (const artist of visibleArtists) {
+      const key = letterKeyFor(artist);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(artist);
     }
@@ -178,11 +187,36 @@ function LibraryPage() {
       if (b === "#") return 1;
       return a.localeCompare(b);
     });
+  }, [visibleArtists, viewMode]);
+
+  const presentLetters = useMemo(() => {
+    if (viewMode !== "list") return null;
+    return new Set(filteredArtists.map(letterKeyFor));
   }, [filteredArtists, viewMode]);
 
-  const scrollToLetter = useCallback((letter) => {
+  const pendingLetterRef = useRef(null);
+
+  const scrollToLetter = useCallback(
+    (letter) => {
+      const target = document.getElementById(`library-group-${letter}`);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
+      const index = filteredArtists.findIndex((artist) => letterKeyFor(artist) === letter);
+      if (index === -1) return;
+      pendingLetterRef.current = letter;
+      setVisibleCount(Math.ceil((index + 1) / PAGE_SIZE) * PAGE_SIZE);
+    },
+    [filteredArtists],
+  );
+
+  useEffect(() => {
+    const letter = pendingLetterRef.current;
+    if (!letter) return;
+    pendingLetterRef.current = null;
     document.getElementById(`library-group-${letter}`)?.scrollIntoView({ behavior: "smooth" });
-  }, []);
+  }, [groupedArtists]);
 
   useEffect(() => {
     if (viewMode !== "list" || !groupedArtists) return;
@@ -386,7 +420,7 @@ function LibraryPage() {
                   <nav className="library-page__alphabet" aria-label="Jump to letter">
                     {ALPHABET.map((letter) => {
                       const isActive = activeLetter === letter;
-                      const isPresent = groupedArtists.some(([l]) => l === letter);
+                      const isPresent = presentLetters?.has(letter) ?? false;
                       return (
                         <button
                           key={letter}
@@ -450,7 +484,7 @@ function LibraryPage() {
                   </div>
                 ))}
                 </>
-              : filteredArtists.slice(0, visibleCount).map((artist) => {
+              : visibleArtists.map((artist) => {
               const artistName = getArtistName(artist) || "Unknown Artist";
               const routeId = getArtistRouteId(artist);
               const monitorOption =

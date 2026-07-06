@@ -4,15 +4,6 @@ import { db } from "../config/db-sqlite.js";
 const RECENT_HISTORY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const CLEANUP_HISTORY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-const FAILURE_STATUSES = new Set([
-  "batch_empty",
-  "enqueue_failed",
-  "missing_file",
-  "transfer_failed",
-  "transfer_timeout",
-  "validation_failed",
-]);
-
 const insertOutcomeStmt = db.prepare(`
   INSERT INTO slskd_transfer_history (
     id,
@@ -257,8 +248,4 @@ export function getSlskdCleanupTargets() {
 export function markSlskdCleanupTargetsCleaned() {
   const cutoff = Date.now() - CLEANUP_HISTORY_WINDOW_MS;
   markCleanedStmt.run(Date.now(), cutoff);
-}
-
-export function isSlskdFailureStatus(status) {
-  return FAILURE_STATUSES.has(normalizeText(status));
 }

@@ -1,13 +1,6 @@
 import { getArtistImage } from "../../services/imageService.js";
 import { logger } from "../../services/logger.js";
 
-export const parseLastFmDate = (dateStr) => {
-  if (!dateStr) return "";
-  const d = new Date(dateStr.split(",")[0].trim());
-  if (isNaN(d.getTime())) return "";
-  return d.toISOString().split("T")[0];
-};
-
 export const sendSSE = (res, event, data) => {
   try {
     res.write(`event: ${event}\n`);

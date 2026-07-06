@@ -7,7 +7,8 @@ import { websocketService } from "../websocketService.js";
 import { withHonkerLock } from "../honkerDb.js";
 import {
   getDiscoveryCache,
-  discoveryPlaylistBuildTokens,
+  getDiscoveryPlaylistBuildToken,
+  clearDiscoveryPlaylistBuildToken,
   getDiscoveryPlaylistBuildKey,
   recordDiscoverPlaylistBuildProgress,
   clearDiscoverPlaylistBuildProgress,
@@ -56,7 +57,7 @@ export const runQueuedDiscoverPlaylistBuild = async (payload = {}) => {
   const cacheNamespace = String(payload?.cacheNamespace || "").trim() || null;
   const buildKey = getDiscoveryPlaylistBuildKey(cacheNamespace);
   const buildToken = String(payload?.buildToken || "").trim();
-  const activeToken = discoveryPlaylistBuildTokens.get(buildKey);
+  const activeToken = getDiscoveryPlaylistBuildToken(buildKey);
   if (activeToken && buildToken && activeToken !== buildToken) {
     return { skipped: true, reason: "stale_build" };
   }
@@ -67,7 +68,7 @@ export const runQueuedDiscoverPlaylistBuild = async (payload = {}) => {
   return withHonkerLock(
     `discovery-playlist-build:${buildKey}`,
     async () => {
-      const lockedToken = discoveryPlaylistBuildTokens.get(buildKey);
+      const lockedToken = getDiscoveryPlaylistBuildToken(buildKey);
       if (lockedToken && buildToken && lockedToken !== buildToken) {
         return { skipped: true, reason: "stale_build" };
       }
@@ -107,7 +108,7 @@ export const runQueuedDiscoverPlaylistBuild = async (payload = {}) => {
           ),
         });
 
-        const currentToken = discoveryPlaylistBuildTokens.get(buildKey);
+        const currentToken = getDiscoveryPlaylistBuildToken(buildKey);
         if (currentToken && buildToken && currentToken !== buildToken) {
           return { skipped: true, reason: "stale_build" };
         }
@@ -133,9 +134,7 @@ export const runQueuedDiscoverPlaylistBuild = async (payload = {}) => {
         logger.info('discovery', `Discover playlists built: ${discoverPlaylists.length} playlists.`);
         return { built: true, playlistCount: discoverPlaylists.length };
       } finally {
-        if (discoveryPlaylistBuildTokens.get(buildKey) === buildToken) {
-          discoveryPlaylistBuildTokens.delete(buildKey);
-        }
+        clearDiscoveryPlaylistBuildToken(buildKey, buildToken);
       }
     },
     {

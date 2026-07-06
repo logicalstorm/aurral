@@ -13,7 +13,7 @@ const getBearerToken = (req) => {
   return authHeader.slice(7).trim();
 };
 
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   try {
     const username = String(req.body?.username || "")
       .trim()
@@ -23,7 +23,7 @@ router.post("/login", (req, res) => {
       return res.status(400).json({ error: "Username and password are required" });
     }
     const user = userOps.getUserByUsername(username);
-    if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       return res.status(401).json({ error: "Invalid username or password" });
     }
     const session = createSession(user.id, req.ip || null, req.headers["user-agent"] || null);

@@ -34,7 +34,7 @@ export default function register(dbOps) {
     if (cacheNamespace) {
       pruneDiscoveryUserCache();
       const cached = discoveryUserCache.get(cacheNamespace);
-      if (cached) return cached;
+      if (cached) return cached.value;
     }
 
     const metadata =
@@ -72,7 +72,7 @@ export default function register(dbOps) {
         globalTopRow?.last_updated ||
         null;
 
-    return {
+    const result = {
       recommendations: recommendations || [],
       globalTop: globalTop || [],
       basedOn: basedOn || [],
@@ -96,7 +96,7 @@ export default function register(dbOps) {
     };
 
     if (cacheNamespace) {
-      discoveryUserCache.set(cacheNamespace, result);
+      discoveryUserCache.set(cacheNamespace, { at: Date.now(), value: result });
     }
 
     return result;

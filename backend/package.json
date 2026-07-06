@@ -34,8 +34,5 @@
     "music-metadata": "^11.12.3",
     "sharp": "^0.34.5",
     "ws": "^8.21.0"
-  },
-  "devDependencies": {
-    "eslint-config-prettier": "^10.1.8"
   }
 }

@@ -14,41 +14,23 @@ import {
 } from "./listenbrainzDiscoveryFallback.js";
 import { getNormalizedText } from "./providers/brainzmashRanking.js";
 import { normalizePercentOfTracks } from "./lidarrAlbumStats.js";
+import {
+  PRIMARY_RELEASE_TYPES as PRIMARY_RELEASE_TYPE_LIST,
+  SECONDARY_RELEASE_TYPES as SECONDARY_RELEASE_TYPE_LIST,
+} from "./apiClients/musicbrainz.js";
 
-function parsePositiveInt(value, fallback) {
+export function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-const PRIMARY_RELEASE_TYPES = new Set(["Album", "EP", "Single"]);
-const SECONDARY_RELEASE_TYPES = new Set([
-  "Live",
-  "Remix",
-  "Compilation",
-  "Demo",
-  "Broadcast",
-  "Soundtrack",
-  "Spokenword",
-  "Other",
-]);
+const PRIMARY_RELEASE_TYPES = new Set(PRIMARY_RELEASE_TYPE_LIST);
+const SECONDARY_RELEASE_TYPES = new Set(SECONDARY_RELEASE_TYPE_LIST);
 const ALL_RELEASE_TYPES = new Set([
   ...PRIMARY_RELEASE_TYPES,
   ...SECONDARY_RELEASE_TYPES,
 ]);
 const albumLibraryLookupCache = createCache(60);
-
-async function fetchLidarrAlbums() {
-  try {
-    const albums = await lidarrClient.request("/album");
-    if (Array.isArray(albums)) {
-      albumLibraryLookupCache.set("lidarrAlbums", albums);
-      return albums;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 async function getAlbumLibraryLookup(albumMbids) {
   const lookup = new Map();
@@ -59,9 +41,12 @@ async function getAlbumLibraryLookup(albumMbids) {
   try {
     let lidarrAlbums = albumLibraryLookupCache.get("lidarrAlbums");
     if (!lidarrAlbums) {
-      lidarrAlbums = await fetchLidarrAlbums();
-      if (!lidarrAlbums) return lookup;
+      lidarrAlbums = await lidarrClient.getAllAlbums();
+      if (lidarrAlbums.length > 0) {
+        albumLibraryLookupCache.set("lidarrAlbums", lidarrAlbums);
+      }
     }
+    if (!lidarrAlbums?.length) return lookup;
     const wanted = new Set(albumMbids);
     for (const album of Array.isArray(lidarrAlbums) ? lidarrAlbums : []) {
       const foreignAlbumId = album?.foreignAlbumId;

@@ -170,7 +170,7 @@ router.get("/", requireAuth, requireAdmin, (req, res) => {
   }
 });
 
-router.post("/", requireAuth, requireAdmin, (req, res) => {
+router.post("/", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { username, password, role = "user", permissions } = req.body;
     const un = String(username || "").trim();
@@ -184,7 +184,7 @@ router.post("/", requireAuth, requireAdmin, (req, res) => {
     if (!passwordValidation.valid) {
       return res.status(400).json({ error: passwordValidation.error });
     }
-    const hash = bcrypt.hashSync(password, 10);
+    const hash = await bcrypt.hash(password, 10);
     const perms = permissions ? { ...userOps.getDefaultPermissions(), ...permissions } : null;
     const created = userOps.createUser(un, hash, role, perms);
     if (!created) {
@@ -198,14 +198,13 @@ router.post("/", requireAuth, requireAdmin, (req, res) => {
       permissions: created.permissions,
       lidarrRootFolderPath: created.lidarrRootFolderPath,
       lidarrQualityProfileId: created.lidarrQualityProfileId,
-      discoverLayout: created.discoverLayout,
     });
   } catch (e) {
     res.status(500).json({ error: "Failed to create user", message: e.message });
   }
 });
 
-router.patch("/:id", requireAuth, (req, res) => {
+router.patch("/:id", requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const isAdmin = req.user.role === "admin";
@@ -245,14 +244,14 @@ router.patch("/:id", requireAuth, (req, res) => {
         if (!currentPassword) {
           return res.status(400).json({ error: "currentPassword required to change password" });
         }
-        if (!bcrypt.compareSync(currentPassword, existing.passwordHash)) {
+        if (!(await bcrypt.compare(currentPassword, existing.passwordHash))) {
           return res.status(401).json({ error: "Current password is incorrect" });
         }
         const passwordValidation = requirePasswordStrength(password);
         if (!passwordValidation.valid) {
           return res.status(400).json({ error: passwordValidation.error });
         }
-        updates.passwordHash = bcrypt.hashSync(password, 10);
+        updates.passwordHash = await bcrypt.hash(password, 10);
       }
       if (Object.keys(updates).length === 0) {
         return res.json({
@@ -265,7 +264,6 @@ router.patch("/:id", requireAuth, (req, res) => {
           lastfmUsername: existing.lastfmUsername,
           lidarrRootFolderPath: existing.lidarrRootFolderPath,
           lidarrQualityProfileId: existing.lidarrQualityProfileId,
-          discoverLayout: existing.discoverLayout,
         });
       }
       const updated = userOps.updateUser(id, updates);
@@ -280,7 +278,7 @@ router.patch("/:id", requireAuth, (req, res) => {
       if (!passwordValidation.valid) {
         return res.status(400).json({ error: passwordValidation.error });
       }
-      updates.passwordHash = bcrypt.hashSync(password, 10);
+      updates.passwordHash = await bcrypt.hash(password, 10);
     }
     if (permissions !== undefined) updates.permissions = permissions;
     if (role !== undefined) updates.role = role;
@@ -299,7 +297,6 @@ router.patch("/:id", requireAuth, (req, res) => {
         lastfmUsername: existing.lastfmUsername,
         lidarrRootFolderPath: existing.lidarrRootFolderPath,
         lidarrQualityProfileId: existing.lidarrQualityProfileId,
-        discoverLayout: existing.discoverLayout,
       });
     }
     const updated = userOps.updateUser(id, updates);
@@ -327,7 +324,6 @@ const sendListenHistorySettings = (req, res) => {
 };
 
 router.get("/me/listening-history", requireAuth, sendListenHistorySettings);
-router.get("/me/lastfm", requireAuth, sendListenHistorySettings);
 
 router.get("/me/lidarr-preferences", requireAuth, async (req, res) => {
   try {
@@ -500,7 +496,7 @@ router.patch("/me/lidarr-preferences", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/me/password", requireAuth, (req, res) => {
+router.post("/me/password", requireAuth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     if (!newPassword) {
@@ -511,10 +507,10 @@ router.post("/me/password", requireAuth, (req, res) => {
       return res.status(400).json({ error: passwordValidation.error });
     }
     const u = userOps.getUserById(req.user.id);
-    if (!u || !bcrypt.compareSync(currentPassword || "", u.passwordHash)) {
+    if (!u || !(await bcrypt.compare(currentPassword || "", u.passwordHash))) {
       return res.status(401).json({ error: "Current password is incorrect" });
     }
-    const hash = bcrypt.hashSync(newPassword, 10);
+    const hash = await bcrypt.hash(newPassword, 10);
     userOps.updateUser(req.user.id, { passwordHash: hash });
     deleteSessionsByUserId(req.user.id);
     res.json({ success: true });

@@ -13,10 +13,10 @@ const isolatedState = await createIsolatedStateDir("weekly-flow-paths");
 applyIsolatedBackendEnv(isolatedState);
 
 const {
-  resolveWeeklyFlowRoot,
-  remapLegacyWeeklyFlowPath,
-  resolveExistingWeeklyFlowTrackPath,
-} = await importFromRepo("backend/services/weeklyFlow/weeklyFlowPaths.js");
+  resolvePlaylistRoot: resolveWeeklyFlowRoot,
+  remapLegacyPath: remapLegacyWeeklyFlowPath,
+  resolveExistingTrackPath: resolveExistingWeeklyFlowTrackPath,
+} = await importFromRepo("backend/services/playlistPaths.js");
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);

@@ -164,6 +164,10 @@ const frontendDist = path.join(__dirname, "..", "frontend", "dist");
 const frontendFallbackRoute = /.*/;
 
 if (fs.existsSync(frontendDist)) {
+  app.use(
+    "/assets",
+    express.static(path.join(frontendDist, "assets"), { maxAge: "1y", immutable: true }),
+  );
   app.use(express.static(frontendDist));
 
   app.get(frontendFallbackRoute, (req, res) => {

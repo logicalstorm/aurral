@@ -47,17 +47,19 @@ import {
 } from "./flows/FlowPlaylistUI";
 import { useFlowMobileLayout } from "./flows/useFlowMobileLayout";
 import {
+  FlowFormFields,
+  ReleaseRadarRecipeFields,
+  EditorialRecipeFields,
+} from "./flows/flowComponents/flowFormComponents.jsx";
+import { FlowTracksPanel } from "./flows/flowComponents/flowTrackComponents.jsx";
+import {
   FlowEmptyState,
   FlowDetailPlaceholder,
   ConfirmDeleteModal,
   ConfirmDisableModal,
   FlowImportReviewModal,
-  FlowFormFields,
-  ReleaseRadarRecipeFields,
-  EditorialRecipeFields,
-  FlowTracksPanel,
   MoreMenu,
-} from "./FlowPageComponents";
+} from "./flows/flowComponents/flowRemainingComponents.jsx";
 import {
   NEW_FLOW_TEMPLATE,
   buildFlowFromForm,

@@ -12,6 +12,7 @@ const cleanOldImagesStmt = db.prepare(
 );
 
 const NOT_FOUND_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const getImagesStmtsByCount = new Map();
 
 const getDeezerMbidCacheStmt = db.prepare(
   "SELECT mbid FROM deezer_mbid_cache WHERE cache_key = ?"
@@ -49,10 +50,14 @@ export default function register(dbOps) {
 
   dbOps.getImages = function (mbids) {
     if (!mbids || !mbids.length) return {};
-    const placeholders = mbids.map(() => "?").join(",");
-    const stmt = db.prepare(
-      `SELECT mbid, image_url, cache_age FROM images_cache WHERE mbid IN (${placeholders})`
-    );
+    let stmt = getImagesStmtsByCount.get(mbids.length);
+    if (!stmt) {
+      const placeholders = mbids.map(() => "?").join(",");
+      stmt = db.prepare(
+        `SELECT mbid, image_url, cache_age FROM images_cache WHERE mbid IN (${placeholders})`
+      );
+      getImagesStmtsByCount.set(mbids.length, stmt);
+    }
     const rows = stmt.all(...mbids);
     const now = Date.now();
     const result = {};

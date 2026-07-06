@@ -8,23 +8,20 @@ import {
   listArtistAlbums,
   resolveAlbumByArtistAndTitle,
 } from "../providers/brainzmashProvider.js";
-import {
-  normalizeReleaseText,
-  scoreTextMatch as scoreTextMatchBase,
-  getYear,
-} from "../providers/brainzmashRanking.js";
+import { scoreTextMatch as scoreTextMatchBase, getYear } from "../providers/brainzmashRanking.js";
 
 const artistAliasCache = new Map();
 const releaseGroupSearchCache = new Map();
 const releaseContextCache = new Map();
 const MATCHER_OPTIONS = { extended: true };
+const MAX_CACHE_ENTRIES = 500;
 
-function normalizeText(value) {
-  return normalizeReleaseText(value, MATCHER_OPTIONS);
-}
-
-function scoreTextMatch(left, right) {
-  return scoreTextMatchBase(left, right, MATCHER_OPTIONS);
+// ponytail: FIFO eviction, not LRU; upgrade to createCache() TTLs if hit rates matter
+function boundedCacheSet(cache, key, value) {
+  if (cache.size >= MAX_CACHE_ENTRIES && !cache.has(key)) {
+    cache.delete(cache.keys().next().value);
+  }
+  cache.set(key, value);
 }
 
 function pickBestCandidate(candidates, expectedTitle, expectedYear = null) {
@@ -40,7 +37,7 @@ function pickBestCandidate(candidates, expectedTitle, expectedYear = null) {
         candidate?.date ||
         candidate?.["release-group"]?.["first-release-date"] ||
         null;
-      const titleScore = scoreTextMatch(title, expectedTitle);
+      const titleScore = scoreTextMatchBase(title, expectedTitle, MATCHER_OPTIONS);
       const yearScore =
         targetYear && getYear(year) === targetYear ? 10 : targetYear && getYear(year) ? -5 : 0;
       return {
@@ -68,9 +65,9 @@ async function fetchArtistAliases(artistMbid) {
       return [];
     }
   })();
-  artistAliasCache.set(key, promise);
+  boundedCacheSet(artistAliasCache, key, promise);
   const aliases = await promise;
-  artistAliasCache.set(key, aliases);
+  boundedCacheSet(artistAliasCache, key, aliases);
   return aliases;
 }
 
@@ -113,9 +110,9 @@ async function resolveReleaseGroup(artistName, artistMbid, albumName, releaseYea
     } catch {}
     return null;
   })();
-  releaseGroupSearchCache.set(cacheKey, promise);
+  boundedCacheSet(releaseGroupSearchCache, cacheKey, promise);
   const resolved = await promise;
-  releaseGroupSearchCache.set(cacheKey, resolved);
+  boundedCacheSet(releaseGroupSearchCache, cacheKey, resolved);
   return resolved;
 }
 
@@ -154,7 +151,7 @@ function matchTrackByTitle(tracks, trackName) {
     [...(Array.isArray(tracks) ? tracks : [])]
       .map((track) => ({
         ...track,
-        _score: scoreTextMatch(track?.title, safeTrackName),
+        _score: scoreTextMatchBase(track?.title, safeTrackName, MATCHER_OPTIONS),
       }))
       .sort((left, right) => right._score - left._score)[0] || null
   );
@@ -201,9 +198,9 @@ async function fetchReleaseContext(albumMbid) {
       return null;
     }
   })();
-  releaseContextCache.set(key, promise);
+  boundedCacheSet(releaseContextCache, key, promise);
   const resolved = await promise;
-  releaseContextCache.set(key, resolved);
+  boundedCacheSet(releaseContextCache, key, resolved);
   return resolved;
 }
 

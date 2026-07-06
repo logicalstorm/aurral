@@ -336,18 +336,16 @@ export const isAuthRequiredByConfig = () => {
   const settings = dbOps.getSettings();
   const onboardingDone = settings.onboardingComplete;
   if (!onboardingDone) return false;
-  const users = userOps.getAllUsers();
   const legacyPasswords = getAuthPassword();
-  return isProxyAuthEnabled() || users.length > 0 || legacyPasswords.length > 0;
+  return isProxyAuthEnabled() || userOps.countUsers() > 0 || legacyPasswords.length > 0;
 };
 
 export const getLocalNetworkBypassConfig = (settings = dbOps.getSettings()) =>
   normalizeLocalNetworkBypassSettings(settings);
 
 export function getSoleAdminUser() {
-  const users = userOps.getAllUsers();
-  if (users.length !== 1) return null;
-  const [user] = users;
+  if (userOps.countUsers() !== 1) return null;
+  const [user] = userOps.getAllUsers();
   if (user?.role !== "admin") return null;
   return user;
 }
@@ -371,9 +369,9 @@ export function getLocalNetworkBypassStatus(req) {
   const settings = dbOps.getSettings();
   const config = getLocalNetworkBypassConfig(settings);
   const onboardingDone = settings?.onboardingComplete === true;
-  const users = userOps.getAllUsers();
-  const soleUser = users.length === 1 ? users[0] : null;
-  const soleAdminUser = getSoleAdminUser();
+  const userCount = userOps.countUsers();
+  const soleUser = userCount === 1 ? userOps.getAllUsers()[0] : null;
+  const soleAdminUser = soleUser?.role === "admin" ? soleUser : null;
   const subnet = inferTrustedLocalSubnet();
 
   let eligible = true;
@@ -382,7 +380,7 @@ export function getLocalNetworkBypassStatus(req) {
   if (!onboardingDone) {
     eligible = false;
     reason = "not_onboarded";
-  } else if (users.length !== 1) {
+  } else if (userCount !== 1) {
     eligible = false;
     reason = "not_single_user";
   } else if (!soleUser || soleUser.role !== "admin") {
@@ -473,8 +471,7 @@ export function resolveProxyUser(req) {
 }
 
 function migrateLegacyAdmin() {
-  const users = userOps.getAllUsers();
-  if (users.length > 0) return;
+  if (userOps.countUsers() > 0) return;
   const settings = dbOps.getSettings();
   const onboardingComplete = settings.onboardingComplete;
   const authUser = settings.integrations?.general?.authUser || "admin";
@@ -489,17 +486,16 @@ function migrateLegacyAdmin() {
 }
 
 function resolveUser(username, password) {
-  const users = userOps.getAllUsers();
-  if (users.length === 0) {
+  if (userOps.countUsers() === 0) {
     migrateLegacyAdmin();
+    if (userOps.countUsers() === 0) return null;
   }
-  const all = userOps.getAllUsers();
-  if (all.length === 0) return null;
   const un = String(username || "")
     .trim()
     .toLowerCase();
   const u = userOps.getUserByUsername(un);
   if (!u || !password) return null;
+  // ponytail: sync compare kept; Basic auth is the rare path and going async cascades through resolveRequestUser/verifyTokenAuth callers in 9 files
   const ok = bcrypt.compareSync(password, u.passwordHash);
   if (!ok) return null;
   const perms = buildPermissions(u.role, u.permissions);

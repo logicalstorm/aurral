@@ -4,7 +4,6 @@ import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
 import {
   addArtistToLibrary,
-  getBootstrapStatus,
   getDiscovery,
   getNearbyShows,
   getRecentlyAdded,
@@ -25,6 +24,9 @@ import {
   readStoredDiscoveryData,
   writeStoredDiscoveryData,
   normalizeDiscoveryData,
+  isStoredDiscoveryFresh,
+  isStoredRecentlyAddedFresh,
+  isStoredRecentReleasesFresh,
   DISCOVER_NEARBY_MODE_KEY,
   DISCOVER_NEARBY_ZIP_KEY,
 } from "./discoverUtils";
@@ -32,7 +34,7 @@ import {
 const getArtistId = (artist) => getArtistRecordId(artist);
 
 export function useDiscoverData() {
-  const { user: authUser, hasPermission } = useAuth();
+  const { user: authUser, hasPermission, bootstrap } = useAuth();
   const { showSuccess, showError } = useToast();
   const initialNearbyLocation = useMemo(() => readStoredNearbyLocation(), []);
 
@@ -305,11 +307,11 @@ export function useDiscoverData() {
 
   useEffect(() => {
     if (!data?.isUpdating && !data?.isEnriching) return;
-    const hasRecentWsUpdate =
-      Date.now() - lastDiscoveryWsMessageAtRef.current < 20000;
-    if (isDiscoverySocketConnected && hasRecentWsUpdate) return;
     const pollDiscovery = () => {
       if (discoveryPollInFlightRef.current) return;
+      const hasRecentWsUpdate =
+        Date.now() - lastDiscoveryWsMessageAtRef.current < 20000;
+      if (isDiscoverySocketConnected && hasRecentWsUpdate) return;
       discoveryPollInFlightRef.current = true;
       fetchAndApplyDiscovery(true)
         .finally(() => {
@@ -351,72 +353,82 @@ export function useDiscoverData() {
   }, [data, data?.isUpdating, data?.stale]);
 
   useEffect(() => {
-    getDiscovery()
-      .then((discoveryData) => {
-        const normalizedData = normalizeDiscoveryData(discoveryData);
-        setData(normalizedData);
-        writeStoredDiscoveryData(normalizedData, authUser?.id);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(
-          err.response?.data?.message || "Failed to load discovery data",
-        );
-        setData({
-          recommendations: [],
-          globalTop: [],
-          basedOn: [],
-          topTags: [],
-          topGenres: [],
-          fallbackGenres: [],
-          provider: "lastfm",
-          capabilities: null,
-          lastUpdated: null,
-          isUpdating: false,
-          stale: false,
-          discoveryMode: "balanced",
-          configured: false,
+    const cachedDiscovery = readStoredDiscoveryData(authUser?.id);
+    const discoveryIsFresh =
+      cachedDiscovery &&
+      isStoredDiscoveryFresh(authUser?.id) &&
+      !cachedDiscovery.isUpdating &&
+      !cachedDiscovery.isEnriching &&
+      !cachedDiscovery.playlistsUpdating &&
+      !cachedDiscovery.stale;
+
+    if (discoveryIsFresh) {
+      setData(cachedDiscovery);
+      setError(null);
+    } else {
+      getDiscovery()
+        .then((discoveryData) => {
+          const normalizedData = normalizeDiscoveryData(discoveryData);
+          setData(normalizedData);
+          writeStoredDiscoveryData(normalizedData, authUser?.id);
+          setError(null);
+        })
+        .catch((err) => {
+          setError(
+            err.response?.data?.message || "Failed to load discovery data",
+          );
+          setData({
+            recommendations: [],
+            globalTop: [],
+            basedOn: [],
+            topTags: [],
+            topGenres: [],
+            fallbackGenres: [],
+            provider: "lastfm",
+            capabilities: null,
+            lastUpdated: null,
+            isUpdating: false,
+            stale: false,
+            discoveryMode: "balanced",
+            configured: false,
+          });
         });
-      });
+    }
 
-    getRecentlyAdded()
-      .then((items) => {
-        setRecentlyAdded(items);
-        writeStoredRecentlyAdded(items, authUser?.id);
-      })
-      .catch((err) => {
-        showError(err?.message || "Failed to load recently added");
-      });
+    const cachedRecentlyAdded = readStoredRecentlyAdded(authUser?.id);
+    if (cachedRecentlyAdded && isStoredRecentlyAddedFresh(authUser?.id)) {
+      setRecentlyAdded(cachedRecentlyAdded);
+    } else {
+      getRecentlyAdded()
+        .then((items) => {
+          setRecentlyAdded(items);
+          writeStoredRecentlyAdded(items, authUser?.id);
+        })
+        .catch((err) => {
+          showError(err?.message || "Failed to load recently added");
+        });
+    }
 
-    getRecentReleases()
-      .then((items) => {
-        setRecentReleases(items);
-        writeStoredRecentReleases(items, authUser?.id);
-      })
-      .catch((err) => {
-        showError(err?.message || "Failed to load recent releases");
-      });
+    const cachedRecentReleases = readStoredRecentReleases(authUser?.id);
+    if (cachedRecentReleases && isStoredRecentReleasesFresh(authUser?.id)) {
+      setRecentReleases(cachedRecentReleases);
+    } else {
+      getRecentReleases()
+        .then((items) => {
+          setRecentReleases(items);
+          writeStoredRecentReleases(items, authUser?.id);
+        })
+        .catch((err) => {
+          showError(err?.message || "Failed to load recent releases");
+        });
+    }
   }, [authUser?.id, showError]);
 
   useEffect(() => {
-    let cancelled = false;
-    const loadBootstrapStatus = async () => {
-      try {
-        const bootstrap = await getBootstrapStatus();
-        if (!cancelled) {
-          setTicketmasterConfigured(!!bootstrap.ticketmasterConfigured);
-        }
-      } catch {
-        if (!cancelled) {
-          setTicketmasterConfigured(true);
-        }
-      }
-    };
-    loadBootstrapStatus();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (bootstrap) {
+      setTicketmasterConfigured(!!bootstrap.ticketmasterConfigured);
+    }
+  }, [bootstrap]);
 
   useEffect(() => {
     try {

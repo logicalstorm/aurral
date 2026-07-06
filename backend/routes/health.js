@@ -128,7 +128,19 @@ async function getDiskSpaceEntry(location, role = null) {
   }
 }
 
+const DISK_SNAPSHOT_TTL_MS = 60_000;
+let diskSnapshotCache = { at: 0, payload: null };
+
 async function buildDiskSpacePayload(settings) {
+  if (diskSnapshotCache.payload && Date.now() - diskSnapshotCache.at < DISK_SNAPSHOT_TTL_MS) {
+    return diskSnapshotCache.payload;
+  }
+  const payload = await computeDiskSpacePayload(settings);
+  diskSnapshotCache = { at: Date.now(), payload };
+  return payload;
+}
+
+async function computeDiskSpacePayload(settings) {
   const dataDir = resolveAurralDataDir();
   const dbPath = resolveDatabasePath();
   const downloadRoot = resolvePlaylistRoot();

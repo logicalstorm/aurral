@@ -1,4 +1,5 @@
 
+import { randomUUID } from "crypto";
 import { dbOps } from "../../db/helpers/index.js";
 
 export const LASTFM_PERIODS = [
@@ -225,8 +226,7 @@ const getDiscoveryCandidateLimit = () =>
     ),
   );
 
-export const createDiscoveryRunId = () =>
-  `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+export const createDiscoveryRunId = () => randomUUID();
 
 export const selectDiscoverySeedSample = (seeds, failureRatio) => {
   const sampleSize = getDiscoveryTagSeedLimit(seeds.length, failureRatio);

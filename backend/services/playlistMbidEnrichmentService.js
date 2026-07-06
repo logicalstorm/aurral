@@ -4,7 +4,9 @@ import {
 } from "./honkerDb.js";
 import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
 import { playlistManager } from "./weeklyFlow/weeklyFlowPlaylistManager.js";
-import { resolveWeeklyFlowTrackContext } from "./weeklyFlow/weeklyFlowTrackResolver.js";import {
+import { resolveWeeklyFlowTrackContext } from "./weeklyFlow/weeklyFlowTrackResolver.js";
+import { mapWithConcurrency } from "./discovery/helpers.js";
+import {
   flowPlaylistConfig,
   normalizeSharedTrack,
   tracksShareMembership,
@@ -208,21 +210,18 @@ export async function enrichSharedPlaylistMbids(
 
   const snapshotJobs = downloadTracker.getByPlaylistType(safePlaylistId);
   const snapshotTracks = Array.isArray(snapshotPlaylist.tracks) ? snapshotPlaylist.tracks : [];
-  const resolutions = [];
-  let tracksExamined = 0;
+  const tracksExamined = snapshotTracks.length;
   let tracksResolved = 0;
 
-  for (const track of snapshotTracks) {
-    tracksExamined += 1;
-    const resolution = await buildResolution(
-      track,
-      snapshotJobs,
-      typeof resolveTrackContext === "function"
-        ? resolveTrackContext
-        : resolveWeeklyFlowTrackContext,
-    );
-    if (!resolution) continue;
-    resolutions.push(resolution);
+  const resolver =
+    typeof resolveTrackContext === "function"
+      ? resolveTrackContext
+      : resolveWeeklyFlowTrackContext;
+  const rawResolutions = await mapWithConcurrency(snapshotTracks, 4, (track) =>
+    buildResolution(track, snapshotJobs, resolver),
+  );
+  const resolutions = rawResolutions.filter(Boolean);
+  for (const resolution of resolutions) {
     if (!isMissingMbid(resolution.resolvedTrack)) {
       tracksResolved += 1;
     }

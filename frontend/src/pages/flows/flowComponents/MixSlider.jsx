@@ -3,6 +3,7 @@ import { Loader2, Search } from "lucide-react";
 import { getTagSuggestions, searchUnified } from "../../../utils/api";
 import { TAG_COLORS } from "../../ArtistDetails/constants";
 import { getTagColor } from "../../ArtistDetails/utils";
+import { useDebouncedTask } from "../../../hooks/useDebouncedTask";
 
 const SOURCE_MIX_COLORS = {
   discover: TAG_COLORS[10],
@@ -401,8 +402,7 @@ export function CommaTokenInput({
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const inputRef = useRef(null);
-  const debounceRef = useRef(null);
-  const suggestionGenerationRef = useRef(0);
+  const { schedule: scheduleSuggest, cancel: cancelSuggest } = useDebouncedTask();
   const { committed, pending } = useMemo(
     () =>
       getCommaTokenInputState(value, {
@@ -444,54 +444,39 @@ export function CommaTokenInput({
 
   useEffect(() => {
     if (!isFocused || typeof fetchSuggestions !== "function") {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
-      suggestionGenerationRef.current += 1;
+      cancelSuggest();
       closeSuggestions();
       return;
     }
 
     const query = pending.trim();
     if (query.length < 2) {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
-      suggestionGenerationRef.current += 1;
+      cancelSuggest();
       closeSuggestions();
       return;
     }
 
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    const generation = suggestionGenerationRef.current + 1;
-    suggestionGenerationRef.current = generation;
-    debounceRef.current = setTimeout(async () => {
-      debounceRef.current = null;
+    scheduleSuggest(async (isCurrent) => {
       setLoadingSuggestions(true);
       try {
         const nextSuggestions = await fetchSuggestions(query, committed);
-        if (generation !== suggestionGenerationRef.current) return;
+        if (!isCurrent()) return;
         setSuggestions(dedupeFocusSuggestions(nextSuggestions, committed));
         setHighlightedIndex(-1);
       } catch {
-        if (generation === suggestionGenerationRef.current) {
+        if (isCurrent()) {
           setSuggestions([]);
           setHighlightedIndex(-1);
         }
       } finally {
-        if (generation === suggestionGenerationRef.current) {
+        if (isCurrent()) {
           setLoadingSuggestions(false);
         }
       }
     }, FLOW_FOCUS_SUGGESTION_DEBOUNCE_MS);
 
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      suggestionGenerationRef.current += 1;
-    };
-  }, [closeSuggestions, committed, fetchSuggestions, isFocused, pending]);
+    return cancelSuggest;
+  }, [closeSuggestions, committed, fetchSuggestions, isFocused, pending, scheduleSuggest, cancelSuggest]);
 
   return (
     <div

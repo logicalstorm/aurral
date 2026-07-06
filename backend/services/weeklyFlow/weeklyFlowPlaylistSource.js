@@ -2,6 +2,7 @@ import { lastfmRequest, getLastfmApiKey } from "../apiClients/index.js";
 import { getDiscoveryCache } from "../discovery/index.js";
 import { normalizeWeightMap } from "./weeklyFlowPlaylistConfig.js";
 import { getDiscoveryFeedback } from "../discovery/feedback.js";
+import { mapWithConcurrency } from "../discovery/helpers.js";
 const LASTFM_HARVEST_CONCURRENCY = 12;
 const ARTIST_TOP_TRACKS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const LIBRARY_OWNERSHIP_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -995,9 +996,11 @@ export class WeeklyFlowPlaylistSource {
     const mbid = String(artistMbid || "").trim();
     const cacheKey = mbid || this._artistKey(name);
     if (!cacheKey) return [];
-    if (this.artistTopTagsCache.has(cacheKey)) {
-      return this.artistTopTagsCache.get(cacheKey);
+    const cachedTags = this.artistTopTagsCache.get(cacheKey);
+    if (cachedTags?.value && cachedTags.expiresAt > Date.now()) {
+      return cachedTags.value;
     }
+    if (cachedTags?.promise) return cachedTags.promise;
     const promise = (async () => {
       if (!getLastfmApiKey()) return [];
       const params = mbid ? { mbid, limit: 12 } : { artist: name, limit: 12 };
@@ -1023,9 +1026,12 @@ export class WeeklyFlowPlaylistSource {
         return [];
       }
     })();
-    this.artistTopTagsCache.set(cacheKey, promise);
+    this.artistTopTagsCache.set(cacheKey, { promise });
     const tags = await promise;
-    this.artistTopTagsCache.set(cacheKey, tags);
+    this.artistTopTagsCache.set(cacheKey, {
+      value: tags,
+      expiresAt: Date.now() + ARTIST_TOP_TRACKS_CACHE_TTL_MS,
+    });
     return tags;
   }
 
@@ -1033,9 +1039,11 @@ export class WeeklyFlowPlaylistSource {
     const normalizedSeeds = this._normalizeFocusEntries(seedArtists);
     const cacheKey = normalizedSeeds.map((entry) => this._artistKey(entry)).join("\u0001");
     if (!cacheKey) return new Map();
-    if (this.relatedArtistMatchCache.has(cacheKey)) {
-      return this.relatedArtistMatchCache.get(cacheKey);
+    const cachedMatch = this.relatedArtistMatchCache.get(cacheKey);
+    if (cachedMatch?.value && cachedMatch.expiresAt > Date.now()) {
+      return cachedMatch.value;
     }
+    if (cachedMatch?.promise) return cachedMatch.promise;
     const promise = (async () => {
       const matchMap = new Map();
       for (const seed of normalizedSeeds) {
@@ -1062,9 +1070,12 @@ export class WeeklyFlowPlaylistSource {
       }
       return matchMap;
     })();
-    this.relatedArtistMatchCache.set(cacheKey, promise);
+    this.relatedArtistMatchCache.set(cacheKey, { promise });
     const resolved = await promise;
-    this.relatedArtistMatchCache.set(cacheKey, resolved);
+    this.relatedArtistMatchCache.set(cacheKey, {
+      value: resolved,
+      expiresAt: Date.now() + ARTIST_TOP_TRACKS_CACHE_TTL_MS,
+    });
     return resolved;
   }
 
@@ -2016,7 +2027,7 @@ export class WeeklyFlowPlaylistSource {
     try {
       const { lidarrClient } = await import("../lidarrClient.js");
       if (lidarrClient.isConfigured()) {
-        const albums = await lidarrClient.request("/album");
+        const albums = await lidarrClient.getAllAlbums();
         for (const album of Array.isArray(albums) ? albums : []) {
           const mbid = String(album?.foreignAlbumId || "")
             .trim()
@@ -2152,29 +2163,29 @@ export class WeeklyFlowPlaylistSource {
     });
     if (albums.length === 0) return [];
 
-    const tracks = [];
     const seenAlbums = new Set();
-
-    for (const album of albums) {
-      if (tracks.length >= limit) break;
+    const uniqueAlbums = albums.filter((album) => {
       const albumKey = String(album.mbid || album.foreignAlbumId || "")
         .trim()
         .toLowerCase();
-      if (albumKey && seenAlbums.has(albumKey)) continue;
+      if (!albumKey) return true;
+      if (seenAlbums.has(albumKey)) return false;
+      seenAlbums.add(albumKey);
+      return true;
+    });
+
+    const resolved = await mapWithConcurrency(uniqueAlbums, 4, (album) => {
       const releaseDate = String(album.releaseDate || "").trim();
-      const trackEntry = await this._pickTrackFromRelease({
+      return this._pickTrackFromRelease({
         artistName: album.artistName,
         albumTitle: album.albumName,
         albumMbid: album.mbid || album.foreignAlbumId || null,
         artistMbid: album.artistMbid || album.foreignArtistId || null,
         releaseYear: releaseDate ? releaseDate.slice(0, 4) : null,
       });
-      if (!trackEntry) continue;
-      if (albumKey) seenAlbums.add(albumKey);
-      tracks.push(trackEntry);
-    }
+    });
 
-    return tracks;
+    return resolved.filter(Boolean).slice(0, limit);
   }
 
   async getEditorialTagTracks(tag, limit) {

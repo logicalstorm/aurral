@@ -45,12 +45,12 @@ export async function getRecentMissingReleases(limit = 24, options = {}) {
   if (!artists && !albums) {
     [artists, albums] = await Promise.all([
       lidarrClient.request("/artist"),
-      lidarrClient.request("/album"),
+      lidarrClient.getAllAlbums(),
     ]);
   } else if (!artists) {
     artists = await lidarrClient.request("/artist");
   } else if (!albums) {
-    albums = await lidarrClient.request("/album");
+    albums = await lidarrClient.getAllAlbums();
   }
 
   if (!Array.isArray(albums) || albums.length === 0) {

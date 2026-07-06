@@ -1,11 +1,8 @@
 import { getLibraryTracks, getReleaseGroupTracks } from "./api";
 import { isDownloadedLibraryAlbum, normalizePreviewTrack, normalizeQueueTrack } from "./audioQueue";
+import { isLibraryPlaybackTrack } from "../pages/ArtistDetails/utils";
 
 const RELEASE_GROUP_FETCH_BATCH = 8;
-
-function isLibraryStreamTrack(track) {
-  return track?.previewProvider === "lidarr" || !!track?.streamPath;
-}
 
 function getRecordingKey(track) {
   const key =
@@ -106,7 +103,7 @@ export async function buildArtistPlaybackQueue({
         localCache[cacheKey] = tracks;
       }
       for (const track of tracks) {
-        if (!track?.preview_url || !isLibraryStreamTrack(track)) continue;
+        if (!track?.preview_url || !isLibraryPlaybackTrack(track)) continue;
         pushTrack(
           normalizeQueueTrack({
             id: track.id ?? track.mbid ?? `lib-${album.id}-${track.trackNumber}`,

@@ -68,18 +68,6 @@ function normalizePlaylistWorkerSettings(raw) {
   };
 }
 
-function normalizeLegacyWeeklyFlowWorkerSettings(raw) {
-  const legacy = readStoredSettingJson("weeklyFlowWorker") || {};
-  const current = normalizePlaylistWorkerSettings(raw);
-  return {
-    ...legacy,
-    concurrency: current.concurrency,
-    retryCycleMinutes: current.retryCycleMinutes,
-    retryPausedPlaylistIds: current.retryPausedPlaylistIds,
-    existingFileMode: current.existingFileMode,
-  };
-}
-
 function getOrCreateEncryptionKey() {
   const row = getSettingStmt.get("_encryptionKey");
   if (row?.value) {
@@ -284,29 +272,19 @@ export const dbOps = {
         );
       }
       if (settings.flows !== undefined) {
-        const serializedFlows = dbHelpers.stringifyJSON(settings.flows);
-        upsertSettingStmt.run("flows", serializedFlows);
-        upsertSettingStmt.run("weeklyFlows", serializedFlows);
+        upsertSettingStmt.run("flows", dbHelpers.stringifyJSON(settings.flows));
       }
       if (settings.sharedPlaylists !== undefined) {
-        const serializedSharedPlaylists = dbHelpers.stringifyJSON(
-          settings.sharedPlaylists,
+        upsertSettingStmt.run(
+          "sharedPlaylists",
+          dbHelpers.stringifyJSON(settings.sharedPlaylists),
         );
-        upsertSettingStmt.run("sharedPlaylists", serializedSharedPlaylists);
-        upsertSettingStmt.run("sharedFlowPlaylists", serializedSharedPlaylists);
       }
       if (settings.playlistWorker !== undefined) {
-        const normalizedPlaylistWorker = normalizePlaylistWorkerSettings(
-          settings.playlistWorker,
-        );
         upsertSettingStmt.run(
           "playlistWorker",
-          dbHelpers.stringifyJSON(normalizedPlaylistWorker),
-        );
-        upsertSettingStmt.run(
-          "weeklyFlowWorker",
           dbHelpers.stringifyJSON(
-            normalizeLegacyWeeklyFlowWorkerSettings(normalizedPlaylistWorker),
+            normalizePlaylistWorkerSettings(settings.playlistWorker),
           ),
         );
       }

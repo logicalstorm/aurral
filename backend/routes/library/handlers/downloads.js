@@ -50,15 +50,19 @@ export const getDownloadStatusesForAlbumIds = async (albumIdArrayInput) => {
         }
       }
 
+      const queueByAlbumId = new Map();
+      for (const q of queueItems) {
+        const qAlbumId = q?.albumId ?? q?.album?.id;
+        if (qAlbumId == null) continue;
+        queueByAlbumId.set(qAlbumId, q);
+      }
+
       for (const albumId of albumIdArray) {
         if (!albumId || albumId === "undefined" || albumId === "null") continue;
         const lidarrAlbumId = parseInt(albumId, 10);
         if (isNaN(lidarrAlbumId)) continue;
 
-        const queueItem = queueItems.find((q) => {
-          const qAlbumId = q?.albumId ?? q?.album?.id;
-          return qAlbumId != null && qAlbumId === lidarrAlbumId;
-        });
+        const queueItem = queueByAlbumId.get(lidarrAlbumId);
 
         if (queueItem) {
           const queueStatus = String(queueItem.status || "").toLowerCase();
@@ -135,7 +139,10 @@ export const getDownloadStatusesForAlbumIds = async (albumIdArrayInput) => {
             : String(data?.statusMessages?.[0] || "").toLowerCase();
           const errorMessage = String(data?.errorMessage || "").toLowerCase();
           const sourceTitle = String(recentHistory?.sourceTitle || "").toLowerCase();
-          const dataString = JSON.stringify(data).toLowerCase();
+          if (historyEntry.dataString === undefined) {
+            historyEntry.dataString = JSON.stringify(data).toLowerCase();
+          }
+          const dataString = historyEntry.dataString;
           const isGrabbed =
             eventType.includes("grabbed") ||
             sourceTitle.includes("grabbed") ||
@@ -202,7 +209,7 @@ const computeAllDownloadStatuses = async () => {
       const [queue, history, albums, commands] = await Promise.all([
         lidarrClient.getQueue(),
         lidarrClient.getHistory(1, 200),
-        lidarrClient.request("/album"),
+        lidarrClient.getAllAlbums(),
         lidarrClient.request("/command").catch(() => []),
       ]);
 
@@ -547,10 +554,6 @@ export function registerDownloads(router) {
       }
     },
   );
-
-  router.post("/downloads/track", async (req, res) => {
-    res.status(400).json({ error: "Track downloads are not supported by Lidarr" });
-  });
 
   router.get("/downloads", async (req, res) => {
     try {

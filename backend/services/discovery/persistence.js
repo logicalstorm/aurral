@@ -225,6 +225,30 @@ export const clearDiscoverPlaylistBuildProgress = () => {
 };
 
 const discoveryPlaylistBuildTokens = new Map();
+const BUILD_TOKEN_TTL_MS = 60 * 60 * 1000;
+
+const pruneDiscoveryPlaylistBuildTokens = () => {
+  const cutoff = Date.now() - BUILD_TOKEN_TTL_MS;
+  for (const [key, entry] of discoveryPlaylistBuildTokens) {
+    if (entry.createdAt < cutoff) discoveryPlaylistBuildTokens.delete(key);
+  }
+};
+
+export const setDiscoveryPlaylistBuildToken = (buildKey, token) => {
+  pruneDiscoveryPlaylistBuildTokens();
+  discoveryPlaylistBuildTokens.set(buildKey, { token, createdAt: Date.now() });
+};
+
+export const getDiscoveryPlaylistBuildToken = (buildKey) => {
+  pruneDiscoveryPlaylistBuildTokens();
+  return discoveryPlaylistBuildTokens.get(buildKey)?.token || null;
+};
+
+export const clearDiscoveryPlaylistBuildToken = (buildKey, token) => {
+  if (discoveryPlaylistBuildTokens.get(buildKey)?.token === token) {
+    discoveryPlaylistBuildTokens.delete(buildKey);
+  }
+};
 
 const getDiscoveryPlaylistBuildKey = (cacheNamespace = null) =>
   String(cacheNamespace || "global");
@@ -232,6 +256,7 @@ const getDiscoveryPlaylistBuildKey = (cacheNamespace = null) =>
 export const getDiscoveryPlaylistBuildStatus = (cacheNamespace = null) => {
   const buildKey = getDiscoveryPlaylistBuildKey(cacheNamespace);
   const lockHeld = isHonkerLockHeld(`discovery-playlist-build:${buildKey}`);
+  pruneDiscoveryPlaylistBuildTokens();
   const tokenPending = discoveryPlaylistBuildTokens.has(buildKey);
   const cacheFlag = !cacheNamespace && !!discoveryCache.playlistsUpdating;
   const updating = cacheFlag || lockHeld || tokenPending;
@@ -245,7 +270,7 @@ export const getDiscoveryPlaylistBuildStatus = (cacheNamespace = null) => {
   };
 };
 
-export { discoveryCache, discoveryPlaylistBuildTokens, getDiscoveryPlaylistBuildKey };
+export { discoveryCache, getDiscoveryPlaylistBuildKey };
 
 export const isGlobalDiscoveryRefreshInProgress = () =>
   isHonkerLockHeld("discovery-global-refresh");

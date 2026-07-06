@@ -2,20 +2,8 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import axios from "../../lib/axiosFetch.js";
-import sharp from "sharp";
+import sharp from "./sharpConfig.js";
 import { resolveAurralDataDir } from "../config/data-dir.js";
-
-sharp.concurrency(
-  Math.min(8, Math.max(1, Math.floor(Number(process.env.AURRAL_SHARP_CONCURRENCY)) || 4)),
-);
-sharp.cache({
-  memory: Math.min(
-    256,
-    Math.max(8, Math.floor(Number(process.env.AURRAL_SHARP_CACHE_MEMORY_MB)) || 32),
-  ),
-  files: 20,
-  items: 100,
-});
 
 const IMAGE_PROXY_ROUTE = "/api/image-proxy";
 const DATA_DIR = resolveAurralDataDir();
@@ -213,7 +201,7 @@ const getCachedEntry = (sourceUrl) => {
   return getCachedEntryFromKey(cacheKey);
 };
 
-const writeCacheEntry = (cacheKey, buffer, contentType, sourceUrl) => {
+const writeCacheEntry = async (cacheKey, buffer, contentType, sourceUrl) => {
   ensureCacheDir();
   const extension = MIME_EXTENSION_MAP[contentType] || "img";
   const { metaPath, baseImagePath } = getCachePaths(cacheKey);
@@ -228,8 +216,8 @@ const writeCacheEntry = (cacheKey, buffer, contentType, sourceUrl) => {
   };
 
   removeStaleCachedFiles(cacheKey, extension);
-  fs.writeFileSync(imagePath, buffer);
-  fs.writeFileSync(metaPath, JSON.stringify(meta));
+  await fs.promises.writeFile(imagePath, buffer);
+  await fs.promises.writeFile(metaPath, JSON.stringify(meta));
   const entry = {
     cacheKey,
     meta,
@@ -333,7 +321,7 @@ const normalizeCachedEntryIfNeeded = async (entry) => {
 
   let buffer = null;
   try {
-    buffer = fs.readFileSync(entry.imagePath);
+    buffer = await fs.promises.readFile(entry.imagePath);
   } catch {
     return entry;
   }

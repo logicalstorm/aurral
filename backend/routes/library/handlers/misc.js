@@ -7,10 +7,6 @@ import { getQualityProfiles } from "../../../services/qualityManager.js";
 import { normalizePercentOfTracks } from "../../../services/lidarrAlbumStats.js";
 
 export function registerMisc(router) {
-  router.post("/scan", async (req, res) => {
-    res.status(400).json({ error: "Scanning is handled by Lidarr" });
-  });
-
   router.get("/rootfolder", async (req, res) => {
     try {
       const { lidarrClient } = await import("../../../services/lidarrClient.js");
@@ -107,13 +103,13 @@ export function registerMisc(router) {
         return res.json({});
       }
 
-      const albums = await lidarrClient.request("/album");
+      const index = await lidarrClient.getAlbumMbidIndex();
       const wanted = new Set(mbids.map((mbid) => String(mbid || "").trim()).filter(Boolean));
       const results = {};
 
-      for (const album of Array.isArray(albums) ? albums : []) {
-        const foreignAlbumId = String(album?.foreignAlbumId || "").trim();
-        if (!foreignAlbumId || !wanted.has(foreignAlbumId)) continue;
+      for (const foreignAlbumId of wanted) {
+        const album = index.get(foreignAlbumId);
+        if (!album) continue;
 
         const percentOfTracks = normalizePercentOfTracks(album?.statistics?.percentOfTracks);
         const sizeOnDisk = Number(album?.statistics?.sizeOnDisk || 0);

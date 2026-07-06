@@ -295,9 +295,6 @@ function ActivityPage() {
 
   useEffect(() => {
     fetchRequests();
-    const initialRefreshTimeout = setTimeout(() => {
-      fetchRequests({ silent: true });
-    }, 2000);
 
     const handleFocus = () => {
       fetchRequests({ silent: true });
@@ -313,7 +310,6 @@ function ActivityPage() {
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
-      clearTimeout(initialRefreshTimeout);
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
@@ -322,6 +318,7 @@ function ActivityPage() {
   useEffect(() => {
     const intervalMs = isListLikeView ? QUEUE_POLL_INTERVAL_MS : HISTORY_POLL_INTERVAL_MS;
     const interval = setInterval(() => {
+      if (document.hidden) return;
       fetchRequests({ silent: true });
     }, intervalMs);
     return () => clearInterval(interval);

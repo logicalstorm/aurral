@@ -28,12 +28,6 @@ export const getMusicbrainzApiBaseUrl = () => {
   return getMetadataBaseUrl();
 };
 
-export const getMusicbrainzApiBaseUrls = () => {
-  return [getMusicbrainzApiBaseUrl()];
-};
-
 export const getMetadataProviderHealthSnapshot = () => {
   return getBrainzmashHealthSnapshot();
 };
-
-export const __setMetadataProviderHealthStateForTests = () => {};

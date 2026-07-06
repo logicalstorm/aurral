@@ -23,7 +23,7 @@ import {
 } from "./playlistM3uPaths.js";
 import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
 import { pathsShareDevice } from "./weeklyFlow/weeklyFlowFileReuse.js";
-import { remapLegacyWeeklyFlowPath, resolveWeeklyFlowRoot } from "./weeklyFlow/weeklyFlowPaths.js";import {
+import { remapLegacyPath as remapLegacyWeeklyFlowPath, resolvePlaylistRoot as resolveWeeklyFlowRoot } from "./playlistPaths.js";import {
   getFilesystemBrowseRoots,
   resolveEnvDownloadFolder,
   getSuggestedDownloadFolderPath,

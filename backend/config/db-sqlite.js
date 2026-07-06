@@ -225,44 +225,8 @@ if (!tableColumns.includes("release_year")) {
 if (!tableColumns.includes("duration_ms")) {
   tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN duration_ms INTEGER");
 }
-if (!tableColumns.includes("track_number")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN track_number INTEGER");
-}
-if (!tableColumns.includes("album_track_count")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_track_count INTEGER");
-}
-if (!tableColumns.includes("album_track_titles")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN album_track_titles TEXT");
-}
-if (!tableColumns.includes("artist_aliases")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN artist_aliases TEXT");
-}
-if (!tableColumns.includes("playlist_type")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN playlist_type TEXT");
-}
 if (!tableColumns.includes("external_path")) {
   tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN external_path TEXT");
-}
-if (!tableColumns.includes("download_source")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN download_source TEXT");
-}
-if (!tableColumns.includes("download_client")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN download_client TEXT");
-}
-if (!tableColumns.includes("download_client_id")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN download_client_id TEXT");
-}
-if (!tableColumns.includes("release_guid")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN release_guid TEXT");
-}
-if (!tableColumns.includes("release_title")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN release_title TEXT");
-}
-if (!tableColumns.includes("indexer_id")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN indexer_id TEXT");
-}
-if (!tableColumns.includes("indexer_name")) {
-  tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN indexer_name TEXT");
 }
 if (!tableColumns.includes("denied_remote_sources")) {
   tryAddColumn("ALTER TABLE playlist_download_jobs ADD COLUMN denied_remote_sources TEXT");

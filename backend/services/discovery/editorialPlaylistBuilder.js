@@ -92,7 +92,7 @@ async function enrichTracksWithAlbums(tracks) {
   return enriched;
 }
 
-export { enrichTrackWithAlbum, enrichTracksWithAlbums };
+export { enrichTracksWithAlbums };
 
 export async function generateEditorialPlaylists() {
   if (!getLastfmApiKey()) {

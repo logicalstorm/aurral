@@ -388,34 +388,10 @@ export class WeeklyFlowDownloadTracker {
   }
 
   _load() {
+    updatePlaylistTypeStmt.run("discover", "discover", "recommended");
     const rows = selectAllStmt.all();
     for (const row of rows) {
       const job = rowToJob(row);
-      if (job.playlistType === "recommended") {
-        job.playlistType = "discover";
-        updateStmt.run(
-          job.status,
-          job.stagingPath,
-          job.finalPath,
-          job.externalPath ?? null,
-          job.error,
-          job.startedAt,
-          job.completedAt,
-          job.albumName ?? null,
-          job.reason ?? null,
-          job.artistMbid ?? null,
-          job.albumMbid ?? null,
-          job.trackMbid ?? null,
-          job.releaseYear ?? null,
-          job.durationMs ?? null,
-          job.trackNumber ?? null,
-          job.albumTrackCount ?? null,
-          stringifyStringListJson(job.albumTrackTitles),
-          stringifyStringListJson(job.artistAliases),
-          job.id,
-        );
-        updatePlaylistTypeStmt.run("discover", "discover", "recommended");
-      }
       if (job.status === "downloading") {
         job.status = "pending";
         job.startedAt = null;

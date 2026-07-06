@@ -8,9 +8,7 @@ import {
   addSharedPlaylistTracks,
   createSharedPlaylist,
   getDiscovery,
-  getBootstrapStatus,
   getArtistCover,
-  getFlowStatus,
   getReleaseGroupCover,
   lookupAlbumsInLibraryBatch,
   lookupArtistsInLibraryBatch,
@@ -36,6 +34,7 @@ import { useToast } from "../contexts/ToastContext";
 import { allReleaseTypes } from "./ArtistDetails/constants";
 import { readReleaseListViewMode, writeReleaseListViewMode } from "./ArtistDetails/utils";
 import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
+import { useSharedPlaylists } from "../hooks/useSharedPlaylists";
 import { getArtistRecordId } from "../utils/artistTaste";
 import {
   PAGE_SIZE,
@@ -81,14 +80,18 @@ function SearchResultsPage() {
   const [albumViewMode, setAlbumViewMode] = useState(() => readReleaseListViewMode());
   const [albumReleaseTab, setAlbumReleaseTab] = useState("all");
   const [dismissedTagBanner, setDismissedTagBanner] = useState(false);
-  const [sharedPlaylists, setSharedPlaylists] = useState([]);
-  const [playlistModalLoading, setPlaylistModalLoading] = useState(false);
-  const [playlistModalError, setPlaylistModalError] = useState("");
+  const {
+    sharedPlaylists,
+    setSharedPlaylists,
+    playlistsLoading: playlistModalLoading,
+    playlistsError: playlistModalError,
+    loadSharedPlaylists,
+  } = useSharedPlaylists();
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
   const sentinelRef = useRef(null);
   const albumOptionsMenuRef = useRef(null);
   const navigate = useDiscoverNavigation();
-  const { hasPermission } = useAuth();
+  const { hasPermission, bootstrap } = useAuth();
   const { showSuccess, showError } = useToast();
 
   const trimmedQuery = useMemo(() => query.trim(), [query]);
@@ -146,16 +149,10 @@ function SearchResultsPage() {
   );
 
   useEffect(() => {
-    const fetchHealth = async () => {
-      try {
-        const bootstrap = await getBootstrapStatus();
-        setLastfmConfigured(!!bootstrap.lastfmConfigured);
-      } catch {
-        setLastfmConfigured(null);
-      }
-    };
-    fetchHealth();
-  }, []);
+    if (bootstrap) {
+      setLastfmConfigured(!!bootstrap.lastfmConfigured);
+    }
+  }, [bootstrap]);
 
   useEffect(() => {
     if (!isAlbumSearch) return;
@@ -874,27 +871,6 @@ function SearchResultsPage() {
     },
     [loadMore],
   );
-
-  const loadSharedPlaylists = useCallback(async () => {
-    setPlaylistModalLoading(true);
-    try {
-      const data = await getFlowStatus();
-      const playlists = Array.isArray(data?.sharedPlaylists) ? data.sharedPlaylists : [];
-      setSharedPlaylists(playlists);
-      return playlists;
-    } catch (err) {
-      const message =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        err.message ||
-        "Failed to load playlists";
-      setPlaylistModalError(message);
-      showError(message);
-      return null;
-    } finally {
-      setPlaylistModalLoading(false);
-    }
-  }, [showError]);
 
   const handleAlbumAction = useCallback(
     async (album) => {

@@ -55,7 +55,7 @@ export const getSessionByToken = (token) => {
     deleteSessionByTokenStmt.run(rawToken);
     return null;
   }
-  const user = userOps.getUserById(row.user_id);
+  const user = userOps.getUserAuthById(row.user_id);
   if (!user) {
     deleteSessionByTokenStmt.run(rawToken);
     return null;

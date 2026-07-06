@@ -16,14 +16,11 @@ applyIsolatedBackendEnv(isolatedState);
 
 const { dbOps } = await importFromRepo("backend/db/helpers/index.js");
 const {
-  __setMetadataProviderHealthStateForTests,
   getMetadataProviderHealthSnapshot,
-  getMusicbrainzApiBaseUrls,
   getMusicbrainzApiBaseUrl,
 } = await importFromRepo("backend/services/apiClients/index.js");
 
 test.after(async () => {
-  __setMetadataProviderHealthStateForTests("musicbrainz");
   await cleanupIsolatedState(isolatedState);
 });
 
@@ -54,7 +51,6 @@ test("backend metadata provider defaults to BrainzMash when unset", () => {
   });
 
   assert.equal(getMusicbrainzApiBaseUrl(), DEFAULT_METADATA_BASE_URL);
-  assert.deepEqual(getMusicbrainzApiBaseUrls(), [DEFAULT_METADATA_BASE_URL]);
 });
 
 test("custom BrainzMash base URL is respected end to end", () => {
@@ -71,18 +67,10 @@ test("custom BrainzMash base URL is respected end to end", () => {
     },
   });
 
-  assert.deepEqual(getMusicbrainzApiBaseUrls(), [
-    "https://brainzmash.example.net",
-  ]);
+  assert.equal(getMusicbrainzApiBaseUrl(), "https://brainzmash.example.net");
 });
 
 test("provider health snapshot reports BrainzMash state", () => {
-  __setMetadataProviderHealthStateForTests("musicbrainz", {
-    failoverActive: true,
-    consecutiveFailures: 3,
-    lastFailureReason: "HTTP 403",
-  });
-
   const snapshot = getMetadataProviderHealthSnapshot();
   assert.ok(snapshot.brainzmash);
   assert.equal(snapshot.brainzmash.configuredProvider, "brainzmash");
