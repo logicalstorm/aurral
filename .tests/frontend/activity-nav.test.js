@@ -1,0 +1,51 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  isActivityQueueItem,
+  matchesActivityView,
+  normalizeActivityView,
+  buildActivityPath,
+} from "../../frontend/src/navigation/activityNavConfig.js";
+
+test("normalizeActivityView falls back to queue", () => {
+  assert.equal(normalizeActivityView(undefined), "queue");
+  assert.equal(normalizeActivityView("bogus"), "queue");
+  assert.equal(normalizeActivityView("review"), "review");
+});
+
+test("buildActivityPath normalizes invalid views", () => {
+  assert.equal(buildActivityPath("history"), "/activity/history");
+  assert.equal(buildActivityPath("nope"), "/activity/queue");
+});
+
+test("blocked items with inQueue only appear in review", () => {
+  const blocked = {
+    status: "blocked",
+    inQueue: true,
+    kind: "track_download",
+  };
+  assert.equal(isActivityQueueItem(blocked), false);
+  assert.equal(matchesActivityView(blocked, "queue"), false);
+  assert.equal(matchesActivityView(blocked, "review"), true);
+  assert.equal(matchesActivityView(blocked, "history"), false);
+});
+
+test("processing items appear in queue not history", () => {
+  const active = { status: "processing", inQueue: true };
+  assert.equal(matchesActivityView(active, "queue"), true);
+  assert.equal(matchesActivityView(active, "review"), false);
+  assert.equal(matchesActivityView(active, "history"), false);
+});
+
+test("completed items appear in history", () => {
+  const done = { status: "completed", inQueue: false };
+  assert.equal(matchesActivityView(done, "queue"), false);
+  assert.equal(matchesActivityView(done, "review"), false);
+  assert.equal(matchesActivityView(done, "history"), true);
+});
+
+test("failed items with canReSearch appear in history", () => {
+  const failed = { status: "failed", inQueue: false, canReSearch: true };
+  assert.equal(matchesActivityView(failed, "history"), true);
+});

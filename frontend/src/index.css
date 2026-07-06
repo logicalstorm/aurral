@@ -6643,6 +6643,19 @@ textarea {
   color: var(--aurral-warning);
 }
 
+.requests-page__badge--review {
+  background: var(--aurral-surface-mid);
+  color: #a78bfa;
+}
+
+.requests-page__inline-error {
+  max-width: 8rem;
+  color: var(--aurral-danger);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
 .requests-page__load-more {
   display: flex;
   justify-content: center;

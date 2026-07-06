@@ -12,6 +12,7 @@ export function normalizeActivityView(view) {
 }
 
 export function isActivityQueueItem(request) {
+  if (request?.status === "blocked") return false;
   return (
     request?.inQueue === true ||
     request?.status === "processing" ||
@@ -22,7 +23,7 @@ export function isActivityQueueItem(request) {
 export function matchesActivityView(request, view) {
   if (view === "queue") return isActivityQueueItem(request);
   if (view === "review") return request?.status === "blocked";
-  return !isActivityQueueItem(request);
+  return !isActivityQueueItem(request) && request?.status !== "blocked";
 }
 
 export function buildActivityPath(view) {

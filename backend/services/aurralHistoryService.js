@@ -733,6 +733,7 @@ export const toHistoryRequestItem = (entry) => {
     kind,
     playlistId: entry.metadata?.playlistId || null,
     jobId: entry.metadata?.jobId || null,
+    artistName: entry.metadata?.artistName || null,
     albumId: entry.metadata?.albumId ? String(entry.metadata.albumId) : null,
     inQueue: entry.status === "processing" || entry.status === "pending" || entry.status === "blocked",
     canReSearch:

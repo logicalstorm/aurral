@@ -332,7 +332,7 @@ function TrackStatusDot({ status }) {
   const normalized = String(status || "").toLowerCase();
   const isLinkable = normalized !== "done";
   if (isLinkable) {
-    const targetPath = normalized === "blocked" ? "/activity/review" : "/downloads";
+    const targetPath = normalized === "blocked" ? "/activity/review" : "/activity/queue";
     return (
       <Link
         to={targetPath}
