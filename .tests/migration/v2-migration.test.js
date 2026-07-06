@@ -125,33 +125,21 @@ test("v2 migration copies existing jobs from weekly_flow_jobs to playlist_downlo
   db.close();
 });
 
-test("v2 migration backward-compat triggers mirror INSERT, UPDATE, and DELETE to weekly_flow_jobs", async () => {
+test("v2 migration drops weekly_flow_jobs after copying data", async () => {
   const { dbPath } = createPreMigrationDb();
   const { applyV2Migration } = await import("../../backend/config/schema-migration-v2.js");
   const db = new Database(dbPath);
 
   applyV2Migration(db, dbHelpers);
 
-  db.prepare(`
-    INSERT INTO playlist_download_jobs (
-      id, artist_name, track_name, playlist_id, playlist_type, status, created_at
+  const legacyTable = db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'weekly_flow_jobs'",
     )
-    VALUES ('job-2', 'Artist 2', 'Track 2', 'discover', 'discover', 'pending', 2)
-  `).run();
-  assert.equal(
-    db.prepare("SELECT track_name FROM weekly_flow_jobs WHERE id = 'job-2'").get()?.track_name,
-    "Track 2",
-  );
-
-  db.prepare("UPDATE playlist_download_jobs SET status = 'done', final_path = '/tmp/track.flac' WHERE id = 'job-2'").run();
-  const mirroredJob = db.prepare("SELECT status, final_path FROM weekly_flow_jobs WHERE id = 'job-2'").get();
-  assert.equal(mirroredJob.status, "done");
-  assert.equal(mirroredJob.final_path, "/tmp/track.flac");
-
-  db.prepare("DELETE FROM playlist_download_jobs WHERE id = 'job-2'").run();
-  assert.equal(
-    db.prepare("SELECT id FROM weekly_flow_jobs WHERE id = 'job-2'").get(),
-    undefined,
+    .get();
+  assert.equal(legacyTable, undefined);
+  assert.ok(
+    db.prepare("SELECT id FROM playlist_download_jobs WHERE id = 'job-1'").get(),
   );
 
   db.close();
