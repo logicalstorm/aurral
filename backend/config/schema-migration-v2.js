@@ -311,13 +311,17 @@ function syncWeeklyFlowJobsToPlaylistDownloads(db) {
   `);
 }
 
-function dropLegacyWeeklyFlowJobs(db) {
+function dropLegacyWeeklyFlowJobTriggers(db) {
   db.exec(`
     DROP TRIGGER IF EXISTS sync_playlist_download_jobs_ai_weekly_flow_jobs;
     DROP TRIGGER IF EXISTS sync_playlist_download_jobs_au_weekly_flow_jobs;
     DROP TRIGGER IF EXISTS sync_playlist_download_jobs_ad_weekly_flow_jobs;
-    DROP TABLE IF EXISTS weekly_flow_jobs;
   `);
+}
+
+function dropLegacyWeeklyFlowJobs(db) {
+  dropLegacyWeeklyFlowJobTriggers(db);
+  db.exec(`DROP TABLE IF EXISTS weekly_flow_jobs;`);
 }
 
 function migrateJobsTable(db) {
@@ -398,6 +402,7 @@ function migrateJobsTable(db) {
     "ALTER TABLE playlist_download_jobs ADD COLUMN indexer_name TEXT",
   );
 
+  dropLegacyWeeklyFlowJobTriggers(db);
   syncWeeklyFlowJobsToPlaylistDownloads(db);
 
   const latestColumns = db

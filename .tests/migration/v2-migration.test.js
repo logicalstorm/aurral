@@ -144,3 +144,66 @@ test("v2 migration drops weekly_flow_jobs after copying data", async () => {
 
   db.close();
 });
+
+test("v2 migration survives legacy playlist_download_jobs sync triggers", async () => {
+  const { dbPath } = createPreMigrationDb();
+  const db = new Database(dbPath);
+  db.exec(`
+    CREATE TABLE playlist_download_jobs (
+      id TEXT PRIMARY KEY,
+      artist_name TEXT NOT NULL,
+      track_name TEXT NOT NULL,
+      album_name TEXT,
+      reason TEXT,
+      artist_mbid TEXT,
+      album_mbid TEXT,
+      track_mbid TEXT,
+      release_year TEXT,
+      duration_ms INTEGER,
+      track_number INTEGER,
+      album_track_count INTEGER,
+      album_track_titles TEXT,
+      artist_aliases TEXT,
+      playlist_id TEXT NOT NULL,
+      playlist_type TEXT,
+      status TEXT NOT NULL,
+      staging_path TEXT,
+      final_path TEXT,
+      error TEXT,
+      started_at INTEGER,
+      completed_at INTEGER,
+      created_at INTEGER NOT NULL
+    );
+    INSERT INTO playlist_download_jobs (
+      id, artist_name, track_name, playlist_id, playlist_type, status, created_at
+    )
+    VALUES ('job-1', 'Artist', 'Track', 'discover', 'discover', 'pending', 1);
+    CREATE TRIGGER sync_playlist_download_jobs_ai_weekly_flow_jobs
+    AFTER INSERT ON playlist_download_jobs
+    BEGIN
+      INSERT INTO weekly_flow_jobs (
+        id, artist_name, track_name, playlist_type, status, created_at
+      )
+      VALUES (
+        NEW.id, NEW.artist_name, NEW.track_name, NEW.playlist_type, NEW.status, NEW.created_at
+      );
+    END;
+  `);
+  db.close();
+
+  const { applyV2Migration } = await import("../../backend/config/schema-migration-v2.js");
+  const reopened = new Database(dbPath);
+  assert.doesNotThrow(() => applyV2Migration(reopened, dbHelpers));
+  assert.equal(
+    reopened
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'weekly_flow_jobs'",
+      )
+      .get(),
+    undefined,
+  );
+  assert.ok(
+    reopened.prepare("SELECT id FROM playlist_download_jobs WHERE id = 'job-1'").get(),
+  );
+  reopened.close();
+});
