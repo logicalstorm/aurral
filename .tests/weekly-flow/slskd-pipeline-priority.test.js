@@ -18,15 +18,13 @@ test.after(async () => {
   await cleanupIsolatedState(isolatedState);
 });
 
-test("getPipelinePriorityForPhase ranks active transfer phases above search", () => {
+test("slskd pipeline queue prioritizes active transfer phases over search", () => {
   assert.ok(getPipelinePriorityForPhase("search") < getPipelinePriorityForPhase("poll"));
   assert.ok(getPipelinePriorityForPhase("poll") < getPipelinePriorityForPhase("download"));
   assert.ok(
     getPipelinePriorityForPhase("download") < getPipelinePriorityForPhase("finalize"),
   );
-});
 
-test("pipeline queue claims higher-priority phases before pending searches", () => {
   const queue = getPipelineQueue();
   enqueuePipelineJob({ phase: "search", jobId: "a" });
   enqueuePipelineJob({ phase: "search", jobId: "b" });

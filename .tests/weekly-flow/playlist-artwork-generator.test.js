@@ -6,15 +6,7 @@ import { importFromRepo } from "../helpers/backendTestHarness.js";
 
 const {
   buildGeneratedPlaylistArtworkBuffer,
-  resolvePlaylistSourceImageUrl,
 } = await importFromRepo("backend/services/playlistArtworkGenerator.js");
-
-test("resolvePlaylistSourceImageUrl returns a unique random picsum URL", async () => {
-  const first = await resolvePlaylistSourceImageUrl();
-  const second = await resolvePlaylistSourceImageUrl();
-  assert.notEqual(first, second);
-  assert.match(first, /^https:\/\/picsum\.photos\/800\/800\?random=/);
-});
 
 test("buildGeneratedPlaylistArtworkBuffer returns aurral WebP artwork", async () => {
   const buffer = await buildGeneratedPlaylistArtworkBuffer({

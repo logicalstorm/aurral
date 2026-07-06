@@ -22,61 +22,36 @@ test.after(async () => {
   await cleanupIsolatedState(isolatedState);
 });
 
-test("resolveWeeklyFlowRoot prefers PLAYLIST_FOLDER", () => {
+test("resolveWeeklyFlowRoot follows env precedence and relative download paths", () => {
   const previousPlaylist = process.env.PLAYLIST_FOLDER;
   const previousWeekly = process.env.WEEKLY_FLOW_FOLDER;
   const previousDownload = process.env.DOWNLOAD_FOLDER;
+
   process.env.PLAYLIST_FOLDER = "/custom/playlist";
   process.env.WEEKLY_FLOW_FOLDER = "/custom/flow";
   process.env.DOWNLOAD_FOLDER = "/data/downloads/tmp";
-  try {
-    assert.equal(resolveWeeklyFlowRoot(), "/custom/playlist");
-  } finally {
-    if (previousPlaylist === undefined) delete process.env.PLAYLIST_FOLDER;
-    else process.env.PLAYLIST_FOLDER = previousPlaylist;
-    if (previousWeekly === undefined) delete process.env.WEEKLY_FLOW_FOLDER;
-    else process.env.WEEKLY_FLOW_FOLDER = previousWeekly;
-    if (previousDownload === undefined) delete process.env.DOWNLOAD_FOLDER;
-    else process.env.DOWNLOAD_FOLDER = previousDownload;
-  }
-});
+  assert.equal(resolveWeeklyFlowRoot(), "/custom/playlist");
 
-test("resolveWeeklyFlowRoot prefers WEEKLY_FLOW_FOLDER when PLAYLIST_FOLDER is unset", () => {
-  const previousPlaylist = process.env.PLAYLIST_FOLDER;
-  const previousWeekly = process.env.WEEKLY_FLOW_FOLDER;
-  const previousDownload = process.env.DOWNLOAD_FOLDER;
   delete process.env.PLAYLIST_FOLDER;
   process.env.WEEKLY_FLOW_FOLDER = "/custom/flow";
-  process.env.DOWNLOAD_FOLDER = "/data/downloads/tmp";
-  try {
-    assert.equal(resolveWeeklyFlowRoot(), "/custom/flow");
-  } finally {
-    if (previousPlaylist === undefined) delete process.env.PLAYLIST_FOLDER;
-    else process.env.PLAYLIST_FOLDER = previousPlaylist;
-    if (previousWeekly === undefined) delete process.env.WEEKLY_FLOW_FOLDER;
-    else process.env.WEEKLY_FLOW_FOLDER = previousWeekly;
-    if (previousDownload === undefined) delete process.env.DOWNLOAD_FOLDER;
-    else process.env.DOWNLOAD_FOLDER = previousDownload;
-  }
-});
+  assert.equal(resolveWeeklyFlowRoot(), "/custom/flow");
 
-test("resolveWeeklyFlowRoot uses absolute DOWNLOAD_FOLDER when higher-priority folders are unset", () => {
-  const previousPlaylist = process.env.PLAYLIST_FOLDER;
-  const previousWeekly = process.env.WEEKLY_FLOW_FOLDER;
-  const previousDownload = process.env.DOWNLOAD_FOLDER;
-  delete process.env.PLAYLIST_FOLDER;
   delete process.env.WEEKLY_FLOW_FOLDER;
   process.env.DOWNLOAD_FOLDER = "/data/downloads/tmp";
-  try {
-    assert.equal(resolveWeeklyFlowRoot(), "/data/downloads/tmp");
-  } finally {
-    if (previousPlaylist === undefined) delete process.env.PLAYLIST_FOLDER;
-    else process.env.PLAYLIST_FOLDER = previousPlaylist;
-    if (previousWeekly === undefined) delete process.env.WEEKLY_FLOW_FOLDER;
-    else process.env.WEEKLY_FLOW_FOLDER = previousWeekly;
-    if (previousDownload === undefined) delete process.env.DOWNLOAD_FOLDER;
-    else process.env.DOWNLOAD_FOLDER = previousDownload;
-  }
+  assert.equal(resolveWeeklyFlowRoot(), "/data/downloads/tmp");
+
+  process.env.DOWNLOAD_FOLDER = "./data/downloads";
+  assert.equal(
+    resolveWeeklyFlowRoot(),
+    path.resolve(process.cwd(), "./data/downloads"),
+  );
+
+  if (previousPlaylist === undefined) delete process.env.PLAYLIST_FOLDER;
+  else process.env.PLAYLIST_FOLDER = previousPlaylist;
+  if (previousWeekly === undefined) delete process.env.WEEKLY_FLOW_FOLDER;
+  else process.env.WEEKLY_FLOW_FOLDER = previousWeekly;
+  if (previousDownload === undefined) delete process.env.DOWNLOAD_FOLDER;
+  else process.env.DOWNLOAD_FOLDER = previousDownload;
 });
 
 test("remapLegacyWeeklyFlowPath rewrites legacy roots and library dir names", () => {
@@ -86,9 +61,7 @@ test("remapLegacyWeeklyFlowPath rewrites legacy roots and library dir names", ()
     remapLegacyWeeklyFlowPath(legacyPath, "/data/downloads/tmp"),
     "/data/downloads/tmp/aurral-weekly-flow/playlist-id/Artist/Album/Track.flac",
   );
-});
 
-test("remapLegacyWeeklyFlowPath rewrites previous v2 library dir names", () => {
   const previousV2Path =
     "/data/downloads/tmp/aurral-playlists/playlist-id/Artist/Album/Track.flac";
   assert.equal(
@@ -132,26 +105,4 @@ test("resolveExistingWeeklyFlowTrackPath resolves absolute paths outside playlis
   const resolved = await resolveExistingWeeklyFlowTrackPath(lidarrPath, root);
   assert.equal(resolved?.path, lidarrPath);
   assert.equal(resolved?.migratedFrom, null);
-});
-
-test("resolveWeeklyFlowRoot resolves relative DOWNLOAD_FOLDER from cwd", () => {
-  const previousPlaylist = process.env.PLAYLIST_FOLDER;
-  const previousWeekly = process.env.WEEKLY_FLOW_FOLDER;
-  const previousDownload = process.env.DOWNLOAD_FOLDER;
-  delete process.env.PLAYLIST_FOLDER;
-  delete process.env.WEEKLY_FLOW_FOLDER;
-  process.env.DOWNLOAD_FOLDER = "./data/downloads";
-  try {
-    assert.equal(
-      resolveWeeklyFlowRoot(),
-      path.resolve(process.cwd(), "./data/downloads"),
-    );
-  } finally {
-    if (previousPlaylist === undefined) delete process.env.PLAYLIST_FOLDER;
-    else process.env.PLAYLIST_FOLDER = previousPlaylist;
-    if (previousWeekly === undefined) delete process.env.WEEKLY_FLOW_FOLDER;
-    else process.env.WEEKLY_FLOW_FOLDER = previousWeekly;
-    if (previousDownload === undefined) delete process.env.DOWNLOAD_FOLDER;
-    else process.env.DOWNLOAD_FOLDER = previousDownload;
-  }
 });

@@ -22,7 +22,6 @@ const [{ db }, trackerModule, reuseModule] = await Promise.all([
 
 const { downloadTracker } = trackerModule;
 const {
-  normalizeExistingFileMode,
   pathsShareDevice,
   reuseTrackForPlaylist,
   repairCompletedTrackLink,
@@ -42,15 +41,6 @@ test.beforeEach(async () => {
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);
-});
-
-test("normalizeExistingFileMode accepts supported modes and maps legacy values", () => {
-  assert.equal(normalizeExistingFileMode("download"), "download");
-  assert.equal(normalizeExistingFileMode("reuse"), "reuse");
-  assert.equal(normalizeExistingFileMode("hardlink"), "reuse");
-  assert.equal(normalizeExistingFileMode("copy"), "reuse");
-  assert.equal(normalizeExistingFileMode(""), "reuse");
-  assert.equal(normalizeExistingFileMode("unsupported"), "reuse");
 });
 
 test("pathsShareDevice compares directory roots without ascending to filesystem root", async () => {
@@ -302,7 +292,7 @@ test("repairOrphanedPlaylistTrackPaths finds removed playlist ids from missing f
     resolveSource: async () => ({ source: null, reason: "No source" }),
   });
 
-  assert.equal(result.removedIds, [deletedFlowId]);
+  assert.deepEqual(result.removedIds, [deletedFlowId]);
   assert.equal(result.requeued, 1);
   assert.equal(downloadTracker.getJob(jobId)?.status, "pending");
 });

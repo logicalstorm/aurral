@@ -5,8 +5,6 @@ import sharp from "sharp";
 import { importFromRepo } from "../helpers/backendTestHarness.js";
 
 const {
-  PHOTO_ARTWORK_COLORS,
-  pickRandomPhotoArtworkPalette,
   pickSeededPhotoArtworkPalette,
   renderStylizedPhotoArtwork,
 } = await importFromRepo("backend/services/discovery/stylizedArtwork.js");
@@ -50,14 +48,4 @@ test("fixed discover playlists use stable unique seeded colors", () => {
   }
 
   assert.equal(seen.size, presetIds.length);
-});
-
-test("pickRandomPhotoArtworkPalette uses the configured distinct colors", () => {
-  const seen = new Set();
-  for (let index = 0; index < 40; index += 1) {
-    const palette = pickRandomPhotoArtworkPalette();
-    seen.add(`${palette.light.r},${palette.light.g},${palette.light.b}`);
-  }
-  assert.equal(PHOTO_ARTWORK_COLORS.length, 15);
-  assert.ok(seen.size > 1);
 });

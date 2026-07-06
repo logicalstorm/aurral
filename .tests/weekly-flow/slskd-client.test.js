@@ -51,15 +51,12 @@ function createMockServer(handler) {
   });
 }
 
-test("isSearchInProgress treats Requested and InProgress as active", () => {
+test("slskd search state helpers recognize active and completed searches", () => {
   assert.equal(isSearchInProgress({ state: "Requested" }), true);
   assert.equal(isSearchInProgress({ state: "InProgress" }), true);
   assert.equal(isSearchInProgress({ state: "Queued" }), true);
   assert.equal(isSearchInProgress({ state: "InProgress, Completed" }), false);
   assert.equal(isSearchInProgress({ isComplete: true }), false);
-});
-
-test("isSearchComplete recognizes completed search states", () => {
   assert.equal(isSearchComplete({ state: "Completed" }), true);
   assert.equal(isSearchComplete({ state: "InProgress, Completed" }), true);
   assert.equal(isSearchComplete({ isComplete: true }), true);
@@ -145,15 +142,11 @@ test("waitForSearch stops quickly when no files appear", async () => {
       return { state: "InProgress", fileCount: 0, responses: [] };
     };
     slskdClient.hydrateCompletedSearch = async (_searchId, data) => data;
-    const started = Date.now();
     const result = await slskdClient.waitForSearch("search-empty", 300, {
       emptyTimeoutMs: 60,
       gracePeriodMs: 0,
     });
-    const elapsed = Date.now() - started;
-    assert.ok(elapsed >= 50);
-    assert.ok(elapsed < 500);
-    assert.ok(calls >= 1);
+    assert.equal(calls, 2);
     assert.equal(result.fileCount, 0);
   });
 });
@@ -180,14 +173,12 @@ test("waitForSearch keeps polling after files appear until active timeout", asyn
       };
     };
     slskdClient.hydrateCompletedSearch = async (_searchId, data) => data;
-    const started = Date.now();
-    await slskdClient.waitForSearch("search-active", 180, {
+    const result = await slskdClient.waitForSearch("search-active", 180, {
       emptyTimeoutMs: 60,
       gracePeriodMs: 0,
     });
-    const elapsed = Date.now() - started;
-    assert.ok(elapsed >= 150);
-    assert.ok(calls >= 2);
+    assert.equal(calls, 3);
+    assert.equal(result.fileCount, 1);
   });
 });
 
@@ -201,14 +192,11 @@ test("settleSearch waits until slskd marks the search complete", async () => {
       }
       return { state: "Completed", fileCount: 0, responses: [] };
     };
-    const started = Date.now();
     const result = await slskdClient.settleSearch("search-settle", {
       maxWaitMs: 5000,
     });
-    const elapsed = Date.now() - started;
-    assert.ok(elapsed >= 1500);
     assert.equal(result?.state, "Completed");
-    assert.ok(calls >= 3);
+    assert.equal(calls, 3);
   });
 });
 

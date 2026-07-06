@@ -3,13 +3,10 @@ import assert from "node:assert/strict";
 
 import { isVerboseConsoleEnabled } from "../../backend/config/constants.js";
 
-test("verbose console mode accepts explicit truthy environment values", () => {
+test("verbose console mode respects explicit environment values", () => {
   assert.equal(isVerboseConsoleEnabled({ AURRAL_VERBOSE_LOGS: "true" }), true);
   assert.equal(isVerboseConsoleEnabled({ AURRAL_VERBOSE_LOGS: "1" }), true);
   assert.equal(isVerboseConsoleEnabled({ AURRAL_VERBOSE_LOGS: "debug" }), true);
-});
-
-test("verbose console mode stays off unless explicitly enabled", () => {
   assert.equal(isVerboseConsoleEnabled({}), false);
   assert.equal(isVerboseConsoleEnabled({ AURRAL_VERBOSE_LOGS: "false" }), false);
   assert.equal(isVerboseConsoleEnabled({ AURRAL_VERBOSE_LOGS: "0" }), false);

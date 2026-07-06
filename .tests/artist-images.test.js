@@ -41,20 +41,16 @@ test("artist image selection keeps source order when image types tie", () => {
   assert.equal(selected?.url, "https://example.test/first.jpg");
 });
 
-test("album image selection prefers cover art over disc art", () => {
+test("album image selection prefers cover art and accepts BrainzMash casing", () => {
   const selected = selectBestAlbumImage([
     { kind: "Disc", url: "https://example.test/disc.png" },
     { kind: "Cover", url: "https://example.test/cover.jpg" },
   ]);
-
   assert.equal(selected?.url, "https://example.test/cover.jpg");
-});
 
-test("album image selection accepts raw BrainzMash image casing", () => {
-  const selected = selectBestAlbumImage([
+  const brainzmash = selectBestAlbumImage([
     { CoverType: "Disc", Url: "https://example.test/disc.png" },
     { CoverType: "Cover", Url: "https://example.test/cover.jpg" },
   ]);
-
-  assert.equal(selected?.Url, "https://example.test/cover.jpg");
+  assert.equal(brainzmash?.Url, "https://example.test/cover.jpg");
 });

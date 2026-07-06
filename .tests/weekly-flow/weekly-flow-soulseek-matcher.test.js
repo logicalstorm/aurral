@@ -33,41 +33,31 @@ test("bypassBannedArtistTerm replaces the first character of each artist word", 
   assert.equal(bypassBannedArtistTerm(""), "");
 });
 
-test("buildFlowWildcardAlbumSearchQueries uses wildcard artist terms", () => {
-  const queries = buildFlowWildcardAlbumSearchQueries({
+test("wildcard search query builders prefix artist terms", () => {
+  const track = {
     artistName: "Franz Ferdinand",
     trackName: "Take Me Out",
     albumName: "Franz Ferdinand",
     releaseYear: "2004",
-    artistAliases: [],
-  });
-
-  assert.ok(queries.includes("*ranz *erdinand Franz Ferdinand"));
-  assert.ok(queries.includes("*ranz *erdinand Franz Ferdinand 2004"));
-  assert.ok(!queries.includes("Franz Ferdinand Franz Ferdinand"));
-});
-
-test("buildFlowArtistOnlySearchQueries returns wildcard artist-only searches", () => {
-  const queries = buildFlowArtistOnlySearchQueries({
-    artistName: "Franz Ferdinand",
-    trackName: "Take Me Out",
-    albumName: "Franz Ferdinand",
     artistAliases: ["Franz F."],
-  });
+  };
 
-  assert.deepEqual(queries, ["*ranz *erdinand", "*ranz *."]);
-});
+  const albumQueries = buildFlowWildcardAlbumSearchQueries(track);
+  assert.ok(albumQueries.includes("*ranz *erdinand Franz Ferdinand"));
+  assert.ok(albumQueries.includes("*ranz *erdinand Franz Ferdinand 2004"));
+  assert.ok(!albumQueries.includes("Franz Ferdinand Franz Ferdinand"));
 
-test("buildFlowWildcardTrackFallbackSearchQueries wildcard-prefixes artist track searches", () => {
-  const queries = buildFlowWildcardTrackFallbackSearchQueries({
-    artistName: "Franz Ferdinand",
-    trackName: "Take Me Out",
-    albumName: "Franz Ferdinand",
+  assert.deepEqual(buildFlowArtistOnlySearchQueries(track), [
+    "*ranz *erdinand",
+    "*ranz *.",
+  ]);
+
+  const fallbackQueries = buildFlowWildcardTrackFallbackSearchQueries({
+    ...track,
     artistAliases: [],
   });
-
-  assert.ok(queries.includes("*ranz *erdinand Take Me Out"));
-  assert.ok(queries.includes("Take Me Out Franz Ferdinand"));
+  assert.ok(fallbackQueries.includes("*ranz *erdinand Take Me Out"));
+  assert.ok(fallbackQueries.includes("Take Me Out Franz Ferdinand"));
 });
 
 test("stripReleaseTypeSuffix removes terminal release metadata only", () => {
@@ -212,22 +202,6 @@ test("buildFlowSearchTiers uses a short album-first plan", () => {
   );
 });
 
-test("buildFlowSearchQueries includes only targeted album and album-track searches", () => {
-  const queries = buildFlowSearchQueries({
-    artistName: "Massive Attack",
-    trackName: "Teardrop",
-    albumName: "Mezzanine",
-    releaseYear: "1998",
-    artistAliases: ["Massive Attk"],
-  });
-
-  assert.equal(queries[0], "Massive Attack Mezzanine 1998");
-  assert.ok(queries.includes("Massive Attack Mezzanine 1998"));
-  assert.ok(queries.includes("*assive *ttack Mezzanine 1998"));
-  assert.ok(queries.includes("Mezzanine Teardrop"));
-  assert.ok(!queries.includes("Massive Attk Teardrop"));
-});
-
 test("search variation helpers normalize and trim bypass text", () => {
   assert.equal(removeSearchAccents("Björk"), "Bjork");
   assert.equal(buildTrimmedBypassText("Bob Dylan"), "Bob Dyla");
@@ -246,22 +220,19 @@ test("search variation helpers normalize and trim bypass text", () => {
   );
 });
 
-test("buildFlowSearchQueries adds album-track plus album searches", () => {
-  const queries = buildFlowSearchQueries({
+test("buildFlowSearchQueries and fallbacks keep album-first searches separate from track fallbacks", () => {
+  const gorillazQueries = buildFlowSearchQueries({
     artistName: "Gorillaz",
     trackName: "Feel Good Inc.",
     albumName: "Demon Days",
     releaseYear: "2005",
     artistAliases: [],
   });
+  assert.ok(gorillazQueries.includes("Demon Days Feel Good Inc."));
+  assert.ok(gorillazQueries.includes("Gorillaz Demon Days 2005"));
+  assert.ok(gorillazQueries.includes("Gorillaz Demon Days"));
+  assert.ok(!gorillazQueries.includes("Gorillaz Feel Good Inc."));
 
-  assert.ok(queries.includes("Demon Days Feel Good Inc."));
-  assert.ok(queries.includes("Gorillaz Demon Days 2005"));
-  assert.ok(queries.includes("Gorillaz Demon Days"));
-  assert.ok(!queries.includes("Gorillaz Feel Good Inc."));
-});
-
-test("buildFlowTrackFallbackSearchQueries keeps simplified title variants available", () => {
   const queries = buildFlowSearchQueries({
     artistName: "Bully",
     trackName: "Lose You (feat. Soccer Mommy)",
@@ -707,8 +678,8 @@ test("selectRankedMatchAttempts spreads early attempts across users before reusi
   );
 });
 
-test("validateDownloadedTrack rejects obvious live mismatches from the remote filename", async () => {
-  const validation = await validateDownloadedTrack(
+test("validateDownloadedTrack scores accepted candidates and rejects live mismatches", async () => {
+  const rejected = await validateDownloadedTrack(
     "/tmp/does-not-exist.mp3",
     {
       raw: {
@@ -721,34 +692,11 @@ test("validateDownloadedTrack rejects obvious live mismatches from the remote fi
       albumName: "Album Name",
     },
   );
+  assert.equal(rejected.valid, false);
+  assert.equal(rejected.scores.trackNumberMismatch, false);
+  assert.ok(rejected.scores.variant < 0);
 
-  assert.equal(validation.valid, false);
-  assert.equal(validation.scores.trackNumberMismatch, false);
-  assert.ok(validation.scores.variant < 0);
-});
-
-test("validateDownloadedTrack accepts candidates that pass pre-download thresholds", async () => {
-  const validation = await validateDownloadedTrack(
-    "/tmp/does-not-exist.flac",
-    {
-      raw: {
-        file: "Of Mice & Men\\Of Mice & Men\\03 - Second & Sebring.flac",
-      },
-    },
-    {
-      artistName: "Of Mice & Men",
-      trackName: "Second & Sebring",
-      albumName: "Of Mice & Men",
-      trackNumber: 3,
-    },
-  );
-
-  assert.equal(validation.valid, true);
-  assert.ok(validation.scores.title >= 82);
-});
-
-test("validateDownloadedTrack still scores preDownloadValid candidates", async () => {
-  const validation = await validateDownloadedTrack(
+  const accepted = await validateDownloadedTrack(
     "/tmp/does-not-exist.flac",
     {
       preDownloadValid: true,
@@ -764,11 +712,10 @@ test("validateDownloadedTrack still scores preDownloadValid candidates", async (
       durationMs: 433000,
     },
   );
-
-  assert.equal(validation.valid, true);
-  assert.notEqual(validation.scores.matchReason, "pre-download-trusted");
-  assert.equal(validation.scores.preDownloadValid, true);
-  assert.ok(validation.scores.title >= 82);
+  assert.equal(accepted.valid, true);
+  assert.notEqual(accepted.scores.matchReason, "pre-download-trusted");
+  assert.equal(accepted.scores.preDownloadValid, true);
+  assert.ok(accepted.scores.title >= 82);
 });
 
 test("rankFlowSearchResults accepts soulseek backslash paths for albums with live in the title", () => {

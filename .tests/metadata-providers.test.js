@@ -24,7 +24,7 @@ test.after(async () => {
   await cleanupIsolatedState(isolatedState);
 });
 
-test("default settings use BrainzMash metadata", () => {
+test("default settings and unset backend config use BrainzMash metadata", () => {
   assert.equal(
     defaultData.settings.integrations.metadata.provider,
     "brainzmash",
@@ -34,9 +34,7 @@ test("default settings use BrainzMash metadata", () => {
     DEFAULT_METADATA_BASE_URL,
   );
   assert.equal(getMusicbrainzApiBaseUrl(), DEFAULT_METADATA_BASE_URL);
-});
 
-test("backend metadata provider defaults to BrainzMash when unset", () => {
   dbOps.updateSettings({
     ...dbOps.getSettings(),
     integrations: {
