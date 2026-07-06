@@ -9,6 +9,7 @@ import { resolveWeeklyFlowTrackContext } from "./weeklyFlowTrackResolver.js";
 import { getListenHistoryProfile } from "../listeningHistory.js";
 import {
   normalizeExistingFileMode,
+  repairOrphanedPlaylistTrackPaths,
   repairReusableTrackLinks,
   reuseTrackForPlaylist,
 } from "./weeklyFlowFileReuse.js";
@@ -672,6 +673,12 @@ export class WeeklyFlowWorker {
     }
     this.lastReuseRepairAt = now;
     const { existingFileMode } = this.getWorkerSettings();
+    if (force) {
+      await repairOrphanedPlaylistTrackPaths({
+        existingFileMode,
+        weeklyFlowRoot: this.weeklyFlowRoot,
+      });
+    }
     if (normalizeExistingFileMode(existingFileMode) === "download") {
       return null;
     }

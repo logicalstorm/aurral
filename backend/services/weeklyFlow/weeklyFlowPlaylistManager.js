@@ -603,6 +603,13 @@ export class WeeklyFlowPlaylistManager {
         );
       }
       downloadTracker.clearByPlaylistType(playlistType);
+      const { repairJobsUnderRemovedPlaylistDir } = await import("./weeklyFlowFileReuse.js");
+      const { weeklyFlowWorker } = await import("./weeklyFlowWorker.js");
+      const { existingFileMode } = weeklyFlowWorker.getWorkerSettings();
+      await repairJobsUnderRemovedPlaylistDir(playlistType, {
+        existingFileMode,
+        weeklyFlowRoot: this.weeklyFlowRoot,
+      });
     }
   }
 

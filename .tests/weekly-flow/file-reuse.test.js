@@ -26,6 +26,8 @@ const {
   pathsShareDevice,
   reuseTrackForPlaylist,
   repairCompletedTrackLink,
+  repairJobsUnderRemovedPlaylistDir,
+  repairOrphanedPlaylistTrackPaths,
   repairReusableTrackLinks,
   restoreCompletedTrack,
 } = reuseModule;
@@ -245,6 +247,64 @@ test("restoreCompletedTrack requeues done jobs when the file and reuse source ar
   assert.equal(result.action, "requeued");
   assert.equal(downloadTracker.getJob(jobId)?.status, "pending");
   assert.equal(downloadTracker.getJob(jobId)?.finalPath, null);
+});
+
+test("repairJobsUnderRemovedPlaylistDir requeues other playlists that reused a deleted flow folder", async () => {
+  const track = {
+    artistName: "Metric",
+    trackName: "Victim of Luck",
+    albumName: "Romanticize the Dive",
+  };
+  const deletedFlowId = "deleted-flow";
+  const reusedPath = path.join(
+    weeklyFlowRoot,
+    "aurral-weekly-flow",
+    deletedFlowId,
+    "Metric",
+    "Romanticize the Dive",
+    "Victim of Luck.mp3",
+  );
+  const jobId = downloadTracker.addJob(track, "active-playlist");
+  downloadTracker.setDone(jobId, reusedPath, track.albumName);
+
+  const result = await repairJobsUnderRemovedPlaylistDir(deletedFlowId, {
+    existingFileMode: "reuse",
+    weeklyFlowRoot,
+    resolveSource: async () => ({ source: null, reason: "No source" }),
+  });
+
+  assert.equal(result.requeued, 1);
+  assert.equal(downloadTracker.getJob(jobId)?.status, "pending");
+  assert.equal(downloadTracker.getJob(jobId)?.finalPath, null);
+});
+
+test("repairOrphanedPlaylistTrackPaths finds removed playlist ids from missing file paths", async () => {
+  const track = {
+    artistName: "Metric",
+    trackName: "Victim of Luck",
+    albumName: "Romanticize the Dive",
+  };
+  const deletedFlowId = "56cb64eb-e545-4760-bb29-58ad2ccaccea";
+  const reusedPath = path.join(
+    weeklyFlowRoot,
+    "aurral-weekly-flow",
+    deletedFlowId,
+    "Metric",
+    "Romanticize the Dive",
+    "Victim of Luck.mp3",
+  );
+  const jobId = downloadTracker.addJob(track, "active-playlist");
+  downloadTracker.setDone(jobId, reusedPath, track.albumName);
+
+  const result = await repairOrphanedPlaylistTrackPaths({
+    existingFileMode: "reuse",
+    weeklyFlowRoot,
+    resolveSource: async () => ({ source: null, reason: "No source" }),
+  });
+
+  assert.equal(result.removedIds, [deletedFlowId]);
+  assert.equal(result.requeued, 1);
+  assert.equal(downloadTracker.getJob(jobId)?.status, "pending");
 });
 
 test("repairReusableTrackLinks requeues missing completed tracks and refreshes playlists", async () => {

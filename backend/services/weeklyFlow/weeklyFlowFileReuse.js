@@ -4,6 +4,8 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { buildSharedTrackIdentity } from "./weeklyFlowPlaylistConfig.js";
 import { libraryManager } from "../libraryManager.js";
 import {
+  isPathInsideRoot,
+  PLAYLIST_LIBRARY_DIR,
   remapLegacyPath as remapLegacyWeeklyFlowPath,
   resolvePlaylistRoot as resolveWeeklyFlowRoot,
 } from "../playlistPaths.js";
@@ -352,6 +354,104 @@ export async function repairCompletedTrackLink(job, options = {}) {
     repaired: false,
     reason: result.reason || "No reusable source found",
   };
+}
+
+export async function repairJobsUnderRemovedPlaylistDir(playlistType, options = {}) {
+  const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || resolveWeeklyFlowRoot());
+  const safePlaylistType = String(playlistType || "").trim();
+  if (!safePlaylistType) {
+    return { repaired: 0, requeued: 0, skipped: 0, changedPlaylistTypes: [] };
+  }
+
+  const removedDir = path.resolve(weeklyFlowRoot, PLAYLIST_LIBRARY_DIR, safePlaylistType);
+  let repaired = 0;
+  let requeued = 0;
+  let skipped = 0;
+  const changedPlaylistTypes = new Set();
+
+  for (const job of downloadTracker.getAll()) {
+    if (job?.status !== "done" || typeof job?.finalPath !== "string") continue;
+    const finalPath = path.resolve(remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot));
+    if (!isPathInsideRoot(finalPath, removedDir)) continue;
+    if (await fileExists(finalPath)) continue;
+
+    const result = await restoreCompletedTrack(job, {
+      ...options,
+      weeklyFlowRoot,
+      requeueOnMissing: true,
+    });
+    if (result.action === "repaired") {
+      repaired += 1;
+      changedPlaylistTypes.add(String(job.playlistType || ""));
+    } else if (result.action === "requeued") {
+      requeued += 1;
+      changedPlaylistTypes.add(String(job.playlistType || ""));
+    } else if (downloadTracker.setPending(job.id, "Source playlist was removed")) {
+      requeued += 1;
+      changedPlaylistTypes.add(String(job.playlistType || ""));
+    } else {
+      skipped += 1;
+    }
+  }
+
+  if (repaired > 0 || requeued > 0) {
+    const { playlistManager } = await import("./weeklyFlowPlaylistManager.js");
+    for (const changedPlaylistType of changedPlaylistTypes) {
+      await playlistManager.refreshPlaylist(changedPlaylistType).catch(() => {});
+    }
+    playlistManager.scheduleScanLibrary();
+  }
+
+  return {
+    repaired,
+    requeued,
+    skipped,
+    changedPlaylistTypes: [...changedPlaylistTypes],
+  };
+}
+
+function parsePlaylistIdFromFinalPath(finalPath, weeklyFlowRoot) {
+  const resolved = path.resolve(remapLegacyWeeklyFlowPath(finalPath, weeklyFlowRoot));
+  const marker = `${path.sep}${PLAYLIST_LIBRARY_DIR}${path.sep}`;
+  const markerIndex = resolved.indexOf(marker);
+  if (markerIndex < 0) return null;
+  const remainder = resolved.slice(markerIndex + marker.length);
+  const playlistId = remainder.split(path.sep)[0];
+  return playlistId || null;
+}
+
+export async function repairOrphanedPlaylistTrackPaths(options = {}) {
+  const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || resolveWeeklyFlowRoot());
+  const { flowPlaylistConfig } = await import("./weeklyFlowPlaylistConfig.js");
+  const activeIds = new Set([
+    ...flowPlaylistConfig.getFlows().map((flow) => String(flow.id)),
+    ...flowPlaylistConfig.getSharedPlaylists().map((playlist) => String(playlist.id)),
+  ]);
+
+  const removedIds = new Set();
+  for (const job of downloadTracker.getAll()) {
+    if (job?.status !== "done" || typeof job?.finalPath !== "string") continue;
+    const finalPath = path.resolve(remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot));
+    if (await fileExists(finalPath)) continue;
+    const ownerId = parsePlaylistIdFromFinalPath(finalPath, weeklyFlowRoot);
+    if (!ownerId || activeIds.has(ownerId)) continue;
+    removedIds.add(ownerId);
+  }
+
+  let repaired = 0;
+  let requeued = 0;
+  let skipped = 0;
+  for (const removedId of removedIds) {
+    const result = await repairJobsUnderRemovedPlaylistDir(removedId, {
+      ...options,
+      weeklyFlowRoot,
+    });
+    repaired += result.repaired;
+    requeued += result.requeued;
+    skipped += result.skipped;
+  }
+
+  return { repaired, requeued, skipped, removedIds: [...removedIds] };
 }
 
 const REUSE_REPAIR_BATCH_SIZE = 50;
