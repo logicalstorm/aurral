@@ -55,10 +55,15 @@ export function getTrackSavingKey(track) {
   );
 }
 
+import { isAlbumCompleteInLibrary } from "./albumAddAction";
+
 export function isSuggestionInLibrary(item) {
   if (!item) return false;
+  if (item.type === "album") {
+    return isAlbumCompleteInLibrary({ status: item.status });
+  }
   if (item.inLibrary) return true;
-  return item.type === "album" && item.status === "available";
+  return false;
 }
 
 export function buildTrackPlaylistPayload(track) {

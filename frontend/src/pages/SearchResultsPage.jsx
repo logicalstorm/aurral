@@ -36,7 +36,7 @@ import { readReleaseListViewMode, writeReleaseListViewMode } from "./ArtistDetai
 import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
 import { useSharedPlaylists } from "../hooks/useSharedPlaylists";
 import { getArtistRecordId } from "../utils/artistTaste";
-import { getAlbumAddButtonLabel, shouldTriggerAlbumSearch } from "../utils/albumAddAction";
+import { getAlbumAddButtonLabel, isAlbumCompleteInLibrary, shouldTriggerAlbumSearch } from "../utils/albumAddAction";
 import {
   PAGE_SIZE,
   DEFAULT_ALBUM_SORT,
@@ -1030,13 +1030,13 @@ function SearchResultsPage() {
   const isSearchResultInLibrary = useCallback(
     (item) => {
       if (!item) return false;
+      if (item.type === "album") {
+        return isAlbumCompleteInLibrary({ status: item.status });
+      }
       if (item.inLibrary) return true;
       if (item.type === "artist") {
         const artistId = getArtistRecordId(item);
         return artistId ? !!libraryLookup[artistId] : false;
-      }
-      if (item.type === "album") {
-        return item.status === "available";
       }
       return false;
     },

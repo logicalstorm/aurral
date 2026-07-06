@@ -5,6 +5,7 @@ import SearchLibraryCheck from "./SearchLibraryCheck";
 import { useImageGradientColors } from "../utils/imageColors";
 import { navigateFromSearchResult } from "../utils/searchNavigation";
 import { getArtistRecordId } from "../utils/artistTaste";
+import { isAlbumCompleteInLibrary } from "../utils/albumAddAction";
 
 function getPrimaryLabel(item) {
   if (item?.type === "artist") return item.name || "";
@@ -118,7 +119,10 @@ function SearchTopArtistCard({
   if (!result || !label) return null;
   const isArtist = result.type === "artist";
   const artistId = isArtist ? getArtistRecordId(result) : null;
-  const isInLibrary = result.inLibrary || (isArtist && artistId ? libraryLookup[artistId] : false);
+  const isInLibrary =
+    result.type === "album"
+      ? isAlbumCompleteInLibrary({ status: result.status })
+      : result.inLibrary || (isArtist && artistId ? libraryLookup[artistId] : false);
   const metaLabel = getMetaLabel(result);
   const previewLabel = getPreviewLabel(result, previewTracks);
   const navigateToResult = () => navigateFromSearchResult(navigate, result, { query });
