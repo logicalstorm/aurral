@@ -1,7 +1,18 @@
 import { dbOps } from "../db/helpers/index.js";
-import { warmImageProxy } from "./imageProxyService.js";
+import {
+  isImageProxyLocalUrl,
+  resolveImageProxyLocalUrl,
+  warmImageProxy,
+} from "./imageProxyService.js";
 import { getArtistByMbid, listArtistAlbums, searchArtists } from "./providers/brainzmashProvider.js";
 import { fetchReleaseGroupCoverUrl, LEGACY_COVER_HOST_PATTERN } from "./releaseGroupCoverService.js";
+
+const MAX_NEGATIVE_CACHE = 1000;
+const MAX_PENDING_REQUESTS = 100;
+const NEGATIVE_CACHE_TTL_MS = 60 * 60 * 1000;
+const RELEASE_GROUP_CONCURRENCY = 4;
+const negativeImageCache = new Map();
+const pendingImageRequests = new Map();
 
 const ARTIST_IMAGE_KIND_RANK = {
   poster: 0,
@@ -164,6 +175,10 @@ const getCachedUrl = (cacheKey) => {
     return undefined;
   }
   if (cached?.imageUrl && cached.imageUrl !== "NOT_FOUND") {
+    if (isImageProxyLocalUrl(cached.imageUrl) && !resolveImageProxyLocalUrl(cached.imageUrl)) {
+      dbOps.deleteImage(cacheKey);
+      return undefined;
+    }
     return cached.imageUrl;
   }
   if (cached?.imageUrl === "NOT_FOUND") {
@@ -265,7 +280,9 @@ export const getArtistImage = async (
     cachedImage &&
     cachedImage.imageUrl &&
     cachedImage.imageUrl !== "NOT_FOUND" &&
-    !LEGACY_COVER_HOST_PATTERN.test(cachedImage.imageUrl)
+    !LEGACY_COVER_HOST_PATTERN.test(cachedImage.imageUrl) &&
+    (!isImageProxyLocalUrl(cachedImage.imageUrl) ||
+      resolveImageProxyLocalUrl(cachedImage.imageUrl))
   ) {
     const override = dbOps.getArtistOverride(mbid);
     const resolvedMbid = override?.musicbrainzId || mbid;

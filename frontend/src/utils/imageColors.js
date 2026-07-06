@@ -11,6 +11,8 @@ const SAMPLE_SIZE = 128;
 const MAX_COLORS = 128;
 const gradientCache = new Map();
 
+import { normalizeMediaUrl } from "./normalizeMediaUrl.js";
+
 function isExternalUrl(url) {
   try {
     const parsed = new URL(url, window.location.origin);
@@ -21,10 +23,13 @@ function isExternalUrl(url) {
 }
 
 function proxyImageUrl(src) {
-  if (!src || src.startsWith("data:") || src.startsWith("blob:")) return src;
-  if (src.startsWith("/api/image-proxy")) return src;
-  if (!isExternalUrl(src)) return src;
-  return `/api/image-proxy?src=${encodeURIComponent(src)}`;
+  const normalized = normalizeMediaUrl(src);
+  if (!normalized || normalized.startsWith("data:") || normalized.startsWith("blob:")) {
+    return normalized;
+  }
+  if (normalized.startsWith("/api/image-proxy")) return normalized;
+  if (!isExternalUrl(normalized)) return normalized;
+  return `/api/image-proxy?src=${encodeURIComponent(normalized)}`;
 }
 
 function loadImage(src) {

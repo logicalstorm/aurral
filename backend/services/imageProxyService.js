@@ -166,10 +166,57 @@ const removeStaleCachedFiles = (cacheKey, keepExtension) => {
 
 const buildLocalImageUrl = (cacheKey, extension) => `${IMAGE_PROXY_ROUTE}/${cacheKey}.${extension}`;
 
+const awaitCacheIndexReady = async () => {
+  initializeCacheIndex();
+  if (indexBuildPromise) {
+    await indexBuildPromise;
+  }
+};
+
+const readCacheEntryFromDisk = (cacheKey) => {
+  if (!cacheKey) return null;
+  const existing = cacheEntriesByKey.get(cacheKey);
+  if (existing?.imagePath && fs.existsSync(existing.imagePath)) {
+    return existing;
+  }
+  const metaPath = path.join(IMAGE_PROXY_DIR, `${cacheKey}.json`);
+  const meta = _readCacheMetadata(metaPath);
+  if (!meta?.extension) return null;
+  const imagePath = path.join(IMAGE_PROXY_DIR, `${cacheKey}.${meta.extension}`);
+  if (!fs.existsSync(imagePath)) return null;
+  const sourceUrl = normalizeKnownImageUrl(meta.sourceUrl);
+  const entry = {
+    cacheKey,
+    meta,
+    imagePath,
+    localUrl: buildLocalImageUrl(cacheKey, meta.extension),
+    isFresh:
+      Number(meta.fetchedAt || 0) > 0 &&
+      Date.now() - Number(meta.fetchedAt || 0) < CACHE_TTL_MS,
+  };
+  cacheEntriesByKey.set(cacheKey, entry);
+  if (sourceUrl) {
+    cacheKeysBySourceUrl.set(sourceUrl, cacheKey);
+  }
+  return entry;
+};
+
 const getCacheKeyFromLocalUrl = (value) => {
   const normalized = String(value || "").trim();
-  const match = normalized.match(/\/api\/image-proxy\/([a-f0-9]{64})(?:\.[a-z0-9]+)?$/i);
-  return match?.[1]?.toLowerCase() || null;
+  const proxyMatch = normalized.match(/\/api\/image-proxy\/([a-f0-9]{64})(?:\.[a-z0-9]+)?$/i);
+  if (proxyMatch?.[1]) return proxyMatch[1].toLowerCase();
+  const bareMatch = normalized.match(/^([a-f0-9]{64})\.[a-z0-9]+$/i);
+  return bareMatch?.[1]?.toLowerCase() || null;
+};
+
+export const isImageProxyLocalUrl = (value) =>
+  getCacheKeyFromLocalUrl(value) != null;
+
+export const resolveImageProxyLocalUrl = (value) => {
+  const cacheKey = getCacheKeyFromLocalUrl(value);
+  if (!cacheKey) return null;
+  const entry = readCacheEntryFromDisk(cacheKey);
+  return entry?.localUrl || null;
 };
 
 const _readCacheMetadata = (metaPath) => {
@@ -183,7 +230,7 @@ const _readCacheMetadata = (metaPath) => {
 const getCachedEntryFromKey = (cacheKey) => {
   if (!cacheKey) return null;
   initializeCacheIndex();
-  const entry = cacheEntriesByKey.get(cacheKey);
+  const entry = cacheEntriesByKey.get(cacheKey) || readCacheEntryFromDisk(cacheKey);
   if (!entry) return null;
   return {
     ...entry,
@@ -387,9 +434,17 @@ const fetchAndCacheImage = async (sourceUrl) => {
 export const warmImageProxy = async (sourceUrl) => {
   const cacheKeyFromLocalUrl = getCacheKeyFromLocalUrl(sourceUrl);
   if (cacheKeyFromLocalUrl) {
+    await awaitCacheIndexReady();
     const cachedLocal = getCachedEntryFromKey(cacheKeyFromLocalUrl);
-    if (cachedLocal?.imagePath) {
+    if (cachedLocal?.imagePath && fs.existsSync(cachedLocal.imagePath)) {
       return normalizeCachedEntryIfNeeded(cachedLocal);
+    }
+    const meta = _readCacheMetadata(
+      path.join(IMAGE_PROXY_DIR, `${cacheKeyFromLocalUrl}.json`),
+    );
+    const sourceFromMeta = normalizeKnownImageUrl(meta?.sourceUrl) || meta?.sourceUrl || null;
+    if (sourceFromMeta) {
+      return fetchAndCacheImage(sourceFromMeta);
     }
     throw new Error("Missing local cached image");
   }
@@ -423,6 +478,17 @@ export const buildImageProxyUrl = (sourceUrl) => {
     normalized.startsWith("data:") ||
     normalized.startsWith("blob:")
   ) {
+    const localKey = getCacheKeyFromLocalUrl(normalized);
+    if (localKey) {
+      const entry = readCacheEntryFromDisk(localKey);
+      if (entry?.localUrl) return entry.localUrl;
+      const meta = _readCacheMetadata(path.join(IMAGE_PROXY_DIR, `${localKey}.json`));
+      const sourceFromMeta = normalizeKnownImageUrl(meta?.sourceUrl) || meta?.sourceUrl || null;
+      if (sourceFromMeta) {
+        return `${IMAGE_PROXY_ROUTE}?src=${encodeURIComponent(sourceFromMeta)}`;
+      }
+      return null;
+    }
     return normalized;
   }
 
@@ -436,7 +502,7 @@ export const buildImageProxyUrl = (sourceUrl) => {
   }
 
   const cached = getCachedEntry(normalized);
-  if (cached?.localUrl) return cached.localUrl;
+  if (cached?.localUrl && fs.existsSync(cached.imagePath)) return cached.localUrl;
   return `${IMAGE_PROXY_ROUTE}?src=${encodeURIComponent(normalized)}`;
 };
 
@@ -448,8 +514,18 @@ export const handleImageProxyRequest = async (req, res) => {
   }
 
   const cacheKey = match[1].toLowerCase();
-  const cached = getCachedEntryFromKey(cacheKey);
-  if (!cached?.imagePath) {
+  await awaitCacheIndexReady();
+  let cached = getCachedEntryFromKey(cacheKey);
+  if (!cached?.imagePath || !fs.existsSync(cached.imagePath)) {
+    const meta = _readCacheMetadata(path.join(IMAGE_PROXY_DIR, `${cacheKey}.json`));
+    const sourceFromMeta = normalizeKnownImageUrl(meta?.sourceUrl) || meta?.sourceUrl || null;
+    if (sourceFromMeta) {
+      try {
+        cached = await fetchAndCacheImage(sourceFromMeta);
+      } catch {}
+    }
+  }
+  if (!cached?.imagePath || !fs.existsSync(cached.imagePath)) {
     return res.status(404).json({ error: "Image not found" });
   }
 

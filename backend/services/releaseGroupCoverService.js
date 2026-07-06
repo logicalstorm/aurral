@@ -1,5 +1,10 @@
 import { dbOps } from "../db/helpers/index.js";
-import { buildImageProxyUrl, warmImageProxy } from "./imageProxyService.js";
+import {
+  buildImageProxyUrl,
+  isImageProxyLocalUrl,
+  resolveImageProxyLocalUrl,
+  warmImageProxy,
+} from "./imageProxyService.js";
 import { getAlbumByMbid, resolveAlbumByArtistAndTitle } from "./providers/brainzmashProvider.js";
 
 export const LEGACY_COVER_HOST_PATTERN =
@@ -25,6 +30,9 @@ const pickAlbumCoverUrl = (images = []) => {
 
 const toPublicCoverUrl = (imageUrl) => {
   if (!imageUrl || imageUrl === "NOT_FOUND") return null;
+  if (isImageProxyLocalUrl(imageUrl)) {
+    return resolveImageProxyLocalUrl(imageUrl) || buildImageProxyUrl(imageUrl);
+  }
   return buildImageProxyUrl(imageUrl) || imageUrl;
 };
 
@@ -39,6 +47,10 @@ const getCachedUrl = (cacheKey) => {
     return undefined;
   }
   if (cached?.imageUrl && cached.imageUrl !== "NOT_FOUND") {
+    if (isImageProxyLocalUrl(cached.imageUrl) && !resolveImageProxyLocalUrl(cached.imageUrl)) {
+      dbOps.deleteImage(cacheKey);
+      return undefined;
+    }
     return cached.imageUrl;
   }
   if (cached?.imageUrl === "NOT_FOUND") {

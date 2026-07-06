@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import PropTypes from "prop-types";
 import { Music, Loader, Play } from "lucide-react";
 import { getArtistCover } from "../utils/api";
+import { normalizeMediaUrl } from "../utils/normalizeMediaUrl";
 import { useArtistPreviewPlayback } from "../hooks/useArtistPreviewPlayback";
 
 const queue = [];
@@ -56,7 +57,7 @@ const ArtistImage = ({
   isInLibrary = false,
   loading = "lazy",
 }) => {
-  const [currentSrc, setCurrentSrc] = useState(src);
+  const [currentSrc, setCurrentSrc] = useState(() => normalizeMediaUrl(src));
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const fetchingRef = useRef(false);
@@ -101,7 +102,7 @@ const ArtistImage = ({
           const front = data.images.find((img) => img.front) || data.images[0];
           const url = front.image;
           if (url) {
-            setCurrentSrc(url);
+            setCurrentSrc(normalizeMediaUrl(url));
             setHasError(false);
           } else {
             setHasError(true);
@@ -131,7 +132,7 @@ const ArtistImage = ({
     abortRef.current = controller;
 
     if (src) {
-      setCurrentSrc(src);
+      setCurrentSrc(normalizeMediaUrl(src));
       setHasError(false);
       setIsLoading(true);
     } else if (mbid && enableBackendFallback) {
