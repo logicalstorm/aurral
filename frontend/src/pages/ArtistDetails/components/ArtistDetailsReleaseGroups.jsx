@@ -6,6 +6,7 @@ import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { navigateToReleaseGroup } from "../../../utils/searchNavigation";
 import { getPopularReleaseGroups, getReleaseMetric, getReleaseYear } from "../utils";
+import { getAlbumAddButtonLabel } from "../../../utils/albumAddAction";
 
 const viewModes = [
   { value: "popular", label: "Popular Releases" },
@@ -148,6 +149,7 @@ export function ArtistDetailsReleaseGroups({
                         }}
                         isLoading={requestingAlbum === releaseGroup.id}
                         disabled={requestingAlbum === releaseGroup.id}
+                        label={getAlbumAddButtonLabel({ status: status?.status })}
                       />
                     </div>
                   ) : null}

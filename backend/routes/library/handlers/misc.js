@@ -116,14 +116,15 @@ export function registerMisc(router) {
         const trackCount = Number(album?.statistics?.trackCount || 0);
         const trackFileCount = Number(album?.statistics?.trackFileCount || 0);
         const hasFiles = sizeOnDisk > 0 || trackFileCount > 0;
+        const monitored = Boolean(album?.monitored);
 
         results[foreignAlbumId] = {
           inLibrary: true,
           libraryAlbumId: album.id !== undefined && album.id !== null ? String(album.id) : null,
           libraryArtistId:
             album.artistId !== undefined && album.artistId !== null ? String(album.artistId) : null,
-          status: hasFiles ? "available" : "inLibrary",
-          monitored: Boolean(album?.monitored),
+          status: hasFiles ? "available" : monitored ? "monitored" : "unmonitored",
+          monitored,
           percentOfTracks,
           sizeOnDisk,
           trackCount,

@@ -155,7 +155,7 @@ function ReleasePage() {
     [downloadStatus, libraryInfo],
   );
   const isComplete = libraryDisplay.isComplete;
-  const isInLibrary = libraryDisplay.isInLibrary;
+  const triggerSearch = libraryDisplay.triggerSearch;
   const lastfmUrl = artistName && releaseTitle ? buildLastfmAlbumUrl(artistName, releaseTitle) : "";
 
   const releaseMeta = [
@@ -424,7 +424,7 @@ function ReleasePage() {
         albumName: release.title,
         artistMbid,
         artistName,
-        triggerSearch: isInLibrary,
+        triggerSearch,
       });
       const lookup = await lookupAlbumsInLibraryBatch([releaseMbid]);
       const entry = lookup?.[releaseMbid];
@@ -436,7 +436,7 @@ function ReleasePage() {
         }
       }
       showSuccess(
-        isInLibrary
+        triggerSearch
           ? `Searching for ${release.title || "album"}`
           : `Added ${release.title || "album"} to Lidarr`,
       );
@@ -453,7 +453,7 @@ function ReleasePage() {
   }, [
     artistMbid,
     artistName,
-    isInLibrary,
+    triggerSearch,
     release.title,
     releaseMbid,
     requestingAlbum,
@@ -540,7 +540,7 @@ function ReleasePage() {
                 onClick={handleAlbumAction}
                 isLoading={requestingAlbum}
                 disabled={requestingAlbum}
-                label={isInLibrary ? "Search Album" : "Add to Lidarr"}
+                label={triggerSearch ? "Search Album" : "Add to Lidarr"}
               />
             ) : null}
             {lastfmUrl ? (

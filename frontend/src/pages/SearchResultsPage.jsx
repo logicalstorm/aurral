@@ -36,6 +36,7 @@ import { readReleaseListViewMode, writeReleaseListViewMode } from "./ArtistDetai
 import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
 import { useSharedPlaylists } from "../hooks/useSharedPlaylists";
 import { getArtistRecordId } from "../utils/artistTaste";
+import { getAlbumAddButtonLabel, shouldTriggerAlbumSearch } from "../utils/albumAddAction";
 import {
   PAGE_SIZE,
   DEFAULT_ALBUM_SORT,
@@ -876,7 +877,11 @@ function SearchResultsPage() {
   const handleAlbumAction = useCallback(
     async (album) => {
       if (!album?.id) return;
-      const shouldTriggerSearch = album.status === "inLibrary";
+      const shouldTriggerSearch = shouldTriggerAlbumSearch({
+        status: album.status,
+        inLibrary: album.inLibrary,
+        monitored: album.monitored,
+      });
       setPendingAlbumIds((prev) => ({ ...prev, [album.id]: true }));
       try {
         const result = await requestAlbumFromSearch({
@@ -1031,7 +1036,7 @@ function SearchResultsPage() {
         return artistId ? !!libraryLookup[artistId] : false;
       }
       if (item.type === "album") {
-        return item.status === "available" || item.status === "inLibrary";
+        return item.status === "available";
       }
       return false;
     },
@@ -1090,7 +1095,11 @@ function SearchResultsPage() {
             }}
             isLoading={pending}
             disabled={pending || ALBUM_PENDING_STATUSES.has(item.status)}
-            label="Add to Lidarr"
+            label={getAlbumAddButtonLabel({
+              status: item.status,
+              inLibrary: item.inLibrary,
+              monitored: item.monitored,
+            })}
           />
         );
       }

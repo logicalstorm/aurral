@@ -58,7 +58,7 @@ export function getTrackSavingKey(track) {
 export function isSuggestionInLibrary(item) {
   if (!item) return false;
   if (item.inLibrary) return true;
-  return item.type === "album" && ["available", "inLibrary"].includes(item.status);
+  return item.type === "album" && item.status === "available";
 }
 
 export function buildTrackPlaylistPayload(track) {

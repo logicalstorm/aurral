@@ -3,6 +3,7 @@ import PropTypes from "prop-types";
 import { Music } from "lucide-react";
 import SearchLibraryCheck from "./SearchLibraryCheck";
 import AddAlbumButton from "./AddAlbumButton";
+import { getAlbumAddButtonLabel, isAlbumCompleteInLibrary } from "../utils/albumAddAction";
 import { getReleaseNavigationTarget } from "../utils/searchNavigation";
 
 function isAlbumActionDisabled(album, isPending, canAddAlbum) {
@@ -41,8 +42,12 @@ function AlbumCover({ src, alt }) {
 
 function AlbumAction({ album, isPending, canAddAlbum, onAlbumAction }) {
   const actionDisabled = isAlbumActionDisabled(album, isPending, canAddAlbum);
-  const isComplete = album.status === "available";
-  const actionLabel = album.status === "inLibrary" ? "Search Album" : "Add to Lidarr";
+  const isComplete = isAlbumCompleteInLibrary({ status: album.status });
+  const actionLabel = getAlbumAddButtonLabel({
+    status: album.status,
+    inLibrary: album.inLibrary,
+    monitored: album.monitored,
+  });
 
   if (isComplete) {
     return (

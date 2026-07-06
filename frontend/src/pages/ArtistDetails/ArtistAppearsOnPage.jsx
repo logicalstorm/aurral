@@ -29,6 +29,7 @@ import {
   readReleaseListViewMode,
   writeReleaseListViewMode,
 } from "./utils";
+import { getAlbumAddButtonLabel } from "../../utils/albumAddAction";
 
 const APPEARS_ON_LIMIT = 250;
 
@@ -270,6 +271,7 @@ function ArtistAppearsOnPage() {
                   }}
                   isLoading={library.requestingAlbum === releaseGroup.id}
                   disabled={library.requestingAlbum === releaseGroup.id}
+                  label={getAlbumAddButtonLabel({ status: status?.status })}
                 />
               </div>
             ) : null}
@@ -307,6 +309,7 @@ function ArtistAppearsOnPage() {
                   }}
                   isLoading={library.requestingAlbum === releaseGroup.id}
                   disabled={library.requestingAlbum === releaseGroup.id}
+                  label={getAlbumAddButtonLabel({ status: status?.status })}
                 />
               </div>
             ) : null}

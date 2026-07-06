@@ -55,7 +55,8 @@ test("normalizeAlbumSearchItem preserves compilation metadata and library state"
     {
       libraryAlbumId: "42",
       libraryArtistId: "7",
-      status: "inLibrary",
+      status: "monitored",
+      monitored: true,
     },
   );
 
@@ -72,7 +73,8 @@ test("normalizeAlbumSearchItem preserves compilation metadata and library state"
     inLibrary: true,
     libraryAlbumId: "42",
     libraryArtistId: "7",
-    status: "inLibrary",
+    status: "monitored",
+    monitored: true,
   });
 });
 

@@ -29,6 +29,7 @@ import {
   readReleaseListViewMode,
   writeReleaseListViewMode,
 } from "./utils";
+import { getAlbumAddButtonLabel } from "../../utils/albumAddAction";
 
 const sortOptions = [
   { value: "date", label: "Date", defaultDirection: "desc" },
@@ -268,6 +269,7 @@ function ArtistAlbumsPage() {
                   }}
                   isLoading={library.requestingAlbum === releaseGroup.id}
                   disabled={library.requestingAlbum === releaseGroup.id}
+                  label={getAlbumAddButtonLabel({ status: status?.status })}
                 />
               </div>
             ) : null}
@@ -305,6 +307,7 @@ function ArtistAlbumsPage() {
                   }}
                   isLoading={library.requestingAlbum === releaseGroup.id}
                   disabled={library.requestingAlbum === releaseGroup.id}
+                  label={getAlbumAddButtonLabel({ status: status?.status })}
                 />
               </div>
             ) : null}

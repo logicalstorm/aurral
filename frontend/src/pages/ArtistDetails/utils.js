@@ -262,14 +262,30 @@ export const formatAlbumDuration = (durationMs) => {
   return `${minutes} min`;
 };
 
+import {
+  shouldTriggerAlbumSearch,
+} from "../../utils/albumAddAction.js";
+
 export const resolveReleaseLibraryDisplay = (libraryInfo, downloadStatus) => {
+  const withAction = (display) => ({
+    ...display,
+    triggerSearch: shouldTriggerAlbumSearch({
+      inLibrary: display.isInLibrary,
+      monitored: libraryInfo?.monitored,
+      status: downloadStatus?.status,
+      percentOfTracks: libraryInfo?.percentOfTracks,
+      sizeOnDisk: libraryInfo?.sizeOnDisk,
+      trackFileCount: libraryInfo?.trackFileCount,
+    }),
+  });
+
   if (!libraryInfo?.inLibrary) {
-    return {
+    return withAction({
       kind: "missing",
       label: null,
       isComplete: false,
       isInLibrary: false,
-    };
+    });
   }
 
   const percent = Number(libraryInfo.percentOfTracks || 0);
@@ -279,12 +295,12 @@ export const resolveReleaseLibraryDisplay = (libraryInfo, downloadStatus) => {
   const isComplete = hasFiles;
 
   if (isComplete) {
-    return {
+    return withAction({
       kind: "complete",
       label: "In library",
       isComplete: true,
       isInLibrary: true,
-    };
+    });
   }
 
   const activeStatus = String(downloadStatus?.status || "").trim();
@@ -298,38 +314,38 @@ export const resolveReleaseLibraryDisplay = (libraryInfo, downloadStatus) => {
       processing: "Searching...",
       failed: "Failed",
     };
-    return {
+    return withAction({
       kind: activeStatus === "failed" ? "failed" : "active",
       label: labels[activeStatus] || activeStatus,
       isComplete: false,
       isInLibrary: true,
-    };
+    });
   }
 
   if (percent > 0) {
-    return {
+    return withAction({
       kind: "incomplete",
       label: `Incomplete · ${percent}%`,
       isComplete: false,
       isInLibrary: true,
-    };
+    });
   }
 
   if (libraryInfo.monitored) {
-    return {
+    return withAction({
       kind: "monitored",
       label: "Monitored",
       isComplete: false,
       isInLibrary: true,
-    };
+    });
   }
 
-  return {
+  return withAction({
     kind: "unmonitored",
     label: null,
     isComplete: false,
     isInLibrary: true,
-  };
+  });
 };
 
 export const getReleaseMetric = (releaseGroup) => {

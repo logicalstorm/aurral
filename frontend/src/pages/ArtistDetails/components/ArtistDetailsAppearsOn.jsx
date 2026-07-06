@@ -6,6 +6,7 @@ import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { navigateToReleaseGroup } from "../../../utils/searchNavigation";
 import { getReleaseMetric, getReleaseYear } from "../utils";
+import { getAlbumAddButtonLabel } from "../../../utils/albumAddAction";
 
 const sortLatest = (items) =>
   [...items].sort((a, b) =>
@@ -102,6 +103,7 @@ export function ArtistDetailsAppearsOn({
                         }}
                         isLoading={requestingAlbum === releaseGroup.id}
                         disabled={requestingAlbum === releaseGroup.id}
+                        label={getAlbumAddButtonLabel({ status: status?.status })}
                       />
                     </div>
                   ) : null}

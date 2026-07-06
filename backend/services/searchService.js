@@ -53,12 +53,15 @@ async function getAlbumLibraryLookup(albumMbids) {
       if (!foreignAlbumId || !wanted.has(foreignAlbumId)) continue;
       const percentOfTracks = normalizePercentOfTracks(album?.statistics?.percentOfTracks);
       const sizeOnDisk = Number(album?.statistics?.sizeOnDisk || 0);
+      const monitored = Boolean(album?.monitored);
+      const hasFiles = percentOfTracks >= 100 || sizeOnDisk > 0;
       lookup.set(foreignAlbumId, {
         inLibrary: true,
+        monitored,
         libraryAlbumId: album.id !== undefined && album.id !== null ? String(album.id) : null,
         libraryArtistId:
           album.artistId !== undefined && album.artistId !== null ? String(album.artistId) : null,
-        status: percentOfTracks >= 100 || sizeOnDisk > 0 ? "available" : "inLibrary",
+        status: hasFiles ? "available" : monitored ? "monitored" : "unmonitored",
       });
     }
   } catch (error) {
@@ -140,6 +143,7 @@ function normalizeAlbumItem(item, lookup = null) {
     libraryAlbumId: lookup?.libraryAlbumId || null,
     libraryArtistId: lookup?.libraryArtistId || null,
     status: lookup?.status || "missing",
+    ...(lookup ? { monitored: Boolean(lookup.monitored) } : {}),
     score: item.score || 0,
   };
 }

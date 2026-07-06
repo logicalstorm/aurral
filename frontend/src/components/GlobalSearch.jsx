@@ -40,6 +40,7 @@ import {
   isSuggestionInLibrary,
   buildTrackPlaylistPayload,
 } from "../utils/globalSearchUtils";
+import { getAlbumAddButtonLabel, shouldTriggerAlbumSearch } from "../utils/albumAddAction";
 import { useDebouncedTask } from "../hooks/useDebouncedTask";
 import { useSharedPlaylists } from "../hooks/useSharedPlaylists";
 function GlobalSearch() {
@@ -345,7 +346,11 @@ function GlobalSearch() {
   const handleAlbumAction = useCallback(
     async (album) => {
       if (!album?.id) return;
-      const shouldTriggerSearch = album.status === "inLibrary";
+      const shouldTriggerSearch = shouldTriggerAlbumSearch({
+        status: album.status,
+        inLibrary: album.inLibrary,
+        monitored: album.monitored,
+      });
       setPendingAlbumIds((prev) => ({ ...prev, [album.id]: true }));
       try {
         const result = await requestAlbumFromSearch({
@@ -460,7 +465,11 @@ function GlobalSearch() {
             }}
             isLoading={pending}
             disabled={pending || ALBUM_PENDING_STATUSES.has(item.status)}
-            label="Add to Lidarr"
+            label={getAlbumAddButtonLabel({
+              status: item.status,
+              inLibrary: item.inLibrary,
+              monitored: item.monitored,
+            })}
           />
         );
       }
