@@ -281,7 +281,7 @@ async function failJob(job, message) {
     weeklyFlowWorker.wake(0);
     await weeklyFlowWorker.checkPlaylistComplete(job.playlistId || job.playlistType);
   } catch (error) {
-    logger.slskd("warn", "Failed to run post-failure playlist checks", {
+    logger.warn("slskd", "Failed to run post-failure playlist checks", {
       jobId: job.id,
       error: error?.message || String(error),
     });
@@ -348,7 +348,7 @@ function summarizeSourceErrors(payload, message) {
 async function failOrTryNextSource(payload, job, message, logDetails = {}) {
   const nextPayload = buildNextSourcePayload(payload, payload?.source || "slskd", message);
   if (nextPayload) {
-    logger.slskd("info", "Trying next download source", {
+    logger.info("slskd", "Trying next download source", {
       jobId: job?.id,
       failedSource: payload?.source || "slskd",
       nextSource: nextPayload.source,
@@ -538,7 +538,7 @@ async function cleanupRejectedDownload({
   if (transferUser && transferId) {
     await slskdClient
       .deleteTransfer(transferUser, transferId, { remove: true })
-      .catch((err) => { logger.slskd("warn", "Failed to clean up transfer", { transferId, error: err?.message || String(err) }); });  }
+      .catch((err) => { logger.warn("slskd", "Failed to clean up transfer", { transferId, error: err?.message || String(err) }); });  }
   const safeSource = String(sourcePath || "").trim();
   const safeSlskdRoot = String(slskdRoot || "").trim();
   const safePlaylistRoot = String(playlistRoot || "").trim();
@@ -548,7 +548,7 @@ async function cleanupRejectedDownload({
     isPathInside(safeSource, safeSlskdRoot) &&
     (!safePlaylistRoot || !isPathInside(safeSource, safePlaylistRoot))
   ) {
-    await fs.rm(safeSource, { force: true }).catch((err) => { logger.slskd("warn", "Failed to remove rejected download file", { sourcePath: safeSource, error: err?.message || String(err) }); });
+    await fs.rm(safeSource, { force: true }).catch((err) => { logger.warn("slskd", "Failed to remove rejected download file", { sourcePath: safeSource, error: err?.message || String(err) }); });
     await cleanupEmptyAncestors(path.dirname(safeSource), safeSlskdRoot).catch(
       () => {},
     );  }
@@ -564,7 +564,7 @@ async function cleanupTransferForPayload(payload, transfer) {
   if (!username) return;
   await slskdClient
     .deleteTransfer(username, transferId, { remove: true })
-    .catch((err) => { logger.slskd("warn", "Failed to clean up transfer for payload", { transferId, error: err?.message || String(err) }); });}
+    .catch((err) => { logger.warn("slskd", "Failed to clean up transfer for payload", { transferId, error: err?.message || String(err) }); });}
 
 async function cleanupSuccessfulRunArtifacts(payload, transfer) {
   if (!isSlskdCleanupAfterRunsEnabled()) return;
@@ -585,7 +585,7 @@ async function cleanupSuccessfulRunArtifacts(payload, transfer) {
       : [];
   if (searchIds.length === 0 && transfers.length === 0) return;
   await slskdClient.cleanupAfterRun({ searchIds, transfers }).catch((error) =>
-    logger.slskd("warn", "Failed to clean up successful slskd run", {
+    logger.warn("slskd", "Failed to clean up successful slskd run", {
       error: error?.message || String(error),
       searchIds,
       transferCount: transfers.length,
@@ -706,7 +706,7 @@ async function handleSearch(payload) {
   });
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobSearching }) => recordTrackJobSearching(job))
-    .catch((err) => { logger.slskd("warn", "Failed to record track job searching", { jobId: job.id, error: err?.message || String(err) }); });
+    .catch((err) => { logger.warn("slskd", "Failed to record track job searching", { jobId: job.id, error: err?.message || String(err) }); });
   const resolvedTrack = buildResolvedTrack(job, payload.track);
   const searchTiers = buildSlskdSearchTierGroups(resolvedTrack);
   const searchOptions = await getWorkerSearchOptions();
@@ -776,7 +776,7 @@ async function handleSearch(payload) {
     }),
   );
   if (candidates.length === 0) {
-    logger.slskd("warn", "No slskd download candidates after search", {
+    logger.warn("slskd", "No slskd download candidates after search", {
       jobId: job.id,
       artistName: job.artistName,
       trackName: job.trackName,
@@ -788,7 +788,7 @@ async function handleSearch(payload) {
     if (searchIds.length > 0) {
       await slskdClient
         .cleanupAfterRun({ searchIds, transfers: [] })
-        .catch((err) => { logger.slskd("warn", "Failed to clean up slskd run after empty search", { error: err?.message || String(err) }); });    }
+        .catch((err) => { logger.warn("slskd", "Failed to clean up slskd run after empty search", { error: err?.message || String(err) }); });    }
     return failOrTryNextSource(payload, job, "No suitable slskd search results", {
       queryCount: queries.length,
       rawResultCount: aggregated.length,
@@ -813,7 +813,7 @@ async function handleDownload(payload) {
   if (job.status === "failed" || job.status === "done") return null;
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobDownloading }) => recordTrackJobDownloading(job))
-    .catch((err) => { logger.slskd("warn", "Failed to record track job downloading", { jobId: job.id, error: err?.message || String(err) }); });
+    .catch((err) => { logger.warn("slskd", "Failed to record track job downloading", { jobId: job.id, error: err?.message || String(err) }); });
   const candidates = Array.isArray(payload.candidates)
     ? payload.candidates
     : [];  const index = Number(payload.candidateIndex || 0);
@@ -847,7 +847,7 @@ async function handleDownload(payload) {
   } catch (error) {
     const message = error?.message || String(error);
     recordPayloadOutcome(job, { ...payload, candidate }, "enqueue_failed", message, { candidate });
-    logger.slskd("warn", "slskd batch enqueue failed for candidate", {
+    logger.warn("slskd", "slskd batch enqueue failed for candidate", {
       jobId: job.id,
       username: candidate.raw.user,
       file: candidate.raw.file,
@@ -1010,7 +1010,7 @@ async function handleFinalize(payload) {
     buildResolvedTrack(job, payload.track),
   );
   if (!validation.valid) {
-    logger.slskd("warn", "slskd download validation failed", {
+    logger.warn("slskd", "slskd download validation failed", {
       jobId: job.id,
       artistName: job.artistName,
       trackName: job.trackName,
@@ -1057,7 +1057,7 @@ async function handleFinalize(payload) {
   }
   import("./aurralHistoryService.js")
     .then(({ recordTrackJobMoving }) => recordTrackJobMoving(job))
-    .catch((err) => { logger.slskd("warn", "Failed to record track job moving", { jobId: job.id, error: err?.message || String(err) }); });
+    .catch((err) => { logger.warn("slskd", "Failed to record track job moving", { jobId: job.id, error: err?.message || String(err) }); });
   const committedFinalPath = await commitImportToPlaylistLibrary(
     sourcePath,
     finalPath,

@@ -1,16 +1,7 @@
 import { dbOps } from "../db/helpers/index.js";
 import { warmImageProxy } from "./imageProxyService.js";
 import { getArtistByMbid, listArtistAlbums, searchArtists } from "./providers/brainzmashProvider.js";
-import { fetchReleaseGroupCoverUrl } from "./releaseGroupCoverService.js";
-
-const MAX_NEGATIVE_CACHE = 1000;
-const MAX_PENDING_REQUESTS = 100;
-const NEGATIVE_CACHE_TTL_MS = 60 * 60 * 1000;
-const RELEASE_GROUP_CONCURRENCY = 4;
-const negativeImageCache = new Map();
-const pendingImageRequests = new Map();
-const LEGACY_COVER_HOST_PATTERN =
-  /https?:\/\/(?:caa\.lkly\.net|coverartarchive\.org|archive\.org|[\w-]+\.ca\.archive\.org)\//i;
+import { fetchReleaseGroupCoverUrl, LEGACY_COVER_HOST_PATTERN } from "./releaseGroupCoverService.js";
 
 const ARTIST_IMAGE_KIND_RANK = {
   poster: 0,
@@ -180,8 +171,6 @@ const getCachedUrl = (cacheKey) => {
   }
   return undefined;
 };
-
-export { fetchReleaseGroupCoverUrl };
 
 const typeRank = (primaryType) => {
   if (primaryType === "Album") return 0;

@@ -1,4 +1,4 @@
-import { UUID_REGEX } from "../../../config/constants.js";
+import { UUID_REGEX } from "../../../../lib/uuid.js";
 import { logger } from "../../../services/logger.js";
 import { dbOps } from "../../../db/helpers/index.js";
 import { pendingCoverRequests, fetchCoverInBackground } from "../utils.js";
@@ -18,7 +18,7 @@ export function registerCover(router) {
       }
 
       if (pendingCoverRequests.has(mbid)) {
-        logger.api("info", "Deduplicating cover request", { mbid });
+        logger.info("api", "Deduplicating cover request", { mbid });
         const result = await pendingCoverRequests.get(mbid);
         return res.json({ images: result.images || [] });
       }
@@ -33,7 +33,7 @@ export function registerCover(router) {
         cachedImage.imageUrl &&
         cachedImage.imageUrl !== "NOT_FOUND"
       ) {
-        logger.api("info", "Cover cache hit", { mbid });        res.set("Cache-Control", "public, max-age=31536000, immutable");
+        logger.info("api", "Cover cache hit", { mbid });        res.set("Cache-Control", "public, max-age=31536000, immutable");
 
         const cacheAge = cachedImage.cacheAge;
         const shouldRefresh = !cacheAge || Date.now() - cacheAge > 7 * 24 * 60 * 60 * 1000;
@@ -69,7 +69,7 @@ export function registerCover(router) {
         cachedImage.imageUrl === "NOT_FOUND" &&
         !artistNameFromQuery
       ) {
-        logger.api("info", "NOT_FOUND cache", { mbid });        res.set("Cache-Control", "public, max-age=3600");
+        logger.info("api", "NOT_FOUND cache", { mbid });        res.set("Cache-Control", "public, max-age=3600");
 
         setTimeout(() => {
           fetchCoverInBackground(mbid, artistNameFromQuery).catch(() => {});
@@ -78,7 +78,7 @@ export function registerCover(router) {
         return res.json({ images: [] });
       }
 
-      logger.api("info", "Fetching cover", { mbid });
+      logger.info("api", "Fetching cover", { mbid });
 
       const shouldForceRefresh =
         !!refresh || (cachedImage?.imageUrl === "NOT_FOUND" && !!artistNameFromQuery);
@@ -95,7 +95,7 @@ export function registerCover(router) {
             transientError: !!result.transientError,
           };
         } catch (error) {
-          logger.api("error", "Error fetching cover", { mbid, error: error.message });
+          logger.error("api", "Error fetching cover", { mbid, error: error.message });
           return { images: [] };
         }
       })();
@@ -104,21 +104,21 @@ export function registerCover(router) {
       const result = await fetchPromise;
 
       if (result.images && result.images.length > 0) {
-        logger.api("info", "Successfully returning cover", { mbid });
+        logger.info("api", "Successfully returning cover", { mbid });
         res.set("Cache-Control", "public, max-age=31536000, immutable");
       } else {
         if (result.notFound) {
-          logger.api("info", "No cover found, caching NOT_FOUND", { mbid });          dbOps.setImage(mbid, "NOT_FOUND");
+          logger.info("api", "No cover found, caching NOT_FOUND", { mbid });          dbOps.setImage(mbid, "NOT_FOUND");
           res.set("Cache-Control", "public, max-age=3600");
         } else {
-          logger.api("warn", "Cover lookup failed transiently, skipping NOT_FOUND cache", { mbid });
+          logger.warn("api", "Cover lookup failed transiently, skipping NOT_FOUND cache", { mbid });
           res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
         }
       }
 
       res.json({ images: result.images || [] });
     } catch (error) {
-      logger.api("error", "Error in cover route", { mbid, error: error.message });
+      logger.error("api", "Error in cover route", { mbid, error: error.message });
       res.set("Cache-Control", "public, max-age=60");
       res.json({ images: [] });
     } finally {

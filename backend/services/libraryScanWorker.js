@@ -1,14 +1,7 @@
+import createHonkerWorker from "./honkerWorkerFactory.js";
 import { dbOps } from "../db/helpers/index.js";
-import { enqueueLibraryScanJob, getLibraryScanQueue, getWorkerId } from "./honkerDb.js";
-import {
-  createIdleAbortController,
-  getWorkerIdleStopMs,
-  isHonkerDatabaseClosedError,
-  isHonkerShuttingDown,
-  markHonkerWorkerLoopEnded,
-  registerHonkerWorker,
-  withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
+import { enqueueLibraryScanJob, getLibraryScanQueue } from "./honkerDb.js";
+import { isHonkerDatabaseClosedError } from "./honkerWorkerRuntime.js";
 
 const WORKER_NAME = "library-scan";
 const LIBRARY_SCAN_REGISTRY_KEY = "pendingLibraryScanJob";
@@ -36,106 +29,73 @@ export function clearScheduledLibraryScan(jobId = null) {
   setScanRegistry(registry);
 }
 
-export function scheduleLibraryScan(force = false) {
-  if (force) {
-    clearScheduledLibraryScan();
-    const jobId = enqueueLibraryScanJob({ force: true, requestedAt: Date.now() }, { priority: 10 });
-    setScanRegistry({ jobId });
-    return jobId;
+export function scheduleLibraryScan({ force = false } = {}) {
+  const registry = getScanRegistry();
+  const existingJobId = Number(registry.jobId);
+  if (Number.isFinite(existingJobId)) {
+    return existingJobId;
   }
-  if (getScheduledLibraryScanJobId() != null) {
-    return getScheduledLibraryScanJobId();
-  }
-  const jobId = enqueueLibraryScanJob(
-    { force: false, requestedAt: Date.now() },
-    { delaySeconds: SCAN_DEBOUNCE_SECONDS },
-  );
+  const jobId = enqueueLibraryScanJob({ force: force === true });
   setScanRegistry({ jobId });
   return jobId;
 }
 
-let running = false;
-let stopRequested = false;
-let _loopPromise = null;
-let idleController = null;
-
-async function runLoop() {
-  const queue = getLibraryScanQueue();
-  const workerId = getWorkerId();
-  idleController = createIdleAbortController({
-    idleStopMs: getWorkerIdleStopMs(),
-  });
-  let databaseClosed = false;
-  idleController.arm();
-  try {
-    for await (const job of queue.claim(workerId, {
-      idlePollS: 10,
-      signal: idleController.signal,
-    })) {
-      idleController.disarm();
-      if (!running || stopRequested) break;
-      const scheduledJobId = getScheduledLibraryScanJobId();
-      if (scheduledJobId != null && scheduledJobId !== job.id) {
-        job.ack();
-        idleController.arm();
-        continue;
-      }
-      clearScheduledLibraryScan(job.id);
-      try {
-        await withJobHeartbeat(job, queue, async () => {
-          const { playlistManager } = await import("./weeklyFlow/weeklyFlowPlaylistManager.js");
-          await playlistManager.scanLibrary();
-        });
-        job.ack();
-      } catch (error) {
-        const message = error?.message || String(error);
-        if (job.attempts >= 3) {
-          job.fail(message);
-        } else {
-          setScanRegistry({ jobId: job.id });
-          job.retry(60, message);
-        }
-      }
-      idleController.arm();
-    }
-  } catch (error) {
-    databaseClosed = isHonkerDatabaseClosedError(error);
-    if (!databaseClosed && !idleController?.idleStopped && !stopRequested) {
-      console.error("[libraryScanWorker] loop error:", error);
-    }
-  } finally {
-    const idleStopped = idleController?.idleStopped === true;
-    idleController?.dispose();
-    idleController = null;
-    running = false;
-    _loopPromise = null;
-    const intentional = stopRequested || idleStopped || databaseClosed;
-    stopRequested = false;
-    markHonkerWorkerLoopEnded(WORKER_NAME, startLibraryScanWorker, {
-      intentional,
-    });
+export function scheduleLibraryScanDebounced({ force = false } = {}) {
+  const registry = getScanRegistry();
+  const debounceUntil = Number(registry.debounceUntil || 0);
+  const now = Math.floor(Date.now() / 1000);
+  if (!force && debounceUntil > now) {
+    return getScheduledLibraryScanJobId();
   }
+  setScanRegistry({
+    ...registry,
+    debounceUntil: now + SCAN_DEBOUNCE_SECONDS,
+  });
+  return scheduleLibraryScan({ force });
 }
 
-export function startLibraryScanWorker() {
-  if (running || isHonkerShuttingDown()) return;
-  running = true;
-  stopRequested = false;
-  _loopPromise = runLoop();
-}
+let databaseClosed = false;
 
-export function stopLibraryScanWorker() {
-  stopRequested = true;
-  running = false;
-  idleController?.abort();
-}
-
-export function isLibraryScanWorkerRunning() {
-  return running;
-}
-
-registerHonkerWorker(WORKER_NAME, {
+const {
   start: startLibraryScanWorker,
   stop: stopLibraryScanWorker,
   isRunning: isLibraryScanWorkerRunning,
+} = createHonkerWorker({
+  name: WORKER_NAME,
+  getQueue: getLibraryScanQueue,
+  idlePollS: 10,
+  retryDelayS: 60,
+  maxAttempts: 3,
+  filterJob(job) {
+    const scheduledJobId = getScheduledLibraryScanJobId();
+    if (scheduledJobId != null && scheduledJobId !== job.id) {
+      return false;
+    }
+    clearScheduledLibraryScan(job.id);
+    return true;
+  },
+  processJob: async () => {
+    const { playlistManager } = await import("./weeklyFlow/weeklyFlowPlaylistManager.js");
+    await playlistManager.scanLibrary();
+  },
+  resolveRetry(error, job) {
+    const message = error?.message || String(error);
+    if (job.attempts >= 3) {
+      return { action: "fail", message };
+    }
+    setScanRegistry({ jobId: job.id });
+    return { action: "retry", delayS: 60, message };
+  },
+  onLoopError(error) {
+    databaseClosed = isHonkerDatabaseClosedError(error);
+    if (!databaseClosed) {
+      console.error("[libraryScanWorker] loop error:", error);
+    }
+  },
 });
+
+export {
+  startLibraryScanWorker,
+  stopLibraryScanWorker,
+  isLibraryScanWorkerRunning,
+};

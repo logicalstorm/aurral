@@ -36,7 +36,7 @@ class WebSocketService {
       this.handleConnection(ws, req);
     });
 
-    logger.system("info", "WebSocket server initialized on /ws");
+    logger.info("system", "WebSocket server initialized on /ws");
     return this;
   }
 
@@ -82,7 +82,7 @@ class WebSocketService {
     };
 
     this.clients.add(client);
-    logger.system("info", "Client connected", { clientId, totalClients: this.clients.size });
+    logger.info("system", "Client connected", { clientId, totalClients: this.clients.size });
 
     ws.on('message', (message) => {
       this.handleMessage(client, message);
@@ -90,11 +90,11 @@ class WebSocketService {
 
     ws.on('close', () => {
       this.clients.delete(client);
-      logger.system("info", "Client disconnected", { clientId, totalClients: this.clients.size });
+      logger.info("system", "Client disconnected", { clientId, totalClients: this.clients.size });
     });
 
     ws.on('error', (error) => {
-      logger.system("error", "Client error", { clientId, error: error.message });
+      logger.error("system", "Client error", { clientId, error: error.message });
       this.clients.delete(client);
     });
 
@@ -120,10 +120,10 @@ class WebSocketService {
           this.send(client, { type: 'pong', timestamp: Date.now() });
           break;
         default:
-          logger.system("warn", "Unknown WebSocket message type", { messageType: message.type });
+          logger.warn("system", "Unknown WebSocket message type", { messageType: message.type });
       }
     } catch (error) {
-      logger.system("error", "Failed to parse WebSocket message", { error: error.message });
+      logger.error("system", "Failed to parse WebSocket message", { error: error.message });
     }
   }
 

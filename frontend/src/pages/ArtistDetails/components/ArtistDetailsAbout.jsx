@@ -7,7 +7,7 @@ import lastFmLogo from "../../../../images/logos/last-fm.svg?raw";
 import musicBrainzLogo from "../../../../images/logos/musicbrainz.svg?raw";
 import listenBrainzLogo from "../../../../images/logos/listenbrainz.svg?raw";
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { UUID_REGEX } from "../../../../../lib/uuid.js";
 
 const toCurrentColorSvg = (svg) =>
   svg

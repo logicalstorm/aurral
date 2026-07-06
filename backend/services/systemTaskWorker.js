@@ -1,20 +1,6 @@
-import { getSystemTaskQueue, getWorkerId } from "./honkerDb.js";
+import createHonkerWorker from "./honkerWorkerFactory.js";
+import { getSystemTaskQueue } from "./honkerDb.js";
 import { cleanExpiredSessions } from "../config/session-helpers.js";
-import {
-  createIdleAbortController,
-  getWorkerIdleStopMs,
-  isHonkerShuttingDown,
-  markHonkerWorkerLoopEnded,
-  registerHonkerWorker,
-  withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
-
-const WORKER_NAME = "system-task";
-
-let running = false;
-let stopRequested = false;
-let _loopPromise = null;
-let idleController = null;
 
 async function processSystemTask(payload = {}) {
   const kind = String(payload?.kind || "").trim();
@@ -38,9 +24,8 @@ async function processSystemTask(payload = {}) {
       return;
     }
     case "discovery-refresh-check": {
-      const { enqueueDiscoveryRefreshIfNeeded } = await import(
-        "./discovery/refreshScheduler.js"
-      );      await enqueueDiscoveryRefreshIfNeeded({ reason: "interval" });
+      const { enqueueDiscoveryRefreshIfNeeded } = await import("./discovery/refreshScheduler.js");
+      await enqueueDiscoveryRefreshIfNeeded({ reason: "interval" });
       return;
     }
     case "weekly-flow-startup-check": {
@@ -49,9 +34,8 @@ async function processSystemTask(payload = {}) {
       return;
     }
     case "discovery-bootstrap": {
-      const { bootstrapDiscoveryRefresh } = await import(
-        "./discovery/refreshScheduler.js"
-      );      await bootstrapDiscoveryRefresh();
+      const { bootstrapDiscoveryRefresh } = await import("./discovery/refreshScheduler.js");
+      await bootstrapDiscoveryRefresh();
       return;
     }
     case "playlist-startup-migration": {
@@ -88,70 +72,21 @@ async function processSystemTask(payload = {}) {
   }
 }
 
-async function runLoop() {
-  const queue = getSystemTaskQueue();
-  const workerId = getWorkerId();
-  idleController = createIdleAbortController({
-    idleStopMs: getWorkerIdleStopMs(),
-  });
-  idleController.arm();
-  try {
-    for await (const job of queue.claim(workerId, {
-      idlePollS: 10,
-      signal: idleController.signal,
-    })) {
-      idleController.disarm();
-      if (!running || stopRequested) break;
-      try {
-        await withJobHeartbeat(job, queue, () => processSystemTask(job.payload));
-        job.ack();
-      } catch (error) {
-        const message = error?.message || String(error);
-        if (job.attempts >= 3) {
-          job.fail(message);
-        } else {
-          job.retry(120, message);
-        }
-      }
-      idleController.arm();
-    }
-  } catch (error) {
-    if (!idleController?.idleStopped && !stopRequested) {
-      console.error("[systemTaskWorker] loop error:", error);
-    }
-  } finally {
-    const idleStopped = idleController?.idleStopped === true;
-    idleController?.dispose();
-    idleController = null;
-    running = false;
-    _loopPromise = null;
-    const intentional = stopRequested || idleStopped;
-    stopRequested = false;
-    markHonkerWorkerLoopEnded(WORKER_NAME, startSystemTaskWorker, {
-      intentional,
-    });
-  }
-}
-
-export function startSystemTaskWorker() {
-  if (running || isHonkerShuttingDown()) return;
-  running = true;
-  stopRequested = false;
-  _loopPromise = runLoop();
-}
-
-export function stopSystemTaskWorker() {
-  stopRequested = true;
-  running = false;
-  idleController?.abort();
-}
-
-export function isSystemTaskWorkerRunning() {
-  return running;
-}
-
-registerHonkerWorker(WORKER_NAME, {
+const {
   start: startSystemTaskWorker,
   stop: stopSystemTaskWorker,
   isRunning: isSystemTaskWorkerRunning,
+} = createHonkerWorker({
+  name: "system-task",
+  getQueue: getSystemTaskQueue,
+  processJob: processSystemTask,
+  idlePollS: 10,
+  retryDelayS: 120,
+  maxAttempts: 3,
 });
+
+export {
+  startSystemTaskWorker,
+  stopSystemTaskWorker,
+  isSystemTaskWorkerRunning,
+};

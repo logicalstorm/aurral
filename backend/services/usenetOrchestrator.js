@@ -190,7 +190,7 @@ async function handleUsenetSearch(payload, helpers) {
         );
       } catch (error) {
         lastError = error?.message || String(error);
-        logger.slskd("warn", "Prowlarr search failed", {
+        logger.warn("slskd", "Prowlarr search failed", {
           jobId: job.id,
           query,
           error: lastError,
@@ -263,7 +263,7 @@ async function handleUsenetDownload(payload, helpers) {
     });
   } catch (error) {
     const message = error?.message || String(error);
-    logger.slskd("warn", "Usenet client append failed for release", {
+    logger.warn("slskd", "Usenet client append failed for release", {
       jobId: job.id,
       client: clientKey,
       releaseTitle: release.title,
@@ -310,7 +310,7 @@ async function handleUsenetPoll(payload, helpers) {
   const historyItem = await client.getHistoryItem(payload.nzbId);
   if (historyItem) {
     const state = classifyHistoryStatus(historyItem);
-    logger.slskd("debug", "usenet poll history status", { state, raw: historyItem?.Status || historyItem?.status, nzbId: payload.nzbId });
+    logger.debug("slskd", "usenet poll history status", { state, raw: historyItem?.Status || historyItem?.status, nzbId: payload.nzbId });
     if (state === "success") {
       return {
         ...payload,
@@ -394,7 +394,7 @@ async function handleUsenetFinalize(payload, helpers) {
 }
 
 export async function processUsenetPipelinePayload(payload, helpers = {}) {
-  logger.slskd("debug", "usenet pipeline phase", { phase: payload.phase, jobId: payload.jobId, source: payload.source });
+  logger.debug("slskd", "usenet pipeline phase", { phase: payload.phase, jobId: payload.jobId, source: payload.source });
   switch (payload.phase) {
     case "search":
       return handleUsenetSearch(payload, helpers);

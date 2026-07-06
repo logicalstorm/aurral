@@ -12,7 +12,7 @@ import {
   normalizeReleaseText,
   scoreTextMatch as scoreTextMatchBase,
   getYear,
-} from "./weeklyFlowTextMatch.js";
+} from "../providers/brainzmashRanking.js";
 
 const artistAliasCache = new Map();
 const releaseGroupSearchCache = new Map();

@@ -1,13 +1,12 @@
 import { dbOps } from "../db/helpers/index.js";
 import {
-  createConnectionCache,
   normalizeBaseUrl,
   normalizeInteger,
   sanitizeNzbName,
 } from "./usenetClientCommon.js";
-import { httpPost } from "./http.js";
+import axios from "../../lib/axiosFetch.js";
 
-let connectionCache = createConnectionCache();
+let connectionCache = { checkedAt: 0, result: null };
 
 function getSettings() {
   const nzbget = dbOps.getSettings()?.integrations?.nzbget || {};
@@ -66,7 +65,7 @@ export class NzbgetClient {
     const { url, username, password } = getSettings();
     const rpcUrl = buildRpcUrl(url);
     if (!rpcUrl) throw new Error("NZBGet not configured");
-    const response = await httpPost(
+    const response = await axios.post(
       rpcUrl,
       {
         jsonrpc: "2.0",
@@ -75,7 +74,7 @@ export class NzbgetClient {
         id: Date.now(),
       },
       {
-        timeoutMs: 45000,
+        timeout: 45000,
         auth: buildAuthFromCredentials(username, password),
         headers: {
           Accept: "application/json",

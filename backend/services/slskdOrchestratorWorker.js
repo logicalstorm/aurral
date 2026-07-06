@@ -1,4 +1,5 @@
-import { getPipelineQueue, getWorkerId, resetProcessingPipelineJobs } from "./honkerDb.js";
+import createHonkerWorker from "./honkerWorkerFactory.js";
+import { getPipelineQueue, resetProcessingPipelineJobs } from "./honkerDb.js";
 import {
   continuePipeline,
   processPipelinePayload,
@@ -6,113 +7,44 @@ import {
   failPipelineJob,
 } from "./slskdOrchestrator.js";
 import { isAnyDownloadSourceConfigured } from "./downloadSourceService.js";
-import {
-  createIdleAbortController,
-  getWorkerIdleStopMs,
-  isHonkerShuttingDown,
-  markHonkerWorkerLoopEnded,
-  registerHonkerWorker,
-  scheduleHonkerComponentRestart,
-  withJobHeartbeat,
-} from "./honkerWorkerRuntime.js";
 
-const WORKER_NAME = "slskd-pipeline";
-
-let running = false;
-let stopRequested = false;
-let _loopPromise = null;
-let idleController = null;
-
-async function runLoop() {
-  if (!isAnyDownloadSourceConfigured()) {
-    running = false;
-    return;
-  }
-  const queue = getPipelineQueue();
-  const workerId = getWorkerId();
-  idleController = createIdleAbortController({
-    idleStopMs: getWorkerIdleStopMs(),
-  });
-  idleController.arm();
-  try {
-    for await (const job of queue.claim(workerId, {
-      idlePollS: 2,
-      signal: idleController.signal,
-    })) {
-      idleController.disarm();
-      if (!running || stopRequested) break;
-      try {
-        const nextPayload = await withJobHeartbeat(job, queue, () =>
-          processPipelinePayload(job.payload),
-        );
-        await continuePipeline(nextPayload);
-        job.ack();
-      } catch (error) {
-        const message = error?.message || String(error);
-        if (job.attempts >= 4) {
-          console.error("[slskdOrchestratorWorker] pipeline job failed:", {
-            jobId: job.payload?.jobId || null,
-            phase: job.payload?.phase || null,
-            candidateIndex: job.payload?.candidateIndex ?? null,
-            message,
-            stack: error?.stack || null,
-          });
-          job.fail(message);
-          await failPipelineJob(job.payload, message);
-        } else {
-          job.retry(30, message);
-        }
-      }
-      idleController.arm();
-    }
-  } catch (error) {
-    if (!idleController?.idleStopped && !stopRequested) {
-      console.error("[slskdOrchestratorWorker] loop error:", error);
-    }
-  } finally {
-    const idleStopped = idleController?.idleStopped === true;
-    idleController?.dispose();
-    idleController = null;
-    running = false;
-    _loopPromise = null;
-    const intentional = stopRequested || idleStopped;
-    console.log("[pipeline] worker stopped", { idleStopped, intentional });
-    stopRequested = false;
-    markHonkerWorkerLoopEnded(WORKER_NAME, startSlskdOrchestratorWorker, {
-      intentional,
-      shouldRestart: () => isAnyDownloadSourceConfigured(),
-    });
-    if (idleStopped) {
-      scheduleHonkerComponentRestart(WORKER_NAME, startSlskdOrchestratorWorker, {
-        shouldRestart: () => isAnyDownloadSourceConfigured(),
-      });
-    }
-  }
-}
-
-export function startSlskdOrchestratorWorker() {
-  if (running || isHonkerShuttingDown()) return;
-  if (!isAnyDownloadSourceConfigured()) return;
-  console.log("[pipeline] worker starting");
-  resetProcessingPipelineJobs();
-  running = true;
-  stopRequested = false;
-  enqueuePendingJobsWithoutBatch();
-  _loopPromise = runLoop();
-}
-
-export function stopSlskdOrchestratorWorker() {
-  stopRequested = true;
-  running = false;
-  idleController?.abort();
-}
-
-export function isSlskdOrchestratorRunning() {
-  return running;
-}
-
-registerHonkerWorker(WORKER_NAME, {
+const {
   start: startSlskdOrchestratorWorker,
   stop: stopSlskdOrchestratorWorker,
   isRunning: isSlskdOrchestratorRunning,
+} = createHonkerWorker({
+  name: "slskd-pipeline",
+  getQueue: getPipelineQueue,
+  idlePollS: 2,
+  retryDelayS: 30,
+  maxAttempts: 4,
+  shouldRestart: () => isAnyDownloadSourceConfigured(),
+  onStart() {
+    if (!isAnyDownloadSourceConfigured()) return false;
+    console.log("[pipeline] worker starting");
+    resetProcessingPipelineJobs();
+    enqueuePendingJobsWithoutBatch();
+    return true;
+  },
+  processJob: async (payload) => {
+    const nextPayload = await processPipelinePayload(payload);
+    await continuePipeline(nextPayload);
+  },
+  onFinalFailure(job, error) {
+    const message = error?.message || String(error);
+    console.error("[slskdOrchestratorWorker] pipeline job failed:", {
+      jobId: job.payload?.jobId || null,
+      phase: job.payload?.phase || null,
+      candidateIndex: job.payload?.candidateIndex ?? null,
+      message,
+      stack: error?.stack || null,
+    });
+    return failPipelineJob(job.payload, message);
+  },
 });
+
+export {
+  startSlskdOrchestratorWorker,
+  stopSlskdOrchestratorWorker,
+  isSlskdOrchestratorRunning,
+};

@@ -10,10 +10,6 @@ export function normalizeInteger(value, fallback = 0) {
   return Math.trunc(parsed);
 }
 
-export function createConnectionCache() {
-  return { checkedAt: 0, result: null };
-}
-
 export function sanitizeNzbName(value) {
   const raw = String(value || "aurral-download");
   const cleaned = Array.from(raw)

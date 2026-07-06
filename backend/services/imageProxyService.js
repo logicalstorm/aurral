@@ -2,8 +2,20 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import axios from "../../lib/axiosFetch.js";
-import sharp from "./sharpResourcePolicy.js";
+import sharp from "sharp";
 import { resolveAurralDataDir } from "../config/data-dir.js";
+
+sharp.concurrency(
+  Math.min(8, Math.max(1, Math.floor(Number(process.env.AURRAL_SHARP_CONCURRENCY)) || 4)),
+);
+sharp.cache({
+  memory: Math.min(
+    256,
+    Math.max(8, Math.floor(Number(process.env.AURRAL_SHARP_CACHE_MEMORY_MB)) || 32),
+  ),
+  files: 20,
+  items: 100,
+});
 
 const IMAGE_PROXY_ROUTE = "/api/image-proxy";
 const DATA_DIR = resolveAurralDataDir();

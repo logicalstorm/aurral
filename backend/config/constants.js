@@ -1,7 +1,4 @@
 import { resolveAppVersion } from "../../lib/app-version.js";
-import { UUID_REGEX } from "../../lib/uuid.js";
-
-export { UUID_REGEX };
 
 const TRUE_ENV_VALUES = new Set(["1", "true", "yes", "on", "verbose", "debug"]);
 

@@ -1,5 +1,5 @@
 import express from "express";
-import { UUID_REGEX } from "../config/constants.js";
+import { UUID_REGEX } from "../../lib/uuid.js";
 import { noCache } from "../middleware/cache.js";
 import { requireAuth, requirePermission } from "../middleware/requirePermission.js";
 import { invalidateAllDownloadStatusesCache } from "./library/handlers/downloads.js";

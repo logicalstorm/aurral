@@ -117,7 +117,7 @@ export function registerTags(router) {
                 .filter((a) => a.id);
             }
           } catch (err) {
-            logger.discovery("error", "Last.fm tag search failed", { error: err.message });
+            logger.error("discovery", "Last.fm tag search failed", { error: err.message });
           }
         } else {
           const fallbackResult = await searchFallbackGenreArtists({

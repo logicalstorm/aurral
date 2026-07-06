@@ -1,13 +1,12 @@
 import { dbOps } from "../db/helpers/index.js";
 import {
-  createConnectionCache,
   normalizeBaseUrl,
   normalizeInteger,
   sanitizeNzbName,
 } from "./usenetClientCommon.js";
-import { httpGet } from "./http.js";
+import axios from "../../lib/axiosFetch.js";
 
-let connectionCache = createConnectionCache();
+let connectionCache = { checkedAt: 0, result: null };
 
 function getSettings() {
   const sabnzbd = dbOps.getSettings()?.integrations?.sabnzbd || {};
@@ -72,7 +71,7 @@ export class SabnzbdClient {
       .filter(([, v]) => v != null && v !== "")
       .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
       .join("&");
-    const response = await httpGet(`${base}&${query}`, { timeoutMs: 45000 });
+    const response = await axios.get(`${base}&${query}`, { timeout: 45000 });
     if (response.status !== 200) {
       throw new Error(`SABnzbd ${mode} failed: HTTP ${response.status}`);
     }
@@ -165,8 +164,8 @@ export class SabnzbdClient {
     try {
       const apiUrl = buildUrl(settings.url, settings.apiKey);
       const [versionRes, statsRes, directories] = await Promise.all([
-        httpGet(`${apiUrl}&mode=version`, { timeoutMs: 15000 }),
-        httpGet(`${apiUrl}&mode=server_stats`, { timeoutMs: 15000 }),
+        axios.get(`${apiUrl}&mode=version`, { timeout: 15000 }),
+        axios.get(`${apiUrl}&mode=server_stats`, { timeout: 15000 }),
         this.getDownloadDirectories(),
       ]);
       const version = versionRes.data?.version || null;

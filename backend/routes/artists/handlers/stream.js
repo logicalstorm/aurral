@@ -1,4 +1,4 @@
-import { UUID_REGEX } from "../../../config/constants.js";
+import { UUID_REGEX } from "../../../../lib/uuid.js";
 import {
   getLastfmApiKey,
   lastfmRequest,

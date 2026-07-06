@@ -1,4 +1,4 @@
-import { UUID_REGEX } from "../../config/constants.js";
+import { UUID_REGEX } from "../../../lib/uuid.js";
 
 const SOURCE_BASE_WEIGHTS = {
   library: 1,

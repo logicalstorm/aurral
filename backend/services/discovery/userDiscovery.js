@@ -65,7 +65,7 @@ export async function getUserDiscovery(userId, limit = 50, offset = 0) {
       requestUserDiscoveryRefresh(listenHistoryProfile, {
         feedbackUserId: userId || null,
       }).catch((err) => {
-        logger.discovery("error", `On-demand refresh for ${listenHistoryProfile.listenHistoryProvider}:${listenHistoryProfile.listenHistoryUsername} failed`, { error: err.message });
+        logger.error("discovery", `On-demand refresh for ${listenHistoryProfile.listenHistoryProvider}:${listenHistoryProfile.listenHistoryUsername} failed`, { error: err.message });
       });
     }
   }

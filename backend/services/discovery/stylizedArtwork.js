@@ -1,6 +1,18 @@
 import axios from "../../../lib/axiosFetch.js";
-import sharp from "../sharpResourcePolicy.js";
+import sharp from "sharp";
 import { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } from "../../config/discoverPlaylistPresets.js";
+
+sharp.concurrency(
+  Math.min(8, Math.max(1, Math.floor(Number(process.env.AURRAL_SHARP_CONCURRENCY)) || 4)),
+);
+sharp.cache({
+  memory: Math.min(
+    256,
+    Math.max(8, Math.floor(Number(process.env.AURRAL_SHARP_CACHE_MEMORY_MB)) || 32),
+  ),
+  files: 20,
+  items: 100,
+});
 
 const ARTWORK_SIZE = 1200;
 const TITLE_PADDING_X = 72;

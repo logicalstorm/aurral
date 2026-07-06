@@ -5,7 +5,7 @@ import {
   scoreTextMatch,
   getYear,
   splitWords,
-} from "./weeklyFlowTextMatch.js";
+} from "../providers/brainzmashRanking.js";
 
 const AUDIO_CATEGORY_MIN = 3000;
 const AUDIO_CATEGORY_MAX = 3999;

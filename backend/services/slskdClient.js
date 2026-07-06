@@ -385,7 +385,7 @@ export class SlskdClient {
     if (responses.length > 0) {
       return { ...data, responses };
     }
-    logger.slskd("warn", "slskd search completed with counts but no file payloads", {
+    logger.warn("slskd", "slskd search completed with counts but no file payloads", {
       searchId,
       responseCount,
       fileCount,
@@ -657,7 +657,7 @@ export class SlskdClient {
           transfers = targets.transfers;
           markCleaned = markSlskdCleanupTargetsCleaned;
         } catch (error) {
-          logger.slskd("warn", "Failed to read scoped slskd cleanup targets", {
+          logger.warn("slskd", "Failed to read scoped slskd cleanup targets", {
             error: error?.message || String(error),
           });
         }
@@ -693,7 +693,7 @@ export class SlskdClient {
       if (typeof markCleaned === "function") {
         markCleaned();
       }
-      logger.slskd("info", "Cleaned up slskd after run", {
+      logger.info("slskd", "Cleaned up slskd after run", {
         ownedOnly,
         searchesRemoved,
         transfersRemoved,

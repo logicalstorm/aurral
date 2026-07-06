@@ -18,7 +18,7 @@ import { startWeeklyFlowPlaylistRetryWorker } from "./weeklyFlow/weeklyFlowPlayl
 import { startWeeklyFlowPlaylistReserveBuildWorker } from "./weeklyFlow/weeklyFlowPlaylistReserveBuildWorker.js";
 import { startPlaylistMbidEnrichmentWorker } from "./playlistMbidEnrichmentWorker.js";
 import { registerHonkerShutdownHandler } from "./honkerWorkerRuntime.js";
-import { HONKER_QUEUE_NAMES } from "./honkerQueueMetadata.js";
+import { HONKER_QUEUE_NAMES } from "./honkerDb.js";
 
 let backgroundWorkersStarted = false;
 let workerSupervisorStarted = false;

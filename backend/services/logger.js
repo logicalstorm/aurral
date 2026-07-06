@@ -20,11 +20,4 @@ export const logger = {
   info: (category, message, data) => log("info", category, message, data),
   warn: (category, message, data) => log("warn", category, message, data),
   error: (category, message, data) => log("error", category, message, data),
-  download: (level, message, downloadId, data = {}) =>
-    log(level, "download", message, { downloadId, ...data }),
-  library: (level, message, data) => log(level, "library", message, data),
-  discovery: (level, message, data) => log(level, "discovery", message, data),
-  api: (level, message, data) => log(level, "api", message, data),
-  slskd: (level, message, data) => log(level, "slskd", message, data),
-  system: (level, message, data) => log(level, "system", message, data),
 };

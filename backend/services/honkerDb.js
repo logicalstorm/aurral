@@ -2,7 +2,21 @@ import fs from "fs";
 import path from "path";
 import honker from "@russellthehippo/honker-node";
 import { resolveAurralDataDir } from "../config/data-dir.js";
-import { HONKER_QUEUE_NAMES } from "./honkerQueueMetadata.js";
+
+export const HONKER_QUEUE_NAMES = [
+  "system-task",
+  "weekly-flow-operation",
+  "slskd-pipeline",
+  "playlist-retry",
+  "playlist-reserve-build",
+  "playlist-mbid-enrichment",
+  "library-scan",
+  "discovery-refresh",
+  "discovery-playlist-build",
+  "discovery-user-refresh",
+  "image-prefetch",
+  "_outbox:notifications",
+];
 
 function resolveHonkerDbPath() {
   return process.env.AURRAL_DB_PATH
@@ -507,8 +521,6 @@ export function resetProcessingPipelineJobs() {
   } catch {
   }
 }
-
-export { HONKER_QUEUE_NAMES };
 
 export function sweepAllHonkerQueues() {
   let swept = 0;

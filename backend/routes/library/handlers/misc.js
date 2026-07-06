@@ -1,19 +1,12 @@
-import { UUID_REGEX } from "../../../config/constants.js";
+import { UUID_REGEX } from "../../../../lib/uuid.js";
 import { dbOps } from "../../../db/helpers/index.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
-import { fetchReleaseGroupCoverUrl } from "../../../services/imageService.js";
+import { fetchReleaseGroupCoverUrl } from "../../../services/releaseGroupCoverService.js";
 import { libraryManager, getCachedArtists } from "../../../services/libraryManager.js";
 import { getQualityProfiles } from "../../../services/qualityManager.js";
+import { normalizePercentOfTracks } from "../../../services/lidarrAlbumStats.js";
 
 export function registerMisc(router) {
-  const normalizePercentOfTracks = (value) => {
-    const raw = Number(value);
-    if (!Number.isFinite(raw) || raw <= 0) return 0;
-    if (raw > 1 && raw <= 100) return Math.round(raw);
-    if (raw <= 1) return Math.round(raw * 100);
-    return Math.min(100, Math.round(raw / 10));
-  };
-
   router.post("/scan", async (req, res) => {
     res.status(400).json({ error: "Scanning is handled by Lidarr" });
   });

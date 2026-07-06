@@ -13,7 +13,12 @@ import {
   searchFallbackGenreArtists,
 } from "./listenbrainzDiscoveryFallback.js";
 import { getNormalizedText } from "./providers/brainzmashRanking.js";
-import { parsePositiveInt } from "./searchUtils.js";
+import { normalizePercentOfTracks } from "./lidarrAlbumStats.js";
+
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 const PRIMARY_RELEASE_TYPES = new Set(["Album", "EP", "Single"]);
 const SECONDARY_RELEASE_TYPES = new Set([
@@ -31,14 +36,6 @@ const ALL_RELEASE_TYPES = new Set([
   ...SECONDARY_RELEASE_TYPES,
 ]);
 const albumLibraryLookupCache = createCache(60);
-
-function normalizePercentOfTracks(value) {
-  const raw = Number(value);
-  if (!Number.isFinite(raw) || raw <= 0) return 0;
-  if (raw > 1 && raw <= 100) return Math.round(raw);
-  if (raw <= 1) return Math.round(raw * 100);
-  return Math.min(100, Math.round(raw / 10));
-}
 
 async function fetchLidarrAlbums() {
   try {

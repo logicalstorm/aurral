@@ -1,4 +1,4 @@
-import { UUID_REGEX } from "../../../config/constants.js";
+import { UUID_REGEX } from "../../../../lib/uuid.js";
 import { dbOps } from "../../../db/helpers/index.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 import {

@@ -6,7 +6,7 @@ import {
 import { dbOps } from "../../../db/helpers/index.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
 import { extractLastfmImageUrl } from "../shared/transform.js";
-import { UUID_REGEX } from "../../../config/constants.js";
+import { UUID_REGEX } from "../../../../lib/uuid.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 
 export function registerSimilar(router) {

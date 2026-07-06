@@ -1,5 +1,5 @@
 import { youtubeFindTopSongVideo } from "../../../services/apiClients/index.js";
-import { UUID_REGEX } from "../../../config/constants.js";
+import { UUID_REGEX } from "../../../../lib/uuid.js";
 import { cacheMiddleware } from "../../../middleware/cache.js";
 
 export function registerVideo(router) {

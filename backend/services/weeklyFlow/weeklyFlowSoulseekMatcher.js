@@ -7,7 +7,7 @@ import {
   getYear,
   splitWords as splitWordsBase,
   TITLE_STOP_WORDS,
-} from "./weeklyFlowTextMatch.js";
+} from "../providers/brainzmashRanking.js";
 
 const MATCHER_OPTIONS = { extended: true };
 

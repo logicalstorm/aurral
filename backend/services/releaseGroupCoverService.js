@@ -2,9 +2,10 @@ import { dbOps } from "../db/helpers/index.js";
 import { buildImageProxyUrl, warmImageProxy } from "./imageProxyService.js";
 import { getAlbumByMbid, resolveAlbumByArtistAndTitle } from "./providers/brainzmashProvider.js";
 
-const RG_CACHE_PREFIX = "rg:";
-const LEGACY_COVER_HOST_PATTERN =
+export const LEGACY_COVER_HOST_PATTERN =
   /https?:\/\/(?:caa\.lkly\.net|coverartarchive\.org|archive\.org|[\w-]+\.ca\.archive\.org)\//i;
+
+const RG_CACHE_PREFIX = "rg:";
 
 const getImageUrl = (image) => image?.url || image?.Url || null;
 
