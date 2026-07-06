@@ -64,6 +64,7 @@ function GlobalSearch() {
     setSharedPlaylists,
     playlistsLoading: playlistModalLoading,
     playlistsError: playlistModalError,
+    setPlaylistsError: setPlaylistModalError,
     loadSharedPlaylists,
   } = useSharedPlaylists();
   const canAddArtist = hasPermission("addArtist");
@@ -425,7 +426,7 @@ function GlobalSearch() {
         setPlaylistMenuSavingKey("");
       }
     },
-    [loadSharedPlaylists, sharedPlaylists, showError, showSuccess],
+    [loadSharedPlaylists, setPlaylistModalError, setSharedPlaylists, sharedPlaylists, showError, showSuccess],
   );
 
   const renderSuggestionAction = useCallback(

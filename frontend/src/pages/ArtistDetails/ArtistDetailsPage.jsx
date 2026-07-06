@@ -72,6 +72,7 @@ function ArtistDetailsPage() {
     setSharedPlaylists,
     playlistsLoading: playlistModalLoading,
     playlistsError: playlistModalError,
+    setPlaylistsError: setPlaylistModalError,
     loadSharedPlaylists,
   } = useSharedPlaylists();
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");

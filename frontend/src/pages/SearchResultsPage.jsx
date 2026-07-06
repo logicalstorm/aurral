@@ -85,6 +85,7 @@ function SearchResultsPage() {
     setSharedPlaylists,
     playlistsLoading: playlistModalLoading,
     playlistsError: playlistModalError,
+    setPlaylistsError: setPlaylistModalError,
     loadSharedPlaylists,
   } = useSharedPlaylists();
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
@@ -982,7 +983,7 @@ function SearchResultsPage() {
         setPlaylistMenuSavingKey("");
       }
     },
-    [loadSharedPlaylists, sharedPlaylists, showError, showSuccess],
+    [loadSharedPlaylists, setPlaylistModalError, setSharedPlaylists, sharedPlaylists, showError, showSuccess],
   );
 
   const handleArtistAction = useCallback(

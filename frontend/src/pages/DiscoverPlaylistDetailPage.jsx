@@ -128,7 +128,7 @@ export default function DiscoverPlaylistDetailPage() {
         setPlaylistMenuSavingKey("");
       }
     },
-    [buildTrackPayload, loadSharedPlaylists, sharedPlaylists, showError, showSuccess],
+    [buildTrackPayload, loadSharedPlaylists, setPlaylistMenuError, setSharedPlaylists, sharedPlaylists, showError, showSuccess],
   );
 
   const sourceLine = playlist ? getPlaylistSourceLine(playlist) : null;
