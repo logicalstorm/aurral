@@ -107,7 +107,7 @@ export function normalizeDiscoverPath(path) {
   return normalizedSearch ? `${normalizedPathname}?${normalizedSearch}` : normalizedPathname;
 }
 
-const MBID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { UUID_REGEX } from "../../../lib/uuid.js";
 
 export function pickDiscoverRecentPageState(state) {
   if (!state || typeof state !== "object") return {};
@@ -122,7 +122,7 @@ export function getDiscoverRecentPageLinkState(entry) {
   const storedState = pickDiscoverRecentPageState(entry?.state);
   if (storedState.artistName) return storedState;
   const label = String(entry?.label || "").trim();
-  if (!label || label === "Artist" || MBID_REGEX.test(label)) {
+  if (!label || label === "Artist" || UUID_REGEX.test(label)) {
     return storedState;
   }
   return { ...storedState, artistName: label };

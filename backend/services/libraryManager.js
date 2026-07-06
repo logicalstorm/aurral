@@ -139,7 +139,7 @@ export function getCachedArtistCount() {
 }
 
 export function getCachedArtists() {
-  return Array.isArray(_cachedArtists) ? [..._cachedArtists] : [];
+  return Array.isArray(_cachedArtists) ? _cachedArtists : [];
 }
 
 function getSettings() {
@@ -751,6 +751,7 @@ export class LibraryManager {
           return _cachedArtists;
         }
         _cachedArtists = lidarrArtists.map((a) => this.mapLidarrArtist(a));
+        import("../../services/unifiedSearchService.js").then(({ clearSearchContextCache }) => clearSearchContextCache()).catch(() => {});
         return _cachedArtists;
       } catch (error) {
         const wasHealthy = _lastLidarrFailureAt === 0;

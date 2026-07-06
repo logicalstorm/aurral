@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "../../../../lib/axiosFetch.js";
 import { noCache } from "../../../middleware/cache.js";
 import { verifyTokenAuth } from "../../../middleware/auth.js";
 import { dbOps } from "../../../db/helpers/index.js";

@@ -3,7 +3,7 @@ import { dbOps } from "../../../db/helpers/index.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
 import { fetchReleaseGroupCoverUrl } from "../../../services/imageService.js";
 import { libraryManager, getCachedArtists } from "../../../services/libraryManager.js";
-import { qualityManager } from "../../../services/qualityManager.js";
+import { getQualityProfiles } from "../../../services/qualityManager.js";
 
 export function registerMisc(router) {
   const normalizePercentOfTracks = (value) => {
@@ -37,7 +37,7 @@ export function registerMisc(router) {
 
   router.get("/qualityprofile", async (req, res) => {
     try {
-      const profiles = qualityManager.getQualityProfiles();
+      const profiles = getQualityProfiles();
       res.json(profiles);
     } catch (error) {
       res.status(500).json({

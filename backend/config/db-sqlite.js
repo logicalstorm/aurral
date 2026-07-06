@@ -18,6 +18,10 @@ if (!fs.existsSync(path.dirname(DB_PATH))) {
 const db = new Database(DB_PATH);
 
 db.pragma("journal_mode = WAL");
+db.pragma("busy_timeout = 5000");
+db.pragma("synchronous = NORMAL");
+db.pragma("cache_size = -64000");
+db.pragma("mmap_size = 268435456");
 
 function tryAddColumn(sql) {
   try {

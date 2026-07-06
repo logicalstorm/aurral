@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "../../lib/axiosFetch.js";
 import { dbOps } from "../db/helpers/index.js";
 
 const DEFAULT_MUSIC_CATEGORIES = [3000];

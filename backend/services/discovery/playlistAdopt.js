@@ -61,6 +61,8 @@ export async function adoptDiscoverPresetAsFlow(user, presetId) {
   flowPlaylistConfig.setEnabled(flow.id, true);
   flowPlaylistConfig.scheduleNextRun(flow.id);
 
+  import("../../services/unifiedSearchService.js").then(({ clearSearchContextCache }) => clearSearchContextCache()).catch(() => {});
+
   const tracks = (cachedPlaylist.tracks || []).map(serializeTrack);
   const result = await weeklyFlowOperationQueue.enqueuePayload({
     kind: "adopt-flow-seed",

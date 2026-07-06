@@ -1,4 +1,7 @@
 import { resolveAppVersion } from "../../lib/app-version.js";
+import { UUID_REGEX } from "../../lib/uuid.js";
+
+export { UUID_REGEX };
 
 const TRUE_ENV_VALUES = new Set(["1", "true", "yes", "on", "verbose", "debug"]);
 
@@ -6,10 +9,6 @@ export const isVerboseConsoleEnabled = (env = process.env) =>
   TRUE_ENV_VALUES.has(
     String(env.AURRAL_VERBOSE_LOGS || "").trim().toLowerCase(),
   );
-
-
-export const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const MUSICBRAINZ_API = "https://musicbrainz.org/ws/2";
 export const DEFAULT_METADATA_BASE_URL = "https://lidarrapi.brainzmash.cc";

@@ -2,6 +2,7 @@ import createHonkerWorker from "./honkerWorkerFactory.js";
 import { getImagePrefetchQueue } from "./honkerDb.js";
 import { dbOps } from "../db/helpers/index.js";
 import { getArtistImage } from "./imageService.js";
+import { mapWithConcurrency } from "./discovery/helpers.js";
 
 async function processImagePrefetch(payload = {}) {
   const mbids = (Array.isArray(payload?.mbids) ? payload.mbids : [])
@@ -11,14 +12,17 @@ async function processImagePrefetch(payload = {}) {
 
   const artistNames =
     payload?.artistNames && typeof payload.artistNames === "object" ? payload.artistNames : {};
-  await Promise.allSettled(
-    mbids.map((mbid) => {
+  const IMAGE_PREFETCH_CONCURRENCY = 6;
+  await mapWithConcurrency(
+    mbids,
+    IMAGE_PREFETCH_CONCURRENCY,
+    (mbid) => {
       const cached = dbOps.getImage(mbid);
       return getArtistImage(mbid, {
         artistName: typeof artistNames[mbid] === "string" ? artistNames[mbid] : null,
         forceRefresh: cached?.imageUrl === "NOT_FOUND",
       });
-    }),
+    },
   );
   return { prefetched: mbids.length };
 }

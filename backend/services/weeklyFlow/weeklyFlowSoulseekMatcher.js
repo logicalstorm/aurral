@@ -1,5 +1,31 @@
 import path from "path";
 import { parseFile } from "music-metadata";
+import {
+  normalizeReleaseText,
+  normalizeTitle as normalizeTitleBase,
+  scoreTextMatch as scoreTextMatchBase,
+  getYear,
+  splitWords as splitWordsBase,
+  TITLE_STOP_WORDS,
+} from "./weeklyFlowTextMatch.js";
+
+const MATCHER_OPTIONS = { extended: true };
+
+function normalizeText(value) {
+  return normalizeReleaseText(value, MATCHER_OPTIONS);
+}
+
+function normalizeTitle(value) {
+  return normalizeTitleBase(value, MATCHER_OPTIONS);
+}
+
+function splitWords(value) {
+  return splitWordsBase(value, MATCHER_OPTIONS);
+}
+
+function scoreTextMatch(left, right) {
+  return scoreTextMatchBase(left, right, MATCHER_OPTIONS);
+}
 
 const AUDIO_EXTENSIONS = new Set([
   ".flac",
@@ -14,18 +40,6 @@ const AUDIO_EXTENSIONS = new Set([
   ".wma",
 ]);
 
-const TITLE_STOP_WORDS = new Set([
-  "the",
-  "a",
-  "an",
-  "and",
-  "or",
-  "feat",
-  "featuring",
-  "ft",
-  "with",
-]);
-
 const MIX_VARIANT_PATTERNS = [
   { value: "radio_edit", pattern: /\bradio\s+edit\b/ },
   { value: "extended", pattern: /\b(?:extended|full length|club mix|long version)\b/ },
@@ -35,20 +49,6 @@ const MIX_VARIANT_PATTERNS = [
 const LIVE_VARIANT_PATTERN =
   /\((?:live\b|live at[^)]*)\)|\[(?:live\b|live at[^\]]*)\]|\b(?:live at|live from|live version|live recording)\b|(?: - | – )\s*live\b/i;
 
-function normalizeText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/\(.*?\)|\[.*?\]/g, " ")
-    .replace(
-      /\b(deluxe|expanded|anniversary|remaster(?:ed)?|bonus|edition|live|mono|stereo|explicit|clean)\b/g,
-      " ",
-    )
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function normalizeVariantText(value) {
   return String(value || "")
     .toLowerCase()
@@ -56,13 +56,6 @@ function normalizeVariantText(value) {
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function normalizeTitle(value) {
-  return normalizeText(value)
-    .split(" ")
-    .filter((word) => word && !TITLE_STOP_WORDS.has(word))
-    .join(" ");
 }
 
 function extractVariantProfile(value) {
@@ -81,44 +74,8 @@ function extractVariantProfile(value) {
   };
 }
 
-function getYear(value) {
-  const match = String(value || "").match(/\b(19\d{2}|20\d{2})\b/);
-  return match ? match[1] : null;
-}
-
 function getYears(value) {
   return [...String(value || "").matchAll(/\b(19\d{2}|20\d{2})\b/g)].map((match) => match[1]);
-}
-
-function splitWords(value) {
-  return normalizeText(value)
-    .split(" ")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
-function scoreTextMatch(left, right) {
-  const a = normalizeText(left);
-  const b = normalizeText(right);
-  if (!a || !b) return 0;
-  if (a === b) return 100;
-  if (a.includes(b) || b.includes(a)) {
-    const aWords = a.split(" ").filter(Boolean).length;
-    const bWords = b.split(" ").filter(Boolean).length;
-    const wordRatio = Math.min(aWords, bWords) / Math.max(aWords, bWords, 1);
-    if (wordRatio >= 0.6) return 92;
-    if (wordRatio >= 0.25) return 70;
-    return 45;
-  }
-  const leftWords = new Set(splitWords(a));
-  const rightWords = new Set(splitWords(b));
-  if (leftWords.size === 0 || rightWords.size === 0) return 0;
-  let overlap = 0;
-  for (const word of leftWords) {
-    if (rightWords.has(word)) overlap += 1;
-  }
-  const ratio = (2 * overlap) / Math.max(1, leftWords.size + rightWords.size);
-  return Math.round(ratio * 100);
 }
 
 function getDistinctiveAlbumPhrase(albumName) {

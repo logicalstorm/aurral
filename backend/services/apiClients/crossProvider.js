@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "../../../lib/axiosFetch.js";
 import createCache from "./simpleCache.js";
 import {
   APP_NAME,

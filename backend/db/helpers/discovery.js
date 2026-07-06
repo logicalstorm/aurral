@@ -15,18 +15,35 @@ const DISCOVERY_METADATA_FIELDS = [
   "enrichmentProgressMessage",
 ];
 
+const discoveryUserCache = new Map();
+const DISCOVERY_USER_CACHE_TTL_MS = 10_000;
+
+function pruneDiscoveryUserCache() {
+  const now = Date.now();
+  for (const [key, entry] of discoveryUserCache) {
+    if (now - entry.at >= DISCOVERY_USER_CACHE_TTL_MS) {
+      discoveryUserCache.delete(key);
+    }
+  }
+}
+
 export default function register(dbOps) {
   dbOps.getDiscoveryCache = function (cacheNamespace = null) {
     const prefix = cacheNamespace ? `${cacheNamespace}:` : "";
+
+    if (cacheNamespace) {
+      pruneDiscoveryUserCache();
+      const cached = discoveryUserCache.get(cacheNamespace);
+      if (cached) return cached;
+    }
+
     const metadata =
       dbHelpers.parseJSON(getDiscoveryCacheStmt.get(`${prefix}metadata`)?.value) ||
       {};
-    const recommendations = dbHelpers.parseJSON(
-      getDiscoveryCacheStmt.get(`${prefix}recommendations`)?.value
-    );
-    const globalTop = dbHelpers.parseJSON(
-      getDiscoveryCacheStmt.get(`${prefix}globalTop`)?.value
-    );
+    const recommendationsRow = getDiscoveryCacheStmt.get(`${prefix}recommendations`);
+    const recommendations = dbHelpers.parseJSON(recommendationsRow?.value);
+    const globalTopRow = getDiscoveryCacheStmt.get(`${prefix}globalTop`);
+    const globalTop = dbHelpers.parseJSON(globalTopRow?.value);
     const basedOn = dbHelpers.parseJSON(
       getDiscoveryCacheStmt.get(`${prefix}basedOn`)?.value
     );
@@ -47,8 +64,6 @@ export default function register(dbOps) {
     );
     const provider =
       getDiscoveryCacheStmt.get(`${prefix}provider`)?.value || null;
-    const recommendationsRow = getDiscoveryCacheStmt.get(`${prefix}recommendations`);
-    const globalTopRow = getDiscoveryCacheStmt.get(`${prefix}globalTop`);
     const lastUpdated = cacheNamespace
       ? getDiscoveryCacheStmt.get(`${prefix}lastUpdated`)?.value ||
         recommendationsRow?.last_updated ||
@@ -79,11 +94,18 @@ export default function register(dbOps) {
       enrichmentCompletedAt: metadata.enrichmentCompletedAt || null,
       enrichmentProgressMessage: metadata.enrichmentProgressMessage || null,
     };
+
+    if (cacheNamespace) {
+      discoveryUserCache.set(cacheNamespace, result);
+    }
+
+    return result;
   };
 
   dbOps.updateDiscoveryCache = function (discovery, cacheNamespace = null) {
     const now = new Date().toISOString();
     const prefix = cacheNamespace ? `${cacheNamespace}:` : "";
+    if (cacheNamespace) discoveryUserCache.delete(cacheNamespace);
     const updateFn = db.transaction(() => {
       if (discovery.recommendations) {
         upsertDiscoveryCacheStmt.run(
@@ -179,6 +201,8 @@ export default function register(dbOps) {
   };
 
   dbOps.deleteDiscoveryCacheByPrefix = function (prefix) {
+    const namespace = String(prefix || "").replace(/%$/, "").replace(/:$/, "");
+    discoveryUserCache.delete(namespace);
     return db.prepare("DELETE FROM discovery_cache WHERE key LIKE ?").run(
       `${prefix}%`
     );

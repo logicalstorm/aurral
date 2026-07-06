@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
 import { Loader, Music, Star } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
-import { useImageGradientColors } from "../../../hooks/useImageGradientColors";
+import { useImageGradientColors } from "../../../utils/imageColors";
 import { getReleaseGroupTracks } from "../../../utils/api";
 import { buildAurralPick, getReleaseMetric } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";

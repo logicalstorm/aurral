@@ -1,5 +1,4 @@
 import express from "express";
-import cors from "cors";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import path from "path";
@@ -54,17 +53,28 @@ const allowedCorsOrigins = String(process.env.CORS_ORIGIN || "")
   .map((v) => v.trim())
   .filter(Boolean);
 
-const corsOptions =
-  allowedCorsOrigins.length > 0
-    ? {
-        origin(origin, callback) {
-          if (!origin || allowedCorsOrigins.includes(origin)) {
-            return callback(null, true);
-          }
-          return callback(null, false);
-        },
-      }
-    : { origin: false };
+function corsMiddleware(req, res, next) {
+  if (allowedCorsOrigins.length === 0) {
+    if (req.method === "OPTIONS") {
+      res.status(403).end();
+      return;
+    }
+    next();
+    return;
+  }
+  const origin = req.headers.origin;
+  if (origin && allowedCorsOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") {
+    res.status(origin && allowedCorsOrigins.includes(origin) ? 204 : 403).end();
+    return;
+  }
+  next();
+}
 
 const trustProxyValue =
   process.env.TRUST_PROXY === undefined
@@ -78,7 +88,7 @@ const trustProxyValue =
           : Number(process.env.TRUST_PROXY);
 app.set("trust proxy", trustProxyValue);
 
-app.use(cors(corsOptions));
+app.use(corsMiddleware);
 app.use(
   helmet({
     contentSecurityPolicy: {

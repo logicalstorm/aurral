@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "../../lib/axiosFetch.js";
 import createRateLimiter from "./apiClients/rateLimiter.js";
 import createCache from "./apiClients/simpleCache.js";
 import { validateExternalUrl } from "../middleware/urlValidator.js";

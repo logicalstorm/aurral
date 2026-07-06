@@ -8,59 +8,23 @@ import {
   listArtistAlbums,
   resolveAlbumByArtistAndTitle,
 } from "../providers/brainzmashProvider.js";
+import {
+  normalizeReleaseText,
+  scoreTextMatch as scoreTextMatchBase,
+  getYear,
+} from "./weeklyFlowTextMatch.js";
 
 const artistAliasCache = new Map();
 const releaseGroupSearchCache = new Map();
 const releaseContextCache = new Map();
+const MATCHER_OPTIONS = { extended: true };
 
 function normalizeText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(
-      /\b(deluxe|expanded|anniversary|remaster(?:ed)?|bonus|edition|live|mono|stereo|single|ep)\b/g,
-      " ",
-    )
-    .replace(/\(.*?\)|\[.*?\]/g, " ")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function getYear(value) {
-  const match = String(value || "").match(/\b(19\d{2}|20\d{2})\b/);
-  return match ? match[1] : null;
-}
-
-function splitWords(value) {
-  return normalizeText(value)
-    .split(" ")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+  return normalizeReleaseText(value, MATCHER_OPTIONS);
 }
 
 function scoreTextMatch(left, right) {
-  const a = normalizeText(left);
-  const b = normalizeText(right);
-  if (!a || !b) return 0;
-  if (a === b) return 100;
-  if (a.includes(b) || b.includes(a)) {
-    const aWords = a.split(" ").filter(Boolean).length;
-    const bWords = b.split(" ").filter(Boolean).length;
-    const wordRatio = Math.min(aWords, bWords) / Math.max(aWords, bWords, 1);
-    if (wordRatio >= 0.6) return 92;
-    if (wordRatio >= 0.25) return 70;
-    return 45;
-  }
-  const leftWords = new Set(splitWords(a));
-  const rightWords = new Set(splitWords(b));
-  if (leftWords.size === 0 || rightWords.size === 0) return 0;
-  let overlap = 0;
-  for (const word of leftWords) {
-    if (rightWords.has(word)) overlap += 1;
-  }
-  const ratio = (2 * overlap) / Math.max(1, leftWords.size + rightWords.size);
-  return Math.round(ratio * 100);
+  return scoreTextMatchBase(left, right, MATCHER_OPTIONS);
 }
 
 function pickBestCandidate(candidates, expectedTitle, expectedYear = null) {

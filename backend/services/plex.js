@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "../../lib/axiosFetch.js";
 import crypto from "crypto";
 
 const PLEX_TV = "https://plex.tv";

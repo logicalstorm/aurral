@@ -1,11 +1,4 @@
-import sharp from "sharp";
-
-(() => {
-  const concurrency = Math.floor(Number(process.env.AURRAL_SHARP_CONCURRENCY));
-  sharp.concurrency(concurrency >= 1 && concurrency <= 8 ? concurrency : 1);
-  const cacheMem = Math.floor(Number(process.env.AURRAL_SHARP_CACHE_MEMORY_MB));
-  sharp.cache({ memory: cacheMem >= 8 && cacheMem <= 256 ? cacheMem : 32, files: 20, items: 100 });
-})();
+import sharp from "./sharpResourcePolicy.js";
 
 const TAG_COLORS = [
   "#845336",

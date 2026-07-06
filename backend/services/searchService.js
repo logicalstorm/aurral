@@ -12,6 +12,8 @@ import {
   DISCOVERY_PROVIDER_LISTENBRAINZ_FALLBACK,
   searchFallbackGenreArtists,
 } from "./listenbrainzDiscoveryFallback.js";
+import { getNormalizedText } from "./providers/brainzmashRanking.js";
+import { parsePositiveInt } from "./searchUtils.js";
 
 const PRIMARY_RELEASE_TYPES = new Set(["Album", "EP", "Single"]);
 const SECONDARY_RELEASE_TYPES = new Set([
@@ -29,19 +31,6 @@ const ALL_RELEASE_TYPES = new Set([
   ...SECONDARY_RELEASE_TYPES,
 ]);
 const albumLibraryLookupCache = createCache(60);
-function parsePositiveInt(value, fallback) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function normalizeSearchText(value) {
-  return String(value || "")
-    .normalize("NFKD")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function normalizePercentOfTracks(value) {
   const raw = Number(value);
@@ -51,6 +40,19 @@ function normalizePercentOfTracks(value) {
   return Math.min(100, Math.round(raw / 10));
 }
 
+async function fetchLidarrAlbums() {
+  try {
+    const albums = await lidarrClient.request("/album");
+    if (Array.isArray(albums)) {
+      albumLibraryLookupCache.set("lidarrAlbums", albums);
+      return albums;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function getAlbumLibraryLookup(albumMbids) {
   const lookup = new Map();
   if (!lidarrClient.isConfigured() || albumMbids.length === 0) {
@@ -58,9 +60,10 @@ async function getAlbumLibraryLookup(albumMbids) {
   }
 
   try {
-    const lidarrAlbums = albumLibraryLookupCache.get("lidarrAlbums");
+    let lidarrAlbums = albumLibraryLookupCache.get("lidarrAlbums");
     if (!lidarrAlbums) {
-      return lookup;
+      lidarrAlbums = await fetchLidarrAlbums();
+      if (!lidarrAlbums) return lookup;
     }
     const wanted = new Set(albumMbids);
     for (const album of Array.isArray(lidarrAlbums) ? lidarrAlbums : []) {
@@ -274,7 +277,7 @@ function getTagArtistKey(artist) {
 function matchesTagSearch(artist, normalizedTag) {
   const tags = Array.isArray(artist?.tags) ? artist.tags : [];
   const genres = Array.isArray(artist?.genres) ? artist.genres : [];
-  return [...tags, ...genres].some((entry) => normalizeSearchText(entry) === normalizedTag);
+  return [...tags, ...genres].some((entry) => getNormalizedText(entry) === normalizedTag);
 }
 
 function dedupeTagArtists(artists) {
@@ -398,7 +401,7 @@ export async function searchTags(query, limit = 24, offset = 0) {
   }
 
   const discoveryCache = getDiscoveryCache();
-  const tagLower = normalizeSearchText(tag);
+  const tagLower = getNormalizedText(tag);
   const recommendedMatches = dedupeTagArtists(
     (discoveryCache.recommendations || [])
       .filter((artist) => matchesTagSearch(artist, tagLower))

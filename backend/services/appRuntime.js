@@ -18,6 +18,7 @@ import { startWeeklyFlowPlaylistRetryWorker } from "./weeklyFlow/weeklyFlowPlayl
 import { startWeeklyFlowPlaylistReserveBuildWorker } from "./weeklyFlow/weeklyFlowPlaylistReserveBuildWorker.js";
 import { startPlaylistMbidEnrichmentWorker } from "./playlistMbidEnrichmentWorker.js";
 import { registerHonkerShutdownHandler } from "./honkerWorkerRuntime.js";
+import { HONKER_QUEUE_NAMES } from "./honkerQueueMetadata.js";
 
 let backgroundWorkersStarted = false;
 let workerSupervisorStarted = false;
@@ -29,23 +30,25 @@ const WORKER_SUPERVISOR_POLL_MS = Math.max(
   Math.floor(Number(process.env.AURRAL_WORKER_SUPERVISOR_POLL_MS) || 60000),
 );
 
-const QUEUE_WORKERS = [
-  { queue: "system-task", start: startSystemTaskWorker },
-  { queue: "library-scan", start: startLibraryScanWorker },
-  { queue: "image-prefetch", start: startImagePrefetchWorker },
-  { queue: "_outbox:notifications", start: startNotificationOutboxWorker },
-  { queue: "slskd-pipeline", start: startSlskdOrchestratorWorker },
-  { queue: "discovery-refresh", start: startDiscoveryRefreshWorker },
-  { queue: "discovery-playlist-build", start: startDiscoveryPlaylistBuildWorker },
-  { queue: "discovery-user-refresh", start: startDiscoveryUserRefreshWorker },
-  { queue: "weekly-flow-operation", start: startWeeklyFlowOperationWorker },
-  { queue: "playlist-retry", start: startWeeklyFlowPlaylistRetryWorker },
-  {
-    queue: "playlist-reserve-build",
-    start: startWeeklyFlowPlaylistReserveBuildWorker,
-  },
-  { queue: "playlist-mbid-enrichment", start: startPlaylistMbidEnrichmentWorker },
-];
+const WORKER_STARTS = {
+  "system-task": startSystemTaskWorker,
+  "library-scan": startLibraryScanWorker,
+  "image-prefetch": startImagePrefetchWorker,
+  "_outbox:notifications": startNotificationOutboxWorker,
+  "slskd-pipeline": startSlskdOrchestratorWorker,
+  "discovery-refresh": startDiscoveryRefreshWorker,
+  "discovery-playlist-build": startDiscoveryPlaylistBuildWorker,
+  "discovery-user-refresh": startDiscoveryUserRefreshWorker,
+  "weekly-flow-operation": startWeeklyFlowOperationWorker,
+  "playlist-retry": startWeeklyFlowPlaylistRetryWorker,
+  "playlist-reserve-build": startWeeklyFlowPlaylistReserveBuildWorker,
+  "playlist-mbid-enrichment": startPlaylistMbidEnrichmentWorker,
+};
+
+const QUEUE_WORKERS = HONKER_QUEUE_NAMES.map((queue) => ({
+  queue,
+  start: WORKER_STARTS[queue],
+})).filter((worker) => typeof worker.start === "function");
 
 function clearSupervisorWakeTimer() {
   if (!workerSupervisorTimer) return;

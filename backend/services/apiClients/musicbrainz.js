@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "../../../lib/axiosFetch.js";
 import createRateLimiter from "./rateLimiter.js";
 import createCache from "./simpleCache.js";
 import { logger } from "../logger.js";
@@ -64,7 +64,7 @@ const requestMusicbrainz = async (
 
 const mbLimiter = createRateLimiter(1000);
 
-const musicbrainzRequestWithRetry = async (
+const executeMusicbrainzRequest = async (
   endpoint,
   params = {},
   retryCount = 0,
@@ -146,7 +146,7 @@ const musicbrainzRequestWithRetry = async (
       );
     }
     await new Promise((resolve) => setTimeout(resolve, delay));
-    return musicbrainzRequestWithRetry(
+    return executeMusicbrainzRequest(
       endpoint,
       params,
       retryCount + 1,
@@ -173,6 +173,29 @@ const musicbrainzRequestWithRetry = async (
     }
   }
   throw error;
+};
+
+const musicbrainzRequestWithRetry = async (
+  endpoint,
+  params = {},
+  retryCount = 0,
+  forceIpv4 = false,
+) => {
+  if (retryCount > 0) {
+    return executeMusicbrainzRequest(endpoint, params, retryCount, forceIpv4);
+  }
+  const cacheKey = `mb:${endpoint}:${JSON.stringify(params)}`;
+  const cached = mbCache.get(cacheKey);
+  if (cached) return cached;
+  const inflight = musicbrainzInflightRequests.get(cacheKey);
+  if (inflight) return inflight;
+  const requestPromise = executeMusicbrainzRequest(endpoint, params, 0, forceIpv4);
+  musicbrainzInflightRequests.set(cacheKey, requestPromise);
+  try {
+    return await requestPromise;
+  } finally {
+    musicbrainzInflightRequests.delete(cacheKey);
+  }
 };
 
 export const musicbrainzRequest = async (endpoint, params = {}) =>

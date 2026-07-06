@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "../../lib/axiosFetch.js";
 import http from "http";
 import https from "https";
 import { dbOps } from "../db/helpers/index.js";

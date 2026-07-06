@@ -203,11 +203,13 @@ const ArtistImage = ({
   };
 
   const previewButton = canPlayArtistPreview ? (
-    <button
-      type="button"
-      className={`artist-image-preview-button${isArtistPreviewActive ? " is-active" : ""}`}
+    <span
+      role="button"
+      tabIndex={isLoadingPreview ? -1 : 0}
+      className={`artist-image-preview-button${isArtistPreviewActive ? " is-active" : ""}${isLoadingPreview ? " is-loading" : ""}`}
       onClick={handlePreviewClick}
-      disabled={isLoadingPreview}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playArtistPreview(); } }}
+      aria-disabled={isLoadingPreview}
       aria-label={`Play ${artistName || "artist"} top tracks`}
       title={`Play ${artistName || "artist"} top tracks`}
     >
@@ -216,7 +218,7 @@ const ArtistImage = ({
       ) : (
         <Play className="artist-image-preview-button__icon" fill="currentColor" />
       )}
-    </button>
+    </span>
   ) : null;
 
   const showPlaceholder = !currentSrc;

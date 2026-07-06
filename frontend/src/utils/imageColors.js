@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   QuantizerCelebi,
   Score,
@@ -10,6 +11,22 @@ const SAMPLE_SIZE = 128;
 const MAX_COLORS = 128;
 const gradientCache = new Map();
 
+function isExternalUrl(url) {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return parsed.origin !== window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+function proxyImageUrl(src) {
+  if (!src || src.startsWith("data:") || src.startsWith("blob:")) return src;
+  if (src.startsWith("/api/image-proxy")) return src;
+  if (!isExternalUrl(src)) return src;
+  return `/api/image-proxy?src=${encodeURIComponent(src)}`;
+}
+
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -17,7 +34,7 @@ function loadImage(src) {
     image.decoding = "async";
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error("Image load failed"));
-    image.src = src;
+    image.src = proxyImageUrl(src);
   });
 }
 
@@ -113,4 +130,30 @@ export async function extractTwoToneGradientFromImage(src) {
     gradientCache.delete(src);
   }
   return result;
+}
+
+export function useImageGradientColors(src) {
+  const [colors, setColors] = useState(null);
+
+  useEffect(() => {
+    if (!src) {
+      setColors(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setColors(null);
+
+    extractTwoToneGradientFromImage(src).then((result) => {
+      if (!cancelled) {
+        setColors(result);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  return colors;
 }

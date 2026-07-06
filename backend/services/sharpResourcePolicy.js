@@ -6,7 +6,7 @@ const clampInteger = (value, min, max, fallback) => {
   return Math.min(max, Math.max(min, parsed));
 };
 
-const SHARP_CONCURRENCY = clampInteger(process.env.AURRAL_SHARP_CONCURRENCY, 1, 8, 1);
+const SHARP_CONCURRENCY = clampInteger(process.env.AURRAL_SHARP_CONCURRENCY, 1, 8, 4);
 const SHARP_CACHE_MEMORY_MB = clampInteger(process.env.AURRAL_SHARP_CACHE_MEMORY_MB, 8, 256, 32);
 
 sharp.concurrency(SHARP_CONCURRENCY);

@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "../../../lib/axiosFetch.js";
 import https from "https";
 import createRateLimiter from "./rateLimiter.js";
 import createCache from "./simpleCache.js";

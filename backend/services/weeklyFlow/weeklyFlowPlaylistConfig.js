@@ -834,6 +834,7 @@ export const flowPlaylistConfig = {
     });
     playlists[index] = next;
     setSharedPlaylists(playlists);
+    import("../../services/unifiedSearchService.js").then(({ clearSearchContextCache }) => clearSearchContextCache()).catch(() => {});
     return next;
   },
 

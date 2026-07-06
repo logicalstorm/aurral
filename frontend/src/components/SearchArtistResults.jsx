@@ -2,7 +2,7 @@ import PropTypes from "prop-types";
 import ArtistImage from "./ArtistImage";
 import SearchLibraryCheck from "./SearchLibraryCheck";
 import { ArtistContextMenu } from "./ArtistContextMenu";
-import { useImageGradientColors } from "../hooks/useImageGradientColors";
+import { useImageGradientColors } from "../utils/imageColors";
 import { getArtistFeedbackFlags } from "../utils/discoveryFeedback";
 import { getArtistRecordId } from "../utils/artistTaste";
 

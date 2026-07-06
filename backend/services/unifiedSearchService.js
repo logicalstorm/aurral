@@ -8,12 +8,13 @@ import { searchAlbums, searchArtists } from "./providers/brainzmashProvider.js";
 import { flowPlaylistConfig } from "./weeklyFlow/weeklyFlowPlaylistConfig.js";import { getCachedArtists } from "./libraryManager.js";
 import { getDiscoveryCache } from "./discovery/index.js";
 import { compareSearchResults, getLocalMatchThreshold } from "./searchRanking.js";
+import { parsePositiveInt } from "./searchUtils.js";
 
 const unifiedSearchCache = createCache(60);
 
 const SUGGEST_LIMIT = 5;
 const FULL_LIMIT = 20;
-const SEARCH_CONTEXT_TTL_SECONDS = 45;
+const SEARCH_CONTEXT_TTL_SECONDS = 300;
 const CONTEXT_BOOST = {
   LIBRARY_TRACK: 420,
   PLAYLIST_TRACK: 360,
@@ -369,11 +370,6 @@ function pickCatalogTopFallback(catalog) {
   return catalog.artists?.[0] || catalog.albums?.[0] || catalog.tracks?.[0] || null;
 }
 
-function parsePositiveInt(value, fallback) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 function normalizeMode(value) {
   return String(value || "").trim() === "full" ? "full" : "suggest";
 }
@@ -537,6 +533,14 @@ function getSearchContext(user) {
   const context = loadSearchContext(user);
   searchContextCache.set(cacheKey, context);
   return context;
+}
+
+export function clearSearchContextCache(userId) {
+  if (userId) {
+    searchContextCache.flushAll();
+    return;
+  }
+  searchContextCache.flushAll();
 }
 
 export function searchLocalFromData(

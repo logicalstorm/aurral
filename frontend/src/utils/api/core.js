@@ -1,4 +1,3 @@
-import axios from "axios";
 import { getAppBasePath } from "../basePath.js";
 
 const getDefaultApiBaseUrl = () => {
@@ -10,7 +9,133 @@ const getDefaultApiBaseUrl = () => {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || getDefaultApiBaseUrl();
 
-const api = axios.create({
+function joinUrl(baseURL, url) {
+  if (!url) return baseURL;
+  if (String(url).startsWith("http://") || String(url).startsWith("https://")) return url;
+  return `${String(baseURL).replace(/\/+$/, "")}/${String(url).replace(/^\/+/, "")}`;
+}
+
+function appendParams(url, params) {
+  if (!params || typeof params !== "object") return url;
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value != null && value !== "") search.set(key, String(value));
+  }
+  const query = search.toString();
+  if (!query) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}${query}`;
+}
+
+function createApiClient({ baseURL, timeout = 30000, headers = {} }) {
+  const requestInterceptors = [];
+  const responseInterceptors = [];
+
+  async function runRequestInterceptors(config) {
+    let next = { ...config, headers: { ...headers, ...config.headers } };
+    for (const { fulfilled, rejected } of requestInterceptors) {
+      try {
+        next = await fulfilled(next);
+      } catch (error) {
+        if (rejected) return rejected(error);
+        throw error;
+      }
+    }
+    return next;
+  }
+
+  async function runResponseInterceptors(response) {
+    let next = response;
+    for (const { fulfilled } of responseInterceptors) {
+      next = await fulfilled(next);
+    }
+    return next;
+  }
+
+  async function runResponseErrorInterceptors(error) {
+    let next = error;
+    for (const { rejected } of responseInterceptors) {
+      if (!rejected) continue;
+      next = await rejected(next);
+    }
+    return next;
+  }
+
+  async function request(config) {
+    const cfg = await runRequestInterceptors(config);
+    const method = String(cfg.method || "GET").toUpperCase();
+    let url = appendParams(joinUrl(baseURL, cfg.url || ""), cfg.params);
+    const controller = new AbortController();
+    const timeoutMs = Number(cfg.timeout ?? timeout);
+    const timer =
+      timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
+    try {
+      const init = {
+        method,
+        headers: { ...cfg.headers },
+        signal: controller.signal,
+      };
+      if (cfg.data != null && method !== "GET" && method !== "HEAD") {
+        init.body = typeof cfg.data === "string" ? cfg.data : JSON.stringify(cfg.data);
+        if (!init.headers["Content-Type"] && !init.headers["content-type"]) {
+          init.headers["Content-Type"] = "application/json";
+        }
+      }
+
+      const res = await fetch(url, init);
+      const contentType = res.headers.get("content-type") || "";
+      let data;
+      if (contentType.includes("json")) {
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+      } else {
+        data = await res.text();
+      }
+
+      const response = {
+        status: res.status,
+        statusText: res.statusText,
+        headers: res.headers,
+        data,
+      };
+
+      if (!res.ok) {
+        const error = new Error(`Request failed with status code ${res.status}`);
+        error.response = response;
+        throw await runResponseErrorInterceptors(error);
+      }
+
+      return runResponseInterceptors(response);
+    } catch (error) {
+      if (error?.response) throw error;
+      throw await runResponseErrorInterceptors(error);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  return {
+    interceptors: {
+      request: {
+        use: (fulfilled, rejected) => requestInterceptors.push({ fulfilled, rejected }),
+      },
+      response: {
+        use: (fulfilled, rejected) => responseInterceptors.push({ fulfilled, rejected }),
+      },
+    },
+    get: (url, config = {}) => request({ ...config, method: "GET", url }),
+    post: (url, data, config = {}) => request({ ...config, method: "POST", url, data }),
+    put: (url, data, config = {}) => request({ ...config, method: "PUT", url, data }),
+    patch: (url, data, config = {}) => request({ ...config, method: "PATCH", url, data }),
+    delete: (url, config = {}) => request({ ...config, method: "DELETE", url }),
+  };
+}
+
+const api = createApiClient({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: {

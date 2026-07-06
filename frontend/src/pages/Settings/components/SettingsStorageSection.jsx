@@ -5,7 +5,7 @@ import {
   getStorageHealthCache,
   refreshStorageHealth,
   subscribeStorageHealth,
-} from "../../../hooks/storageHealthStatus";
+} from "../../../hooks/useStorageHealth";
 import { SettingsArrFieldSet } from "./arr/SettingsArrLayout";
 
 function formatBytes(bytes) {

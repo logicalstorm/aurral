@@ -1,19 +1,13 @@
-import axios from "axios";
 import { dbOps } from "../db/helpers/index.js";
+import {
+  createConnectionCache,
+  normalizeBaseUrl,
+  normalizeInteger,
+  sanitizeNzbName,
+} from "./usenetClientCommon.js";
+import { httpPost } from "./http.js";
 
-let connectionCache = { checkedAt: 0, result: null };
-
-function normalizeBaseUrl(value) {
-  return String(value || "")
-    .trim()
-    .replace(/\/+$/, "");
-}
-
-function normalizeInteger(value, fallback = 0) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.trunc(parsed);
-}
+let connectionCache = createConnectionCache();
 
 function getSettings() {
   const nzbget = dbOps.getSettings()?.integrations?.nzbget || {};
@@ -37,46 +31,9 @@ function buildRpcUrl(baseUrl) {
   return `${url}/jsonrpc`;
 }
 
-function buildClientFromCredentials(url, username, password) {
-  const rpcUrl = buildRpcUrl(url);
-  if (!rpcUrl) throw new Error("NZBGet not configured");
-  return axios.create({
-    baseURL: rpcUrl,
-    timeout: 45000,
-    auth:
-      username || password
-        ? {
-            username,
-            password,
-          }
-        : undefined,
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    validateStatus: () => true,
-  });
-}
-
-function buildClient() {
-  const { url, username, password } = getSettings();
-  return buildClientFromCredentials(url, username, password);
-}
-
-function sanitizeNzbName(value) {
-  const raw = String(value || "aurral-download");
-  const cleaned = Array.from(raw)
-    .map((ch) => {
-      const code = ch.codePointAt(0);
-      if (code < 0x20) return "_";
-      if ('<>:"/\\|?*'.includes(ch)) return "_";
-      return ch;
-    })
-    .join("")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 180);
-  return cleaned || "aurral-download";
+function buildAuthFromCredentials(username, password) {
+  if (!username && !password) return undefined;
+  return { username, password };
 }
 
 function readConfigValue(configEntries, name) {
@@ -106,12 +63,25 @@ export class NzbgetClient {
   }
 
   async rpc(method, params = []) {
-    const response = await buildClient().post("", {
-      jsonrpc: "2.0",
-      method,
-      params,
-      id: Date.now(),
-    });
+    const { url, username, password } = getSettings();
+    const rpcUrl = buildRpcUrl(url);
+    if (!rpcUrl) throw new Error("NZBGet not configured");
+    const response = await httpPost(
+      rpcUrl,
+      {
+        jsonrpc: "2.0",
+        method,
+        params,
+        id: Date.now(),
+      },
+      {
+        timeoutMs: 45000,
+        auth: buildAuthFromCredentials(username, password),
+        headers: {
+          Accept: "application/json",
+        },
+      },
+    );
     if (response.status !== 200) {
       throw new Error(`NZBGet ${method} failed: HTTP ${response.status}`);
     }

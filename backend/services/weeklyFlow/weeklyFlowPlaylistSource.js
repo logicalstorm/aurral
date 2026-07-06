@@ -2,7 +2,6 @@ import { lastfmRequest, getLastfmApiKey } from "../apiClients/index.js";
 import { getDiscoveryCache } from "../discovery/index.js";
 import { normalizeWeightMap } from "./weeklyFlowPlaylistConfig.js";
 import { getDiscoveryFeedback } from "../discovery/feedback.js";
-const _MBID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LASTFM_HARVEST_CONCURRENCY = 12;
 const ARTIST_TOP_TRACKS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const LIBRARY_OWNERSHIP_CACHE_TTL_MS = 10 * 60 * 1000;

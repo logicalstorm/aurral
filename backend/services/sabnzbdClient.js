@@ -1,19 +1,13 @@
-import axios from "axios";
 import { dbOps } from "../db/helpers/index.js";
+import {
+  createConnectionCache,
+  normalizeBaseUrl,
+  normalizeInteger,
+  sanitizeNzbName,
+} from "./usenetClientCommon.js";
+import { httpGet } from "./http.js";
 
-let connectionCache = { checkedAt: 0, result: null };
-
-function normalizeBaseUrl(value) {
-  return String(value || "")
-    .trim()
-    .replace(/\/+$/, "");
-}
-
-function normalizeInteger(value, fallback = 0) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.trunc(parsed);
-}
+let connectionCache = createConnectionCache();
 
 function getSettings() {
   const sabnzbd = dbOps.getSettings()?.integrations?.sabnzbd || {};
@@ -31,22 +25,6 @@ function buildUrl(url, apiKey) {
   const base = normalizeBaseUrl(url);
   if (!base) return "";
   return `${base}/api?apikey=${encodeURIComponent(apiKey)}&output=json`;
-}
-
-function sanitizeNzbName(value) {
-  const raw = String(value || "aurral-download");
-  const cleaned = Array.from(raw)
-    .map((ch) => {
-      const code = ch.codePointAt(0);
-      if (code < 0x20) return "_";
-      if ('<>:"/\\|?*'.includes(ch)) return "_";
-      return ch;
-    })
-    .join("")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 180);
-  return cleaned || "aurral-download";
 }
 
 function mapPriority(addPaused) {
@@ -94,10 +72,7 @@ export class SabnzbdClient {
       .filter(([, v]) => v != null && v !== "")
       .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
       .join("&");
-    const response = await axios.get(`${base}&${query}`, {
-      timeout: 45000,
-      validateStatus: () => true,
-    });
+    const response = await httpGet(`${base}&${query}`, { timeoutMs: 45000 });
     if (response.status !== 200) {
       throw new Error(`SABnzbd ${mode} failed: HTTP ${response.status}`);
     }
@@ -156,7 +131,6 @@ export class SabnzbdClient {
   }
 
   async getDownloadDirectories() {
-    const settings = getSettings();
     const result = await this.api("get_config", { section: "misc" }).catch(() => null);
     const entries = result?.config?.misc || [];
     return {
@@ -191,8 +165,8 @@ export class SabnzbdClient {
     try {
       const apiUrl = buildUrl(settings.url, settings.apiKey);
       const [versionRes, statsRes, directories] = await Promise.all([
-        axios.get(`${apiUrl}&mode=version`, { timeout: 15000, validateStatus: () => true }),
-        axios.get(`${apiUrl}&mode=server_stats`, { timeout: 15000, validateStatus: () => true }),
+        httpGet(`${apiUrl}&mode=version`, { timeoutMs: 15000 }),
+        httpGet(`${apiUrl}&mode=server_stats`, { timeoutMs: 15000 }),
         this.getDownloadDirectories(),
       ]);
       const version = versionRes.data?.version || null;

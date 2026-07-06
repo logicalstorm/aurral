@@ -2,7 +2,7 @@ import PropTypes from "prop-types";
 import { ChevronRight, ListMusic, Music } from "lucide-react";
 import ArtistImage from "./ArtistImage";
 import SearchLibraryCheck from "./SearchLibraryCheck";
-import { useImageGradientColors } from "../hooks/useImageGradientColors";
+import { useImageGradientColors } from "../utils/imageColors";
 import { navigateFromSearchResult } from "../utils/searchNavigation";
 import { getArtistRecordId } from "../utils/artistTaste";
 

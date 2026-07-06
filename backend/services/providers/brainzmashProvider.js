@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "../../../lib/axiosFetch.js";
 import createCache from "../apiClients/simpleCache.js";
 import { dbOps } from "../../db/helpers/index.js";
 import {
@@ -23,6 +23,7 @@ import { selectBestAlbumImage } from "../imageService.js";
 
 const providerCache = createCache(300);
 const releaseCache = createCache(300);
+const providerInflightRequests = new Map();
 
 const healthState = {
   configuredProvider: "brainzmash",
@@ -74,32 +75,43 @@ function getUserAgent() {
 
 async function request(path, params = {}) {
   const baseUrl = getMetadataBaseUrl();
-  const cacheKey = `${path}:${JSON.stringify(params)}`;
+  const cacheKey = `${baseUrl}${path}:${JSON.stringify(params)}`;
   const cached = providerCache.get(cacheKey);
   if (cached) return cached;
+  const inflight = providerInflightRequests.get(cacheKey);
+  if (inflight) return inflight;
 
   healthState.activeBaseUrl = baseUrl;
   healthState.lastCheckedAt = nowIso();
 
+  const requestPromise = (async () => {
+    try {
+      const response = await axios.get(`${baseUrl}${path}`, {
+        params,
+        timeout: 8000,
+        headers: {
+          "User-Agent": getUserAgent(),
+        },
+      });
+      providerCache.set(cacheKey, response.data);
+      healthState.lastSuccessAt = healthState.lastCheckedAt;
+      healthState.lastFailureReason = "";
+      return response.data;
+    } catch (error) {
+      healthState.lastFailureAt = healthState.lastCheckedAt;
+      healthState.lastFailureReason =
+        error?.response?.status != null
+          ? `HTTP ${error.response.status}`
+          : error?.code || error?.message || "Unknown error";
+      throw error;
+    }
+  })();
+
+  providerInflightRequests.set(cacheKey, requestPromise);
   try {
-    const response = await axios.get(`${baseUrl}${path}`, {
-      params,
-      timeout: 8000,
-      headers: {
-        "User-Agent": getUserAgent(),
-      },
-    });
-    providerCache.set(cacheKey, response.data);
-    healthState.lastSuccessAt = healthState.lastCheckedAt;
-    healthState.lastFailureReason = "";
-    return response.data;
-  } catch (error) {
-    healthState.lastFailureAt = healthState.lastCheckedAt;
-    healthState.lastFailureReason =
-      error?.response?.status != null
-        ? `HTTP ${error.response.status}`
-        : error?.code || error?.message || "Unknown error";
-    throw error;
+    return await requestPromise;
+  } finally {
+    providerInflightRequests.delete(cacheKey);
   }
 }
 

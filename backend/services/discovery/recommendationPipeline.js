@@ -1,4 +1,4 @@
-const MBID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { UUID_REGEX } from "../../config/constants.js";
 
 const SOURCE_BASE_WEIGHTS = {
   library: 1,
@@ -41,7 +41,7 @@ const normalizeText = (value) =>
 
 const normalizeMbid = (value) => {
   const normalized = normalizeText(value);
-  return MBID_REGEX.test(normalized) ? normalized : null;
+  return UUID_REGEX.test(normalized) ? normalized : null;
 };
 
 const buildSeedIdentityKeys = (mbid, artistName) => {

@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "../../lib/axiosFetch.js";
 import createCache from "./apiClients/simpleCache.js";
 import { getTicketmasterApiKey } from "./apiClients/index.js";
 

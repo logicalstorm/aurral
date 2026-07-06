@@ -1,72 +1,15 @@
 import path from "path";
+import {
+  normalizeReleaseText as normalizeText,
+  normalizeTitle,
+  scoreTextMatch,
+  getYear,
+  splitWords,
+} from "./weeklyFlowTextMatch.js";
 
 const AUDIO_CATEGORY_MIN = 3000;
 const AUDIO_CATEGORY_MAX = 3999;
 const DEFAULT_MAX_RELEASE_SIZE_MB = 2500;
-const TITLE_STOP_WORDS = new Set([
-  "the",
-  "a",
-  "an",
-  "and",
-  "or",
-  "feat",
-  "featuring",
-  "ft",
-  "with",
-]);
-
-function normalizeText(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/\(.*?\)|\[.*?\]/g, " ")
-    .replace(/\b(deluxe|expanded|anniversary|remaster(?:ed)?|bonus|edition|explicit|clean)\b/g, " ")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function normalizeTitle(value) {
-  return normalizeText(value)
-    .split(" ")
-    .filter((word) => word && !TITLE_STOP_WORDS.has(word))
-    .join(" ");
-}
-
-function splitWords(value) {
-  return normalizeText(value)
-    .split(" ")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
-function scoreTextMatch(left, right) {
-  const a = normalizeText(left);
-  const b = normalizeText(right);
-  if (!a || !b) return 0;
-  if (a === b) return 100;
-  if (a.includes(b) || b.includes(a)) {
-    const aWords = a.split(" ").filter(Boolean).length;
-    const bWords = b.split(" ").filter(Boolean).length;
-    const ratio = Math.min(aWords, bWords) / Math.max(aWords, bWords, 1);
-    if (ratio >= 0.6) return 92;
-    if (ratio >= 0.25) return 70;
-    return 45;
-  }
-  const leftWords = new Set(splitWords(a));
-  const rightWords = new Set(splitWords(b));
-  if (leftWords.size === 0 || rightWords.size === 0) return 0;
-  let overlap = 0;
-  for (const word of leftWords) {
-    if (rightWords.has(word)) overlap += 1;
-  }
-  return Math.round(((2 * overlap) / Math.max(1, leftWords.size + rightWords.size)) * 100);
-}
-
-function getYear(value) {
-  const match = String(value || "").match(/\b(19\d{2}|20\d{2})\b/);
-  return match ? match[1] : null;
-}
 
 function hasAudioCategory(release) {
   const categories = Array.isArray(release?.categories) ? release.categories : [];

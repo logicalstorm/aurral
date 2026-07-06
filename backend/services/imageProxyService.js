@@ -1,8 +1,8 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import axios from "axios";
-import sharp from "sharp";
+import axios from "../../lib/axiosFetch.js";
+import sharp from "./sharpResourcePolicy.js";
 import { resolveAurralDataDir } from "../config/data-dir.js";
 
 const IMAGE_PROXY_ROUTE = "/api/image-proxy";
@@ -18,6 +18,7 @@ const inflightRequests = new Map();
 const cacheEntriesByKey = new Map();
 const cacheKeysBySourceUrl = new Map();
 let cacheIndexInitialized = false;
+let indexBuildPromise = null;
 
 const PRIVATE_HOST_PATTERNS = [
   /^localhost$/i,
@@ -46,38 +47,45 @@ const ensureCacheDir = () => {
 
 const initializeCacheIndex = () => {
   if (cacheIndexInitialized) return;
-  ensureCacheDir();
+  if (indexBuildPromise) return;
   cacheIndexInitialized = true;
-
-  const files = fs.readdirSync(IMAGE_PROXY_DIR);
-  for (const file of files) {
-    const match = file.match(/^([a-f0-9]{64})\.json$/i);
-    if (!match) continue;
-    const cacheKey = match[1].toLowerCase();
-    const metaPath = path.join(IMAGE_PROXY_DIR, file);
-    let meta = null;
-    try {
-      meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
-    } catch {
-      continue;
-    }
-    if (!meta?.extension) continue;
-    const imagePath = path.join(IMAGE_PROXY_DIR, `${cacheKey}.${meta.extension}`);
-    if (!fs.existsSync(imagePath)) continue;
-    const sourceUrl = normalizeKnownImageUrl(meta.sourceUrl);
-    const entry = {
-      cacheKey,
-      meta,
-      imagePath,
-      localUrl: buildLocalImageUrl(cacheKey, meta.extension),
-      isFresh:
-        Number(meta.fetchedAt || 0) > 0 && Date.now() - Number(meta.fetchedAt || 0) < CACHE_TTL_MS,
-    };
-    cacheEntriesByKey.set(cacheKey, entry);
-    if (sourceUrl) {
-      cacheKeysBySourceUrl.set(sourceUrl, cacheKey);
-    }
-  }
+  indexBuildPromise = new Promise((resolve) => {
+    setImmediate(() => {
+      try {
+        ensureCacheDir();
+        const files = fs.readdirSync(IMAGE_PROXY_DIR);
+        for (const file of files) {
+          const match = file.match(/^([a-f0-9]{64})\.json$/i);
+          if (!match) continue;
+          const cacheKey = match[1].toLowerCase();
+          const metaPath = path.join(IMAGE_PROXY_DIR, file);
+          let meta = null;
+          try {
+            meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+          } catch {
+            continue;
+          }
+          if (!meta?.extension) continue;
+          const imagePath = path.join(IMAGE_PROXY_DIR, `${cacheKey}.${meta.extension}`);
+          if (!fs.existsSync(imagePath)) continue;
+          const sourceUrl = normalizeKnownImageUrl(meta.sourceUrl);
+          cacheEntriesByKey.set(cacheKey, {
+            cacheKey,
+            meta,
+            imagePath,
+            localUrl: buildLocalImageUrl(cacheKey, meta.extension),
+            isFresh:
+              Number(meta.fetchedAt || 0) > 0 &&
+              Date.now() - Number(meta.fetchedAt || 0) < CACHE_TTL_MS,
+          });
+          if (sourceUrl) {
+            cacheKeysBySourceUrl.set(sourceUrl, cacheKey);
+          }
+        }
+      } catch {}
+      resolve();
+    });
+  });
 };
 
 export const clearImageProxyCache = () => {
@@ -93,6 +101,7 @@ export const clearImageProxyCache = () => {
   cacheKeysBySourceUrl.clear();
   inflightRequests.clear();
   cacheIndexInitialized = false;
+  indexBuildPromise = null;
 };
 
 export const getImageProxyCacheSizeBytes = () => {

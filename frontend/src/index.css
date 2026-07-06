@@ -10094,7 +10094,8 @@ textarea {
   outline-offset: 2px;
 }
 
-.artist-image-preview-button:disabled {
+.artist-image-preview-button:disabled,
+.artist-image-preview-button.is-loading {
   cursor: wait;
 }
 
