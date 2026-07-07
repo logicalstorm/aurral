@@ -15,6 +15,7 @@ import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
+import V2UpgradeBanner from "./components/V2UpgradeBanner";
 import { useWebSocketChannel } from "./hooks/useWebSocket";
 
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
@@ -176,6 +177,7 @@ function AppContent() {
           rootFolderConfigured={rootFolderConfigured}
           appVersion={appVersion}
         >
+          <V2UpgradeBanner />
           <UpdateBanner
             currentVersion={appVersion}
             visible={!user || user.role === "admin"}
