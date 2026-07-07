@@ -17,7 +17,7 @@ const [{ db }, historyModule] = await Promise.all([
   importFromRepo("backend/services/aurralHistoryService.js"),
 ]);
 
-const { upsertAurralHistory, getAurralHistoryRequests } = historyModule;
+const { upsertAurralHistory, getAurralHistoryRequests, recordTrackJobBlocked } = historyModule;
 const { downloadTracker } = await importFromRepo(
   "backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
 );
@@ -229,4 +229,56 @@ test("getAurralHistoryRequests fails orphaned download history", async () => {
 
   assert.equal(entry?.status, "failed");
   assert.equal(entry?.inQueue, false);
+});
+
+test("blocked track download history exposes source filename", async () => {
+  const jobId = downloadTracker.addJob(
+    {
+      artistName: "Artist",
+      trackName: "Song",
+    },
+    "playlist-1",
+  );
+  downloadTracker.updateDownloadMetadata(jobId, {
+    remoteFilename: "Artist - Song (2024).flac",
+  });
+  downloadTracker.setBlocked(jobId, "blocked-duration-mismatch", "/tmp/staging/other-name.mp3");
+  recordTrackJobBlocked(downloadTracker.getJob(jobId), "blocked-duration-mismatch");
+
+  const entries = await getAurralHistoryRequests();
+  const entry = entries.find((item) => item.jobId === jobId);
+
+  assert.equal(entry?.status, "blocked");
+  assert.equal(entry?.sourceFilename, "Artist - Song (2024).flac");
+});
+
+test("blocked track download history falls back to staging basename", async () => {
+  const jobId = downloadTracker.addJob(
+    {
+      artistName: "Artist",
+      trackName: "Song",
+    },
+    "playlist-1",
+  );
+  downloadTracker.setBlocked(jobId, "blocked-duration-mismatch", "/tmp/staging/downloaded-track.mp3");
+  upsertAurralHistory({
+    referenceId: jobId,
+    kind: "track_download",
+    title: "Review needed for Song",
+    subtitle: "blocked-duration-mismatch",
+    status: "blocked",
+    statusLabel: "Review",
+    metadata: {
+      jobId,
+      trackName: "Song",
+      artistName: "Artist",
+      playlistId: "playlist-1",
+      downloadSource: "slskd",
+    },
+  });
+
+  const entries = await getAurralHistoryRequests();
+  const entry = entries.find((item) => item.jobId === jobId);
+
+  assert.equal(entry?.sourceFilename, "downloaded-track.mp3");
 });

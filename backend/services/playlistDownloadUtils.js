@@ -57,6 +57,14 @@ export function buildResolvedPlaylistTrack(job, payloadTrack = {}) {
   };
 }
 
+export function resolveBlockedJobSourceFilename(job) {
+  const remote = String(job?.remoteFilename || "").trim();
+  if (remote) return remote;
+  const staging = String(job?.stagingPath || "").trim();
+  if (!staging) return null;
+  return path.basename(staging) || null;
+}
+
 export function joinUnderRoot(root, relativePath, fileName = null) {
   const parts = String(relativePath || "")
     .replace(/\\/g, "/")

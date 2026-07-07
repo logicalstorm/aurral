@@ -38,6 +38,7 @@ const buildRequestChangeSignature = (request) =>
     artistName: request?.artistName || null,
     status: request?.status || null,
     statusLabel: request?.statusLabel || null,
+    sourceFilename: request?.sourceFilename || null,
     href: request?.href || null,
     inQueue: request?.inQueue === true,
     canReSearch: request?.canReSearch === true,

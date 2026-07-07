@@ -85,6 +85,12 @@ export default function ActivityRequestRow({
       : request.name;
   const rowArtistName = request.artistName || null;
   const metaLine = usesTitleSubtitle ? request.subtitle || null : rowArtistName;
+  const isBlockedTrack =
+    request.kind === "track_download" && request.status === "blocked" && !!request.jobId;
+  const displayMetaLine =
+    isBlockedTrack && request.sourceFilename
+      ? [request.sourceFilename, metaLine].filter(Boolean).join(" · ")
+      : metaLine;
   const artistMbid = isAlbum ? request.artistMbid : request.mbid;
   const canNavigate =
     ((isSlskd || isUsenet) && request.playlistId) ||
@@ -94,8 +100,6 @@ export default function ActivityRequestRow({
   const canReSearch =
     request.canReSearch === true && request.albumId && !reSearchingAlbumIds[request.albumId];
   const isReSearching = Boolean(request.albumId && reSearchingAlbumIds[request.albumId]);
-  const isBlockedTrack =
-    request.kind === "track_download" && request.status === "blocked" && !!request.jobId;
   const isApproving = approvingJobId === request.jobId;
   const isDenying = denyingJobId === request.jobId;
   const isThisPlaying = currentTrack?.id === String(request.jobId) && isPlaying;
@@ -130,19 +134,23 @@ export default function ActivityRequestRow({
         <h3 className="requests-page__item-title" title={displayName}>
           {displayName}
         </h3>
-        {(timelineTime || metaLine) && (
+        {(timelineTime || displayMetaLine) && (
           <div className="requests-page__meta">
             {timelineTime && (
               <time className="requests-page__meta-time" dateTime={request.requestedAt}>
                 {timelineTime}
               </time>
             )}
-            {timelineTime && metaLine && (
+            {timelineTime && displayMetaLine && (
               <span className="requests-page__meta-separator" aria-hidden="true">
                 ·
               </span>
             )}
-            {metaLine && <span className="artist-truncate">{metaLine}</span>}
+            {displayMetaLine && (
+              <span className="artist-truncate" title={displayMetaLine}>
+                {displayMetaLine}
+              </span>
+            )}
           </div>
         )}
       </div>
