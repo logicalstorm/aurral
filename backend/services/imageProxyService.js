@@ -119,10 +119,13 @@ export const getImageProxyCacheSizeBytes = () => {
   return total;
 };
 
-const isPrivateHostname = (hostname) => {
-  const normalized = String(hostname || "")
+export const isPrivateHostname = (hostname) => {
+  let normalized = String(hostname || "")
     .trim()
     .toLowerCase();
+  if (normalized.startsWith("[") && normalized.endsWith("]")) {
+    normalized = normalized.slice(1, -1);
+  }
   if (!normalized) return true;
   if (normalized.endsWith(".local")) return true;
   if (PRIVATE_172_RANGE.test(normalized)) return true;
