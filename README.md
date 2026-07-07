@@ -14,6 +14,9 @@ Aurral is a self-hosted music discovery app for Lidarr users. It helps you find 
 
 It is built for people who love discovering music and want that discovery loop to feel intentional, visual, and connected to the library they already maintain.
 
+> [!WARNING]
+> **Aurral v2 is coming.** The next major release is a big upgrade. Aurral's built-in Soulseek client is being removed in favor of external [slskd](https://github.com/slskd/slskd) for more reliable flow and playlist downloads. If you want to stay on the current 1.x line, pin your Docker image to a `1.x.x` tag instead of `latest` before updating. See [Pinning to Aurral 1.x](#pinning-to-aurral-1x).
+
 ## Quick Links
 
 - [Docker image](https://ghcr.io/lklynet/aurral)
@@ -105,6 +108,20 @@ STORAGE=./data
 ```
 
 `STORAGE` keeps Aurral's database and settings. `DL_FOLDER` keeps generated flow and playlist files.
+
+## Pinning to Aurral 1.x
+
+Aurral v2 is in development. It removes the built-in Soulseek client and requires [slskd](https://github.com/slskd/slskd) for Soulseek-backed downloads.
+
+If you are not ready for that change yet, pin your image to a specific 1.x release instead of `latest`:
+
+```yaml
+services:
+  aurral:
+    image: ghcr.io/lklynet/aurral:1.76.0
+```
+
+Browse [GitHub releases](https://github.com/lklynet/aurral/releases) for the current 1.x tag. Watchtower, Renovate, and similar auto-updaters will pull v2 if you leave the image on `latest`.
 
 ## First Run
 
