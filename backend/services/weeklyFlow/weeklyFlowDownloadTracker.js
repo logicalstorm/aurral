@@ -2,10 +2,6 @@ import { randomUUID } from "crypto";
 import { db } from "../../config/db-sqlite.js";
 import { enqueuePipelineJob } from "../honkerDb.js";
 import { isAnyDownloadSourceConfigured } from "../downloadSourceService.js";
-import {
-  enqueueSpidarrTrackRequest,
-  isSpidarrTrackRequestsEnabled,
-} from "../spidarrTrackRequestService.js";
 import { buildPlaylistDestination } from "../playlistPaths.js";
 import {
   normalizePositiveInteger,
@@ -304,13 +300,21 @@ export class WeeklyFlowDownloadTracker {
     if (!job || job.status !== "pending") return false;
     if (this.isSlskdDispatched(jobId)) return false;
 
-    if (isSpidarrTrackRequestsEnabled()) {
-      return enqueueSpidarrTrackRequest(jobId);
-    }
-
-    if (!isAnyDownloadSourceConfigured()) return false;
-    enqueuePipelineJob(buildPipelinePayload(job));
-    this.markSlskdDispatched(jobId);
+    void import("../spidarrTrackRequestService.js")
+      .then(({ isSpidarrTrackRequestsEnabled, enqueueSpidarrTrackRequest }) => {
+        if (isSpidarrTrackRequestsEnabled()) {
+          enqueueSpidarrTrackRequest(jobId);
+          return;
+        }
+        if (!isAnyDownloadSourceConfigured()) return;
+        enqueuePipelineJob(buildPipelinePayload(job));
+        this.markSlskdDispatched(jobId);
+      })
+      .catch(() => {
+        if (!isAnyDownloadSourceConfigured()) return;
+        enqueuePipelineJob(buildPipelinePayload(job));
+        this.markSlskdDispatched(jobId);
+      });
     return true;
   }
 

@@ -47,10 +47,18 @@ export async function processSpidarrTrackRequest(job) {
   const settings = dbOps.getSettings();
   const lidarr = settings?.integrations?.lidarr || {};
 
+  const resolved = await lidarrClient.resolveTrackForRequest(job);
+  const requestTrackMbid = String(resolved?.foreignTrackId || job.trackMbid).trim();
+  if (resolved?.foreignTrackId && resolved.foreignTrackId !== job.trackMbid) {
+    logger.info(
+      `[Spidarr] Mapped recording ${job.trackMbid} → Lidarr track ${resolved.foreignTrackId} (${job.artistName} - ${job.trackName})`,
+    );
+  }
+
   const result = await lidarrClient.requestTrack({
     artistMbid: job.artistMbid,
     albumMbid: job.albumMbid,
-    trackMbid: job.trackMbid,
+    trackMbid: requestTrackMbid,
     artistName: job.artistName,
     trackName: job.trackName,
     albumName: job.albumName,
@@ -65,7 +73,9 @@ export async function processSpidarrTrackRequest(job) {
     `[Spidarr] Track request queued for job ${job.id} (track ${result?.trackId}, command ${result?.commandId ?? "n/a"})`,
   );
 
-  const match = await waitForTrackFile(job.trackMbid);
+  const match =
+    (await waitForTrackFile(requestTrackMbid)) ||
+    (requestTrackMbid !== job.trackMbid ? await waitForTrackFile(job.trackMbid) : null);
   if (!match?.file?.path) {
     throw new Error(`Timed out waiting for track file for ${job.trackName}`);
   }

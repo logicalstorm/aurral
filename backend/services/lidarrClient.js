@@ -1048,10 +1048,18 @@ export class LidarrClient {
 
   async getAllTracks() {
     try {
-      const result = await this.request("/track");
-      if (Array.isArray(result)) return result;
-      if (result?.records && Array.isArray(result.records)) return result.records;
-      return [];
+      const artists = await this.getArtists();
+      const tracks = [];
+      for (const artist of Array.isArray(artists) ? artists : []) {
+        if (!artist?.id) continue;
+        try {
+          const result = await this.request(`/track?artistId=${artist.id}`);
+          if (Array.isArray(result)) tracks.push(...result);
+          else if (Array.isArray(result?.records)) tracks.push(...result.records);
+        } catch {
+        }
+      }
+      return tracks;
     } catch {
       return [];
     }
@@ -1267,13 +1275,67 @@ export class LidarrClient {
     }, skipConfigUpdate);
   }
 
+  async findAlbumByForeignId(albumMbid, skipConfigUpdate = false) {
+    const normalized = String(albumMbid || "").trim();
+    if (!normalized) return null;
+    const albums = await this.request(
+      `/album?foreignAlbumId=${encodeURIComponent(normalized)}`,
+      "GET",
+      null,
+      skipConfigUpdate,
+    );
+    if (Array.isArray(albums) && albums.length > 0) return albums[0];
+    return null;
+  }
+
+  async resolveTrackForRequest(job, skipConfigUpdate = false) {
+    const trackMbid = String(job?.trackMbid || "").trim();
+    const albumMbid = String(job?.albumMbid || "").trim();
+    const trackName = String(job?.trackName || "").trim().toLowerCase();
+    if (!trackMbid && !trackName) return null;
+
+    let tracks = [];
+    if (albumMbid) {
+      const album = await this.findAlbumByForeignId(albumMbid, skipConfigUpdate);
+      if (album?.id) {
+        tracks = await this.getTracksByAlbumId(album.id);
+      }
+    }
+    if (!tracks.length) {
+      tracks = await this.getAllTracks(skipConfigUpdate);
+    }
+
+    const byId =
+      tracks.find((entry) => String(entry?.foreignTrackId || "").trim() === trackMbid) ||
+      tracks.find((entry) => String(entry?.foreignRecordingId || "").trim() === trackMbid);
+    if (byId?.foreignTrackId) return byId;
+
+    if (!trackName) return null;
+    const titleMatches = tracks.filter((entry) => {
+      const title = String(entry?.title || "").trim().toLowerCase();
+      return title === trackName || title.startsWith(`${trackName} (`);
+    });
+    if (!titleMatches.length) return null;
+    titleMatches.sort((left, right) => {
+      const leftExact = String(left?.title || "").trim().toLowerCase() === trackName ? 0 : 1;
+      const rightExact = String(right?.title || "").trim().toLowerCase() === trackName ? 0 : 1;
+      if (leftExact !== rightExact) return leftExact - rightExact;
+      return Number(left?.absoluteTrackNumber || 0) - Number(right?.absoluteTrackNumber || 0);
+    });
+    return titleMatches[0];
+  }
+
   async findTrackFileByMbid(trackMbid, skipConfigUpdate = false) {
     const normalized = String(trackMbid || "").trim();
     if (!normalized) return null;
     const tracks = await this.getAllTracks(skipConfigUpdate);
-    const track = tracks.find(
-      (entry) => String(entry?.foreignTrackId || "").trim() === normalized && entry?.trackFileId,
-    );
+    const track = tracks.find((entry) => {
+      if (!entry?.trackFileId) return false;
+      return (
+        String(entry?.foreignTrackId || "").trim() === normalized ||
+        String(entry?.foreignRecordingId || "").trim() === normalized
+      );
+    });
     if (!track) return null;
     const files = await this.getAllTrackFiles(skipConfigUpdate);
     const file = files.find((entry) => entry?.id === track.trackFileId);
