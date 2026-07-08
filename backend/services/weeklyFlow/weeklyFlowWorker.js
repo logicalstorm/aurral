@@ -20,6 +20,7 @@ import {
   getDownloadSourceNotConfiguredMessage,
   isAnyDownloadSourceConfigured,
 } from "../downloadSourceService.js";
+import { isSpidarrTrackRequestsEnabled } from "../spidarrTrackRequestService.js";
 
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
@@ -864,7 +865,7 @@ export class WeeklyFlowWorker {
           return;
         }
       }
-      if (!isAnyDownloadSourceConfigured()) {
+      if (!isAnyDownloadSourceConfigured() && !isSpidarrTrackRequestsEnabled()) {
         throw new Error(getDownloadSourceNotConfiguredMessage());
       }
       downloadTracker.enqueueDownloadPipeline(job.id);

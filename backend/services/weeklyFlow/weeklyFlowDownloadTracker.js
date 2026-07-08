@@ -2,6 +2,10 @@ import { randomUUID } from "crypto";
 import { db } from "../../config/db-sqlite.js";
 import { enqueuePipelineJob } from "../honkerDb.js";
 import { isAnyDownloadSourceConfigured } from "../downloadSourceService.js";
+import {
+  enqueueSpidarrTrackRequest,
+  isSpidarrTrackRequestsEnabled,
+} from "../spidarrTrackRequestService.js";
 import { buildPlaylistDestination } from "../playlistPaths.js";
 import {
   normalizePositiveInteger,
@@ -296,10 +300,15 @@ export class WeeklyFlowDownloadTracker {
   }
 
   enqueueDownloadPipeline(jobId) {
-    if (!isAnyDownloadSourceConfigured()) return false;
     const job = this.jobs.get(jobId);
     if (!job || job.status !== "pending") return false;
     if (this.isSlskdDispatched(jobId)) return false;
+
+    if (isSpidarrTrackRequestsEnabled()) {
+      return enqueueSpidarrTrackRequest(jobId);
+    }
+
+    if (!isAnyDownloadSourceConfigured()) return false;
     enqueuePipelineJob(buildPipelinePayload(job));
     this.markSlskdDispatched(jobId);
     return true;
