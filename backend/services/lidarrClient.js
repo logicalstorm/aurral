@@ -1238,6 +1238,48 @@ export class LidarrClient {
   async updateQualityDefinition(id, data, skipConfigUpdate = false) {
     return this.request(`/qualitydefinition/${id}`, "PUT", data, skipConfigUpdate);
   }
+
+  async requestTrack(payload, skipConfigUpdate = false) {
+    return this.request("/track/request", "POST", payload, skipConfigUpdate);
+  }
+
+  async getMissingTracks(page = 1, pageSize = 100, skipConfigUpdate = false) {
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+      sortKey: "absoluteTrackNumber",
+      sortDirection: "ascending",
+    });
+    return this.request(`/wanted/missing/track?${params.toString()}`, "GET", null, skipConfigUpdate);
+  }
+
+  async triggerTrackSearch(trackId, skipConfigUpdate = false) {
+    return this.request("/command", "POST", {
+      name: "TrackSearch",
+      trackIds: [trackId],
+    }, skipConfigUpdate);
+  }
+
+  async monitorTracks(trackIds, monitored = true, skipConfigUpdate = false) {
+    return this.request("/track/editor", "PUT", {
+      trackIds,
+      monitored,
+    }, skipConfigUpdate);
+  }
+
+  async findTrackFileByMbid(trackMbid, skipConfigUpdate = false) {
+    const normalized = String(trackMbid || "").trim();
+    if (!normalized) return null;
+    const tracks = await this.getAllTracks(skipConfigUpdate);
+    const track = tracks.find(
+      (entry) => String(entry?.foreignTrackId || "").trim() === normalized && entry?.trackFileId,
+    );
+    if (!track) return null;
+    const files = await this.getAllTrackFiles(skipConfigUpdate);
+    const file = files.find((entry) => entry?.id === track.trackFileId);
+    if (!file?.path) return null;
+    return { track, file };
+  }
 }
 
 export const lidarrClient = new LidarrClient();
