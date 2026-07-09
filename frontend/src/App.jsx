@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect, Suspense, lazy, useRef } from "react";
 import Layout from "./components/Layout";
-import { clearAuthStorage, checkHealthLive, getBootstrapStatus, getStoredAuth, completeSpotifyOAuth } from "./utils/api";
+import { clearAuthStorage, checkHealthLive, getBootstrapStatus, getStoredAuth } from "./utils/api";
 import { getAppBasePath } from "./utils/basePath.js";
 import {
   PROXY_RELOAD_TS_KEY,
@@ -20,7 +20,6 @@ import { AlertTriangle, XCircle } from "lucide-react";
 import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
 import { useWebSocketChannel } from "./hooks/useWebSocket";
-import { consumePendingSpotifyOAuth } from "./utils/spotifyOAuthHandoff.js";
 import {
   ActivitySourceRedirect,
   ActivityRootRedirect,
@@ -100,33 +99,6 @@ function AppContent() {
   const healthCheckInFlightRef = useRef(false);
   const { isAuthenticated, user, bootstrap, authRequired, logout, refreshAuth } = useAuth();
   const { showSuccess, showError } = useToast();
-
-  useEffect(() => {
-    const pending = consumePendingSpotifyOAuth();
-    if (!pending) return undefined;
-    let cancelled = false;
-    (async () => {
-      try {
-        const status = await completeSpotifyOAuth(pending);
-        if (cancelled) return;
-        showSuccess(
-          status?.displayName
-            ? `Spotify connected as ${status.displayName}`
-            : "Spotify connected",
-        );
-      } catch (error) {
-        if (cancelled) return;
-        showError(
-          error?.response?.data?.message ||
-            error?.message ||
-            "Failed to connect Spotify",
-        );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [showError, showSuccess]);
 
   const RELOAD_COOLDOWN_MS = 10000;
 

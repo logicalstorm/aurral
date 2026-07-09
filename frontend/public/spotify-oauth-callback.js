@@ -23,15 +23,14 @@
   }
   if (window.opener) {
     try {
+      if (typeof window.opener.onCompleteOauth === "function") {
+        window.opener.onCompleteOauth(query, function () {
+          window.close();
+        });
+        return;
+      }
       window.opener.postMessage({ type: "aurral-spotify-oauth-ready" }, location.origin);
     } catch (_) {}
-    window.close();
-    return;
   }
-  var returnPath = "/playlists";
-  try {
-    returnPath = sessionStorage.getItem("aurral:spotify-oauth-return") || returnPath;
-    sessionStorage.removeItem("aurral:spotify-oauth-return");
-  } catch (_) {}
-  location.replace(returnPath);
+  window.close();
 })();
