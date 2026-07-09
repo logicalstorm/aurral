@@ -13,8 +13,10 @@ import {
 } from "../../../utils/api";
 import { getAppBasePath, normalizeBasePathWithTrailingSlash } from "../../../utils/basePath";
 import {
+  SPOTIFY_OAUTH_BROADCAST_CHANNEL,
   SPOTIFY_OAUTH_PENDING_KEY,
   consumePendingSpotifyOAuth,
+  tokensFromHandoffPayload,
 } from "../../../utils/spotifyOAuthHandoff.js";
 import { parseFlowImportFile, reserveUniqueFlowName, normalizeNameKey } from "../flowPageUtils";
 
@@ -32,21 +34,12 @@ function getOAuthCallbackUrl() {
 }
 
 function tokensFromOAuthQuery(query) {
-  const queryParams = {};
-  const splitQuery = query.substring(1).split("&");
-  splitQuery.forEach((param) => {
-    if (!param) return;
-    const paramSplit = param.split("=");
-    queryParams[paramSplit[0]] = paramSplit[1];
+  const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
+  return tokensFromHandoffPayload({
+    access_token: params.get("access_token"),
+    refresh_token: params.get("refresh_token"),
+    expires_in: params.get("expires_in"),
   });
-  const accessToken = queryParams.access_token;
-  const refreshToken = queryParams.refresh_token;
-  if (!accessToken || !refreshToken) return null;
-  return {
-    accessToken,
-    refreshToken,
-    expiresIn: queryParams.expires_in,
-  };
 }
 
 function openSpotifyOAuthPopup(oauthUrl) {
@@ -58,9 +51,14 @@ function openSpotifyOAuthPopup(oauthUrl) {
     }
 
     let settled = false;
+    let channel;
     const cleanup = () => {
       delete window.onCompleteOauth;
       window.removeEventListener("storage", onStorage);
+      if (channel) {
+        channel.close();
+        channel = null;
+      }
       clearInterval(pollTimer);
       clearTimeout(timeout);
     };
@@ -84,6 +82,16 @@ function openSpotifyOAuthPopup(oauthUrl) {
     };
 
     window.addEventListener("storage", onStorage);
+    try {
+      channel = new BroadcastChannel(SPOTIFY_OAUTH_BROADCAST_CHANNEL);
+      channel.onmessage = (event) => {
+        if (event.data?.type !== "ready") return;
+        const tokens = tokensFromHandoffPayload(event.data?.payload);
+        if (tokens) finish(tokens);
+      };
+    } catch (_) {
+      channel = null;
+    }
     const pollTimer = setInterval(() => {
       const tokens = consumePendingSpotifyOAuth();
       if (tokens) finish(tokens);

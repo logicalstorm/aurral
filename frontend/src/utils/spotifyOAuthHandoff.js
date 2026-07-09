@@ -1,5 +1,17 @@
+export const SPOTIFY_OAUTH_BROADCAST_CHANNEL = "aurral-spotify-oauth";
 export const SPOTIFY_OAUTH_PENDING_KEY = "aurral:spotify-oauth-pending";
 const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
+
+export function tokensFromHandoffPayload(payload) {
+  const accessToken = String(payload?.access_token || payload?.accessToken || "").trim();
+  const refreshToken = String(payload?.refresh_token || payload?.refreshToken || "").trim();
+  if (!accessToken || !refreshToken) return null;
+  return {
+    accessToken,
+    refreshToken,
+    expiresIn: payload?.expires_in ?? payload?.expiresIn,
+  };
+}
 
 export function consumePendingSpotifyOAuth() {
   const raw = window.localStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY);
@@ -15,14 +27,5 @@ export function consumePendingSpotifyOAuth() {
   if (!savedAt || Date.now() - savedAt > PENDING_MAX_AGE_MS) {
     return null;
   }
-  const accessToken = String(parsed.access_token || "").trim();
-  const refreshToken = String(parsed.refresh_token || "").trim();
-  if (!accessToken || !refreshToken) {
-    return null;
-  }
-  return {
-    accessToken,
-    refreshToken,
-    expiresIn: parsed.expires_in,
-  };
+  return tokensFromHandoffPayload(parsed);
 }
