@@ -12,6 +12,10 @@ import {
   startSpotifyOAuth,
 } from "../../../utils/api";
 import { getAppBasePath, normalizeBasePathWithTrailingSlash } from "../../../utils/basePath";
+import {
+  SPOTIFY_OAUTH_PENDING_KEY,
+  consumePendingSpotifyOAuth,
+} from "../../../utils/spotifyOAuthHandoff.js";
 import { parseFlowImportFile, reserveUniqueFlowName, normalizeNameKey } from "../flowPageUtils";
 
 export const SYNC_INTERVAL_OPTIONS = [
@@ -27,6 +31,24 @@ function getOAuthCallbackUrl() {
   return `${window.location.origin}${base}oauth.html`;
 }
 
+function tokensFromOAuthQuery(query) {
+  const queryParams = {};
+  const splitQuery = query.substring(1).split("&");
+  splitQuery.forEach((param) => {
+    if (!param) return;
+    const paramSplit = param.split("=");
+    queryParams[paramSplit[0]] = paramSplit[1];
+  });
+  const accessToken = queryParams.access_token;
+  const refreshToken = queryParams.refresh_token;
+  if (!accessToken || !refreshToken) return null;
+  return {
+    accessToken,
+    refreshToken,
+    expiresIn: queryParams.expires_in,
+  };
+}
+
 function openSpotifyOAuthPopup(oauthUrl) {
   return new Promise((resolve, reject) => {
     const popup = window.open(oauthUrl, "spotify-oauth", "width=480,height=720");
@@ -35,28 +57,52 @@ function openSpotifyOAuthPopup(oauthUrl) {
       return;
     }
 
+    let settled = false;
+    const cleanup = () => {
+      delete window.onCompleteOauth;
+      window.removeEventListener("storage", onStorage);
+      clearInterval(pollTimer);
+      clearTimeout(timeout);
+    };
+    const finish = (tokens) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(tokens);
+    };
+    const fail = (message) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(message));
+    };
+
+    const onStorage = (event) => {
+      if (event.key !== SPOTIFY_OAUTH_PENDING_KEY || !event.newValue) return;
+      const tokens = consumePendingSpotifyOAuth();
+      if (tokens) finish(tokens);
+    };
+
+    window.addEventListener("storage", onStorage);
+    const pollTimer = setInterval(() => {
+      const tokens = consumePendingSpotifyOAuth();
+      if (tokens) finish(tokens);
+    }, 500);
+
     window.onCompleteOauth = (query, onComplete) => {
       delete window.onCompleteOauth;
-      const queryParams = {};
-      const splitQuery = query.substring(1).split("&");
-      splitQuery.forEach((param) => {
-        if (!param) return;
-        const paramSplit = param.split("=");
-        queryParams[paramSplit[0]] = paramSplit[1];
-      });
       onComplete?.();
-      const accessToken = queryParams.access_token;
-      const refreshToken = queryParams.refresh_token;
-      if (!accessToken || !refreshToken) {
-        reject(new Error("Spotify sign-in returned no tokens"));
+      const tokens = tokensFromOAuthQuery(query);
+      if (!tokens) {
+        fail("Spotify sign-in returned no tokens");
         return;
       }
-      resolve({
-        accessToken,
-        refreshToken,
-        expiresIn: queryParams.expires_in,
-      });
+      finish(tokens);
     };
+
+    const timeout = setTimeout(() => {
+      fail("Spotify sign-in timed out");
+    }, 5 * 60 * 1000);
   });
 }
 
