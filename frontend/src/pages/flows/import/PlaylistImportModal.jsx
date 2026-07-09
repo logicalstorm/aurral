@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { FileJson, Loader2, Music2, Upload } from "lucide-react";
 import { ModalShell } from "../../../components/PlaylistModals";
 import {
-  completeSpotifyOAuth,
   disconnectSpotify,
   getSpotifyImportStatus,
   getSpotifyPlaylists,
@@ -12,6 +11,9 @@ import {
   startSpotifyOAuth,
 } from "../../../utils/api";
 import { getAppBasePath, normalizeBasePathWithTrailingSlash } from "../../../utils/basePath";
+import {
+  saveSpotifyOAuthReturnPath,
+} from "../../../utils/spotifyOAuthHandoff.js";
 import { parseFlowImportFile, reserveUniqueFlowName, normalizeNameKey } from "../flowPageUtils";
 
 export const SYNC_INTERVAL_OPTIONS = [
@@ -25,70 +27,6 @@ export const SYNC_INTERVAL_OPTIONS = [
 function getOAuthCallbackUrl() {
   const base = normalizeBasePathWithTrailingSlash(getAppBasePath());
   return `${window.location.origin}${base}oauth.html`;
-}
-
-function openSpotifyOAuthPopup(oauthUrl) {
-  return new Promise((resolve, reject) => {
-    const popup = window.open(oauthUrl, "spotify-oauth", "width=480,height=720");
-    if (!popup) {
-      reject(new Error("Pop-ups are blocked by your browser"));
-      return;
-    }
-
-    let settled = false;
-    const cleanup = () => {
-      delete window.onCompleteOauth;
-      window.removeEventListener("message", onMessage);
-      clearTimeout(timeout);
-    };
-    const finish = (tokens) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      try {
-        popup.close();
-      } catch (_) {}
-      resolve(tokens);
-    };
-    const fail = (message) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      try {
-        popup.close();
-      } catch (_) {}
-      reject(new Error(message));
-    };
-    const tokensFromQuery = (query) => {
-      const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
-      return {
-        accessToken: params.get("access_token"),
-        refreshToken: params.get("refresh_token"),
-        expiresIn: params.get("expires_in"),
-      };
-    };
-
-    window.onCompleteOauth = (query, onComplete) => {
-      onComplete?.();
-      finish(tokensFromQuery(query));
-    };
-
-    const onMessage = (event) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type !== "aurral-spotify-oauth") return;
-      finish({
-        accessToken: event.data.access_token,
-        refreshToken: event.data.refresh_token,
-        expiresIn: event.data.expires_in,
-      });
-    };
-
-    window.addEventListener("message", onMessage);
-
-    const timeout = setTimeout(() => {
-      fail("Spotify sign-in timed out");
-    }, 5 * 60 * 1000);
-  });
 }
 
 export function PlaylistImportModal({
@@ -212,19 +150,14 @@ export function PlaylistImportModal({
   const handleConnectSpotify = async () => {
     setSpotifyLoading(true);
     try {
+      saveSpotifyOAuthReturnPath();
       const { oauthUrl } = await startSpotifyOAuth(getOAuthCallbackUrl());
-      const tokens = await openSpotifyOAuthPopup(oauthUrl);
-      const status = await completeSpotifyOAuth(tokens);
-      setSpotifyStatus({
-        connected: true,
-        displayName: status?.displayName || null,
-        connectedAt: status?.connectedAt || null,
-      });
-      await loadSpotifyPlaylists();
+      window.location.assign(oauthUrl);
     } catch (error) {
-      showError?.(error?.message || "Failed to connect Spotify");
-    } finally {
       setSpotifyLoading(false);
+      showError?.(
+        error?.response?.data?.message || error?.message || "Failed to connect Spotify",
+      );
     }
   };
 

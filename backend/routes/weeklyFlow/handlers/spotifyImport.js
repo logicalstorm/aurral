@@ -1,6 +1,7 @@
 import { buildSpotifyOAuthUrl } from "../../../services/spotify/spotifyConfig.js";
 import { spotifyConnectionStore } from "../../../services/spotify/spotifyConnectionStore.js";
 import { spotifyClient } from "../../../services/spotify/spotifyClient.js";
+import { logger } from "../../../services/logger.js";
 import { parseSpotifyPlaylistItems } from "../../../services/importLists/spotifyTracks.js";
 import { syncSharedPlaylistImport } from "../../../services/importLists/importListSync.js";
 import { normalizeImportSource } from "../../../services/weeklyFlow/weeklyFlowPlaylistConfig.js";
@@ -47,12 +48,21 @@ export function registerSpotifyImport(router) {
         refreshToken,
         expiresAt,
       });
-      const profile = await spotifyClient.getProfile(req.user.id);
+      let displayName = null;
+      try {
+        const profile = await spotifyClient.getProfile(req.user.id);
+        displayName = profile?.display_name || null;
+      } catch (error) {
+        logger.warn(
+          "spotify",
+          `Spotify profile lookup failed after OAuth complete: ${error?.message || "Unknown error"}`,
+        );
+      }
       const saved = spotifyConnectionStore.saveConnection(req.user.id, {
         accessToken,
         refreshToken,
         expiresAt,
-        displayName: profile?.display_name || null,
+        displayName,
       });
       res.json({
         connected: true,
