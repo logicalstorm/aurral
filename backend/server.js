@@ -124,6 +124,7 @@ app.use(
       },
     },
     frameguard: false,
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
   }),
 );
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
@@ -166,6 +167,12 @@ const frontendDist = path.join(__dirname, "..", "frontend", "dist");
 const frontendFallbackRoute = /.*/;
 
 if (fs.existsSync(frontendDist)) {
+  const oauthHtmlPath = path.join(frontendDist, "oauth.html");
+  app.get("/oauth.html", (req, res, next) => {
+    if (!fs.existsSync(oauthHtmlPath)) return next();
+    res.setHeader("Cache-Control", "no-store");
+    return res.sendFile(oauthHtmlPath);
+  });
   app.use(
     "/assets",
     express.static(path.join(frontendDist, "assets"), { maxAge: "1y", immutable: true }),

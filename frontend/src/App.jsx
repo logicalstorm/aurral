@@ -25,6 +25,10 @@ import {
   ActivityRootRedirect,
   LegacyHistoryRedirect,
 } from "./navigation/ActivityRedirects";
+import {
+  completeSpotifyOAuthPopupBridge,
+  isSpotifyOAuthPopupPending,
+} from "./utils/spotifyOAuthPopupBridge.js";
 
 const Login = lazy(() => import("./pages/Login"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
@@ -316,6 +320,18 @@ function App() {
     root.classList.remove("light");
     root.classList.add("dark");
   }, []);
+
+  useEffect(() => {
+    completeSpotifyOAuthPopupBridge();
+  }, []);
+
+  if (isSpotifyOAuthPopupPending()) {
+    return (
+      <div className="app-loading app-loading--screen">
+        <div className="app-loading__spinner app-loading__spinner--lg" />
+      </div>
+    );
+  }
 
   return (
     <ToastProvider>

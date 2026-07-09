@@ -30,7 +30,7 @@ function getOAuthCallbackUrl() {
 function openSpotifyOAuthPopup(oauthUrl) {
   return new Promise((resolve, reject) => {
     const popup = window.open(oauthUrl, "spotify-oauth", "width=480,height=720");
-    if (!popup || popup.closed || typeof popup.closed === "undefined") {
+    if (!popup) {
       reject(new Error("Pop-ups are blocked by your browser"));
       return;
     }
@@ -39,7 +39,6 @@ function openSpotifyOAuthPopup(oauthUrl) {
     const cleanup = () => {
       delete window.onCompleteOauth;
       window.removeEventListener("message", onMessage);
-      clearInterval(closedPoll);
       clearTimeout(timeout);
     };
     const finish = (tokens) => {
@@ -85,12 +84,6 @@ function openSpotifyOAuthPopup(oauthUrl) {
     };
 
     window.addEventListener("message", onMessage);
-
-    const closedPoll = setInterval(() => {
-      if (!settled && popup.closed) {
-        fail("Spotify sign-in was cancelled");
-      }
-    }, 500);
 
     const timeout = setTimeout(() => {
       fail("Spotify sign-in timed out");

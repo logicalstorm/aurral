@@ -35,6 +35,12 @@ export default defineConfig(({ mode }) => {
             /^\/logout$/,
             /^\/oauth\.html$/,
           ],
+          runtimeCaching: [
+            {
+              urlPattern: ({ url }) => url.pathname.endsWith("/oauth.html"),
+              handler: "NetworkOnly",
+            },
+          ],
         },
         manifest: {
           name: "Aurral - Music Discovery",
