@@ -144,3 +144,24 @@ export const startFlowPlaylist = (flowId, limit = 30) =>
   postData(`/playlists/start/${flowId}`, {
     limit,
   });
+
+export const getSpotifyImportStatus = () => getData("/playlists/import/spotify/status");
+
+export const startSpotifyOAuth = (callbackUrl) =>
+  postData("/playlists/import/spotify/oauth/start", { callbackUrl });
+
+export const completeSpotifyOAuth = (payload) =>
+  postData("/playlists/import/spotify/oauth/complete", payload);
+
+export const disconnectSpotify = () => deleteData("/playlists/import/spotify");
+
+export const getSpotifyPlaylists = () => getData("/playlists/import/spotify/playlists");
+
+export const previewSpotifyPlaylist = (playlistId) =>
+  postData("/playlists/import/spotify/preview", { playlistId });
+
+export const importSpotifyPlaylist = (payload) =>
+  postData("/playlists/import/spotify", payload);
+
+export const syncSharedPlaylistImport = (playlistId) =>
+  postData(`/playlists/shared-playlists/${encodeURIComponent(playlistId)}/sync`);

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>OAuth landing page</title>
+    <script>
+      (function () {
+        function closePopup() {
+          window.close();
+        }
+        try {
+          if (window.opener && typeof window.opener.onCompleteOauth === "function") {
+            window.opener.onCompleteOauth(window.location.search, closePopup);
+            return;
+          }
+        } catch (_) {}
+        closePopup();
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

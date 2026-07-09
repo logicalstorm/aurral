@@ -423,6 +423,7 @@ async function createSharedPlaylist({
   discoverPresetId = null,
   tracks = [],
   ownerUserId = null,
+  importSource = null,
 } = {}) {
   const safePlaylistId = String(playlistId || "").trim() || randomUUID();
   const normalizedTracks = normalizeTrackList(tracks);
@@ -436,6 +437,7 @@ async function createSharedPlaylist({
       discoverPresetId,
       tracks: normalizedTracks,
       ownerUserId,
+      importSource,
     });
   }
   const queued = normalizedTracks.length
@@ -458,7 +460,7 @@ async function createSharedPlaylist({
   };
 }
 
-async function appendSharedPlaylistTracks({ playlistId, tracks = [] } = {}) {
+export async function appendSharedPlaylistTracks({ playlistId, tracks = [] } = {}) {
   const safePlaylistId = String(playlistId || "").trim();
   const playlist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
   if (!playlist) return { missing: true };
@@ -492,6 +494,8 @@ async function updateSharedPlaylist({
   tracks = [],
   hasNameUpdate = false,
   hasTracksUpdate = false,
+  hasImportSourceUpdate = false,
+  importSource = null,
 } = {}) {
   const safePlaylistId = String(playlistId || "").trim();
   const currentPlaylist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
@@ -501,10 +505,12 @@ async function updateSharedPlaylist({
     : String(currentPlaylist.name || "").trim();
   let playlist = null;
   let tracksQueued = 0;
+  const playlistUpdates = { name: safeName };
+  if (hasImportSourceUpdate) {
+    playlistUpdates.importSource = importSource;
+  }
   if (!hasTracksUpdate) {
-    playlist = flowPlaylistConfig.updateSharedPlaylist(safePlaylistId, {
-      name: safeName,
-    });
+    playlist = flowPlaylistConfig.updateSharedPlaylist(safePlaylistId, playlistUpdates);
   } else {
     const normalizedTracks = normalizeTrackList(tracks);
     await withPlaylistMutation(safePlaylistId, async () => {
@@ -551,6 +557,7 @@ async function updateSharedPlaylist({
       playlist = flowPlaylistConfig.updateSharedPlaylist(safePlaylistId, {
         name: safeName,
         tracks: normalizedTracks,
+        ...(hasImportSourceUpdate ? { importSource } : {}),
       });
       const { tracksToQueue } = await reuseTracksForPlaylist(tracksNeedingWork, safePlaylistId);
       tracksQueued = downloadTracker.addJobs(tracksToQueue, safePlaylistId).length;

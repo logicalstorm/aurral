@@ -28,6 +28,11 @@ async function processSystemTask(payload = {}) {
       await enqueueDiscoveryRefreshIfNeeded({ reason: "interval" });
       return;
     }
+    case "import-list-sync": {
+      const { runDueImportSourceSyncs } = await import("./importLists/importListSync.js");
+      await runDueImportSourceSyncs();
+      return;
+    }
     case "weekly-flow-startup-check": {
       const { startWorkerIfPending } = await import("./weeklyFlow/weeklyFlowScheduler.js");
       await startWorkerIfPending();

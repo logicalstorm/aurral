@@ -135,6 +135,15 @@ export function getWeeklyFlowStatusSnapshot({
       createdAt: playlist.createdAt,
       trackCount: jobTotal > 0 ? jobTotal : playlist.trackCount,
       trackIdentities: collectPlaylistTrackIdentities(playlist, playlistStats),
+      importSource: playlist.importSource
+        ? {
+            provider: playlist.importSource.provider,
+            syncEnabled: playlist.importSource.syncEnabled === true,
+            syncIntervalHours: playlist.importSource.syncEnabled
+              ? playlist.importSource.syncIntervalHours
+              : 0,
+          }
+        : null,
     };
   });
   const ownerMap = buildOwnerMap(flows, sharedPlaylists);

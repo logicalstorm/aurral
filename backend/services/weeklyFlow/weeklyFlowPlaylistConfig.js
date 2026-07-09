@@ -389,9 +389,37 @@ export const filterMissingSharedTracks = (existingTracks, incomingTracks) => {
   return missingTracks;
 };
 
+export function normalizeImportSource(value) {
+  if (!value || typeof value !== "object") return null;
+  const provider = String(value.provider || "").trim();
+  if (!provider) return null;
+  const syncIntervalHours = Number(value.syncIntervalHours);
+  const lastSyncAt = Number(value.lastSyncAt);
+  const hasSync =
+    value.syncEnabled !== false &&
+    Number.isFinite(syncIntervalHours) &&
+    syncIntervalHours > 0;
+  return {
+    provider,
+    externalId: String(value.externalId || "").trim() || null,
+    externalName: String(value.externalName || "").trim() || null,
+    syncEnabled: hasSync,
+    syncIntervalHours: hasSync
+      ? Math.min(Math.max(Math.round(syncIntervalHours), 1), 168)
+      : 0,
+    lastSyncAt: Number.isFinite(lastSyncAt) && lastSyncAt > 0 ? lastSyncAt : null,
+    lastSyncError: String(value.lastSyncError || "").trim() || null,
+    lastSyncTrackCount:
+      value.lastSyncTrackCount != null && Number.isFinite(Number(value.lastSyncTrackCount))
+        ? Number(value.lastSyncTrackCount)
+        : null,
+  };
+}
+
 const normalizeSharedPlaylist = (playlist) => {
   const name = String(playlist?.name || "").trim();
   const tracks = dedupeSharedTracks(playlist?.tracks);
+  const importSource = normalizeImportSource(playlist?.importSource);
   return {
     id: playlist?.id || randomUUID(),
     name: name || "Shared Playlist",
@@ -402,6 +430,7 @@ const normalizeSharedPlaylist = (playlist) => {
     sourceName: String(playlist?.sourceName || "").trim() || null,
     sourceFlowId: String(playlist?.sourceFlowId || "").trim() || null,
     discoverPresetId: String(playlist?.discoverPresetId || "").trim() || null,
+    importSource,
     importedAt:
       playlist?.importedAt != null && Number.isFinite(Number(playlist.importedAt))
         ? Number(playlist.importedAt)
@@ -779,6 +808,7 @@ export const flowPlaylistConfig = {
     discoverPresetId = null,
     tracks = [],
     ownerUserId = null,
+    importSource = null,
   }) {
     const playlists = getStoredSharedPlaylists();
     assertUniqueSharedPlaylistName(playlists, name);
@@ -789,6 +819,7 @@ export const flowPlaylistConfig = {
       sourceName,
       sourceFlowId,
       discoverPresetId,
+      importSource,
       tracks,
       importedAt: Date.now(),
       createdAt: Date.now(),
@@ -828,6 +859,10 @@ export const flowPlaylistConfig = {
       sourceName: updates?.sourceName ?? current.sourceName,
       sourceFlowId: updates?.sourceFlowId ?? current.sourceFlowId,
       discoverPresetId: updates?.discoverPresetId ?? current.discoverPresetId,
+      importSource:
+        updates?.importSource !== undefined
+          ? normalizeImportSource(updates.importSource)
+          : current.importSource,
       tracks: Array.isArray(updates?.tracks) ? updates.tracks : current.tracks,
       importedAt: current.importedAt,
       createdAt: current.createdAt,

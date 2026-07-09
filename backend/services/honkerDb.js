@@ -57,6 +57,12 @@ export const SCHEDULED_SYSTEM_TASKS = [
     payload: { kind: "discovery-refresh-check" },
   },
   {
+    name: "import-list-sync",
+    queue: "system-task",
+    schedule: "@every 30m",
+    payload: { kind: "import-list-sync" },
+  },
+  {
     name: "playlist-mbid-enrichment-sweep",
     queue: "playlist-mbid-enrichment",
     schedule: "@every 6h",

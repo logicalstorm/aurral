@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Check, Loader2, Play, FilePlus2, Download, Trash2, Search } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Check, Loader2, Play, FilePlus2, Download, Trash2, Search, RefreshCw } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   getFlowJobs,
@@ -10,7 +10,6 @@ import {
   addSharedPlaylistTracks,
   convertFlowToStaticPlaylist,
   deleteSharedPlaylist,
-  importSharedPlaylist,
   updateSharedPlaylist,
   deleteSharedPlaylistTrack,
   setFlowEnabled,
@@ -22,6 +21,7 @@ import {
   generateFlowArtwork,
   reSearchSharedPlaylistTrack,
   reSearchMissingSharedPlaylistTracks,
+  syncSharedPlaylistImport,
 } from "../utils/api";
 import { CreatePlaylistModal, RenamePlaylistModal } from "../components/PlaylistModals";
 import PillToggle from "../components/PillToggle";
@@ -57,9 +57,10 @@ import {
   FlowDetailPlaceholder,
   ConfirmDeleteModal,
   ConfirmDisableModal,
-  FlowImportReviewModal,
   MoreMenu,
 } from "./flows/flowComponents/flowRemainingComponents.jsx";
+import { PlaylistImportModal, SYNC_INTERVAL_OPTIONS } from "./flows/import/PlaylistImportModal.jsx";
+import { getApiErrorMessage } from "./onboardingUtils.jsx";
 import {
   NEW_FLOW_TEMPLATE,
   buildFlowFromForm,
@@ -79,7 +80,6 @@ import {
   isEditorialFlowDirty,
   normalizeMixPercent,
   normalizeNameKey,
-  parseFlowImportFile,
   reserveUniqueFlowName,
   slugifyFilePart,
 } from "./flows/flowPageUtils";
@@ -136,21 +136,21 @@ function FlowPage() {
   const [applyingSharedPlaylistNameId, setApplyingSharedPlaylistNameId] = useState(null);
   const [reSearchingTrackIds, setReSearchingTrackIds] = useState({});
   const [reSearchingMissingPlaylistId, setReSearchingMissingPlaylistId] = useState(null);
+  const [syncingImportPlaylistId, setSyncingImportPlaylistId] = useState(null);
+  const [updatingSyncIntervalPlaylistId, setUpdatingSyncIntervalPlaylistId] = useState(null);
   const [savingToPlaylistId, setSavingToPlaylistId] = useState(null);
   const [deletingTrackId, setDeletingTrackId] = useState(null);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [tracksLoadingByFlowId, setTracksLoadingByFlowId] = useState({});
   const [tracksErrorByFlowId, setTracksErrorByFlowId] = useState({});
   const [tracksByFlowId, setTracksByFlowId] = useState({});
-  const [importReview, setImportReview] = useState(null);
-  const [importing, setImporting] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [isCreatePlaylistOpen, setIsCreatePlaylistOpen] = useState(false);
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
   const [createPlaylistError, setCreatePlaylistError] = useState("");
   const [playlistMenuSavingKey, setPlaylistMenuSavingKey] = useState("");
   const [playlistMenuError, setPlaylistMenuError] = useState("");
   const [playlistsLoading, setPlaylistsLoading] = useState(false);
-  const importInputRef = useRef(null);
   const { user } = useAuth();
   const { showSuccess, showError } = useToast();
   const disabledFlowSources = status?.capabilities?.unavailableSources || {};
@@ -653,91 +653,7 @@ function FlowPage() {
   };
 
   const handleOpenImportPicker = () => {
-    if (importInputRef.current) {
-      importInputRef.current.value = "";
-      importInputRef.current.click();
-    }
-  };
-
-  const handleImportFileChange = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const content = await file.text();
-      const flows = parseFlowImportFile(content).map((flow) => ({
-        ...flow,
-        importName: flow?.name || "",
-      }));
-      setImportReview({
-        fileName: file.name,
-        flows,
-      });
-    } catch (error) {
-      showError(error?.message || "Failed to read tracklist file");
-    } finally {
-      event.target.value = "";
-    }
-  };
-
-  const handleConfirmImport = async () => {
-    if (!importReview || importing) return;
-    setImporting(true);
-    const reservedNames = new Set(
-      (status?.sharedPlaylists || [])
-        .map((playlist) => normalizeNameKey(playlist?.name))
-        .filter(Boolean),
-    );
-    let importedCount = 0;
-    let renamedCount = 0;
-    const failed = [];
-
-    for (const payload of importReview.flows) {
-      const desiredName = String(payload?.importName ?? payload?.name ?? "").trim();
-      const baseName = desiredName || String(payload?.name || "").trim();
-      const finalName = reserveUniqueFlowName(reservedNames, baseName);
-      if (finalName !== baseName) {
-        renamedCount += 1;
-      }
-      try {
-        await importSharedPlaylist({
-          name: finalName,
-          sourceName: payload?.sourceName || null,
-          sourceFlowId: payload?.sourceFlowId || null,
-          tracks: payload?.tracks || [],
-        });
-        importedCount += 1;
-      } catch (error) {
-        failed.push({
-          name: finalName,
-          message:
-            error?.response?.data?.message ||
-            error?.response?.data?.error ||
-            error?.message ||
-            "Failed to import tracklist",
-        });
-      }
-    }
-
-    try {
-      await fetchStatus();
-    } finally {
-      setImporting(false);
-    }
-
-    if (importedCount > 0) {
-      showSuccess(
-        `${importedCount} ${importedCount === 1 ? "tracklist" : "tracklists"} imported${renamedCount > 0 ? ` • ${renamedCount} renamed` : ""}`,
-      );
-      setImportReview(null);
-    }
-    if (failed.length > 0) {
-      const first = failed[0];
-      showError(
-        failed.length === 1
-          ? `${first.name}: ${first.message}`
-          : `${failed.length} imports failed. First issue: ${first.name} - ${first.message}`,
-      );
-    }
+    setImportModalOpen(true);
   };
 
   const handleDeleteSharedPlaylist = (playlist) => {
@@ -1088,6 +1004,51 @@ function FlowPage() {
     }
   };
 
+  const handleSyncSpotifyPlaylist = async (playlist) => {
+    if (!playlist?.id || syncingImportPlaylistId) return;
+    setSyncingImportPlaylistId(playlist.id);
+    try {
+      const result = await syncSharedPlaylistImport(playlist.id);
+      if (result?.skipped) {
+        showSuccess("Playlist is already up to date");
+      } else {
+        const queued = Number(result?.tracksQueued || 0);
+        showSuccess(
+          queued > 0
+            ? `Synced ${queued} new track${queued !== 1 ? "s" : ""} from Spotify`
+            : "Spotify playlist synced",
+        );
+      }
+      await fetchStatus();
+      await fetchFlowTracks(playlist.id, { showSpinner: false });
+    } catch (err) {
+      showError(getApiErrorMessage(err, "Failed to sync playlist"));
+    } finally {
+      setSyncingImportPlaylistId(null);
+    }
+  };
+
+  const handleUpdateSpotifySyncInterval = async (playlist, syncIntervalHours) => {
+    if (!playlist?.id || updatingSyncIntervalPlaylistId) return;
+    const current = playlist.importSource?.syncIntervalHours ?? 0;
+    if (syncIntervalHours === current) return;
+    setUpdatingSyncIntervalPlaylistId(playlist.id);
+    try {
+      await updateSharedPlaylist(playlist.id, {
+        importSource: {
+          syncIntervalHours,
+          syncEnabled: syncIntervalHours > 0,
+        },
+      });
+      showSuccess(syncIntervalHours > 0 ? "Sync schedule updated" : "Auto-sync turned off");
+      await fetchStatus();
+    } catch (err) {
+      showError(getApiErrorMessage(err, "Failed to update sync schedule"));
+    } finally {
+      setUpdatingSyncIntervalPlaylistId(null);
+    }
+  };
+
   const handleNavigateArtist = (track) => {
     if (!track?.artistMbid) return;
     navigate(`/artist/${track.artistMbid}`, {
@@ -1424,6 +1385,56 @@ function FlowPage() {
         </>
       ) : selectedPlaylist ? (
         <>
+          {selectedPlaylist?.importSource?.provider === "spotify-playlist" ? (
+            <>
+              <button
+                type="button"
+                className="artist-menu-item"
+                onClick={() => handleSyncSpotifyPlaylist(selectedPlaylist)}
+                disabled={syncingImportPlaylistId === selectedPlaylist.id}
+              >
+                <span className="artist-menu-item__main">
+                  {syncingImportPlaylistId === selectedPlaylist.id ? (
+                    <Loader2 className="artist-icon-sm animate-spin" />
+                  ) : (
+                    <RefreshCw className="artist-icon-sm" />
+                  )}
+                  Sync now
+                </span>
+              </button>
+              <div
+                className="flow-page__menu-sync-row"
+                onClick={(event) => event.stopPropagation()}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <label
+                  className="flow-page__menu-sync-label"
+                  htmlFor={`playlist-sync-interval-${selectedPlaylist.id}`}
+                >
+                  Auto-sync
+                </label>
+                <select
+                  id={`playlist-sync-interval-${selectedPlaylist.id}`}
+                  className="flow-page__menu-sync-select"
+                  value={selectedPlaylist.importSource?.syncIntervalHours ?? 0}
+                  onChange={(event) =>
+                    handleUpdateSpotifySyncInterval(
+                      selectedPlaylist,
+                      Number(event.target.value),
+                    )
+                  }
+                  disabled={updatingSyncIntervalPlaylistId === selectedPlaylist.id}
+                >
+                  {SYNC_INTERVAL_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flow-page__menu-divider" />
+            </>
+          ) : null}
           <button
             type="button"
             className="artist-menu-item"
@@ -1649,13 +1660,6 @@ function FlowPage() {
 
   return (
     <div className="flow-page">
-      <input
-        ref={importInputRef}
-        type="file"
-        accept="application/json,.json"
-        className="flow-page__hidden-input"
-        onChange={handleImportFileChange}
-      />
       <div
         className={`flow-page__shell${!isMobileLayout && libraryCollapsed ? " flow-page__shell--library-collapsed" : ""}`}
       >
@@ -1819,26 +1823,13 @@ function FlowPage() {
         onCancel={() => setConfirmDisable(null)}
         onConfirm={handleConfirmDisable}
       />
-      <FlowImportReviewModal
-        importReview={importReview}
-        importing={importing}
-        onNameChange={(index, name) => {
-          setImportReview((prev) => {
-            if (!prev || !Array.isArray(prev.flows)) return prev;
-            const nextFlows = prev.flows.map((flow, flowIndex) =>
-              flowIndex === index ? { ...flow, importName: name } : flow,
-            );
-            return {
-              ...prev,
-              flows: nextFlows,
-            };
-          });
-        }}
-        onCancel={() => {
-          if (importing) return;
-          setImportReview(null);
-        }}
-        onConfirm={handleConfirmImport}
+      <PlaylistImportModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImported={fetchStatus}
+        showError={showError}
+        showSuccess={showSuccess}
+        existingPlaylistNames={(status?.sharedPlaylists || []).map((playlist) => playlist?.name)}
       />
       <RenamePlaylistModal
         open={!!renameModal}

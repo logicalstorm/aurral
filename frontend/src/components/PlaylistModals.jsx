@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, MoreVertical, Plus, Sparkles, Trash2, Upload, X } from "lucide-react";
 
-function ModalShell({
+export function ModalShell({
   open,
   title,
   description = "",

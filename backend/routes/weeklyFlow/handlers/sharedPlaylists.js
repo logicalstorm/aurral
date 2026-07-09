@@ -8,6 +8,7 @@ import { weeklyFlowOperationQueue } from "../../../services/weeklyFlow/weeklyFlo
 import {
   getAccessibleSharedPlaylist,
 } from "./utils.js";
+import { normalizeImportSource } from "../../../services/weeklyFlow/weeklyFlowPlaylistConfig.js";
 
 const normalizeImportedTrackList = (value) => {
   if (!Array.isArray(value)) return [];
@@ -183,7 +184,11 @@ export function registerSharedPlaylists(router) {
         req.body || {},
         "tracks",
       );
-      if (!hasNameUpdate && !hasTracksUpdate) {
+      const hasImportSourceUpdate = Object.prototype.hasOwnProperty.call(
+        req.body || {},
+        "importSource",
+      );
+      if (!hasNameUpdate && !hasTracksUpdate && !hasImportSourceUpdate) {
         return res.status(400).json({
           error: "At least one playlist field is required",
         });
@@ -212,6 +217,23 @@ export function registerSharedPlaylists(router) {
           message: "Playlist update must include at least one valid track",
         });
       }
+      let importSource = null;
+      if (hasImportSourceUpdate) {
+        if (!currentPlaylist.importSource) {
+          return res.status(400).json({
+            error: "Playlist has no import source",
+          });
+        }
+        importSource = normalizeImportSource({
+          ...currentPlaylist.importSource,
+          ...(req.body?.importSource || {}),
+        });
+        if (!importSource) {
+          return res.status(400).json({
+            error: "importSource is invalid",
+          });
+        }
+      }
 
       const result = await weeklyFlowOperationQueue.enqueuePayload({
         kind: "shared-playlist-update",
@@ -221,6 +243,8 @@ export function registerSharedPlaylists(router) {
         tracks: normalizedTracks,
         hasNameUpdate,
         hasTracksUpdate,
+        hasImportSourceUpdate,
+        importSource,
       });
       if (result?.missing) {
         return res.status(404).json({ error: "Shared playlist not found" });

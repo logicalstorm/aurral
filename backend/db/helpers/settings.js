@@ -312,3 +312,7 @@ export const dbOps = {
     updateFn();
   },
 };
+
+export function getSettingsEncryptionKey() {
+  return getOrCreateEncryptionKey();
+}

@@ -5,6 +5,7 @@ import { registerArtworkServe } from "./handlers/artworkServe.js";
 import { registerArtworkManagement } from "./handlers/artworkManagement.js";
 import { registerFlows } from "./handlers/flows.js";
 import { registerSharedPlaylists } from "./handlers/sharedPlaylists.js";
+import { registerSpotifyImport } from "./handlers/spotifyImport.js";
 import { registerJobs } from "./handlers/jobs.js";
 
 const router = express.Router();
@@ -18,6 +19,7 @@ router.use(requirePermission("accessFlow"));
 registerArtworkManagement(router);
 registerFlows(router);
 registerSharedPlaylists(router);
+registerSpotifyImport(router);
 registerJobs(router);
 
 export default router;

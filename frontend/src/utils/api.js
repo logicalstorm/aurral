@@ -173,4 +173,12 @@ export {
   approveBlockedJob,
   denyBlockedJob,
   startFlowPlaylist,
+  getSpotifyImportStatus,
+  startSpotifyOAuth,
+  completeSpotifyOAuth,
+  disconnectSpotify,
+  getSpotifyPlaylists,
+  previewSpotifyPlaylist,
+  importSpotifyPlaylist,
+  syncSharedPlaylistImport,
 } from "./api/endpoints/playlists.js";

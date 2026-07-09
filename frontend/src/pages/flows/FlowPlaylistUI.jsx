@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import {
   ArrowRight,
   Clock,
-  ExternalLink,
   ListMusic,
   Loader2,
   Plus,
@@ -70,7 +69,6 @@ export function FlowLibraryCreateMenu({
   creatingFlow = false,
   canCreateFlow = true,
   compact = false,
-  spotifyImportHref = "https://aurral.org/aurral-convert",
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState(null);
@@ -205,30 +203,29 @@ export function FlowLibraryCreateMenu({
       <p className="flow-page__library-create-menu-label flow-page__library-create-menu-label--import">
         Import
       </p>
-      <div className="flow-page__library-create-secondary">
+      <div className="flow-page__library-create-primary">
         <button
           type="button"
           role="menuitem"
-          className="flow-page__library-create-secondary-item"
+          className="flow-page__library-create-action flow-page__library-create-action--import"
           onClick={() => {
             onImport?.();
             close();
           }}
         >
-          <Upload className="flow-page__library-create-secondary-icon" />
-          <span>Import JSON</span>
+          <span
+            className="flow-page__library-create-action-icon flow-page__library-create-action-icon--import"
+            aria-hidden="true"
+          >
+            <Upload className="flow-page__library-create-action-glyph" />
+          </span>
+          <span className="flow-page__library-create-action-copy">
+            <span className="flow-page__library-create-action-title">Import playlist</span>
+            <span className="flow-page__library-create-action-desc">
+              From Spotify or a JSON export
+            </span>
+          </span>
         </button>
-        <a
-          href={spotifyImportHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          role="menuitem"
-          className="flow-page__library-create-secondary-item"
-          onClick={close}
-        >
-          <ExternalLink className="flow-page__library-create-secondary-icon" />
-          <span>Spotify import</span>
-        </a>
       </div>
     </div>
   );
@@ -281,6 +278,10 @@ export function PlaylistLibraryItem({
   const trackLabel = formatTrackCountLabel(trackCount, stats);
   const typeLabel =
     entry.kind === "flow" ? (entry.enabled === true ? "Flow" : "Flow draft") : "Playlist";
+  const showSyncedBadge =
+    entry.kind === "shared" &&
+    entry.importSource?.syncEnabled === true &&
+    entry.importSource?.provider === "spotify-playlist";
 
   return (
     <div
@@ -305,7 +306,12 @@ export function PlaylistLibraryItem({
           title={collapsed && activityHint ? activityHint : undefined}
         >
           <div className="flow-page__library-item-top">
-            <span className="flow-page__library-item-type">{typeLabel}</span>
+            <span className="flow-page__library-item-type-row">
+              <span className="flow-page__library-item-type">{typeLabel}</span>
+              {showSyncedBadge ? (
+                <span className="flow-page__badge flow-page__badge--sync">Synced</span>
+              ) : null}
+            </span>
             {activityHint ? (
               <span
                 className="flow-page__library-item-activity"
