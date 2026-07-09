@@ -657,11 +657,16 @@ function FlowPage() {
     if (!flow) return;
     try {
       const response = await getFlowLidarrImportListUrl(flow.id);
-      const url = String(response?.url || "").trim();
-      if (!url) {
+      const token = String(response?.token || "").trim();
+      if (!token) {
         throw new Error("Feed URL unavailable");
       }
-      await navigator.clipboard.writeText(url);
+      const url = new URL(
+        `/api/feeds/lidarr/flows/${encodeURIComponent(flow.id)}.json`,
+        window.location.origin,
+      );
+      url.searchParams.set("token", token);
+      await navigator.clipboard.writeText(url.toString());
       showSuccess("Copied Lidarr import URL");
     } catch (error) {
       showError(error?.message || "Failed to copy Lidarr import URL");

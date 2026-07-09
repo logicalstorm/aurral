@@ -12,7 +12,6 @@ import {
 import { weeklyFlowWorker } from "../../../services/weeklyFlow/weeklyFlowWorker.js";
 import { schedulePlaylistMbidEnrichment } from "../../../services/playlistMbidEnrichmentService.js";
 import {
-  buildFlowLidarrFeedUrl,
   buildLidarrImportListItems,
 } from "../../../services/lidarrImportListFeed.js";
 import {
@@ -461,12 +460,8 @@ export function registerFlows(router) {
     if (!ensured?.lidarrFeedToken) {
       return res.status(404).json({ error: "Flow not found" });
     }
-    const url = buildFlowLidarrFeedUrl(req, flowId, ensured.lidarrFeedToken);
-    if (!url) {
-      return res.status(500).json({ error: "Failed to build feed URL" });
-    }
     res.json({
-      url,
+      token: ensured.lidarrFeedToken,
       itemCount: buildLidarrImportListItems(downloadTracker.getByPlaylistType(flowId)).length,
     });
   });

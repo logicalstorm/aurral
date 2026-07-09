@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildLidarrImportListItems,
-  resolveLidarrFeedBaseUrl,
   verifyFlowLidarrFeedToken,
 } from "../../backend/services/lidarrImportListFeed.js";
 
@@ -34,24 +33,4 @@ test("buildLidarrImportListItems maps jobs to lidarr custom list rows", () => {
 
 test("verifyFlowLidarrFeedToken rejects missing or mismatched tokens", () => {
   assert.equal(verifyFlowLidarrFeedToken("missing-flow", "token"), null);
-});
-
-test("resolveLidarrFeedBaseUrl uses docker service host when lidarr url is internal", () => {
-  const baseUrl = resolveLidarrFeedBaseUrl({
-    req: { get: (name) => (name === "host" ? "localhost:3001" : "") },
-    lidarrUrl: "http://lidarr:8686",
-    publicUrl: "",
-    port: 3001,
-  });
-  assert.equal(baseUrl, "http://aurral:3001");
-});
-
-test("resolveLidarrFeedBaseUrl honors AURRAL_PUBLIC_URL", () => {
-  const baseUrl = resolveLidarrFeedBaseUrl({
-    req: { get: () => "localhost:3001" },
-    lidarrUrl: "http://lidarr:8686",
-    publicUrl: "http://aurral.example.com",
-    port: 3001,
-  });
-  assert.equal(baseUrl, "http://aurral.example.com");
 });

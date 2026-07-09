@@ -1,5 +1,4 @@
 import crypto from "crypto";
-import { dbOps } from "../db/helpers/index.js";
 import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
 import { flowPlaylistConfig } from "./weeklyFlow/weeklyFlowPlaylistConfig.js";
 
@@ -41,52 +40,4 @@ export const verifyFlowLidarrFeedToken = (flowId, token) => {
   if (!flow?.lidarrFeedToken) return null;
   if (!tokenEquals(flow.lidarrFeedToken, token)) return null;
   return flow;
-};
-
-const parseHostname = (value) => {
-  try {
-    return new URL(String(value || "").trim()).hostname;
-  } catch {
-    return "";
-  }
-};
-
-const isLoopbackHost = (hostname) =>
-  hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-
-export const resolveLidarrFeedBaseUrl = ({
-  req,
-  lidarrUrl = dbOps.getSettings()?.integrations?.lidarr?.url || "",
-  publicUrl = process.env.AURRAL_PUBLIC_URL || "",
-  port = process.env.PORT || 3001,
-} = {}) => {
-  const fromEnv = String(publicUrl || "").trim().replace(/\/+$/, "");
-  if (fromEnv) return fromEnv;
-
-  const lidarrHost = parseHostname(lidarrUrl);
-  const reqHost = String(req?.get?.("x-forwarded-host") || req?.get?.("host") || "")
-    .split(",")[0]
-    .trim();
-  const [reqHostname, reqPortPart] = reqHost.split(":");
-  const feedPort = reqPortPart || String(port);
-
-  if (lidarrHost && !isLoopbackHost(lidarrHost) && !/^\d+\.\d+\.\d+\.\d+$/.test(lidarrHost)) {
-    return `http://aurral:${feedPort}`;
-  }
-
-  if (isLoopbackHost(reqHostname)) {
-    return `http://127.0.0.1:${feedPort}`;
-  }
-
-  const proto = String(req?.get?.("x-forwarded-proto") || req?.protocol || "http")
-    .split(",")[0]
-    .trim();
-  return reqHost ? `${proto}://${reqHost}` : null;
-};
-
-export const buildFlowLidarrFeedUrl = (req, flowId, token) => {
-  const baseUrl = resolveLidarrFeedBaseUrl({ req });
-  if (!baseUrl) return null;
-  const query = new URLSearchParams({ token: String(token || "").trim() });
-  return `${baseUrl}/api/feeds/lidarr/flows/${encodeURIComponent(flowId)}.json?${query}`;
 };
