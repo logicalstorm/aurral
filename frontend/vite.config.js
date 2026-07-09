@@ -26,20 +26,13 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: "autoUpdate",
-        includeAssets: ["arralogo.svg", "icons/*.png"],
+        includeAssets: ["arralogo.svg", "icons/*.png", "spotify-oauth-callback.js"],
         workbox: {
-          // SPA fallback must not intercept reverse-proxy auth callbacks or API routes.
           navigateFallbackDenylist: [
             /^\/oidc\//,
             /^\/api\//,
             /^\/logout$/,
-            /^\/oauth\.html$/,
-          ],
-          runtimeCaching: [
-            {
-              urlPattern: ({ url }) => url.pathname.endsWith("/oauth.html"),
-              handler: "NetworkOnly",
-            },
+            /^\/oauth\.html/,
           ],
         },
         manifest: {

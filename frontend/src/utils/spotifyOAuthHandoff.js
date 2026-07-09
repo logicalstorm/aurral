@@ -9,6 +9,37 @@ export function saveSpotifyOAuthReturnPath() {
   );
 }
 
+export function captureSpotifyOAuthFromLocation() {
+  const { pathname, search, hash } = window.location;
+  if (!pathname.endsWith("/oauth.html")) return false;
+  const rawQuery = search || (hash ? `?${String(hash).replace(/^#/, "")}` : "");
+  const params = new URLSearchParams(rawQuery.replace(/^\?/, ""));
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+  if (!accessToken || !refreshToken) return false;
+  try {
+    window.localStorage.setItem(
+      SPOTIFY_OAUTH_PENDING_KEY,
+      JSON.stringify({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: params.get("expires_in"),
+        savedAt: Date.now(),
+      }),
+    );
+  } catch {
+    return false;
+  }
+  let returnPath = "/playlists";
+  try {
+    returnPath =
+      window.sessionStorage.getItem(SPOTIFY_OAUTH_RETURN_PATH_KEY) || returnPath;
+    window.sessionStorage.removeItem(SPOTIFY_OAUTH_RETURN_PATH_KEY);
+  } catch {}
+  window.location.replace(returnPath);
+  return true;
+}
+
 export function consumePendingSpotifyOAuth() {
   const raw = window.localStorage.getItem(SPOTIFY_OAUTH_PENDING_KEY);
   if (!raw) return null;

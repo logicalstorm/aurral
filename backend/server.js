@@ -168,10 +168,16 @@ const frontendFallbackRoute = /.*/;
 
 if (fs.existsSync(frontendDist)) {
   const oauthHtmlPath = path.join(frontendDist, "oauth.html");
+  const oauthCallbackPath = path.join(frontendDist, "spotify-oauth-callback.js");
   app.get("/oauth.html", (req, res, next) => {
     if (!fs.existsSync(oauthHtmlPath)) return next();
     res.setHeader("Cache-Control", "no-store");
     return res.sendFile(oauthHtmlPath);
+  });
+  app.get("/spotify-oauth-callback.js", (req, res, next) => {
+    if (!fs.existsSync(oauthCallbackPath)) return next();
+    res.setHeader("Cache-Control", "no-store");
+    return res.sendFile(oauthCallbackPath);
   });
   app.use(
     "/assets",
