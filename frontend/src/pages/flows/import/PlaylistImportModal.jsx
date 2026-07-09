@@ -34,16 +34,67 @@ function openSpotifyOAuthPopup(oauthUrl) {
       reject(new Error("Pop-ups are blocked by your browser"));
       return;
     }
-    window.onCompleteOauth = (query, onComplete) => {
+
+    let settled = false;
+    const cleanup = () => {
       delete window.onCompleteOauth;
+      window.removeEventListener("message", onMessage);
+      clearInterval(closedPoll);
+      clearTimeout(timeout);
+    };
+    const finish = (tokens) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      try {
+        popup.close();
+      } catch (_) {}
+      resolve(tokens);
+    };
+    const fail = (message) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      try {
+        popup.close();
+      } catch (_) {}
+      reject(new Error(message));
+    };
+    const tokensFromQuery = (query) => {
       const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
-      onComplete?.();
-      resolve({
+      return {
         accessToken: params.get("access_token"),
         refreshToken: params.get("refresh_token"),
         expiresIn: params.get("expires_in"),
+      };
+    };
+
+    window.onCompleteOauth = (query, onComplete) => {
+      onComplete?.();
+      finish(tokensFromQuery(query));
+    };
+
+    const onMessage = (event) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "aurral-spotify-oauth") return;
+      finish({
+        accessToken: event.data.access_token,
+        refreshToken: event.data.refresh_token,
+        expiresIn: event.data.expires_in,
       });
     };
+
+    window.addEventListener("message", onMessage);
+
+    const closedPoll = setInterval(() => {
+      if (!settled && popup.closed) {
+        fail("Spotify sign-in was cancelled");
+      }
+    }, 500);
+
+    const timeout = setTimeout(() => {
+      fail("Spotify sign-in timed out");
+    }, 5 * 60 * 1000);
   });
 }
 

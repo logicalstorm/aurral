@@ -29,7 +29,12 @@ export default defineConfig(({ mode }) => {
         includeAssets: ["arralogo.svg", "icons/*.png"],
         workbox: {
           // SPA fallback must not intercept reverse-proxy auth callbacks or API routes.
-          navigateFallbackDenylist: [/^\/oidc\//, /^\/api\//, /^\/logout$/],
+          navigateFallbackDenylist: [
+            /^\/oidc\//,
+            /^\/api\//,
+            /^\/logout$/,
+            /^\/oauth\.html$/,
+          ],
         },
         manifest: {
           name: "Aurral - Music Discovery",
