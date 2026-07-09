@@ -16,6 +16,8 @@ It is built for people who love discovering music and want that discovery loop t
 
 > [!WARNING]
 > **Aurral v2 is coming.** The next major release is a big upgrade. Aurral's built-in Soulseek client is being removed in favor of external [slskd](https://github.com/slskd/slskd) for more reliable flow and playlist downloads. If you want to stay on the current 1.x line, pin your Docker image to a `1.x.x` tag instead of `latest` before updating. See [Pinning to Aurral 1.x](#pinning-to-aurral-1x).
+>
+> **[See what's new in v2.](https://github.com/lklynet/aurral/blob/test/V2.md)** Currently available on the `test` prerelease branch.
 
 ## Quick Links
 
