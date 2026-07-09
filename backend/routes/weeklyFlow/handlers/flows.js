@@ -12,6 +12,10 @@ import {
 import { weeklyFlowWorker } from "../../../services/weeklyFlow/weeklyFlowWorker.js";
 import { schedulePlaylistMbidEnrichment } from "../../../services/playlistMbidEnrichmentService.js";
 import {
+  buildFlowLidarrFeedUrl,
+  buildLidarrImportListItems,
+} from "../../../services/lidarrImportListFeed.js";
+import {
   getUnavailableFlowSourceError,
 } from "../../../services/weeklyFlow/weeklyFlowValidation.js";
 import {
@@ -445,5 +449,25 @@ export function registerFlows(router) {
         message: error.message,
       });
     }
+  });
+
+  router.get("/flows/:flowId/lidarr-import-list", (req, res) => {
+    const { flowId } = req.params;
+    const flow = getAccessibleFlow(req.user, flowId);
+    if (!flow) {
+      return res.status(404).json({ error: "Flow not found" });
+    }
+    const ensured = flowPlaylistConfig.ensureLidarrFeedToken(flowId);
+    if (!ensured?.lidarrFeedToken) {
+      return res.status(404).json({ error: "Flow not found" });
+    }
+    const url = buildFlowLidarrFeedUrl(req, flowId, ensured.lidarrFeedToken);
+    if (!url) {
+      return res.status(500).json({ error: "Failed to build feed URL" });
+    }
+    res.json({
+      url,
+      itemCount: buildLidarrImportListItems(downloadTracker.getByPlaylistType(flowId)).length,
+    });
   });
 }

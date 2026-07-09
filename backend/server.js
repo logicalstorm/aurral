@@ -31,6 +31,7 @@ import {
 } from "./services/honkerWorkerRuntime.js";
 import authRouter from "./routes/auth.js";
 import imageProxyRouter from "./routes/imageProxy.js";
+import lidarrFeedRouter from "./routes/lidarrFeed.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -152,6 +153,7 @@ app.use("/api/discover", discoveryRouter);
 app.use("/api/requests", requestsRouter);
 app.use("/api/health", healthRouter);
 app.use("/api/filesystem", filesystemRouter);
+app.use("/api/feeds", lidarrFeedRouter);
 app.use("/api/playlists", weeklyFlowRouter);
 app.use("/api/weekly-flow", (req, res) => {
   const target = req.originalUrl.replace("/api/weekly-flow", "/api/playlists");

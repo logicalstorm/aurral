@@ -27,3 +27,13 @@ Path mappings let Aurral read files. If Navidrome sees the same files at a diffe
 ## Safety
 
 Artist and album changes go through Lidarr. Aurral does not write directly into your root music library.
+
+## Import list feeds
+
+Each flow can expose a Lidarr Custom List URL. Open the flow menu on **Playlists**, choose **Lidarr import URL**, then add it in Lidarr under **Settings → Import Lists → Custom List**.
+
+The copied URL is meant for Lidarr to fetch, not your browser. If Lidarr runs in Docker and Aurral's Lidarr URL is `http://lidarr:8686`, Aurral generates `http://aurral:3001/...` for the feed. Set `AURRAL_PUBLIC_URL` when Lidarr needs a different hostname.
+
+The feed always reflects the flow's current tracklist. After each flow refresh, Lidarr picks up new artists or albums on its next import list sync (about every 6 hours by default). Set **Monitor** to **Specific Album** or **Artist** in Lidarr to match how you want releases added.
+
+Tracks without a MusicBrainz artist ID are omitted from the feed. Album IDs are included when Aurral has them; Lidarr uses them for **Specific Album** monitoring on versions that support album-level custom lists.

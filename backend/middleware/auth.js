@@ -608,7 +608,8 @@ export const authMiddleware = (req, res, next) => {
       req.path === "/api/filesystem/browse" ||
       req.path === "/api/filesystem/ensure" ||
       req.path === "/api/image-proxy" ||
-      req.path.startsWith("/api/image-proxy/")
+      req.path.startsWith("/api/image-proxy/") ||
+      (req.method === "GET" && /^\/api\/feeds\/lidarr\/flows\/[^/]+\.json$/i.test(req.path))
     ) {
       return next();
     }

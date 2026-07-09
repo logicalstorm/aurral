@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { dbOps } from "../../db/helpers/index.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 
@@ -289,6 +289,7 @@ const normalizeFlow = (flow) => {
     discoverPresetId: String(flow?.discoverPresetId || "").trim() || null,
     type: flow?.type || null,
     tag: flow?.tag || null,
+    lidarrFeedToken: String(flow?.lidarrFeedToken || "").trim() || null,
     createdAt:
       flow?.createdAt != null && Number.isFinite(Number(flow.createdAt))
         ? Number(flow.createdAt)
@@ -609,6 +610,21 @@ export const flowPlaylistConfig = {
   getFlowForUser(user, flowId) {
     const flow = this.getFlow(flowId);
     return this.canUserAccessFlow(user, flow) ? flow : null;
+  },
+
+  ensureLidarrFeedToken(flowId) {
+    const flows = getStoredFlows();
+    const index = flows.findIndex((flow) => flow.id === flowId);
+    if (index === -1) return null;
+    const current = flows[index];
+    if (current.lidarrFeedToken) return current;
+    const next = normalizeFlow({
+      ...current,
+      lidarrFeedToken: randomBytes(24).toString("hex"),
+    });
+    flows[index] = next;
+    setFlows(flows);
+    return next;
   },
 
   isEnabled(flowId) {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Check, Loader2, Play, FilePlus2, Download, Trash2, Search, RefreshCw } from "lucide-react";
+import { Check, Loader2, Play, FilePlus2, Download, Trash2, Search, RefreshCw, ClipboardCopy } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   getFlowJobs,
@@ -22,6 +22,7 @@ import {
   reSearchSharedPlaylistTrack,
   reSearchMissingSharedPlaylistTracks,
   syncSharedPlaylistImport,
+  getFlowLidarrImportListUrl,
 } from "../utils/api";
 import { CreatePlaylistModal, RenamePlaylistModal } from "../components/PlaylistModals";
 import PillToggle from "../components/PillToggle";
@@ -649,6 +650,21 @@ function FlowPage() {
       showSuccess(`Exported ${flow.name} tracklist`);
     } catch (error) {
       showError(error?.message || "Failed to export tracklist");
+    }
+  };
+
+  const handleCopyLidarrImportListUrl = async (flow) => {
+    if (!flow) return;
+    try {
+      const response = await getFlowLidarrImportListUrl(flow.id);
+      const url = String(response?.url || "").trim();
+      if (!url) {
+        throw new Error("Feed URL unavailable");
+      }
+      await navigator.clipboard.writeText(url);
+      showSuccess("Copied Lidarr import URL");
+    } catch (error) {
+      showError(error?.message || "Failed to copy Lidarr import URL");
     }
   };
 
@@ -1357,6 +1373,16 @@ function FlowPage() {
             <span className="artist-menu-item__main">
               <FilePlus2 className="artist-icon-sm" />
               Convert to static
+            </span>
+          </button>
+          <button
+            type="button"
+            className="artist-menu-item"
+            onClick={() => handleCopyLidarrImportListUrl(selectedFlow)}
+          >
+            <span className="artist-menu-item__main">
+              <ClipboardCopy className="artist-icon-sm" />
+              Lidarr import URL
             </span>
           </button>
           <button

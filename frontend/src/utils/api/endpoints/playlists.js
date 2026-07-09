@@ -165,3 +165,6 @@ export const importSpotifyPlaylist = (payload) =>
 
 export const syncSharedPlaylistImport = (playlistId) =>
   postData(`/playlists/shared-playlists/${encodeURIComponent(playlistId)}/sync`);
+
+export const getFlowLidarrImportListUrl = (flowId) =>
+  getData(`/playlists/flows/${encodeURIComponent(flowId)}/lidarr-import-list`);
