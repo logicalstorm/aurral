@@ -1,6 +1,6 @@
 ---
 title: Playlist imports
-description: JSON formats, Spotify import, retries, and file reuse.
+description: Spotify connect, JSON formats, retries, and file reuse.
 ---
 
 Imported playlists are separate from flows.
@@ -14,15 +14,27 @@ Imported playlists are separate from flows.
 
 ## Spotify import
 
-The fastest path from Spotify is the [Spotify import helper](https://aurral.org/aurral-convert.html) on aurral.org, which converts Exportify CSV files into Aurral-ready JSON.
+The fastest path is in-app import on **Playlists**.
 
-Manual path:
+1. Open the create menu and choose **Import playlist**.
+2. Select **Spotify**, then **Connect Spotify**.
+3. Approve access in the popup, pick a playlist, and import.
 
-1. Export the playlist from [Exportify](https://exportify.net/)
-2. Convert the CSV to JSON with [CSVJSON](https://csvjson.com/csv2json)
-3. Import that JSON file in Aurral
+During import you can set a display name and a sync schedule. Sync re-fetches the Spotify tracklist and queues new tracks. Choose **None** for a fixed snapshot. Change sync later from the playlist menu.
 
-Aurral accepts CSVJSON output directly as one playlist and understands Spotify-style keys like `Track Name`, `Artist Name(s)`, and `Album Name`.
+The connection is stored per Aurral user. Use **Disconnect** in the import modal to revoke access.
+
+Allow the OAuth popup if your browser blocks it. Self-hosted instances need `oauth.html` reachable on the same origin Aurral serves.
+
+### Manual CSV import
+
+When OAuth is not an option, use the [Spotify import helper](https://aurral.org/aurral-convert.html) or Exportify plus CSVJSON:
+
+1. Export from [Exportify](https://exportify.net/)
+2. Convert with [CSVJSON](https://csvjson.com/csv2json) or aurral-convert.html
+3. Import the JSON on the **JSON file** tab in the import modal
+
+Aurral accepts CSVJSON output directly and understands Spotify-style keys like `Track Name`, `Artist Name(s)`, and `Album Name`.
 
 ## What the importer accepts
 

@@ -44,7 +44,17 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 
 | Variable | Purpose |
 | -------- | ------- |
-| `AURRAL_LASTFM_TIMEOUT_MS` | Per-request timeout for Last.fm API calls in milliseconds. Default `15000`. Increase if focus playlists are missing tracks and logs show `ECONNABORTED` errors.
+| `AURRAL_LASTFM_TIMEOUT_MS` | Per-request timeout for Last.fm API calls in milliseconds. Default `15000`. Increase if focus playlists are missing tracks and logs show `ECONNABORTED` errors. |
+
+## Spotify playlist import
+
+Optional overrides for the shared Lidarr Spotify OAuth proxy. Defaults work for most installs.
+
+| Variable | Purpose |
+| -------- | ------- |
+| `SPOTIFY_CLIENT_ID` | OAuth client ID. |
+| `SPOTIFY_OAUTH_REDIRECT_URI` | Authorization redirect. Default `https://spotify.lidarr.audio/auth`. |
+| `SPOTIFY_OAUTH_RENEW_URI` | Token refresh endpoint. Default `https://spotify.lidarr.audio/renew`. |
 
 ## Example
 

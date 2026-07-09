@@ -34,6 +34,8 @@ Each flow can expose a Lidarr Custom List URL. Open the flow menu on **Playlists
 
 The copied URL uses the same host you have open in your browser, for example `https://aurral.kell.ly/api/feeds/...`. Lidarr must be able to reach that host.
 
+The URL includes a per-flow token. Treat it like a secret — anyone with the URL can read that flow's artist list.
+
 The feed always reflects the flow's current tracklist.
 
 Tracks without a MusicBrainz artist ID are omitted from the feed. Album IDs are included when Aurral has them; Lidarr uses them for **Specific Album** monitoring on versions that support album-level custom lists.

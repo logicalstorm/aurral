@@ -16,7 +16,13 @@ The **Playlists** page is where flows and imported playlists live. Both download
 | Controls  | Schedule, source mix, focus, deep dive | None of the flow controls        |
 | Worker    | Shared download worker                 | Shared download worker           |
 
-Flows are dynamic playlists that refresh automatically based on your listening context and flow recipe. Static playlists come from imported JSON or exported flow tracklists.
+Flows are dynamic playlists that refresh automatically based on your listening context and flow recipe. Static playlists come from Spotify, imported JSON, or exported flow tracklists.
+
+## Import and Lidarr sync
+
+Use **Import playlist** for Spotify (connect in-app) or a JSON tracklist. See [Playlist imports](/using/playlist-imports/).
+
+Flows can expose a **Lidarr import URL** so Lidarr polls the current flow tracklist as a custom import list. See [Lidarr — Import list feeds](/integrations/lidarr/#import-list-feeds).
 
 ## Where files go
 
@@ -31,4 +37,4 @@ Navidrome can scan the same tree and play `.m3u` playlists. Plex can index the t
 ## Next steps
 
 - [Flows](/using/flows/) — schedule, source mix, focus, and generation behavior
-- [Playlist imports](/using/playlist-imports/) — JSON formats, Spotify import, retries, and file reuse
+- [Playlist imports](/using/playlist-imports/) — Spotify connect, JSON formats, retries, and file reuse
