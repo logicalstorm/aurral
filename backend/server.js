@@ -189,12 +189,6 @@ if (fs.existsSync(frontendDist)) {
     if (req.path.startsWith("/api")) {
       return res.status(404).json({ error: "Not found" });
     }
-    if (req.path === "/oauth.html" || req.path.endsWith("/oauth.html")) {
-      const oauthPath = path.join(frontendDist, "oauth.html");
-      if (fs.existsSync(oauthPath)) {
-        return res.sendFile(oauthPath);
-      }
-    }
     res.sendFile(path.join(frontendDist, "index.html"));
   });
 } else {

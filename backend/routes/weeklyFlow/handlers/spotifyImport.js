@@ -1,4 +1,4 @@
-import { buildSpotifyOAuthUrl } from "../../../services/spotify/spotifyConfig.js";
+import { buildSpotifyOAuthUrl, SPOTIFY_API_BASE } from "../../../services/spotify/spotifyConfig.js";
 import { spotifyConnectionStore } from "../../../services/spotify/spotifyConnectionStore.js";
 import { spotifyClient } from "../../../services/spotify/spotifyClient.js";
 import { logger } from "../../../services/logger.js";
@@ -43,15 +43,18 @@ export function registerSpotifyImport(router) {
         return res.status(400).json({ error: "Spotify tokens are required" });
       }
       const expiresAt = parseExpiresAt(expiresIn);
-      spotifyConnectionStore.saveConnection(req.user.id, {
-        accessToken,
-        refreshToken,
-        expiresAt,
-      });
       let displayName = null;
       try {
-        const profile = await spotifyClient.getProfile(req.user.id);
-        displayName = profile?.display_name || null;
+        const response = await fetch(`${SPOTIFY_API_BASE}/me`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/json",
+          },
+        });
+        if (response.ok) {
+          const profile = await response.json();
+          displayName = profile?.display_name || null;
+        }
       } catch (error) {
         logger.warn(
           "spotify",

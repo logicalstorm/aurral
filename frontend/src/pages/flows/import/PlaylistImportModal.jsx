@@ -12,13 +12,20 @@ import {
   startSpotifyOAuth,
 } from "../../../utils/api";
 import { getAppBasePath, normalizeBasePathWithTrailingSlash } from "../../../utils/basePath";
-import {
-  SPOTIFY_OAUTH_BROADCAST_CHANNEL,
-  SPOTIFY_OAUTH_PENDING_KEY,
-  consumePendingSpotifyOAuth,
-  tokensFromHandoffPayload,
-} from "../../../utils/spotifyOAuthHandoff.js";
 import { parseFlowImportFile, reserveUniqueFlowName, normalizeNameKey } from "../flowPageUtils";
+
+const SPOTIFY_OAUTH_BROADCAST_CHANNEL = "aurral-spotify-oauth";
+
+function tokensFromHandoffPayload(payload) {
+  const accessToken = String(payload?.access_token || "").trim();
+  const refreshToken = String(payload?.refresh_token || "").trim();
+  if (!accessToken || !refreshToken) return null;
+  return {
+    accessToken,
+    refreshToken,
+    expiresIn: payload?.expires_in,
+  };
+}
 
 export const SYNC_INTERVAL_OPTIONS = [
   { value: 0, label: "None" },
@@ -33,15 +40,6 @@ function getOAuthCallbackUrl() {
   return `${window.location.origin}${base}oauth.html`;
 }
 
-function tokensFromOAuthQuery(query) {
-  const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
-  return tokensFromHandoffPayload({
-    access_token: params.get("access_token"),
-    refresh_token: params.get("refresh_token"),
-    expires_in: params.get("expires_in"),
-  });
-}
-
 function openSpotifyOAuthPopup(oauthUrl) {
   return new Promise((resolve, reject) => {
     const popup = window.open(oauthUrl, "spotify-oauth", "width=480,height=720");
@@ -54,12 +52,10 @@ function openSpotifyOAuthPopup(oauthUrl) {
     let channel;
     const cleanup = () => {
       delete window.onCompleteOauth;
-      window.removeEventListener("storage", onStorage);
       if (channel) {
         channel.close();
         channel = null;
       }
-      clearInterval(pollTimer);
       clearTimeout(timeout);
     };
     const finish = (tokens) => {
@@ -75,13 +71,6 @@ function openSpotifyOAuthPopup(oauthUrl) {
       reject(new Error(message));
     };
 
-    const onStorage = (event) => {
-      if (event.key !== SPOTIFY_OAUTH_PENDING_KEY || !event.newValue) return;
-      const tokens = consumePendingSpotifyOAuth();
-      if (tokens) finish(tokens);
-    };
-
-    window.addEventListener("storage", onStorage);
     try {
       channel = new BroadcastChannel(SPOTIFY_OAUTH_BROADCAST_CHANNEL);
       channel.onmessage = (event) => {
@@ -92,15 +81,16 @@ function openSpotifyOAuthPopup(oauthUrl) {
     } catch (_) {
       channel = null;
     }
-    const pollTimer = setInterval(() => {
-      const tokens = consumePendingSpotifyOAuth();
-      if (tokens) finish(tokens);
-    }, 500);
 
     window.onCompleteOauth = (query, onComplete) => {
       delete window.onCompleteOauth;
       onComplete?.();
-      const tokens = tokensFromOAuthQuery(query);
+      const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
+      const tokens = tokensFromHandoffPayload({
+        access_token: params.get("access_token"),
+        refresh_token: params.get("refresh_token"),
+        expires_in: params.get("expires_in"),
+      });
       if (!tokens) {
         fail("Spotify sign-in returned no tokens");
         return;
