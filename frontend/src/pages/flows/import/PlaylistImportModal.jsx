@@ -12,7 +12,6 @@ import {
   startSpotifyOAuth,
 } from "../../../utils/api";
 import { getAppBasePath, normalizeBasePathWithTrailingSlash } from "../../../utils/basePath";
-import { consumePendingSpotifyOAuth } from "../../../utils/spotifyOAuthHandoff.js";
 import { parseFlowImportFile, reserveUniqueFlowName, normalizeNameKey } from "../flowPageUtils";
 
 export const SYNC_INTERVAL_OPTIONS = [
@@ -31,65 +30,33 @@ function getOAuthCallbackUrl() {
 function openSpotifyOAuthPopup(oauthUrl) {
   return new Promise((resolve, reject) => {
     const popup = window.open(oauthUrl, "spotify-oauth", "width=480,height=720");
-    if (!popup) {
-      reject(new Error("Pop-ups are blocked by your browser"));
+    if (!popup || popup.closed || typeof popup.closed === "undefined") {
+      reject(new Error("Pop-ups are being blocked by your browser"));
       return;
     }
 
-    let settled = false;
-    const cleanup = () => {
-      delete window.onCompleteOauth;
-      window.removeEventListener("message", onMessage);
-      clearTimeout(timeout);
-    };
-    const finish = (tokens) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      try {
-        popup.close();
-      } catch (_) {}
-      resolve(tokens);
-    };
-    const fail = (message) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      try {
-        popup.close();
-      } catch (_) {}
-      reject(new Error(message));
-    };
-    const tokensFromQuery = (query) => {
-      const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
-      return {
-        accessToken: params.get("access_token"),
-        refreshToken: params.get("refresh_token"),
-        expiresIn: params.get("expires_in"),
-      };
-    };
-
     window.onCompleteOauth = (query, onComplete) => {
+      delete window.onCompleteOauth;
+      const queryParams = {};
+      const splitQuery = query.substring(1).split("&");
+      splitQuery.forEach((param) => {
+        if (!param) return;
+        const paramSplit = param.split("=");
+        queryParams[paramSplit[0]] = paramSplit[1];
+      });
       onComplete?.();
-      finish(tokensFromQuery(query));
-    };
-
-    const onMessage = (event) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type !== "aurral-spotify-oauth-ready") return;
-      const tokens = consumePendingSpotifyOAuth();
-      if (!tokens) {
-        fail("Spotify sign-in returned no tokens");
+      const accessToken = queryParams.access_token;
+      const refreshToken = queryParams.refresh_token;
+      if (!accessToken || !refreshToken) {
+        reject(new Error("Spotify sign-in returned no tokens"));
         return;
       }
-      finish(tokens);
+      resolve({
+        accessToken,
+        refreshToken,
+        expiresIn: queryParams.expires_in,
+      });
     };
-
-    window.addEventListener("message", onMessage);
-
-    const timeout = setTimeout(() => {
-      fail("Spotify sign-in timed out");
-    }, 5 * 60 * 1000);
   });
 }
 
