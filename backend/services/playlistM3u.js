@@ -1,8 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
 import {
-  buildSharedTrackIdentity,
   flowPlaylistConfig,
+  tracksShareMembership,
 } from "./weeklyFlow/weeklyFlowPlaylistConfig.js";
 import { downloadTracker } from "./weeklyFlow/weeklyFlowDownloadTracker.js";
 import {
@@ -58,27 +58,23 @@ function jobToEntry(job, weeklyFlowRoot, m3uPathMode = getM3uPathMode()) {
 export async function collectPlaylistM3uEntries(playlistType, options = {}) {
   const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || resolveWeeklyFlowRoot());
   const m3uPathMode = normalizeM3uPathMode(options.m3uPathMode ?? getM3uPathMode());
-  const doneJobs = downloadTracker
-    .getByPlaylistType(playlistType)
-    .filter((job) => job?.status === "done" && typeof job?.finalPath === "string");
-  const jobsByIdentity = new Map();
-  for (const job of sortJobsByCreatedAt(doneJobs)) {
-    const identity = buildSharedTrackIdentity(job);
-    if (!jobsByIdentity.has(identity)) {
-      jobsByIdentity.set(identity, job);
-    }
-  }
+  const doneJobs = sortJobsByCreatedAt(
+    downloadTracker
+      .getByPlaylistType(playlistType)
+      .filter((job) => job?.status === "done" && typeof job?.finalPath === "string"),
+  );
 
   const sharedPlaylist = flowPlaylistConfig.getSharedPlaylist(playlistType);
   let orderedJobs;
   if (sharedPlaylist?.tracks?.length) {
     orderedJobs = [];
+    const remaining = [...doneJobs];
     for (const track of sharedPlaylist.tracks) {
-      const job = jobsByIdentity.get(buildSharedTrackIdentity(track));
-      if (job) orderedJobs.push(job);
+      const index = remaining.findIndex((job) => tracksShareMembership(track, job));
+      if (index >= 0) orderedJobs.push(remaining.splice(index, 1)[0]);
     }
   } else {
-    orderedJobs = sortJobsByCreatedAt(doneJobs);
+    orderedJobs = doneJobs;
   }
 
   const entries = [];

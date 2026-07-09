@@ -18,8 +18,18 @@ function hasValue(value) {
   return String(value || "").trim() !== "";
 }
 
+function isUuidMbid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    String(value || "").trim(),
+  );
+}
+
 function isMissingMbid(track) {
-  return !hasValue(track?.artistMbid) || !hasValue(track?.albumMbid) || !hasValue(track?.trackMbid);
+  return (
+    !isUuidMbid(track?.artistMbid) ||
+    !isUuidMbid(track?.albumMbid) ||
+    !isUuidMbid(track?.trackMbid)
+  );
 }
 
 function hasMissingJobMbid(track, jobs) {
@@ -35,8 +45,15 @@ function hasMissingPlaylistMbids(playlist) {
 }
 
 function mergeMissingString(target, source, key) {
-  if (hasValue(target?.[key]) || !hasValue(source?.[key])) return undefined;
-  return String(source[key]).trim();
+  const targetValue = String(target?.[key] || "").trim();
+  const sourceValue = String(source?.[key] || "").trim();
+  if (!sourceValue) return undefined;
+  if (key.endsWith("Mbid")) {
+    if (isUuidMbid(targetValue) || !isUuidMbid(sourceValue)) return undefined;
+    return sourceValue;
+  }
+  if (targetValue) return undefined;
+  return sourceValue;
 }
 
 function mergeMissingMetadata(target, source, { includeJobFields = false } = {}) {

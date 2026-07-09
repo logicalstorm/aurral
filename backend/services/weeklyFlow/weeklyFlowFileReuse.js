@@ -586,6 +586,13 @@ export async function reuseTrackForPlaylist(track, playlistType, options = {}) {
     source.albumName || track.albumName || null,
     source.externalPath || null,
   );
+  if (source.sourceType === "lidarr" && source.lidarrTrack) {
+    const { claimPlaylistAcquisition } = await import("../lidarrPlaylistTagService.js");
+    await claimPlaylistAcquisition(playlistType, {
+      track: source.lidarrTrack,
+      albumMbid: track.albumMbid,
+    });
+  }
   console.log(
     `[WeeklyFlowReuse] Reused ${source.sourceType} track for ${playlistType}: ${track.artistName} - ${track.trackName}`,
   );

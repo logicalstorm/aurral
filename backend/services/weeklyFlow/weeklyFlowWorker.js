@@ -463,6 +463,7 @@ export class WeeklyFlowWorker {
     if (this.activeJobs.size > 0) return;
     if (this.reserveBuildsInFlight.size > 0) return;
     if (downloadTracker.getNextPending()) return;
+    if (Number(downloadTracker.getStats()?.downloading || 0) > 0) return;
     this.stop();
   }
 
@@ -715,6 +716,14 @@ export class WeeklyFlowWorker {
     startSlskdOrchestratorWorker();
     console.log("[WeeklyFlowWorker] Starting worker...");
 
+    void import("../spidarrTrackRequestService.js")
+      .then(({ reconcileLidarrDownloadingJobs }) => reconcileLidarrDownloadingJobs())
+      .catch((error) => {
+        console.warn(
+          `[WeeklyFlowWorker] Lidarr download reconcile failed: ${error?.message || error}`,
+        );
+      });
+
     this.processLoop = () => {
       if (!this.running) return;
       const { concurrency } = this.getWorkerSettings();
@@ -807,13 +816,17 @@ export class WeeklyFlowWorker {
     if (!stopped) {
       return;
     }
-    downloadTracker.resetDownloadingToPending();
+    if (!isSpidarrTrackRequestsEnabled()) {
+      downloadTracker.resetDownloadingToPending();
+    }
   }
 
   async stopAndDrain() {
     this._requestStop();
     await this.waitForIdle();
-    downloadTracker.resetDownloadingToPending();
+    if (!isSpidarrTrackRequestsEnabled()) {
+      downloadTracker.resetDownloadingToPending();
+    }
   }
 
   async processJob(job, runGeneration = this.runGeneration) {

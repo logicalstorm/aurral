@@ -9,12 +9,18 @@ import {
   resolveAlbumByArtistAndTitle,
 } from "../providers/brainzmashProvider.js";
 import { scoreTextMatch as scoreTextMatchBase, getYear } from "../providers/brainzmashRanking.js";
+import { UUID_REGEX } from "../../../lib/uuid.js";
 
 const artistAliasCache = new Map();
 const releaseGroupSearchCache = new Map();
 const releaseContextCache = new Map();
 const MATCHER_OPTIONS = { extended: true };
 const MAX_CACHE_ENTRIES = 500;
+
+function asUuidMbid(value) {
+  const text = String(value || "").trim();
+  return UUID_REGEX.test(text) ? text : null;
+}
 
 // ponytail: FIFO eviction, not LRU; upgrade to createCache() TTLs if hit rates matter
 function boundedCacheSet(cache, key, value) {
@@ -226,9 +232,9 @@ export async function resolveWeeklyFlowTrackContext(track) {
     artistName: String(track?.artistName || "").trim(),
     trackName: String(track?.trackName || "").trim(),
     albumName: String(track?.albumName || "").trim() || null,
-    artistMbid: String(track?.artistMbid || "").trim() || null,
-    albumMbid: String(track?.albumMbid || "").trim() || null,
-    trackMbid: String(track?.trackMbid || "").trim() || null,
+    artistMbid: asUuidMbid(track?.artistMbid),
+    albumMbid: asUuidMbid(track?.albumMbid),
+    trackMbid: asUuidMbid(track?.trackMbid),
     releaseYear: getYear(track?.releaseYear) || null,
     durationMs:
       track?.durationMs != null && Number.isFinite(Number(track.durationMs))
@@ -250,7 +256,7 @@ export async function resolveWeeklyFlowTrackContext(track) {
   const lastfmAlbumName = String(
     lastfmTrack?.album?.title || lastfmTrack?.album?.["#text"] || "",
   ).trim();
-  const lastfmTrackMbid = String(lastfmTrack?.mbid || "").trim();
+  const lastfmTrackMbid = asUuidMbid(lastfmTrack?.mbid);
   const lastfmDuration =
     lastfmTrack?.duration != null && Number.isFinite(Number(lastfmTrack.duration))
       ? Math.max(0, Math.round(Number(lastfmTrack.duration)))
@@ -267,7 +273,7 @@ export async function resolveWeeklyFlowTrackContext(track) {
   }
 
   if (!base.artistMbid) {
-    base.artistMbid = await musicbrainzResolveArtistMbidByName(base.artistName);
+    base.artistMbid = asUuidMbid(await musicbrainzResolveArtistMbidByName(base.artistName));
   }
 
   if ((base.artistAliases?.length || 0) === 0 && base.artistMbid) {
@@ -303,8 +309,9 @@ export async function resolveWeeklyFlowTrackContext(track) {
     }
     const matchedTrack = matchTrackByTitle(releaseContext?.tracks, base.trackName);
     if (matchedTrack) {
-      if (!base.trackMbid && matchedTrack.recordingId) {
-        base.trackMbid = matchedTrack.recordingId;
+      const recordingId = asUuidMbid(matchedTrack.recordingId);
+      if (!base.trackMbid && recordingId) {
+        base.trackMbid = recordingId;
       }
       if (matchedTrack.durationMs) {
         base.durationMs = matchedTrack.durationMs;

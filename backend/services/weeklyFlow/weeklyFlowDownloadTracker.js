@@ -797,6 +797,7 @@ export class WeeklyFlowDownloadTracker {
     job.status = "done";
     job.retryCycle = false;
     job.completedAt = Date.now();
+    job.error = null;
     job.finalPath = finalPath;
     job.externalPath = externalPath ?? null;
     const safeAlbum = String(albumName || "").trim();

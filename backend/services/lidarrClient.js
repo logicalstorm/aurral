@@ -643,6 +643,14 @@ export class LidarrClient {
     return this.request("/tag", "GET", null, skipConfigUpdate);
   }
 
+  async getTagDetails(skipConfigUpdate = false) {
+    return this.request("/tag/detail", "GET", null, skipConfigUpdate);
+  }
+
+  async createTag(label, skipConfigUpdate = false) {
+    return this.request("/tag", "POST", { label: String(label || "").trim() }, skipConfigUpdate);
+  }
+
   getArtistAddFallbacks({ rootFolders, qualityProfiles, settings } = {}) {
     const safeRootFolders = mapRootFolders(rootFolders);
     const safeQualityProfiles = mapQualityProfiles(qualityProfiles);
@@ -1183,6 +1191,35 @@ export class LidarrClient {
     return this.request(`/album/${albumId}${query}`, "DELETE");
   }
 
+  async getAlbumsByArtistId(artistId) {
+    const result = await this.request(`/album?artistId=${encodeURIComponent(artistId)}`);
+    if (Array.isArray(result)) return result;
+    return result?.records || [];
+  }
+
+  async getTrackFileById(trackFileId, skipConfigUpdate = false) {
+    const id = Number(trackFileId);
+    if (!Number.isFinite(id) || id <= 0) return null;
+    try {
+      return await this.request(`/trackfile/${id}`, "GET", null, skipConfigUpdate);
+    } catch {
+      return null;
+    }
+  }
+
+  async deleteTrackFile(trackFileId) {
+    return this.request(`/trackfile/${trackFileId}`, "DELETE");
+  }
+
+  async removeQueueItem(queueId, options = {}) {
+    const params = new URLSearchParams();
+    if (options.removeFromClient !== false) params.append("removeFromClient", "true");
+    if (options.skipRedownload !== false) params.append("skipRedownload", "true");
+    if (options.blocklist === true) params.append("blocklist", "true");
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return this.request(`/queue/${queueId}${query}`, "DELETE");
+  }
+
   async getQualityProfiles(skipConfigUpdate = false) {
     return this.request("/qualityprofile", "GET", null, skipConfigUpdate);
   }
@@ -1293,6 +1330,9 @@ export class LidarrClient {
     const albumMbid = String(job?.albumMbid || "").trim();
     const trackName = String(job?.trackName || "").trim().toLowerCase();
     if (!trackMbid && !trackName) return null;
+    const mbidLooksValid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      trackMbid,
+    );
 
     let tracks = [];
     if (albumMbid) {
@@ -1305,10 +1345,12 @@ export class LidarrClient {
       tracks = await this.getAllTracks(skipConfigUpdate);
     }
 
-    const byId =
-      tracks.find((entry) => String(entry?.foreignTrackId || "").trim() === trackMbid) ||
-      tracks.find((entry) => String(entry?.foreignRecordingId || "").trim() === trackMbid);
-    if (byId?.foreignTrackId) return byId;
+    if (mbidLooksValid) {
+      const byId =
+        tracks.find((entry) => String(entry?.foreignTrackId || "").trim() === trackMbid) ||
+        tracks.find((entry) => String(entry?.foreignRecordingId || "").trim() === trackMbid);
+      if (byId?.foreignTrackId) return byId;
+    }
 
     if (!trackName) return null;
     const titleMatches = tracks.filter((entry) => {
@@ -1337,8 +1379,15 @@ export class LidarrClient {
       );
     });
     if (!track) return null;
-    const files = await this.getAllTrackFiles(skipConfigUpdate);
-    const file = files.find((entry) => entry?.id === track.trackFileId);
+    const file = await this.getTrackFileById(track.trackFileId, skipConfigUpdate);
+    if (!file?.path) return null;
+    return { track, file };
+  }
+
+  async findTrackFileForJob(job, skipConfigUpdate = false) {
+    const track = await this.resolveTrackForRequest(job, skipConfigUpdate);
+    if (!track?.trackFileId) return null;
+    const file = await this.getTrackFileById(track.trackFileId, skipConfigUpdate);
     if (!file?.path) return null;
     return { track, file };
   }

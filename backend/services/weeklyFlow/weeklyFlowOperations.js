@@ -36,6 +36,8 @@ import {
 import { withHonkerLock } from "../honkerDb.js";
 import { getUnavailableFlowSourceError } from "./weeklyFlowValidation.js";
 import { schedulePlaylistMbidEnrichment } from "../playlistMbidEnrichmentService.js";
+import { cleanupLidarrForPlaylist } from "../lidarrFlowCleanupService.js";
+import { logger } from "../logger.js";
 
 const DEFAULT_LIMIT = 30;
 const OPERATION_TOKENS_KEY = "weeklyFlowOperationTokens";
@@ -305,6 +307,7 @@ async function runFlowSeed({
 
     recordFlowGenerationStarted({ flowId: safeFlowId });
     playlistManager.updateConfig(false);
+    await cleanupPlaylistLidarr(safeFlowId);
     await playlistManager.weeklyReset([safeFlowId]);
     weeklyFlowWorker.clearPlaylistRunState(safeFlowId);
     downloadTracker.clearByPlaylistType(safeFlowId);
@@ -344,23 +347,36 @@ async function runFlowSeed({
   return result;
 }
 
+async function cleanupPlaylistLidarr(playlistId) {
+  try {
+    return await cleanupLidarrForPlaylist(playlistId);
+  } catch (error) {
+    logger.error("weeklyFlow", `Lidarr cleanup failed for ${playlistId}`, {
+      message: error.message,
+    });
+    return { error: error.message };
+  }
+}
+
 async function runFlowCleanup({ flowId, tokenScope = null, token = null } = {}) {
   const safeFlowId = String(flowId || "").trim();
   if (!safeFlowId) return { missing: true };
   if (!isLatestWeeklyFlowOperationToken(tokenScope, token)) {
     return { cancelled: true };
   }
+  let lidarr = null;
   await withPlaylistMutation(safeFlowId, async () => {
     if (!isLatestWeeklyFlowOperationToken(tokenScope, token)) {
       return;
     }
+    lidarr = await cleanupPlaylistLidarr(safeFlowId);
     playlistManager.updateConfig(false);
     await playlistManager.weeklyReset([safeFlowId]);
     weeklyFlowWorker.clearPlaylistRunState(safeFlowId);
     downloadTracker.clearByPlaylistType(safeFlowId);
   });
   await restartWorkerIfPending();
-  return { success: true, flowId: safeFlowId };
+  return { success: true, flowId: safeFlowId, lidarr };
 }
 
 async function deleteFlow({ flowId, tokenScope = null, token = null } = {}) {
@@ -377,6 +393,7 @@ async function deleteFlow({ flowId, tokenScope = null, token = null } = {}) {
     weeklyFlowWorker.setRetryCyclePaused(safeFlowId, false);
     weeklyFlowWorker.clearPlaylistRunState(safeFlowId);
     playlistManager.updateConfig(false);
+    await cleanupPlaylistLidarr(safeFlowId);
     await playlistManager.weeklyReset([safeFlowId]);
     downloadTracker.clearByPlaylistType(safeFlowId);
     didDelete = flowPlaylistConfig.deleteFlow(safeFlowId);
@@ -391,6 +408,9 @@ async function resetPlaylists({ playlistTypes = [] } = {}) {
     .map((entry) => String(entry || "").trim())
     .filter(Boolean);
   await withPlaylistMutation(types, async () => {
+    for (const playlistType of types) {
+      await cleanupPlaylistLidarr(playlistType);
+    }
     playlistManager.updateConfig(false);
     await playlistManager.weeklyReset(types);
   });
@@ -676,6 +696,7 @@ async function deleteSharedPlaylist({ playlistId } = {}) {
   await withPlaylistMutation(safePlaylistId, async () => {
     weeklyFlowWorker.setRetryCyclePaused(safePlaylistId, false);
     playlistManager.updateConfig(false);
+    await cleanupPlaylistLidarr(safePlaylistId);
     await playlistManager.weeklyReset([safePlaylistId]);
     downloadTracker.clearByPlaylistType(safePlaylistId);
     deleted = flowPlaylistConfig.deleteSharedPlaylist(safePlaylistId);

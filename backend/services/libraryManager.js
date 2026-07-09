@@ -940,6 +940,10 @@ export class LibraryManager {
           .catch(() => existingAlbum);
         const refreshedArtist = await lidarr.getArtist(artistId).catch(() => fallbackArtist);
         if (!refreshedArtist) return null;
+        const { graduateAlbumFromPlaylistAcquisition } = await import(
+          "./lidarrPlaylistTagService.js"
+        );
+        await graduateAlbumFromPlaylistAcquisition(artistId, releaseGroupMbid).catch(() => {});
         return this.mapLidarrAlbum(refreshedExisting, refreshedArtist);
       };
       let lidarrArtist = null;
@@ -1023,6 +1027,8 @@ export class LibraryManager {
         this.scheduleRequestedAlbumMonitoringRepair(artistId, lidarrAlbum.id);
         lidarrAlbum = await lidarr.getAlbum(lidarrAlbum.id).catch(() => lidarrAlbum);
       }
+      const { graduateAlbumFromPlaylistAcquisition } = await import("./lidarrPlaylistTagService.js");
+      await graduateAlbumFromPlaylistAcquisition(artistId, releaseGroupMbid).catch(() => {});
       const updatedArtist = await lidarr.getArtist(artistId);
       return this.mapLidarrAlbum(lidarrAlbum, updatedArtist);
     } catch (error) {
