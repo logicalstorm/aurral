@@ -3,12 +3,6 @@ name: CI
 on:
   pull_request:
     branches: ["main", "test"]
-    paths-ignore:
-      - "*.md"
-      - ".github/*.md"
-      - "CONTRIBUTING.md"
-      - "LICENSE"
-      - "README.md"
 
 jobs:
   validate:
