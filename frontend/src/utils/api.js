@@ -11,6 +11,7 @@
 export {
   AUTH_INVALID_EVENT,
   getStoredAuth,
+  getRequestToken,
   setStoredAuth,
   clearAuthStorage,
   libraryLookupCache,

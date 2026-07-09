@@ -1,4 +1,5 @@
 import { getAppBasePath } from "../basePath.js";
+import { isProxyAuthActive } from "../authRecovery.js";
 
 const getDefaultApiBaseUrl = () => {
   if (import.meta.env.DEV) return "/api";
@@ -167,6 +168,11 @@ export const getStoredAuth = () => {
   return sessionAuth;
 };
 
+export const getRequestToken = () => {
+  const { token } = getStoredAuth();
+  return token && !isProxyAuthActive() ? token : "";
+};
+
 export const setStoredAuth = ({ token = "" } = {}) => {
   if (!token) {
     globalThis?.sessionStorage?.removeItem(AUTH_TOKEN_KEY);
@@ -288,7 +294,7 @@ export const buildAuthenticatedApiUrl = (path, params = {}) => {
     ? String(path || "")
     : `/${String(path || "")}`;
   const query = new URLSearchParams();
-  const { token } = getStoredAuth();
+  const token = getRequestToken();
   if (token) query.set("token", token);
   Object.entries(params).forEach(([key, value]) => {
     if (value != null && value !== "") query.set(key, String(value));
@@ -302,7 +308,7 @@ export const buildAuthenticatedApiUrl = (path, params = {}) => {
 
 api.interceptors.request.use(
   (config) => {
-    const { token } = getStoredAuth();
+    const token = getRequestToken();
     if (token) {
       config.headers["Authorization"] = `Bearer ${token}`;
     }

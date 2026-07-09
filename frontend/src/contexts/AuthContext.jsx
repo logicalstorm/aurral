@@ -9,22 +9,13 @@ import {
   logoutApi,
   setStoredAuth,
 } from "../utils/api";
+import {
+  AUTH_RECOVERY_RELOAD_KEY,
+  PROXY_AUTH_KEY,
+  resetClientCache,
+} from "../utils/authRecovery.js";
 
 const AuthContext = createContext(null);
-const AUTH_RECOVERY_RELOAD_KEY = "aurral:auth-recovery-reload";
-const PROXY_AUTH_KEY = "aurral:proxy-auth";
-
-const resetClientCache = async () => {
-  const registrations = globalThis?.navigator?.serviceWorker
-    ? await globalThis.navigator.serviceWorker.getRegistrations()
-    : [];
-  const cacheKeys = globalThis?.caches ? await globalThis.caches.keys() : [];
-
-  await Promise.allSettled(registrations.map((registration) => registration.unregister()));
-  await Promise.allSettled(cacheKeys.map((cacheKey) => globalThis.caches.delete(cacheKey)));
-
-  return registrations.length > 0 || cacheKeys.length > 0;
-};
 
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);

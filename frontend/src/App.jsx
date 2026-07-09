@@ -1,8 +1,15 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect, Suspense, lazy, useRef } from "react";
 import Layout from "./components/Layout";
-import { getBootstrapStatus } from "./utils/api";
+import { clearAuthStorage, getBootstrapStatus, getStoredAuth } from "./utils/api";
 import { getAppBasePath } from "./utils/basePath.js";
+import {
+  PROXY_RELOAD_TS_KEY,
+  clearAuthRecoveryFlags,
+  hardNavigateHome,
+  isProxyAuthActive,
+  resetClientCache,
+} from "./utils/authRecovery.js";
 import { DISCOVERY_MANUAL_REFRESH_KEY } from "./utils/discoverRecentNavigation.js";
 import { AudioPlayerProvider } from "react-use-audio-player";
 import { ToastProvider, useToast } from "./contexts/ToastContext";
@@ -89,11 +96,9 @@ function AppContent() {
   const [appVersion, setAppVersion] = useState(null);
   const discoveryToastShownRef = useRef(false);
   const healthCheckInFlightRef = useRef(false);
-  const { isAuthenticated, user, bootstrap } = useAuth();
+  const { isAuthenticated, user, bootstrap, authRequired, logout, refreshAuth } = useAuth();
   const { showSuccess, showError } = useToast();
 
-  const PROXY_AUTH_KEY = "aurral:proxy-auth";
-  const RELOAD_TS_KEY = "aurral:proxy-reload-ts";
   const RELOAD_COOLDOWN_MS = 10000;
 
   useWebSocketChannel("discovery", (msg) => {
@@ -142,6 +147,7 @@ function AppContent() {
       } catch {
         setIsHealthy(false);
         setAppVersion(null);
+        refreshAuth();
       } finally {
         healthCheckInFlightRef.current = false;
       }
@@ -159,25 +165,35 @@ function AppContent() {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, refreshAuth]);
+
+  const handleReauth = async () => {
+    await resetClientCache();
+    clearAuthStorage();
+    clearAuthRecoveryFlags();
+    try {
+      await logout();
+    } catch {}
+    hardNavigateHome(basePath);
+  };
 
   useEffect(() => {
     if (isHealthy === null) return;
 
     if (isHealthy === true) {
-      globalThis?.sessionStorage?.removeItem(RELOAD_TS_KEY);
+      clearAuthRecoveryFlags();
       return;
     }
 
-    const isProxyAuth = globalThis?.sessionStorage?.getItem(PROXY_AUTH_KEY) === "1";
-    if (!isAuthenticated && !isProxyAuth) return;
+    const hasStoredToken = !!getStoredAuth().token;
+    if (!isAuthenticated && !isProxyAuthActive() && !hasStoredToken) return;
 
-    const lastReload = Number(globalThis?.sessionStorage?.getItem(RELOAD_TS_KEY) || 0);
+    const lastReload = Number(globalThis?.sessionStorage?.getItem(PROXY_RELOAD_TS_KEY) || 0);
     if (Date.now() - lastReload < RELOAD_COOLDOWN_MS) return;
 
-    globalThis?.sessionStorage?.setItem(RELOAD_TS_KEY, String(Date.now()));
-    window.location.reload();
-  }, [isHealthy, isAuthenticated]);
+    globalThis?.sessionStorage?.setItem(PROXY_RELOAD_TS_KEY, String(Date.now()));
+    void resetClientCache().then(() => hardNavigateHome(basePath));
+  }, [basePath, isHealthy, isAuthenticated]);
 
   return (
     <Router
@@ -198,9 +214,13 @@ function AppContent() {
             <div className="app-status-banner app-status-banner--error">
               <XCircle className="app-status-banner__icon app-status-banner__icon--error" />
               <p className="app-status-banner__text app-status-banner__text--error">
-                Unable to connect to the backend API. Please check your
-                configuration.
+                Unable to connect to the backend API. Your session may have expired.
               </p>
+              {authRequired && (
+                <button type="button" className="btn btn-primary btn--sm" onClick={handleReauth}>
+                  Sign in again
+                </button>
+              )}
             </div>
           )}
 

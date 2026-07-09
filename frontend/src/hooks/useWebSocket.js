@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { getStoredAuth } from "../utils/api";
+import { getRequestToken } from "../utils/api";
 
 function getWsUrl() {
-  const { token } = getStoredAuth();
+  const token = getRequestToken();
   const apiUrl = import.meta.env.VITE_API_URL;
   if (apiUrl && (apiUrl.startsWith("http://") || apiUrl.startsWith("https://"))) {
     const url = new URL(apiUrl);
