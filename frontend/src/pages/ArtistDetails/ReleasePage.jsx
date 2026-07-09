@@ -419,13 +419,30 @@ function ReleasePage() {
     if (!releaseMbid || requestingAlbum) return;
     setRequestingAlbum(true);
     try {
-      await requestAlbumFromSearch({
+      const result = await requestAlbumFromSearch({
         albumMbid: releaseMbid,
         albumName: release.title,
         artistMbid,
         artistName,
         triggerSearch,
       });
+      if (result?.queued) {
+        showSuccess(`Adding ${release.title || "album"}...`);
+        for (let attempt = 0; attempt < 20; attempt += 1) {
+          const lookup = await lookupAlbumsInLibraryBatch([releaseMbid]);
+          const entry = lookup?.[releaseMbid];
+          if (entry?.inLibrary) {
+            setLibraryInfo(entry);
+            if (entry.libraryAlbumId) {
+              const statuses = await getDownloadStatus([entry.libraryAlbumId]);
+              setDownloadStatus(statuses?.[entry.libraryAlbumId] || null);
+            }
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        return;
+      }
       const lookup = await lookupAlbumsInLibraryBatch([releaseMbid]);
       const entry = lookup?.[releaseMbid];
       if (entry?.inLibrary) {

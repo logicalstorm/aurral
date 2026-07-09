@@ -36,6 +36,7 @@ export { default } from "./api/core.js";
 
 export {
   checkHealth,
+  checkHealthLive,
   getBootstrapStatus,
   browseFilesystem,
   ensureFilesystemPath,

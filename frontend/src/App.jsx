@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect, Suspense, lazy, useRef } from "react";
 import Layout from "./components/Layout";
-import { clearAuthStorage, getBootstrapStatus, getStoredAuth } from "./utils/api";
+import { clearAuthStorage, checkHealthLive, getBootstrapStatus, getStoredAuth } from "./utils/api";
 import { getAppBasePath } from "./utils/basePath.js";
 import {
   PROXY_RELOAD_TS_KEY,
@@ -92,6 +92,7 @@ const PermissionRoute = ({ children, permission }) => {
 function AppContent() {
   const basePath = getAppBasePath();
   const [isHealthy, setIsHealthy] = useState(null);
+  const [healthIssue, setHealthIssue] = useState(null);
   const [rootFolderConfigured, setRootFolderConfigured] = useState(false);
   const [appVersion, setAppVersion] = useState(null);
   const discoveryToastShownRef = useRef(false);
@@ -125,11 +126,16 @@ function AppContent() {
     }
   });
 
+  const applyBootstrapHealth = (payload) => {
+    setIsHealthy(payload.status === "ok");
+    setRootFolderConfigured(payload.rootFolderConfigured || false);
+    setAppVersion(payload.appVersion || null);
+    setHealthIssue(payload.lidarr?.circuitOpen ? "lidarr" : null);
+  };
+
   useEffect(() => {
     if (!bootstrap) return;
-    setIsHealthy(bootstrap.status === "ok");
-    setRootFolderConfigured(bootstrap.rootFolderConfigured || false);
-    setAppVersion(bootstrap.appVersion || null);
+    applyBootstrapHealth(bootstrap);
   }, [bootstrap]);
 
   useEffect(() => {
@@ -141,12 +147,18 @@ function AppContent() {
       healthCheckInFlightRef.current = true;
       try {
         const bootstrap = await getBootstrapStatus();
-        setIsHealthy(bootstrap.status === "ok");
-        setRootFolderConfigured(bootstrap.rootFolderConfigured || false);
-        setAppVersion(bootstrap.appVersion || null);
+        applyBootstrapHealth(bootstrap);
       } catch {
-        setIsHealthy(false);
-        setAppVersion(null);
+        try {
+          await checkHealthLive();
+          setIsHealthy(true);
+          setHealthIssue("degraded");
+          setAppVersion(null);
+        } catch {
+          setIsHealthy(false);
+          setHealthIssue("backend");
+          setAppVersion(null);
+        }
         refreshAuth();
       } finally {
         healthCheckInFlightRef.current = false;
@@ -179,9 +191,8 @@ function AppContent() {
 
   useEffect(() => {
     if (isHealthy === null) return;
-
-    if (isHealthy === true) {
-      clearAuthRecoveryFlags();
+    if (isHealthy !== false || healthIssue === "degraded") {
+      if (isHealthy === true) clearAuthRecoveryFlags();
       return;
     }
 
@@ -193,7 +204,7 @@ function AppContent() {
 
     globalThis?.sessionStorage?.setItem(PROXY_RELOAD_TS_KEY, String(Date.now()));
     void resetClientCache().then(() => hardNavigateHome(basePath));
-  }, [basePath, isHealthy, isAuthenticated]);
+  }, [basePath, healthIssue, isHealthy, isAuthenticated]);
 
   return (
     <Router
@@ -210,11 +221,29 @@ function AppContent() {
             currentVersion={appVersion}
             visible={!user || user.role === "admin"}
           />
-          {isHealthy === false && (
+          {healthIssue === "lidarr" && isHealthy && (
+            <div className="app-status-banner app-status-banner--warning">
+              <AlertTriangle className="app-status-banner__icon app-status-banner__icon--warning" />
+              <p className="app-status-banner__text app-status-banner__text--warning">
+                Lidarr is busy. Library data may be stale until it catches up.
+              </p>
+            </div>
+          )}
+
+          {healthIssue === "degraded" && (
+            <div className="app-status-banner app-status-banner--warning">
+              <AlertTriangle className="app-status-banner__icon app-status-banner__icon--warning" />
+              <p className="app-status-banner__text app-status-banner__text--warning">
+                Aurral is responding slowly. Lidarr may be busy — try again in a minute.
+              </p>
+            </div>
+          )}
+
+          {healthIssue === "backend" && isHealthy === false && (
             <div className="app-status-banner app-status-banner--error">
               <XCircle className="app-status-banner__icon app-status-banner__icon--error" />
               <p className="app-status-banner__text app-status-banner__text--error">
-                Unable to connect to the backend API. Your session may have expired.
+                Unable to connect to the Aurral backend. Your session may have expired.
               </p>
               {authRequired && (
                 <button type="button" className="btn btn-primary btn--sm" onClick={handleReauth}>

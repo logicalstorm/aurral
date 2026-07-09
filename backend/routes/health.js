@@ -15,12 +15,13 @@ import {
   issueStreamToken,
   getLocalNetworkBypassStatus,
 } from "../middleware/auth.js";
+import { lidarrClient } from "../services/lidarrClient.js";
 import {
   getDiscoveryCache,
   getDiscoveryUpdateStatus,
-} from "../services/discovery/index.js";import { getCachedArtistCount } from "../services/libraryManager.js";
+} from "../services/discovery/index.js";
+import { getCachedArtistCount } from "../services/libraryManager.js";
 import { logger } from "../services/logger.js";
-import { lidarrClient } from "../services/lidarrClient.js";
 import { PLAYLIST_LIBRARY_DIR, resolvePlaylistRoot } from "../services/playlistPaths.js";
 import { getFilesystemBrowseRoots } from "../services/downloadFolderConfig.js";
 import { dbOps } from "../db/helpers/index.js";
@@ -265,6 +266,10 @@ function buildBootstrapPayload(req) {
     downloadSources,
     metadataProviders: getMetadataProviderHealthSnapshot(),
     localNetworkBypass,
+    lidarr: {
+      configured: lidarrConfigured,
+      circuitOpen: lidarrClient.isCircuitOpen(),
+    },
   };
 
   if (currentUser) {

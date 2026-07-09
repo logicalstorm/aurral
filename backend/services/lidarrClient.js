@@ -236,6 +236,27 @@ export class LidarrClient {
     this._circuitOpenedAt = 0;
   }
 
+  isCircuitOpen() {
+    if (this.config?.circuitDisabled) return false;
+    return this._circuitOpen && Date.now() - this._circuitOpenedAt < CIRCUIT_COOLDOWN_MS;
+  }
+
+  _staleGetCache(method, endpoint) {
+    if (method !== "GET") return null;
+    if (endpoint === "/artist" && this._artistListCache) {
+      return this._artistListCache.data;
+    }
+    if (endpoint === "/album" || endpoint.startsWith("/album?")) {
+      const cached = this._albumCache.get(endpoint);
+      if (cached) return cached.data;
+    }
+    if (endpoint === "/queue" || endpoint === "/command" || endpoint.startsWith("/history")) {
+      const cached = this._statusCache.get(endpoint);
+      if (cached) return cached.data;
+    }
+    return null;
+  }
+
   updateConfig() {
     if (this._holdConfig) {
       return;
@@ -359,6 +380,8 @@ export class LidarrClient {
     const bypassCircuit = options?.bypassCircuit === true;
     if (!this.config.circuitDisabled && this._circuitOpen && !bypassCircuit) {
       if (now - this._circuitOpenedAt < CIRCUIT_COOLDOWN_MS) {
+        const stale = this._staleGetCache(method, endpoint);
+        if (stale !== null) return stale;
         throw new Error("Lidarr unavailable (circuit open). Will retry after cooldown.");
       }
       this._resetCircuitState();

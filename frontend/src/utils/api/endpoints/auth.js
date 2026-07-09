@@ -2,6 +2,8 @@ import { getData, postData, patchData, deleteData, fetchInflightOnce, bootstrapI
 
 export const checkHealth = () => getData("/health");
 
+export const checkHealthLive = () => getData("/health/live", { timeout: 5000 });
+
 const BOOTSTRAP_CACHE_TTL_MS = 25_000;
 let bootstrapCache = null;
 

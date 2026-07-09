@@ -213,6 +213,8 @@ const broadcastDownloadStatuses = async () => {
   downloadStatusBroadcastInFlight = true;
   try {
     if (!hasWsSubscribers("downloads")) return;
+    const { lidarrClient } = await import("./services/lidarrClient.js");
+    if (lidarrClient.isCircuitOpen()) return;
     const statuses = await getAllDownloadStatuses();
     const payload = JSON.stringify(statuses);
     if (payload !== lastDownloadStatusesPayload) {

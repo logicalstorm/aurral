@@ -1418,6 +1418,9 @@ export class LibraryManager {
       });
       return result;
     } catch (error) {
+      if (cached) {
+        return cached.tracks;
+      }
       if (error.message && error.message.includes("404")) {
         return [];
       }

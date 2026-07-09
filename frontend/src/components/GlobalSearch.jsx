@@ -360,17 +360,21 @@ function GlobalSearch() {
           artistName: album.artistName,
           triggerSearch: shouldTriggerSearch,
         });
-        const nextAlbum = {
-          inLibrary: true,
-          libraryAlbumId: result.album?.id,
-          libraryArtistId: result.artist?.id,
-          status: result.status,
-        };
+        const nextAlbum = result?.queued
+          ? { inLibrary: true, status: "processing" }
+          : {
+              inLibrary: true,
+              libraryAlbumId: result.album?.id,
+              libraryArtistId: result.artist?.id,
+              status: result.status,
+            };
         updateSuggestionItem(album, nextAlbum);
         showSuccess(
-          result.triggeredSearch
-            ? `Search triggered for ${album.title}`
-            : `${album.title} added to library`,
+          result?.queued
+            ? `Adding ${album.title}...`
+            : result.triggeredSearch
+              ? `Search triggered for ${album.title}`
+              : `${album.title} added to library`,
         );
       } catch (err) {
         showError(

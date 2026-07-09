@@ -553,7 +553,10 @@ export function useArtistDetailsLibrary({
         let addedAlbum = null;
         try {
           addedAlbum = await addLibraryAlbum(currentLibraryArtist.id, albumId, title);
-          if (addedAlbum?.id) {
+          if (addedAlbum?.queued) {
+            showSuccess(`Adding ${title}...`);
+            libraryAlbum = await waitForLibraryAlbum(currentLibraryArtist.id, albumId);
+          } else if (addedAlbum?.id) {
             setDownloadStatuses((prev) => ({
               ...prev,
               [addedAlbum.id]: { status: "processing" },

@@ -7,6 +7,7 @@ import {
   requireAuth,
   requirePermission,
 } from "../../../middleware/requirePermission.js";
+import { logger } from "../../../services/logger.js";
 
 export function registerAlbums(router) {
   router.get("/albums", cacheMiddleware(5), async (req, res) => {
@@ -74,34 +75,37 @@ export function registerAlbums(router) {
         const settings = dbOps.getSettings();
         const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
 
-        const album = await libraryManager.addAlbum(artistId, mbid, albumName, {
-          triggerSearch: searchOnAdd,
+        res.status(202).json({
+          queued: true,
+          artistId,
+          releaseGroupMbid: mbid,
+          albumName,
         });
-        if (album?.error) {
-          return res.status(503).json({ error: album.error });
-        }
-        if (album.artistName && album.albumName) {
-          playlistManager
-            .removeDiscoverSymlinksForAlbum(album.artistName, album.albumName)
-            .catch(() => {});
-        }
-        const { recordAlbumRequested } = await import(
-          "../../../services/aurralHistoryService.js"
-        );
-        recordAlbumRequested({
-          albumId: album.id,
-          albumName: album.albumName || albumName,
-          artistName: album.artistName,
-          artistMbid: album.mbid || album.foreignAlbumId,
-          searching: searchOnAdd,
-        });
-        const formatted = {
-          ...album,
-          foreignAlbumId: album.mbid,
-          title: album.albumName,
-          albumType: "Album",
-        };
-        res.status(201).json(formatted);
+
+        (async () => {
+          const album = await libraryManager.addAlbum(artistId, mbid, albumName, {
+            triggerSearch: searchOnAdd,
+          });
+          if (album?.error) {
+            logger.error("library", `Failed to add album ${albumName}:`, { message: album.error });
+            return;
+          }
+          if (album.artistName && album.albumName) {
+            playlistManager
+              .removeDiscoverSymlinksForAlbum(album.artistName, album.albumName)
+              .catch(() => {});
+          }
+          const { recordAlbumRequested } = await import(
+            "../../../services/aurralHistoryService.js"
+          );
+          recordAlbumRequested({
+            albumId: album.id,
+            albumName: album.albumName || albumName,
+            artistName: album.artistName,
+            artistMbid: album.mbid || album.foreignAlbumId,
+            searching: searchOnAdd,
+          });
+        })();
       } catch (error) {
         res.status(500).json({
           error: "Failed to add album",
@@ -125,33 +129,52 @@ export function registerAlbums(router) {
           triggerSearch = false,
         } = req.body || {};
 
-        const result = await libraryManager.requestAlbumFromSearch({
+        if (!albumMbid || !albumName || !artistMbid || !artistName) {
+          return res.status(400).json({
+            error: "albumMbid, albumName, artistMbid, and artistName are required",
+          });
+        }
+
+        res.status(202).json({
+          queued: true,
           albumMbid,
           albumName,
-          artistName,
           artistMbid,
-          triggerSearch,
-          user: req.user,
+          artistName,
         });
 
-        const settings = dbOps.getSettings();
-        const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
-        const searching =
-          triggerSearch === true ||
-          searchOnAdd ||
-          result?.status === "searching";
-        const { recordAlbumRequested } = await import(
-          "../../../services/aurralHistoryService.js"
-        );
-        recordAlbumRequested({
-          albumId: result?.id,
-          albumName: result?.albumName || albumName,
-          artistName: result?.artistName || artistName,
-          artistMbid: result?.mbid || artistMbid,
-          searching,
-        });
-
-        res.json(result);
+        (async () => {
+          try {
+            const result = await libraryManager.requestAlbumFromSearch({
+              albumMbid,
+              albumName,
+              artistName,
+              artistMbid,
+              triggerSearch,
+              user: req.user,
+            });
+            const settings = dbOps.getSettings();
+            const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+            const searching =
+              triggerSearch === true ||
+              searchOnAdd ||
+              result?.status === "searching";
+            const { recordAlbumRequested } = await import(
+              "../../../services/aurralHistoryService.js"
+            );
+            recordAlbumRequested({
+              albumId: result?.id,
+              albumName: result?.albumName || albumName,
+              artistName: result?.artistName || artistName,
+              artistMbid: result?.mbid || artistMbid,
+              searching,
+            });
+          } catch (error) {
+            logger.error("library", `Failed to request album ${albumName}:`, {
+              message: error.message,
+            });
+          }
+        })();
       } catch (error) {
         const statusCode =
           Number.isInteger(error?.statusCode) && error.statusCode >= 400
