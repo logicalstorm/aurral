@@ -15,6 +15,9 @@
 Aurral is a self-hosted music discovery app for the Lidarr stack. Find new artists, request albums, custom automatic rotating playlists, and import existing spotify playlists. Built by a developer with over a decade of experience.
 
 > [!NOTE]
+> **[Aurral v2 is here.](V2.md)** Spotify import, Usenet downloads, Plex sync, Gotify/webhook notifications, reverse-proxy auth, per-user discovery, and more.
+
+> [!NOTE]
 > **AI disclosure** - Aurral is built with a hybrid approach to development. The foundation is hand-written code. For feature work, specifications are written by a developer, and any AI-generated code is thoroughly reviewed before being merged.
 
 ## Quick Links
