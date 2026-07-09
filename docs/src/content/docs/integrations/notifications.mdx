@@ -1,0 +1,37 @@
+---
+title: Notifications (Gotify & Webhooks)
+description: Get alerts when flows finish and discovery updates.
+---
+
+Aurral can send notifications when events happen: a flow finishes downloading, or daily discovery recommendations are ready.
+
+Two delivery methods are available. You can use one or both.
+
+## Gotify
+
+Gotify is a self-hosted push notification server. Configure it in **Settings → Connect**.
+
+Provide:
+- **Server URL** — the base URL Aurral can reach (e.g. `http://gotify:8888` in Docker)
+- **App token** — create an application in Gotify and copy its token
+
+Toggle which events fire:
+- **Notify when discovery updates** — sends a notification when the daily recommendation refresh finishes
+- **Notify when weekly flow finishes** — sends a notification with the number of completed and failed tracks
+
+Click **Test** on the Gotify card to verify connectivity.
+
+## Webhooks
+
+Webhooks fire an HTTP request for each enabled event. Configure them under **Settings → Connect** in the **Webhook Events** section.
+
+Each webhook has:
+- **URL** — the endpoint to call (must start with `http://` or `https://`)
+- **Body** — optional JSON payload. Use `$flowPath` and `$flowName` as placeholders for playlists. Leave blank to send a GET request instead of POST.
+- **Headers** — optional key-value pairs
+
+Toggle which events fire for your webhooks:
+- **Notify when discovery updates**
+- **Notify when weekly flow finishes**
+
+Events that are toggled off do not fire, even if you have webhook URLs configured.

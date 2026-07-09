@@ -29,8 +29,8 @@ Aurral is a self-hosted music discovery app for the Lidarr stack. Find new artis
 - **Search** — Find artists and albums, preview tracks, and add to Lidarr with your defaults.
 - **Library** — Browse and search artists already in Lidarr.
 - **Playlists** — Run scheduled flows, adopt discover playlists like Release Radar, import static playlists, and convert flows to fixed tracklists.
-- **History** — One timeline for Lidarr requests, slskd downloads, and Aurral playlist activity.
-- **Integrations** — Lidarr, Last.fm, ListenBrainz, slskd, Navidrome, Plex, Ticketmaster, Gotify, and webhooks.
+- **Activity** — Queue, review, and history for Lidarr requests, slskd and Usenet downloads, and Aurral playlist jobs.
+- **Integrations** — Lidarr, Last.fm, ListenBrainz, Koito, slskd, SABnzbd/NZBGet, Navidrome, Plex, Ticketmaster, Gotify, and webhooks.
 - **Playback** — Stream through Navidrome (M3U playlists) or Plex/Plexamp (API-synced playlists) from a dedicated download folder.
 - **Multi-user** — Per-user profiles, discovery layout, permissions, local auth, LAN auto-login, and reverse-proxy SSO.
 
@@ -76,7 +76,7 @@ services:
       - ./config:/config
 ```
 
-Change `/data:/data` to the host path you use for media. For file reuse, slskd downloads, and generated playlists, mount the **same root directory** into Aurral, Lidarr, slskd, and your player (Navidrome or Plex) at the same container path (for example `/data:/data`). See [shared storage](https://docs.aurral.org/getting-started/storage/).
+Change `/data:/data` to the host path you use for media. For file reuse, slskd downloads, and generated playlists, mount the **same root directory** into Aurral, Lidarr, slskd, and your player (Navidrome or Plex) at the same container path. See [shared storage](https://docs.aurral.org/getting-started/storage/).
 
 ```bash
 docker compose up -d

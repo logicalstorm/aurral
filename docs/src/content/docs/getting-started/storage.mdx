@@ -7,10 +7,10 @@ Flows, download handoff, Lidarr file reuse, Navidrome playback, and Plex library
 
 Docker only exposes mounted paths. If Lidarr stores a file at `/data/music/...` but Aurral does not have `/data/music` mounted, library checks and reuse fail even when the API connection works.
 
-Every service mounts the same media root at `/data` inside the container. Pick a host path that fits your setup — `/data` is simplest, `/srv/media` is common on NAS hardware.
+Every service mounts the same media root at `/data` inside the container.
 
 ```
-/srv/media/
+/data/
 ├── music/                              # Lidarr root folder
 └── downloads/
     ├── slskd/
@@ -22,17 +22,17 @@ Every service mounts the same media root at `/data` inside the container. Pick a
 
 ## What each service needs
 
-| Service   | Mount                | Internal path                                   |
-| --------- | -------------------- | ----------------------------------------------- |
-| Lidarr    | `/srv/media:/data`   | Root folder `/data/music`                       |
-| slskd     | `/srv/media:/data`   | Downloads `/data/downloads/slskd/complete`      |
-| NZBGet    | `/srv/media:/data`   | Completed `/data/downloads/nzbget/completed`    |
-| SABnzbd   | `/srv/media:/data`   | Completed per SABnzbd config                    |
-| Aurral    | `/srv/media:/data`   | `DOWNLOAD_FOLDER=/data/downloads/aurral`        |
-| Navidrome | `/srv/media:/data:ro`| Scan `/data/music` and `/data/downloads/aurral` |
-| Plex      | `/srv/media:/data`   | Read `/data/downloads/aurral/aurral-weekly-flow`|
+| Service   | Mount            | Internal path                                   |
+| --------- | ---------------- | ----------------------------------------------- |
+| Lidarr    | `/data:/data`    | Root folder `/data/music`                       |
+| slskd     | `/data:/data`    | Downloads `/data/downloads/slskd/complete`      |
+| NZBGet    | `/data:/data`    | Completed `/data/downloads/nzbget/completed`    |
+| SABnzbd   | `/data:/data`    | Completed per SABnzbd config                    |
+| Aurral    | `/data:/data`    | `DOWNLOAD_FOLDER=/data/downloads/aurral`        |
+| Navidrome | `/data:/data:ro` | Scan `/data/music` and `/data/downloads/aurral` |
+| Plex      | `/data:/data`    | Read `/data/downloads/aurral/aurral-weekly-flow`|
 
-Aurral app state stays in `/config` and does not need to be shared.
+Aurral app state stays in `./config:/config` and does not need to be shared.
 
 ## Example compose file
 
@@ -43,17 +43,17 @@ services:
       - PUID=1000
       - PGID=1000
     volumes:
-      - /srv/media:/data
+      - /data:/data
       - ./config:/config
 
   lidarr:
     volumes:
-      - /srv/media:/data
+      - /data:/data
       - ./config/lidarr:/config
 
   slskd:
     volumes:
-      - /srv/media:/data
+      - /data:/data
       - ./config/slskd:/app
 
   navidrome:
@@ -61,7 +61,7 @@ services:
       - ND_SCANNER_PURGEMISSING=always
       - ND_DATA=/config
     volumes:
-      - /srv/media:/data:ro
+      - /data:/data:ro
       - ./data/navidrome:/config
 ```
 
@@ -103,11 +103,9 @@ After adding mappings, run **Settings → Lidarr → Test library access** to ve
 
 ## When Navidrome or Plex see different paths
 
-If Navidrome runs with a different filesystem view than Aurral, use `M3U_PATH_MODE=remote` and `M3U_PATH_MAPPINGS` (`Aurral path|Navidrome path`).
+If Navidrome runs with a different filesystem view than Aurral, use **Use Navidrome paths in M3U files** in **Settings → Playback → Navidrome**. For Plex, set the Plex downloads path in **Settings → Playback → Plex**.
 
-For Plex, set the Plex downloads path in **Settings → Playback → Plex**.
-
-See [Environment variables](/admin/environment/), [Navidrome](/integrations/navidrome/), and [Plex](/integrations/plex/) for details.
+See [Navidrome](/integrations/navidrome/) and [Plex](/integrations/plex/) for details.
 
 ---
 

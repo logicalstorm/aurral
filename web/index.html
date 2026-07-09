@@ -35,7 +35,7 @@
         <a href="https://docs.aurral.org/guides/self-hosting/">Guide</a>
         <a href="https://docs.aurral.org/">Docs</a>
         <a href="https://docs.aurral.org/using/playlists/">Playlists</a>
-        <a href="aurral-convert.html">Spotify Import</a>
+        <a href="aurral-convert.html">CSV Converter</a>
         <a href="https://docs.aurral.org/getting-started/docker/">Docker Setup</a>
         <a
           href="https://github.com/lklynet/aurral"
@@ -405,8 +405,8 @@
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
     volumes:
-      - ${MEDIA_ROOT:-/srv/media}:/data
-      - ${CONFIG:-./config}:/config</code></pre>
+      - /data:/data
+      - ./config:/config</code></pre>
         </div>
 
         <p class="setup-docs-link">
@@ -483,30 +483,6 @@
             </svg>
             Read the docs
           </a>
-          <a
-            href="https://github.com/lklynet/aurral/blob/main/CONTRIBUTING.md"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="btn btn-outline"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M14 3h7v7"></path>
-              <path d="M10 14 21 3"></path>
-              <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"></path>
-            </svg>
-            Read CONTRIBUTING.md
-          </a>
         </div>
       </section>
     </main>
@@ -539,7 +515,7 @@
         <a href="https://docs.aurral.org/guides/self-hosting/">Guide</a>
         <a href="https://docs.aurral.org/">Docs</a>
         <a href="https://docs.aurral.org/using/playlists/">Playlists</a>
-        <a href="aurral-convert.html">Spotify Import</a>
+        <a href="aurral-convert.html">CSV Converter</a>
         <a href="https://github.com/lklynet/aurral" target="_blank" rel="noopener noreferrer"
           >GitHub</a
         >

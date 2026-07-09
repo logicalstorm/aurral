@@ -58,7 +58,7 @@ See [Navidrome — Mixed Windows and Docker](/integrations/navidrome/#mixed-wind
 
 ## Plex playlists are empty or tracks are missing
 
-Symptoms: **Sync to Plex now** succeeds but playlists have no tracks, or the **Aurral** library in Plex stays empty after a scan.
+Symptoms: **Sync to Plex now** succeeds but playlists have no tracks, or the Aurral library in Plex stays empty after a scan.
 
 - Confirm Plex can read the flow download tree. From inside the Plex container or host, the path should exist: `<downloads>/aurral-weekly-flow/<flow-id>/...`.
 - If Plex and Aurral use different mounts, set **Settings → Playback → Plex → Plex downloads path** to the folder Plex sees. Leave it blank when both share the same path prefix.

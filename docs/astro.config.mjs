@@ -99,6 +99,7 @@ export default defineConfig({
             { slug: "integrations/plex" },
             { slug: "integrations/ticketmaster" },
             { slug: "integrations/metadata" },
+            { slug: "integrations/notifications" },
           ],
         },
         {
