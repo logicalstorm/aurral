@@ -28,10 +28,13 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 | `TRUST_PROXY` | Set when Aurral is behind a reverse proxy. |
 | `AUTH_PROXY_ENABLED` | Enable reverse-proxy authentication. Default header `x-forwarded-user`. |
 | `AUTH_PROXY_HEADER` | Custom header containing the authenticated username. |
+| `AUTH_PROXY_DOMAIN` | Origin of your forwardAuth login page (e.g. `https://auth.example.com`). Added to the CSP `connect-src` directive so the browser doesn't block requests redirected there. |
 | `AUTH_PROXY_TRUSTED_IPS` | Comma-separated proxy IP allowlist for auth headers. |
-| `AUTH_PROXY_DEFAULT_ROLE` | Role for new proxy-auth users: `user` or `admin`. |
-| `AUTH_PROXY_ADMIN_USERS` | Comma-separated usernames that should be created as admins. |
-| `AUTH_PROXY_ROLE_HEADER` | Optional header whose value can promote a new proxy user to admin. |
+| `AUTH_PROXY_LOGOUT_URL` | Your proxy/IdP's logout endpoint (e.g. `https://auth.example.com/logout`). When set, logging out of Aurral also redirects there to end the proxy-level session, not just the local one. |
+| `AUTH_PROXY_DEFAULT_ROLE` | Role assigned to proxy-auth users who aren't otherwise granted admin: `user` or `admin`. Re-evaluated on every request. |
+| `AUTH_PROXY_ADMIN_USERS` | Comma-separated usernames always granted admin. Re-checked on every request, so removing a username here demotes them on their next request. |
+| `AUTH_PROXY_ROLE_HEADER` | Optional header containing the user's group membership (e.g. Authelia's `Remote-Groups`), typically a comma-separated list. Checked against `AUTH_PROXY_ADMIN_GROUPS` on every request. |
+| `AUTH_PROXY_ADMIN_GROUPS` | Comma-separated group names (matched against `AUTH_PROXY_ROLE_HEADER`) that grant admin. A group literally named `admin` isn't treated specially unless listed here. |
 | `SESSION_EXPIRY_HOURS` | Password-login session lifetime in hours. Default `720` (30 days). |
 
 ## Logging

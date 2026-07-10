@@ -69,6 +69,12 @@ Symptoms: **Sync to Plex now** succeeds but playlists have no tracks, or the Aur
 
 See [Plex integration](/integrations/plex/).
 
+## Page keeps reloading or stays blank behind a reverse proxy
+
+- Usually means `AUTH_PROXY_TRUSTED_IPS` doesn't match the address your reverse proxy actually connects from. This isn't the same value as `TRUST_PROXY` — check your proxy's own access logs to confirm its real source address.
+- Only affects proxy-auth setups (`AUTH_PROXY_ENABLED`/`AUTH_PROXY_HEADER`); plain password-login installs aren't affected by this.
+- The reload should stop on its own after a few attempts rather than loop forever - check the browser console for a message explaining why it stopped.
+
 ## Permission errors
 
 - Make sure mounted folders are writable by the container user.
