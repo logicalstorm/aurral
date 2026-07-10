@@ -18,7 +18,6 @@ import {
 import {
   buildHistoryListEntries,
   compareActivityRequests,
-  isAurralInternalRow,
   mergeActivityRequests,
 } from "./activity/activityListUtils";
 import ActivityRequestRow from "./activity/ActivityRequestRow";
@@ -75,11 +74,7 @@ function ActivityPage() {
   );
 
   const filteredRequests = useMemo(
-    () =>
-      requests.filter(
-        (request) =>
-          matchesActivityView(request, activeView) && !isAurralInternalRow(request),
-      ),
+    () => requests.filter((request) => matchesActivityView(request, activeView)),
     [requests, activeView],
   );
 

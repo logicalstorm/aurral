@@ -1,14 +1,3 @@
-export const AURRAL_INTERNAL_KINDS = new Set([
-  "discovery_refresh",
-  "flow_generated",
-  "flow_generating",
-  "playlist_tracks_added",
-  "track_reused_aurral",
-]);
-
-export const isAurralInternalRow = (request) =>
-  request?.source === "aurral" && AURRAL_INTERNAL_KINDS.has(request?.kind);
-
 const getRequestIdentity = (request) =>
   String(
     request?.id ||

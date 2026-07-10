@@ -14,10 +14,16 @@ const KIND_SOURCE_MAP = {
   track_reused_lidarr: "lidarr",
   track_reused_aurral: "aurral",
   discovery_refresh: "aurral",
-  flow_generated: "aurral",
   flow_generating: "aurral",
   playlist_tracks_added: "aurral",
 };
+
+const ACTIVITY_HIDDEN_KINDS = new Set([
+  "discovery_refresh",
+  "flow_generating",
+  "playlist_tracks_added",
+  "track_reused_aurral",
+]);
 
 const resolvePlaylistName = (playlistId) => {
   const id = String(playlistId || "").trim();
@@ -150,8 +156,6 @@ export const upsertAurralHistory = (entry = {}) => {
   dbOps.pruneAurralHistory({ maxAgeMs: MAX_AGE_MS });
   return record;
 };
-
-export const recordAurralHistory = (entry = {}) => appendAurralHistory(entry);
 
 export const recordDiscoveryRefreshStarted = () =>
   upsertAurralHistory({
@@ -312,16 +316,18 @@ const buildHistoryJobFromEntry = (entry) => ({
   downloadSource: entry.metadata?.downloadSource || null,
 });
 
-export const syncTrackDownloadHistory = async () => {
+const loadRecentHistory = () =>
+  dbOps.getAurralHistory({ since: Date.now() - MAX_AGE_MS, limit: 300 });
+
+export const syncTrackDownloadHistory = async (historyEntries = null) => {
   const { downloadTracker } = await import("./weeklyFlow/weeklyFlowDownloadTracker.js");
-  const cutoff = Date.now() - MAX_AGE_MS;
-  const trackEntries = dbOps
-    .getAurralHistory({ since: cutoff, limit: 300 })
-    .filter(
-      (entry) =>
-        entry.kind === "track_download" &&
-        (entry.status === "processing" || entry.status === "pending" || entry.status === "blocked"),
-    );
+  const trackEntries = (historyEntries || loadRecentHistory()).filter(
+    (entry) =>
+      entry.kind === "track_download" &&
+      (entry.status === "processing" ||
+        entry.status === "pending" ||
+        entry.status === "blocked"),
+  );
 
   const historyJobIds = new Set(
     trackEntries.map((entry) => entry.metadata?.jobId).filter(Boolean),
@@ -331,24 +337,21 @@ export const syncTrackDownloadHistory = async () => {
     recordTrackJobBlocked(job, job.error || "Blocked for review");
   }
 
-  const pendingEntries = trackEntries.filter(
-    (entry) => entry.status === "processing" || entry.status === "pending",
-  );
-  const blockedEntries = trackEntries.filter((entry) => entry.status === "blocked");
-
-  for (const entry of pendingEntries) {
+  for (const entry of trackEntries) {
     const jobId = String(entry.metadata?.jobId || "").trim();
+    const isBlocked = entry.status === "blocked";
+    const stale = Date.now() - Number(entry.createdAt || 0) >= STALE_TRACK_JOB_MS;
+    const fakeJob = buildHistoryJobFromEntry(entry);
+
     if (!jobId) {
-      if (Date.now() - Number(entry.createdAt || 0) >= STALE_TRACK_JOB_MS) {
-        recordTrackJobFailed(buildHistoryJobFromEntry(entry), "Download no longer active");
-      }
+      if (stale) recordTrackJobFailed(fakeJob, "Download no longer active");
       continue;
     }
 
     const job = downloadTracker.getJob(jobId);
     if (!job) {
-      if (Date.now() - Number(entry.createdAt || 0) >= STALE_TRACK_JOB_MS) {
-        recordTrackJobFailed(buildHistoryJobFromEntry(entry), "Download no longer active");
+      if (isBlocked || stale) {
+        recordTrackJobFailed(fakeJob, "Download no longer active");
       }
       continue;
     }
@@ -357,103 +360,63 @@ export const syncTrackDownloadHistory = async () => {
       recordTrackJobCompleted(job);
       continue;
     }
-
     if (job.status === "failed") {
       recordTrackJobFailed(job, job.error || "Download failed");
       continue;
     }
-
     if (job.status === "blocked") {
       recordTrackJobBlocked(job, job.error || "Blocked for review");
       continue;
     }
+    if (isBlocked && (job.status === "pending" || job.status === "downloading")) {
+      recordTrackJobFailed(job, "Denied by user — will retry");
+      continue;
+    }
+    if (isBlocked) continue;
 
     const anchorTime = Math.max(
       Number(job.startedAt || 0),
       Number(job.createdAt || 0),
       Number(entry.createdAt || 0),
     );
-    if (!anchorTime || Date.now() - anchorTime < STALE_TRACK_JOB_MS) {
-      continue;
-    }
-
-    if (await isPipelineActiveForJob(jobId)) {
-      continue;
-    }
+    if (!anchorTime || Date.now() - anchorTime < STALE_TRACK_JOB_MS) continue;
+    if (await isPipelineActiveForJob(jobId)) continue;
 
     const message = "Download timed out";
     downloadTracker.setFailed(jobId, message);
     recordTrackJobFailed(job, message);
   }
-
-  for (const entry of blockedEntries) {
-    const jobId = String(entry.metadata?.jobId || "").trim();
-    const fakeJob = buildHistoryJobFromEntry(entry);
-
-    if (!jobId) {
-      if (Date.now() - Number(entry.createdAt || 0) >= STALE_TRACK_JOB_MS) {
-        recordTrackJobFailed(fakeJob, "Download no longer active");
-      }
-      continue;
-    }
-
-    const job = downloadTracker.getJob(jobId);
-    if (!job) {
-      recordTrackJobFailed(fakeJob, "Download no longer active");
-      continue;
-    }
-
-    if (job.status === "done") {
-      recordTrackJobCompleted(job);
-      continue;
-    }
-
-    if (job.status === "failed") {
-      recordTrackJobFailed(job, job.error || "Download failed");
-      continue;
-    }
-
-    if (job.status === "pending" || job.status === "downloading") {
-      recordTrackJobFailed(job, "Denied by user — will retry");
-      continue;
-    }
-  }
 };
 
-const syncDiscoveryRefreshHistory = async () => {
-  const cutoff = Date.now() - MAX_AGE_MS;
-  const pendingEntries = dbOps
-    .getAurralHistory({ since: cutoff, limit: 300 })
-    .filter((entry) => entry.kind === "discovery_refresh" && entry.status === "processing");
+const syncDiscoveryRefreshHistory = async (historyEntries = null) => {
+  const pendingEntries = (historyEntries || loadRecentHistory()).filter(
+    (entry) => entry.kind === "discovery_refresh" && entry.status === "processing",
+  );
   if (!pendingEntries.length) return;
 
   const discoveryActive = await isHonkerQueueActive("discovery-refresh", () => true);
   if (discoveryActive) return;
 
   for (const entry of pendingEntries) {
-    if (Date.now() - Number(entry.createdAt || 0) < STALE_AURRAL_JOB_MS) {
-      continue;
-    }
+    if (Date.now() - Number(entry.createdAt || 0) < STALE_AURRAL_JOB_MS) continue;
     recordDiscoveryRefreshFailed("Discovery refresh timed out");
   }
 };
 
-const syncFlowGenerationHistory = async () => {
-  const cutoff = Date.now() - MAX_AGE_MS;
-  const pendingEntries = dbOps
-    .getAurralHistory({ since: cutoff, limit: 300 })
-    .filter((entry) => entry.kind === "flow_generating" && entry.status === "processing");
+const syncFlowGenerationHistory = async (historyEntries = null) => {
+  const pendingEntries = (historyEntries || loadRecentHistory()).filter(
+    (entry) => entry.kind === "flow_generating" && entry.status === "processing",
+  );
   if (!pendingEntries.length) return;
 
   for (const entry of pendingEntries) {
     const flowId = String(entry.metadata?.flowId || "").trim();
     if (!flowId) continue;
-    if (Date.now() - Number(entry.createdAt || 0) < STALE_AURRAL_JOB_MS) {
-      continue;
-    }
+    if (Date.now() - Number(entry.createdAt || 0) < STALE_AURRAL_JOB_MS) continue;
     const flowActive = await isHonkerQueueActive(
       "weekly-flow-operation",
-      (payload) => String(payload?.flowId || payload?.playlistId || "").trim() === flowId,
+      (payload) =>
+        String(payload?.flowId || payload?.playlistId || "").trim() === flowId,
     );
     if (flowActive) continue;
     upsertAurralHistory({
@@ -469,22 +432,12 @@ const syncFlowGenerationHistory = async () => {
   }
 };
 
-export const syncProcessingActivityHistory = async (lidarrClient = null) => {
-  await syncTrackDownloadHistory();
-  await syncDiscoveryRefreshHistory();
-  await syncFlowGenerationHistory();
-  if (lidarrClient) {
-    await syncAlbumSearchHistory(lidarrClient);
-  }
-};
-
-export const syncAlbumSearchHistory = async (lidarrClient) => {
+export const syncAlbumSearchHistory = async (lidarrClient, historyEntries = null) => {
   if (!lidarrClient?.isConfigured()) return;
 
-  const cutoff = Date.now() - MAX_AGE_MS;
-  const pendingEntries = dbOps
-    .getAurralHistory({ since: cutoff, limit: 300 })
-    .filter((entry) => entry.kind === "album_requested" && entry.status === "processing");
+  const pendingEntries = (historyEntries || loadRecentHistory()).filter(
+    (entry) => entry.kind === "album_requested" && entry.status === "processing",
+  );
   if (!pendingEntries.length) return;
 
   const { parseLidarrSearchContext, resolveAlbumSearchOutcome } =
@@ -511,6 +464,20 @@ export const syncAlbumSearchHistory = async (lidarrClient) => {
       statusLabel: outcome.statusLabel,
     });
   }
+};
+
+const syncActivityFeedHistory = async (lidarrClient = null) => {
+  const entries = loadRecentHistory();
+  await syncTrackDownloadHistory(entries);
+  if (lidarrClient) await syncAlbumSearchHistory(lidarrClient, entries);
+};
+
+export const syncProcessingActivityHistory = async (lidarrClient = null) => {
+  const entries = loadRecentHistory();
+  await syncTrackDownloadHistory(entries);
+  await syncDiscoveryRefreshHistory(entries);
+  await syncFlowGenerationHistory(entries);
+  if (lidarrClient) await syncAlbumSearchHistory(lidarrClient, entries);
 };
 
 export const recordFlowGenerationStarted = ({ flowId } = {}) => {
@@ -646,53 +613,41 @@ export const recordTrackJobActivity = ({
   });
 };
 
+const trackJobFields = (job) => ({
+  jobId: job?.id,
+  trackName: job?.trackName,
+  artistName: job?.artistName,
+  playlistId: job?.playlistId || job?.playlistType,
+  downloadSource: job?.downloadSource,
+  downloadClient: job?.downloadClient,
+});
+
+const recordTrackJob = (job, patch) =>
+  recordTrackJobActivity({ ...trackJobFields(job), ...patch });
+
 export const recordTrackJobSearching = (job) =>
-  recordTrackJobActivity({
-    jobId: job?.id,
-    trackName: job?.trackName,
-    artistName: job?.artistName,
-    playlistId: job?.playlistId || job?.playlistType,
-    downloadSource: job?.downloadSource,
-    downloadClient: job?.downloadClient,
+  recordTrackJob(job, {
     status: "processing",
     statusLabel: "Searching",
     title: `Searching ${resolveDownloadClientLabel(job?.downloadSource, job?.downloadClient)} for ${job?.trackName || "track"}`,
   });
 
 export const recordTrackJobDownloading = (job) =>
-  recordTrackJobActivity({
-    jobId: job?.id,
-    trackName: job?.trackName,
-    artistName: job?.artistName,
-    playlistId: job?.playlistId || job?.playlistType,
-    downloadSource: job?.downloadSource,
-    downloadClient: job?.downloadClient,
+  recordTrackJob(job, {
     status: "processing",
     statusLabel: "Downloading",
     title: `Downloading ${job?.trackName || "track"} via ${resolveDownloadClientLabel(job?.downloadSource, job?.downloadClient)}`,
   });
 
 export const recordTrackJobMoving = (job) =>
-  recordTrackJobActivity({
-    jobId: job?.id,
-    trackName: job?.trackName,
-    artistName: job?.artistName,
-    playlistId: job?.playlistId || job?.playlistType,
-    downloadSource: job?.downloadSource,
-    downloadClient: job?.downloadClient,
+  recordTrackJob(job, {
     status: "processing",
     statusLabel: "Moving",
     title: `Moving ${job?.trackName || "track"} into playlist library`,
   });
 
 export const recordTrackJobCompleted = (job) =>
-  recordTrackJobActivity({
-    jobId: job?.id,
-    trackName: job?.trackName,
-    artistName: job?.artistName,
-    playlistId: job?.playlistId || job?.playlistType,
-    downloadSource: job?.downloadSource,
-    downloadClient: job?.downloadClient,
+  recordTrackJob(job, {
     status: "completed",
     statusLabel: "Downloaded",
     title: `Downloaded ${job?.trackName || "track"}`,
@@ -700,13 +655,7 @@ export const recordTrackJobCompleted = (job) =>
   });
 
 export const recordTrackJobFailed = (job, message = "Download failed") =>
-  recordTrackJobActivity({
-    jobId: job?.id,
-    trackName: job?.trackName,
-    artistName: job?.artistName,
-    playlistId: job?.playlistId || job?.playlistType,
-    downloadSource: job?.downloadSource,
-    downloadClient: job?.downloadClient,
+  recordTrackJob(job, {
     status: "failed",
     statusLabel: "Failed",
     title: `Failed to download ${job?.trackName || "track"}`,
@@ -714,13 +663,7 @@ export const recordTrackJobFailed = (job, message = "Download failed") =>
   });
 
 export const recordTrackJobBlocked = (job, message = "Blocked for review") =>
-  recordTrackJobActivity({
-    jobId: job?.id,
-    trackName: job?.trackName,
-    artistName: job?.artistName,
-    playlistId: job?.playlistId || job?.playlistType,
-    downloadSource: job?.downloadSource,
-    downloadClient: job?.downloadClient,
+  recordTrackJob(job, {
     status: "blocked",
     statusLabel: "Review",
     title: `Review needed for ${job?.trackName || "track"}`,
@@ -749,7 +692,10 @@ export const toHistoryRequestItem = (entry, options = {}) => {
     artistName: entry.metadata?.artistName || null,
     albumId: entry.metadata?.albumId ? String(entry.metadata.albumId) : null,
     sourceFilename,
-    inQueue: entry.status === "processing" || entry.status === "pending" || entry.status === "blocked",
+    inQueue:
+      entry.status === "processing" ||
+      entry.status === "pending" ||
+      entry.status === "blocked",
     canReSearch:
       entry.kind === "album_requested" &&
       entry.status === "failed" &&
@@ -757,16 +703,18 @@ export const toHistoryRequestItem = (entry, options = {}) => {
   };
 };
 
+const FAILED_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
 export const getAurralHistoryRequests = async (lidarrClient = null) => {
-  await syncProcessingActivityHistory(lidarrClient);
-  const cutoff = Date.now() - MAX_AGE_MS;
-  const entries = dbOps.getAurralHistory({ since: cutoff, limit: 300 });
+  await syncActivityFeedHistory(lidarrClient);
+  const entries = loadRecentHistory();
   const entryIds = new Set(entries.map((e) => e.id));
 
   const { downloadTracker } = await import("./weeklyFlow/weeklyFlowDownloadTracker.js");
-  const activeStatuses = new Set(["blocked", "pending", "downloading"]);
   for (const job of downloadTracker.getAll()) {
-    if (!activeStatuses.has(job.status)) continue;
+    if (job.status !== "blocked" && job.status !== "pending" && job.status !== "downloading") {
+      continue;
+    }
     const historyId = stableId("track_download", job.id);
     if (entryIds.has(historyId)) continue;
     const row = dbOps.getAurralHistoryById(historyId);
@@ -777,17 +725,21 @@ export const getAurralHistoryRequests = async (lidarrClient = null) => {
   }
 
   const now = Date.now();
-  const FAILED_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
-  const visible = entries.filter(
-    (e) => e.status !== "failed" || (now - e.createdAt) < FAILED_RETENTION_MS,
-  );
   const jobsById = new Map(downloadTracker.getAll().map((job) => [job.id, job]));
-  return visible.map((entry) => {
-    const jobId = String(entry.metadata?.jobId || "").trim();
-    const job = jobId ? jobsById.get(jobId) : null;
-    const sourceFilename =
-      entry.metadata?.sourceFilename ||
-      (entry.status === "blocked" && job ? resolveBlockedJobSourceFilename(job) : null);
-    return toHistoryRequestItem(entry, { sourceFilename });
-  });
+  return entries
+    .filter(
+      (e) =>
+        !ACTIVITY_HIDDEN_KINDS.has(e.kind) &&
+        (e.status !== "failed" || now - e.createdAt < FAILED_RETENTION_MS),
+    )
+    .map((entry) => {
+      const jobId = String(entry.metadata?.jobId || "").trim();
+      const job = jobId ? jobsById.get(jobId) : null;
+      const sourceFilename =
+        entry.metadata?.sourceFilename ||
+        (entry.status === "blocked" && job
+          ? resolveBlockedJobSourceFilename(job)
+          : null);
+      return toHistoryRequestItem(entry, { sourceFilename });
+    });
 };
