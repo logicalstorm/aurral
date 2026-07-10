@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
-  AUTH_INVALID_EVENT,
   clearAuthStorage,
   getStoredAuth,
   setStoredAuth,
@@ -8,14 +7,11 @@ import {
 import {
   getBootstrapStatus,
   getMe,
+  invalidateBootstrapCache,
   loginApi,
   logoutApi,
 } from "../utils/api/endpoints/auth.js";
-import {
-  AUTH_RECOVERY_RELOAD_KEY,
-  PROXY_AUTH_KEY,
-  resetClientCache,
-} from "../utils/authRecovery.js";
+import { PROXY_AUTH_KEY, isProxyAuthActive } from "../utils/authRecovery.js";
 
 const AuthContext = createContext(null);
 
@@ -94,43 +90,12 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       setIsAuthenticated(false);
     } finally {
-      globalThis?.sessionStorage?.removeItem(AUTH_RECOVERY_RELOAD_KEY);
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
     checkAuthStatus();
-  }, [checkAuthStatus]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const handleInvalidAuth = async () => {
-      setIsAuthenticated(false);
-      setUser(null);
-      setIsLoading(true);
-
-      const hadClientCache = await resetClientCache();
-      if (cancelled) return;
-
-      const hasReloaded = globalThis?.sessionStorage?.getItem(AUTH_RECOVERY_RELOAD_KEY) === "1";
-
-      if (hadClientCache && !hasReloaded && typeof window !== "undefined") {
-        globalThis.sessionStorage?.setItem(AUTH_RECOVERY_RELOAD_KEY, "1");
-        window.location.reload();
-        return;
-      }
-
-      globalThis?.sessionStorage?.removeItem(AUTH_RECOVERY_RELOAD_KEY);
-      await checkAuthStatus();
-    };
-
-    window.addEventListener(AUTH_INVALID_EVENT, handleInvalidAuth);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(AUTH_INVALID_EVENT, handleInvalidAuth);
-    };
   }, [checkAuthStatus]);
 
   const login = useCallback(async (password, username) => {
@@ -143,6 +108,9 @@ export const AuthProvider = ({ children }) => {
       setStoredAuth({ token: result.token });
       setUser(result.user || null);
       setIsAuthenticated(true);
+      try {
+        setBootstrap(await getBootstrapStatus());
+      } catch {}
       return true;
     } catch {
       return false;
@@ -154,9 +122,22 @@ export const AuthProvider = ({ children }) => {
       await logoutApi();
     } catch {}
     clearAuthStorage();
+    invalidateBootstrapCache();
+
+    let proxyLogoutUrl = bootstrap?.proxyLogoutUrl;
+    if (!proxyLogoutUrl && isProxyAuthActive()) {
+      try {
+        proxyLogoutUrl = (await getBootstrapStatus())?.proxyLogoutUrl;
+      } catch {}
+    }
+
+    if (proxyLogoutUrl) {
+      window.location.href = proxyLogoutUrl;
+      return;
+    }
     setIsAuthenticated(false);
     setUser(null);
-  }, []);
+  }, [bootstrap]);
 
   const hasPermission = useCallback((perm) => {
     if (!user) return false;

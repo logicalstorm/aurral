@@ -1,11 +1,32 @@
 import { normalizeBasePathWithTrailingSlash } from "./basePath.js";
 
 export const PROXY_AUTH_KEY = "aurral:proxy-auth";
-export const AUTH_RECOVERY_RELOAD_KEY = "aurral:auth-recovery-reload";
 export const PROXY_RELOAD_TS_KEY = "aurral:proxy-reload-ts";
+export const REAUTH_ATTEMPT_KEY = "aurral:reauth-attempts";
+
+const REAUTH_ATTEMPT_WINDOW_MS = 30000;
+const REAUTH_MAX_ATTEMPTS = 3;
 
 export const isProxyAuthActive = () =>
   globalThis?.sessionStorage?.getItem(PROXY_AUTH_KEY) === "1";
+
+export const registerReauthAttempt = () => {
+  const storage = globalThis?.sessionStorage;
+  if (!storage) return true;
+  let state;
+  try {
+    state = JSON.parse(storage.getItem(REAUTH_ATTEMPT_KEY) || "null");
+  } catch {
+    state = null;
+  }
+  const now = Date.now();
+  if (!state || now - state.firstAt > REAUTH_ATTEMPT_WINDOW_MS) {
+    state = { count: 0, firstAt: now };
+  }
+  state.count += 1;
+  storage.setItem(REAUTH_ATTEMPT_KEY, JSON.stringify(state));
+  return state.count <= REAUTH_MAX_ATTEMPTS;
+};
 
 export const resetClientCache = async () => {
   const registrations = globalThis?.navigator?.serviceWorker
@@ -26,7 +47,7 @@ export const hardNavigateHome = (basePath = "/") => {
 };
 
 export const clearAuthRecoveryFlags = () => {
-  globalThis?.sessionStorage?.removeItem(AUTH_RECOVERY_RELOAD_KEY);
   globalThis?.sessionStorage?.removeItem(PROXY_RELOAD_TS_KEY);
   globalThis?.sessionStorage?.removeItem(PROXY_AUTH_KEY);
+  globalThis?.sessionStorage?.removeItem(REAUTH_ATTEMPT_KEY);
 };

@@ -1,4 +1,4 @@
-import { getData, postData, patchData, deleteData, fetchInflightOnce, bootstrapInflight, lidarrCredentialParams, AUTH_INVALID_EVENT } from "../core.js";
+import { getData, postData, patchData, deleteData, fetchInflightOnce, bootstrapInflight, lidarrCredentialParams } from "../core.js";
 
 export const checkHealth = () => getData("/health");
 
@@ -7,13 +7,9 @@ export const checkHealthLive = () => getData("/health/live", { timeout: 5000 });
 const BOOTSTRAP_CACHE_TTL_MS = 25_000;
 let bootstrapCache = null;
 
-const invalidateBootstrapCache = () => {
+export const invalidateBootstrapCache = () => {
   bootstrapCache = null;
 };
-
-if (typeof window !== "undefined") {
-  window.addEventListener(AUTH_INVALID_EVENT, invalidateBootstrapCache);
-}
 
 export const getBootstrapStatus = () => {
   if (bootstrapCache && Date.now() - bootstrapCache.at < BOOTSTRAP_CACHE_TTL_MS) {

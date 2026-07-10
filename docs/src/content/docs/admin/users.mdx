@@ -29,7 +29,14 @@ Set `AUTH_PROXY_ENABLED=true` or provide `AUTH_PROXY_HEADER` to let a trusted re
 
 The default username header is `x-forwarded-user`.
 
-When a proxied username first reaches Aurral, a matching local user is created with default user permissions. Set `AUTH_PROXY_DEFAULT_ROLE=admin`, `AUTH_PROXY_ADMIN_USERS`, or `AUTH_PROXY_ROLE_HEADER` to create admins through the proxy.
+When a proxied username first reaches Aurral, a matching local user is created. Role (user vs admin) comes from one of:
+
+- `AUTH_PROXY_DEFAULT_ROLE` - the default for anyone not otherwise granted admin
+- An exact match in `AUTH_PROXY_ADMIN_USERS`
+- Group membership via `AUTH_PROXY_ROLE_HEADER` (e.g. Authelia's `Remote-Groups`), checked against `AUTH_PROXY_ADMIN_GROUPS`
+
+This is re-evaluated on every request, so promoting or demoting someone on the proxy/IdP side takes effect on their next request. 
+No manual account edits needed in Aurral.
 
 Proxy-created users cannot use local password login until an admin sets a password. After creation, admins can manage the account from **Settings → Users**.
 

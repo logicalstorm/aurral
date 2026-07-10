@@ -1,5 +1,5 @@
 import { getAppBasePath } from "../basePath.js";
-import { isProxyAuthActive } from "../authRecovery.js";
+import { isProxyAuthActive, registerReauthAttempt } from "../authRecovery.js";
 
 const getDefaultApiBaseUrl = () => {
   if (import.meta.env.DEV) return "/api";
@@ -27,6 +27,34 @@ function appendParams(url, params) {
   return `${url}${url.includes("?") ? "&" : "?"}${query}`;
 }
 
+export const forceProxyReauthNavigation = () => {
+  if (typeof window === "undefined") return;
+  if (!registerReauthAttempt()) {
+    console.error(
+      "[Aurral] Repeated auth-redirect recovery attempts detected in a short window; " +
+        "stopping to avoid a reload loop. Check the reverse proxy / forwardAuth configuration.",
+    );
+    return;
+  }
+  clearAuthStorage();
+  const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+  window.location.href = `${API_BASE_URL}/auth/reauth?returnTo=${returnTo}`;
+};
+
+const forceReloadForLogin = () => {
+  if (typeof window === "undefined") return;
+  if (!registerReauthAttempt()) {
+    console.error(
+      "[Aurral] Repeated auth-recovery reload attempts detected in a short window; stopping to avoid a reload loop.",
+    );
+    return;
+  }
+  clearAuthStorage();
+  const separator = window.location.pathname.includes("?") ? "&" : "?";
+  window.location.href =
+    window.location.origin + window.location.pathname + separator + "_nc=" + Date.now();
+};
+
 async function request(config) {
   const method = String(config.method || "GET").toUpperCase();
   let url = appendParams(joinUrl(API_BASE_URL, config.url || ""), config.params);
@@ -38,11 +66,19 @@ async function request(config) {
   if (token) headers.Authorization = `Bearer ${token}`;
 
   try {
-    const init = { method, headers, signal: controller.signal };
+    const init = { method, headers, signal: controller.signal, redirect: "manual" };
     if (config.data != null && method !== "GET" && method !== "HEAD") {
       init.body = typeof config.data === "string" ? config.data : JSON.stringify(config.data);
     }
     const res = await fetch(url, init);
+
+    if (res.type === "opaqueredirect") {
+      forceProxyReauthNavigation();
+      const authError = new Error("Request was redirected to an authentication provider");
+      authError.isAuthRedirect = true;
+      throw authError;
+    }
+
     const contentType = res.headers.get("content-type") || "";
     let data;
     if (contentType.includes("json")) {
@@ -58,11 +94,10 @@ async function request(config) {
     if (!res.ok) {
       const error = new Error(`Request failed with status code ${res.status}`);
       error.response = response;
-      if (res.status === 401 && data?.code === "SESSION_INVALID") {
-        clearAuthStorage();
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event(AUTH_INVALID_EVENT));
-        }
+      const urlPath = String(config.url || "");
+      const isAuthEndpoint = urlPath.includes("/auth/login") || urlPath.includes("/auth/logout");
+      if (res.status === 401 && data?.code === "SESSION_INVALID" && !isAuthEndpoint) {
+        forceReloadForLogin();
       }
       throw error;
     }
@@ -79,8 +114,6 @@ const api = {
   patch: (url, data, config = {}) => request({ ...config, method: "PATCH", url, data }),
   delete: (url, config = {}) => request({ ...config, method: "DELETE", url }),
 };
-
-export const AUTH_INVALID_EVENT = "aurral:auth-invalid";
 
 const AUTH_TOKEN_KEY = "auth_token";
 

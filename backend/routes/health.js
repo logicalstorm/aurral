@@ -10,8 +10,8 @@ import {
 import { APP_VERSION } from "../config/constants.js";
 import {
   resolveRequestUser,
-  getAuthUser,
   isAuthRequiredByConfig,
+  isProxyAuthEnabled,
   issueStreamToken,
   getLocalNetworkBypassStatus,
 } from "../middleware/auth.js";
@@ -239,47 +239,47 @@ function buildBootstrapPayload(req) {
   const settings = dbOps.getSettings();
   const onboardingDone = settings.onboardingComplete;
   const authRequired = isAuthRequiredByConfig();
-  const authUser = getAuthUser();
   const currentUser = resolveRequestUser(req);
-  const localNetworkBypass = getLocalNetworkBypassStatus(req);
   const lidarrConfigured = lidarrClient.isConfigured();
-  const downloadSources = getDownloadSourceStatus();
 
   const payload = {
     status: "ok",
     authRequired,
-    authUser: currentUser ? currentUser.username : authUser,
+    proxyAuthEnabled: isProxyAuthEnabled(),
     onboardingRequired: !onboardingDone,
     timestamp: new Date().toISOString(),
     appVersion: APP_VERSION,
-    rootFolderConfigured: lidarrConfigured,
-    lidarrConfigured,
-    lastfmConfigured: !!getLastfmApiKey(),
-    ticketmasterConfigured: !!getTicketmasterApiKey(),
-    musicbrainzConfigured: !!settings.integrations?.metadata?.baseUrl,
-    metadataConfigured: !!settings.integrations?.metadata?.baseUrl,
-    slskdConfigured: downloadSources.slskd.configured,
-    prowlarrConfigured: downloadSources.usenet.prowlarrConfigured,
-    nzbgetConfigured: downloadSources.usenet.nzbgetConfigured,
-    sabnzbdConfigured: downloadSources.usenet.sabnzbdConfigured,
-    usenetConfigured: downloadSources.usenet.configured,
-    ytdlpConfigured: downloadSources.ytdlp.configured,
-    downloadSources,
-    metadataProviders: getMetadataProviderHealthSnapshot(),
-    localNetworkBypass,
-    lidarr: {
-      configured: lidarrConfigured,
-      circuitOpen: lidarrClient.isCircuitOpen(),
-    },
   };
 
   if (currentUser) {
+    const downloadSources = getDownloadSourceStatus();
     payload.user = {
       id: currentUser.id,
       username: currentUser.username,
       role: currentUser.role,
       permissions: currentUser.permissions,
     };
+    payload.authUser = currentUser.username;
+    payload.rootFolderConfigured = lidarrConfigured;
+    payload.lidarr = {
+      configured: lidarrConfigured,
+      circuitOpen: lidarrClient.isCircuitOpen(),
+    };
+    payload.lidarrConfigured = lidarrConfigured;
+    payload.lastfmConfigured = !!getLastfmApiKey();
+    payload.ticketmasterConfigured = !!getTicketmasterApiKey();
+    payload.musicbrainzConfigured = !!settings.integrations?.metadata?.baseUrl;
+    payload.metadataConfigured = !!settings.integrations?.metadata?.baseUrl;
+    payload.slskdConfigured = downloadSources.slskd.configured;
+    payload.prowlarrConfigured = downloadSources.usenet.prowlarrConfigured;
+    payload.nzbgetConfigured = downloadSources.usenet.nzbgetConfigured;
+    payload.sabnzbdConfigured = downloadSources.usenet.sabnzbdConfigured;
+    payload.usenetConfigured = downloadSources.usenet.configured;
+    payload.ytdlpConfigured = downloadSources.ytdlp.configured;
+    payload.downloadSources = downloadSources;
+    payload.metadataProviders = getMetadataProviderHealthSnapshot();
+    payload.localNetworkBypass = getLocalNetworkBypassStatus(req);
+    payload.proxyLogoutUrl = process.env.AUTH_PROXY_LOGOUT_URL || null;
   }
 
   return payload;
