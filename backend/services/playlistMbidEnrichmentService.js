@@ -29,19 +29,24 @@ function hasMissingJobMbid(track, jobs) {
 }
 
 function hasMissingPlaylistMbids(playlist) {
-  return (Array.isArray(playlist?.tracks) ? playlist.tracks : []).some((track) =>
-    isMissingMbid(track),
+  return (Array.isArray(playlist?.tracks) ? playlist.tracks : []).some(
+    (track) => isMissingMbid(track) || hasValue(track?.albumMbid),
   );
 }
 
-function mergeMissingString(target, source, key) {
-  if (hasValue(target?.[key]) || !hasValue(source?.[key])) return undefined;
-  return String(source[key]).trim();
+function mergeMissingString(target, source, key, { overwrite = false } = {}) {
+  if (!hasValue(source?.[key])) return undefined;
+  const next = String(source[key]).trim();
+  if (!overwrite && hasValue(target?.[key])) return undefined;
+  if (overwrite && String(target?.[key] || "").trim() === next) return undefined;
+  return next;
 }
 
 function mergeMissingMetadata(target, source, { includeJobFields = false } = {}) {
   const patch = {};
-  for (const key of ["artistMbid", "albumMbid", "trackMbid", "albumName", "releaseYear"]) {
+  const artistMbid = mergeMissingString(target, source, "artistMbid", { overwrite: true });
+  if (artistMbid !== undefined) patch.artistMbid = artistMbid;
+  for (const key of ["albumMbid", "trackMbid", "albumName", "releaseYear"]) {
     const value = mergeMissingString(target, source, key);
     if (value !== undefined) patch[key] = value;
   }
@@ -120,19 +125,18 @@ function matchingJobsForTrack(track, jobs) {
 }
 
 async function buildResolution(track, jobs, resolveTrackContext) {
-  if (!isMissingMbid(track) && !hasMissingJobMbid(track, jobs)) {
+  const shouldResolve =
+    isMissingMbid(track) || hasValue(track?.albumMbid) || hasMissingJobMbid(track, jobs);
+  if (!shouldResolve) {
     return null;
   }
 
   const originalTrack = normalizeSharedTrack(track);
   if (!originalTrack) return null;
 
-  let resolvedTrack = originalTrack;
-  if (isMissingMbid(originalTrack)) {
-    resolvedTrack = await Promise.resolve()
-      .then(() => resolveTrackContext(originalTrack))
-      .catch(() => originalTrack);
-  }
+  const resolvedTrack = await Promise.resolve()
+    .then(() => resolveTrackContext(originalTrack))
+    .catch(() => originalTrack);
 
   const enrichedTrack = applyPlaylistTrackPatch(originalTrack, resolvedTrack);
   const jobMetadata = {

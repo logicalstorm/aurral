@@ -221,10 +221,10 @@ export const normalizeSharedTrack = (track) => {
   ).trim();
   if (!artistName || !trackName) return null;
   const albumName = String(track.albumName ?? track.album ?? track["Album Name"] ?? "").trim();
-  const artistMbid = String(track.artistMbid ?? track.artistId ?? track.mbid ?? "").trim();
+  const artistMbid = String(track.artistMbid ?? track.artistId ?? "").trim();
   const albumMbid = String(track.albumMbid ?? track.releaseGroupMbid ?? track.albumId ?? "").trim();
   const trackMbid = String(
-    track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? "",
+    track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? track.mbid ?? "",
   ).trim();
   const releaseYear = String(track.releaseYear ?? track.year ?? "").trim();
   const durationMs =

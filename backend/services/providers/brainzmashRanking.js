@@ -127,6 +127,23 @@ function bootlegPenalty(item) {
   return statuses.some((status) => String(status || "").toLowerCase() === "bootleg") ? 1 : 0;
 }
 
+function isProperNameExtension(query, name) {
+  const normalizedQuery = normalizeText(query);
+  const normalizedName = normalizeText(name);
+  return (
+    Boolean(normalizedQuery) &&
+    Boolean(normalizedName) &&
+    normalizedName !== normalizedQuery &&
+    normalizedName.startsWith(`${normalizedQuery} `)
+  );
+}
+
+export function artistNamesMatch(left, right) {
+  const a = normalizeText(left);
+  const b = normalizeText(right);
+  return Boolean(a) && a === b;
+}
+
 export function rankArtistCandidates(query, candidates = []) {
   const normalizedQuery = normalizeText(query);
   return [...candidates].sort((left, right) => {
@@ -135,6 +152,10 @@ export function rankArtistCandidates(query, candidates = []) {
     const leftExact = normalizeText(leftName) === normalizedQuery ? 1 : 0;
     const rightExact = normalizeText(rightName) === normalizedQuery ? 1 : 0;
     if (leftExact !== rightExact) return rightExact - leftExact;
+
+    const leftExtension = isProperNameExtension(normalizedQuery, leftName) ? 1 : 0;
+    const rightExtension = isProperNameExtension(normalizedQuery, rightName) ? 1 : 0;
+    if (leftExtension !== rightExtension) return leftExtension - rightExtension;
 
     const leftScore = Number(left?.score || 0);
     const rightScore = Number(right?.score || 0);
