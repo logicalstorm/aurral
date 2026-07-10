@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import PropTypes from "prop-types";
 import { Link, useLocation } from "react-router-dom";
 import {
   Menu,
@@ -18,7 +17,7 @@ import GlobalSearch from "./GlobalSearch";
 import GlobalPlayerBar from "./GlobalPlayerBar";
 import UserProfileMenu from "./UserProfileMenu";
 import { useAuth } from "../contexts/AuthContext";
-import { useAudioQueue } from "../hooks/useAudioQueue";
+import { useAudioQueue } from "../contexts/audioQueueContext";
 import { DEFAULT_SETTINGS_TAB } from "../pages/Settings/settingsTabsConfig";
 
 const SIDEBAR_THRESHOLD = 100;
@@ -391,9 +390,5 @@ function Layout({ children }) {
     </div>
   );
 }
-
-Layout.propTypes = {
-  children: PropTypes.node.isRequired,
-};
 
 export default Layout;

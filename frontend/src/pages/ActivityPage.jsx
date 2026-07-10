@@ -1,9 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
-import { Loader, AlertCircle, Music } from "lucide-react";
-import { getRequests, triggerAlbumSearch } from "../utils/api";
+import { getRequests, triggerAlbumSearch } from "../utils/api/endpoints/library.js";
 import { approveBlockedJob, denyBlockedJob, getStagingStreamUrl } from "../utils/api/endpoints/playlists";
-import { useAudioQueue } from "../hooks/useAudioQueue";
+import { useAudioQueue } from "../contexts/audioQueueContext";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuth } from "../contexts/AuthContext";
 import { useFlowWorkerActivity } from "./flows/useFlowWorkerActivity";
@@ -22,6 +20,8 @@ import {
 } from "./activity/activityListUtils";
 import ActivityRequestRow from "./activity/ActivityRequestRow";
 
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Loader, AlertCircle, Music } from "lucide-react";
 const ACTIVITY_PAGE_SIZE = 25;
 const ACTIVE_POLL_INTERVAL_MS = 15000;
 const HISTORY_POLL_INTERVAL_MS = 60000;

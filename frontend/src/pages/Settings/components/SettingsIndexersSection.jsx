@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { getProwlarrIndexers, testProwlarrConnection } from "../../../utils/api/endpoints/settings.js";
+
 import { RefreshCw } from "lucide-react";
 import { SettingsInput } from "./SettingsField";
 import { IntegrationCard, SettingsIntegrationModal } from "./SettingsIntegrationCards";
@@ -9,8 +11,6 @@ import {
   SettingsModalToggle,
 } from "./SettingsModalLayout";
 import { getIndexerStatus, getProviderStatus } from "../utils/integrationStatus";
-import { getProwlarrIndexers, testProwlarrConnection } from "../../../utils/api";
-
 function toNumber(value, fallback) {
   const next = parseInt(value, 10);
   return Number.isFinite(next) ? next : fallback;

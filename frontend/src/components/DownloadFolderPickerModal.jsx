@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import PropTypes from "prop-types";
-import { ArrowUp, Folder, X } from "lucide-react";
-import { browseFilesystem, ensureFilesystemPath } from "../utils/api";
+import { browseFilesystem, ensureFilesystemPath } from "../utils/api/endpoints/auth.js";
 
+import { createPortal } from "react-dom";
+import { ArrowUp, Folder, X } from "lucide-react";
 function normalizeConfirmedPath(pathValue, browsePath) {
   const raw = String(pathValue ?? "").trim() || browsePath || "/";
   if (raw === "/") return "/";
@@ -225,10 +224,3 @@ export default function DownloadFolderPickerModal({
     document.body,
   );
 }
-
-DownloadFolderPickerModal.propTypes = {
-  initialPath: PropTypes.string,
-  createOnConfirm: PropTypes.bool,
-  onConfirm: PropTypes.func.isRequired,
-  onCancel: PropTypes.func.isRequired,
-};

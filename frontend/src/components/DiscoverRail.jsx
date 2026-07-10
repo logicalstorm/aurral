@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import PropTypes from "prop-types";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export function DiscoverRail({
@@ -104,17 +103,3 @@ export function DiscoverRail({
     </section>
   );
 }
-
-DiscoverRail.propTypes = {
-  title: PropTypes.string.isRequired,
-  subtitle: PropTypes.string,
-  mobileTitle: PropTypes.string,
-  onViewAll: PropTypes.func,
-  afterTitle: PropTypes.node,
-  headerActions: PropTypes.node,
-  children: PropTypes.node,
-  className: PropTypes.string,
-  headerClassName: PropTypes.string,
-  style: PropTypes.object,
-  footer: PropTypes.node,
-};

@@ -1,18 +1,18 @@
 import { useCallback, useMemo, useState } from "react";
+import {
+  adoptDiscoverPlaylistAsFlow,
+  adoptDiscoverPlaylistAsStatic,
+  getDiscoverArtworkUrl,
+} from "../utils/api/endpoints/discovery.js";
+import { useToast } from "../contexts/ToastContext";
+import { useAuth } from "../contexts/AuthContext";
+import { Crosshair, Loader, Music } from "lucide-react";
+
 import { Link } from "react-router-dom";
 import { useDiscoverData } from "./useDiscoverData";
 import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
 import { DiscoverPlaylistContextMenu } from "../components/DiscoverPlaylistContextMenu";
 import DiscoveryStatusPill from "../components/DiscoveryStatusPill";
-import {
-  adoptDiscoverPlaylistAsFlow,
-  adoptDiscoverPlaylistAsStatic,
-  getDiscoverArtworkUrl,
-} from "../utils/api";
-import { useToast } from "../contexts/ToastContext";
-import { useAuth } from "../contexts/AuthContext";
-import { Crosshair, Loader, Music } from "lucide-react";
-
 const DISCOVER_FLOW_PRESET_ORDER = [
   "discover-weekly",
   "trending-mix",

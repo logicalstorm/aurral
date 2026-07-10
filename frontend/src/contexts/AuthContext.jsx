@@ -1,14 +1,16 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
   AUTH_INVALID_EVENT,
   clearAuthStorage,
+  getStoredAuth,
+  setStoredAuth,
+} from "../utils/api/core.js";
+import {
   getBootstrapStatus,
   getMe,
-  getStoredAuth,
   loginApi,
   logoutApi,
-  setStoredAuth,
-} from "../utils/api";
+} from "../utils/api/endpoints/auth.js";
 import {
   AUTH_RECOVERY_RELOAD_KEY,
   PROXY_AUTH_KEY,

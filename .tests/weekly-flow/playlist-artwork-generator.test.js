@@ -8,7 +8,6 @@ test("buildGeneratedPlaylistArtworkBuffer returns aurral WebP artwork", async ()
   const buffer = await buildGeneratedPlaylistArtworkBuffer({
     title: "Road Trip",
     kind: "Playlist",
-    signature: "playlist-1",
     style: "aurral",
   });
   const metadata = await sharp(buffer).metadata();

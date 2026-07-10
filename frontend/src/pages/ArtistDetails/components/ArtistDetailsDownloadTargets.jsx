@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader, Music, Star } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { useImageGradientColors } from "../../../utils/imageColors";
-import { getReleaseGroupTracks } from "../../../utils/api";
+import { getReleaseGroupTracks } from "../../../utils/api/endpoints/artists.js";
 import { buildAurralPick, getReleaseMetric } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
 import { TrackPlayButton } from "./TrackPlayButton";
 import { ArtistTrackListToolbar } from "./ArtistTrackListToolbar";
 import { useAlbumTrackListToolbar } from "../../../hooks/useAlbumTrackListToolbar";
-import { useGlobalTrackPlayback } from "../../../hooks/useGlobalTrackPlayback";
+import { useAudioQueue } from "../../../contexts/audioQueueContext";
 import { normalizePreviewTrack } from "../../../utils/audioQueue";
 
 function PickCover({ pick, albumCovers, artistCoverImage }) {
@@ -130,7 +130,36 @@ export function ArtistDetailsDownloadTargets({
     [artist?.name, artistName, missingReleasePick?.title],
   );
 
-  const { isTrackPlaying, isTrackLoading, handlePlay } = useGlobalTrackPlayback(normalizeTrack);
+  const { currentTrack, isPlaying, isLoading, playTrack, togglePlayPause, source } =
+    useAudioQueue();
+
+  const handlePlay = useCallback(
+    (track, options = {}, ...normalizeArgs) => {
+      const normalized = normalizeTrack(track, ...normalizeArgs);
+      if (!normalized?.src) return;
+      if (currentTrack?.id === normalized.id) {
+        togglePlayPause();
+        return;
+      }
+      playTrack(normalized, {
+        source: options.source ?? source,
+        queue: options.queue,
+        shuffle: options.shuffle,
+        updateShufflePreference: options.updateShufflePreference,
+      });
+    },
+    [currentTrack?.id, normalizeTrack, playTrack, source, togglePlayPause],
+  );
+
+  const isTrackPlaying = useCallback(
+    (trackId) => !!trackId && currentTrack?.id === String(trackId) && (isPlaying || isLoading),
+    [currentTrack?.id, isLoading, isPlaying],
+  );
+
+  const isTrackLoading = useCallback(
+    (trackId) => !!trackId && currentTrack?.id === String(trackId) && isLoading,
+    [currentTrack?.id, isLoading],
+  );
 
   const getQueueTracks = useCallback(
     () =>

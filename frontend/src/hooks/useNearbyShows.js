@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { getNearbyShows } from "../utils/api";
+import { getNearbyShows } from "../utils/api/endpoints/discovery.js";
 import {
   readStoredNearbyLocation,
   writeStoredNearbyLocation,

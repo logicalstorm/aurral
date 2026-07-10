@@ -1,15 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useWebSocketChannel } from "../hooks/useWebSocket";
-import { useToast } from "../contexts/ToastContext";
-import { useAuth } from "../contexts/AuthContext";
 import {
   addArtistToLibrary,
-  getDiscovery,
   getRecentlyAdded,
   getRecentReleases,
   downloadAlbum,
   updateLibraryAlbum,
-} from "../utils/api";
+} from "../utils/api/endpoints/library.js";
+import { getDiscovery } from "../utils/api/endpoints/discovery.js";
 import { getArtistRecordId } from "../utils/artistTaste";
 import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
 import { useNearbyShows } from "../hooks/useNearbyShows";
@@ -26,6 +23,9 @@ import {
   isStoredRecentReleasesFresh,
 } from "./discoverUtils";
 
+import { useWebSocketChannel } from "../hooks/useWebSocket";
+import { useToast } from "../contexts/ToastContext";
+import { useAuth } from "../contexts/AuthContext";
 const getArtistId = (artist) => getArtistRecordId(artist);
 
 export function useDiscoverData() {

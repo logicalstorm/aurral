@@ -1,10 +1,11 @@
-import { createPortal } from "react-dom";
-import { Lock, Trash2, UserPlus, X } from "lucide-react";
-import { GRANULAR_PERMISSIONS, granularPerms } from "../constants";
-import { loginApi, setStoredAuth } from "../../../utils/api";
+import { loginApi } from "../../../utils/api/endpoints/auth.js";
+import { setStoredAuth } from "../../../utils/api/core.js";
 import { SettingsInput } from "./SettingsField";
 import { SettingsArrFieldSet, SettingsArrFormGroup } from "./arr/SettingsArrLayout";
 
+import { createPortal } from "react-dom";
+import { Lock, Trash2, UserPlus, X } from "lucide-react";
+import { GRANULAR_PERMISSIONS, granularPerms } from "../constants";
 function getLocalBypassStatus(status) {
   if (!status) {
     return {

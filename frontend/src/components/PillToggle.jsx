@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import "./PillToggle.css";
 
 function PillToggle({ checked, onChange, disabled, id, className }) {
@@ -16,13 +15,5 @@ function PillToggle({ checked, onChange, disabled, id, className }) {
     </div>
   );
 }
-
-PillToggle.propTypes = {
-  checked: PropTypes.bool.isRequired,
-  onChange: PropTypes.func.isRequired,
-  disabled: PropTypes.bool,
-  id: PropTypes.string,
-  className: PropTypes.string,
-};
 
 export default PillToggle;

@@ -1,16 +1,16 @@
-import { Link } from "react-router-dom";
 import { useState } from "react";
-import { RefreshCw } from "lucide-react";
-import { SettingsInput, SettingsSelect } from "./SettingsField";
-import { SettingsArrFieldSet, SettingsArrFormGroup } from "./arr/SettingsArrLayout";
 import {
   getLidarrRootFolders,
   getLidarrMetadataProfiles,
   getLidarrProfiles,
   getLidarrTags,
   testLidarrConnection,
-} from "../../../utils/api";
+} from "../../../utils/api/endpoints/settings.js";
 
+import { Link } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
+import { SettingsInput, SettingsSelect } from "./SettingsField";
+import { SettingsArrFieldSet, SettingsArrFormGroup } from "./arr/SettingsArrLayout";
 export function LidarrSettingsSection({
   settings,
   updateSettings,

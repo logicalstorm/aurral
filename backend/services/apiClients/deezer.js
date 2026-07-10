@@ -1,11 +1,7 @@
 import axios from "../../../lib/axiosFetch.js";
 import createCache from "./simpleCache.js";
-import { getMusicBrainzContact } from "./config.js";
-import { APP_NAME, APP_VERSION } from "../../config/constants.js";
 
 const deezerArtistCache = createCache(3600);
-
-const deezerBioCache = createCache(3600);
 
 const deezerAlbumCache = createCache(3600);
 const deezerAlbumTrackCache = createCache(3600);
@@ -113,60 +109,6 @@ export async function getDeezerArtistById(artistId) {
       return null;
     }
   });
-}
-
-export async function deezerGetArtistBio(artistName) {
-  if (!artistName || typeof artistName !== "string") return null;
-  const artist = await getDeezerArtist(artistName);
-  if (!artist?.id) return null;
-  const cacheKey = `dz-bio:${artist.id}`;
-  const cached = deezerBioCache.get(cacheKey);
-  if (cached !== undefined) return cached;
-  try {
-    const res = await axios.get(`https://api.deezer.com/artist/${artist.id}`, {
-      timeout: 3000,
-    });
-    const data = res.data;
-    const bio =
-      (data && (data.biography || data.bio || data.description)) || null;
-    const value = typeof bio === "string" && bio.trim() ? bio.trim() : null;
-    deezerBioCache.set(cacheKey, value);
-    return value;
-  } catch (e) {
-    deezerBioCache.set(cacheKey, null);
-    return null;
-  }
-}
-
-export async function deezerGetArtistBioById(artistId) {
-  const normalizedId = String(artistId || "").trim();
-  if (!normalizedId) return null;
-  const cacheKey = `dz-bio:${normalizedId}`;
-  const cached = deezerBioCache.get(cacheKey);
-  if (cached !== undefined) return cached;
-  try {
-    const res = await axios.get(
-      `https://api.deezer.com/artist/${normalizedId}`,
-      {
-        timeout: 3000,
-      },
-    );
-    const data = res.data;
-    const bio =
-      (data && (data.biography || data.bio || data.description)) || null;
-    const value = typeof bio === "string" && bio.trim() ? bio.trim() : null;
-    deezerBioCache.set(cacheKey, value);
-    return value;
-  } catch (e) {
-    deezerBioCache.set(cacheKey, null);
-    return null;
-  }
-}
-
-export async function deezerSearchArtist(artistName) {
-  const artist = await getDeezerArtist(artistName);
-  if (!artist || !artist.imageUrl) return null;
-  return artist;
 }
 
 export async function deezerGetArtistTopTracks(artistName) {
@@ -464,46 +406,6 @@ export function attachDeezerTrackPreviews(tracks, deezerTracks) {
   });
 }
 
-export async function deezerGetArtistAlbums(artistName) {
-  try {
-    const artist = await getDeezerArtist(artistName);
-    if (!artist) return [];
-    const mapped = (await getDeezerAlbumsForArtist(artist)).map((a) => ({
-      id: `dz-${a.id}`,
-      title: a.title,
-      "first-release-date": a["first-release-date"],
-      "primary-type": a["primary-type"],
-      "secondary-types": [],
-      _coverUrl: a._coverUrl,
-      _fans: a.fans || 0,
-      _normalizedTitle: a._normalizedTitle,
-      _releaseDate: a._releaseDate || "",
-    }));
-    const byKey = new Map();
-    for (const item of mapped) {
-      const key = `${item["primary-type"]}:${item._normalizedTitle}`;
-      const existing = byKey.get(key);
-      if (
-        !existing ||
-        item._fans > existing._fans ||
-        (item._fans === existing._fans &&
-          item._releaseDate < existing._releaseDate)
-      ) {
-        byKey.set(key, item);
-      }
-    }
-    const albums = Array.from(byKey.values()).map(
-      ({ _fans, _normalizedTitle, _releaseDate, ...rest }) => ({
-        ...rest,
-        fans: _fans,
-      }),
-    );
-    return albums;
-  } catch (e) {
-    return [];
-  }
-}
-
 export async function deezerGetAlbumTracks(deezerAlbumId) {
   const id = String(deezerAlbumId).replace(/^dz-/, "");
   if (!id || id === "dz") return [];
@@ -533,57 +435,6 @@ export async function deezerGetAlbumTracks(deezerAlbumId) {
       return [];
     }
   });
-}
-
-export async function enrichReleaseGroupsWithDeezer(
-  mbReleaseGroups,
-  artistName,
-  deezerArtistId = null,
-) {
-  if (!mbReleaseGroups?.length || !artistName) return mbReleaseGroups;
-  try {
-    const artist = deezerArtistId
-      ? await getDeezerArtistById(deezerArtistId)
-      : await getDeezerArtist(artistName);
-    if (!artist) return mbReleaseGroups;
-
-    const albums = await getDeezerAlbumsForArtist(artist);
-    const byKey = new Map();
-    for (const a of albums) {
-      const primaryType = a["primary-type"] || "Album";
-      const title = a.title || "";
-      const key = `${primaryType}:${normalizeTitle(title)}`;
-      const fans = typeof a.fans === "number" ? a.fans : 0;
-      const coverUrl = a._coverUrl || null;
-      const existing = byKey.get(key);
-      if (
-        !existing ||
-        fans > existing.fans ||
-        (fans === existing.fans &&
-          (a._releaseDate || "") < (existing.release_date || ""))
-      ) {
-        byKey.set(key, {
-          id: a.id,
-          fans,
-          coverUrl,
-          release_date: a._releaseDate || "",
-        });
-      }
-    }
-
-    for (const rg of mbReleaseGroups) {
-      const key = `${rg["primary-type"]}:${normalizeTitle(rg.title)}`;
-      const match = byKey.get(key);
-      if (match) {
-        rg._coverUrl = match.coverUrl;
-        rg.fans = match.fans;
-        rg._deezerAlbumId = match.id;
-      }
-    }
-    return mbReleaseGroups;
-  } catch (e) {
-    return mbReleaseGroups;
-  }
 }
 
 export async function enrichTracksWithDeezerPreviews(
@@ -630,4 +481,4 @@ export async function enrichTracksWithDeezerPreviews(
   }
 }
 
-export { deezerAlbumCache, deezerAlbumTrackCache, deezerPreviewMatchCache, deezerBioCache, deezerArtistCache };
+export { deezerAlbumCache, deezerAlbumTrackCache, deezerPreviewMatchCache, deezerArtistCache };

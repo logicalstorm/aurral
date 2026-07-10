@@ -1,4 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { readLibraryLookupCache, lookupArtistsInLibraryBatch } from "../utils/api/endpoints/library.js";
+import { getMyDiscoverLayout, updateMyDiscoverLayout } from "../utils/api/endpoints/auth.js";
+
 import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
 import {
   Loader,
@@ -31,8 +34,6 @@ import {
   writeStoredDiscoverLayout,
 } from "./discoverUtils";
 import { useDiscoverData } from "./useDiscoverData";
-import { readLibraryLookupCache, lookupArtistsInLibraryBatch, getMyDiscoverLayout, updateMyDiscoverLayout } from "../utils/api";
-
 const getArtistId = (artist) => getArtistRecordId(artist);
 
 function DiscoverPage() {

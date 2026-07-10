@@ -11,11 +11,7 @@ export const PLAYLIST_ARTWORK_STYLES = ["aurral", "photo"];
 
 export function getPlaylistArtworkStyle() {
   const settings = dbOps.getSettings() || {};
-  const style = String(
-    settings?.playlistArtwork?.style ||
-      settings?.integrations?.lastfm?.discoverFlowArtworkStyle ||
-      "photo",
-  )
+  const style = String(settings?.playlistArtwork?.style || "photo")
     .trim()
     .toLowerCase();
   return PLAYLIST_ARTWORK_STYLES.includes(style) ? style : "photo";
@@ -39,10 +35,7 @@ export async function resolvePlaylistSourceImageUrl() {
 export async function buildGeneratedPlaylistArtworkBuffer({
   title,
   kind = "Playlist",
-  _signature,
-  _relatedArtists = [],
   style = null,
-  _rotateSourceImage = false,
   paletteSeed = null,
 }) {
   const resolvedStyle = style || getPlaylistArtworkStyle();
@@ -75,10 +68,7 @@ export async function writeGeneratedPlaylistArtwork({
   outputPath,
   title,
   kind = "Playlist",
-  signature,
-  relatedArtists = [],
   style = null,
-  rotateSourceImage = false,
   paletteSeed = null,
 }) {
   const resolvedStyle = style || getPlaylistArtworkStyle();
@@ -95,10 +85,7 @@ export async function writeGeneratedPlaylistArtwork({
   const buffer = await buildGeneratedPlaylistArtworkBuffer({
     title,
     kind,
-    signature,
-    relatedArtists,
     style: resolvedStyle,
-    rotateSourceImage,
     paletteSeed,
   });
   await fs.writeFile(targetPath, buffer);

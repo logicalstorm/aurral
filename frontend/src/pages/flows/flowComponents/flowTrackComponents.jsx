@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { getFlowTrackDisplayNumber, sortFlowTracks } from "../../../utils/flowTrackSort";
 import { Link } from "react-router-dom";
-import { useAudioQueue } from "../../../hooks/useAudioQueue";
+import { useAudioQueue } from "../../../contexts/audioQueueContext";
 import { normalizeFlowTrack } from "../../../utils/audioQueue";
 import { TrackPlaylistMenu, TrackPlaylistSubmenu } from "../../ArtistDetails/components/TrackPlaylistMenu";
 

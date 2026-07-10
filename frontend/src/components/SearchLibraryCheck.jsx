@@ -1,6 +1,4 @@
 import { CheckCircle2 } from "lucide-react";
-import PropTypes from "prop-types";
-
 const SIZE_CLASS = {
   sm: "library-check--sm",
   md: "library-check",
@@ -20,11 +18,5 @@ function SearchLibraryCheck({ action = false, size, className = "", ...props }) 
     />
   );
 }
-
-SearchLibraryCheck.propTypes = {
-  action: PropTypes.bool,
-  size: PropTypes.oneOf(["sm", "md", "action", "discover", "overlay"]),
-  className: PropTypes.string,
-};
 
 export default SearchLibraryCheck;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import api, {
-  checkHealth,
+import api from "../../../utils/api/core.js";
+import { checkHealth } from "../../../utils/api/endpoints/auth.js";
+import {
   getAppSettings,
   updateAppSettings,
   getLidarrRootFolders,
@@ -10,7 +11,7 @@ import api, {
   testLidarrConnection,
   testGotifyConnection,
   applyLidarrCommunityGuide,
-} from "../../../utils/api";
+} from "../../../utils/api/endpoints/settings.js";
 import { useWebSocketChannel } from "../../../hooks/useWebSocket";
 import { DISCOVERY_MANUAL_REFRESH_KEY } from "../../../utils/discoverRecentNavigation.js";
 import { allReleaseTypes } from "../constants";

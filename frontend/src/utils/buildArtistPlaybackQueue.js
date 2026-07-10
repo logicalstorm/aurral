@@ -1,4 +1,5 @@
-import { getLibraryTracks, getReleaseGroupTracks } from "./api";
+import { getLibraryTracks } from "./api/endpoints/library.js";
+import { getReleaseGroupTracks } from "./api/endpoints/artists.js";
 import { isDownloadedLibraryAlbum, normalizePreviewTrack, normalizeQueueTrack } from "./audioQueue";
 import { isLibraryPlaybackTrack } from "../pages/ArtistDetails/utils";
 

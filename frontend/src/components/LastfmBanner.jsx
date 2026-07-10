@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { getBootstrapStatus } from "../utils/api";
+import { getBootstrapStatus } from "../utils/api/endpoints/auth.js";
 import { useAuth } from "../contexts/AuthContext";
 
+import { useNavigate } from "react-router-dom";
 const LEGACY_DISMISS_KEY = "lastfm_banner_dismissed";
 const DISMISS_KEY_PREFIX = "aurral:lastfm-banner-dismissed";
 

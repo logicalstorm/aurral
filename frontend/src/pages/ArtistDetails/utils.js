@@ -1,7 +1,7 @@
 import {
   RELEASE_LIST_VIEW_MODE_KEY,
-  TAG_COLORS,
 } from "./constants";
+import { TAG_COLORS } from "../discoverUtils";
 import { shouldTriggerAlbumSearch } from "../../utils/albumAddAction.js";
 
 export const readReleaseListViewMode = () => {

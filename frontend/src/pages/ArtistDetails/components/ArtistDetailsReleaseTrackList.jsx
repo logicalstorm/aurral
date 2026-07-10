@@ -4,7 +4,7 @@ import { TrackPlayButton } from "./TrackPlayButton";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
 import { ArtistTrackListToolbar } from "./ArtistTrackListToolbar";
 import { useAlbumTrackListToolbar } from "../../../hooks/useAlbumTrackListToolbar";
-import { useGlobalTrackPlayback } from "../../../hooks/useGlobalTrackPlayback";
+import { useAudioQueue } from "../../../contexts/audioQueueContext";
 import { normalizePreviewTrack } from "../../../utils/audioQueue";
 
 export function ArtistDetailsReleaseTrackList({
@@ -39,8 +39,35 @@ export function ArtistDetailsReleaseTrackList({
     [artistName, release?.title, trackKey],
   );
 
-  const { isTrackPlaying, isTrackLoading, handlePlay } = useGlobalTrackPlayback((track, index) =>
-    normalizeTrack(track, index),
+  const { currentTrack, isPlaying, isLoading, playTrack, togglePlayPause, source } =
+    useAudioQueue();
+
+  const handlePlay = useCallback(
+    (track, options = {}, ...normalizeArgs) => {
+      const normalized = normalizeTrack(track, ...normalizeArgs);
+      if (!normalized?.src) return;
+      if (currentTrack?.id === normalized.id) {
+        togglePlayPause();
+        return;
+      }
+      playTrack(normalized, {
+        source: options.source ?? source,
+        queue: options.queue,
+        shuffle: options.shuffle,
+        updateShufflePreference: options.updateShufflePreference,
+      });
+    },
+    [currentTrack?.id, normalizeTrack, playTrack, source, togglePlayPause],
+  );
+
+  const isTrackPlaying = useCallback(
+    (trackId) => !!trackId && currentTrack?.id === String(trackId) && (isPlaying || isLoading),
+    [currentTrack?.id, isLoading, isPlaying],
+  );
+
+  const isTrackLoading = useCallback(
+    (trackId) => !!trackId && currentTrack?.id === String(trackId) && isLoading,
+    [currentTrack?.id, isLoading],
   );
 
   const getQueueTracks = useCallback(

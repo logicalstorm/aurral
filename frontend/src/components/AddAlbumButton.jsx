@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import { Plus, Loader } from "lucide-react";
 
 const AddAlbumButton = ({
@@ -28,15 +27,6 @@ const AddAlbumButton = ({
       <span className="btn-add-album__label">{label}</span>
     </button>
   );
-};
-
-AddAlbumButton.propTypes = {
-  onClick: PropTypes.func.isRequired,
-  isLoading: PropTypes.bool,
-  disabled: PropTypes.bool,
-  className: PropTypes.string,
-  style: PropTypes.object,
-  label: PropTypes.string,
 };
 
 export default AddAlbumButton;

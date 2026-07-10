@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getRequestToken } from "../utils/api";
+import { getRequestToken } from "../utils/api/core.js";
 
 function getWsUrl() {
   const token = getRequestToken();

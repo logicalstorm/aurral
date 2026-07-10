@@ -1,17 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
-import PropTypes from "prop-types";
+import {
+  adoptDiscoverPlaylistAsFlow,
+  adoptDiscoverPlaylistAsStatic,
+  getDiscoverArtworkUrl,
+} from "../utils/api/endpoints/discovery.js";
+import { useToast } from "../contexts/ToastContext";
+
 import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
 import { CheckCircle2, Crosshair, ListMusic, Sparkles } from "lucide-react";
 import { DiscoverPlaylistContextMenu } from "../components/DiscoverPlaylistContextMenu";
 import { DiscoverRail } from "../components/DiscoverRail";
 import DiscoveryStatusPill from "../components/DiscoveryStatusPill";
-import {
-  adoptDiscoverPlaylistAsFlow,
-  adoptDiscoverPlaylistAsStatic,
-  getDiscoverArtworkUrl,
-} from "../utils/api";
-import { useToast } from "../contexts/ToastContext";
-
 const RECIPE_LABELS = {
   discover: "Discovery",
   mix: "Library",
@@ -252,13 +251,3 @@ export function DiscoverPlaylistSection({
     </DiscoverRail>
   );
 }
-
-DiscoverPlaylistSection.propTypes = {
-  playlists: PropTypes.arrayOf(PropTypes.object),
-  artworkVersion: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  canAdopt: PropTypes.bool,
-  playlistsUpdating: PropTypes.bool,
-  playlistsUpdateMessage: PropTypes.string,
-  onFlowAdopted: PropTypes.func,
-  onPlaylistAdopted: PropTypes.func,
-};

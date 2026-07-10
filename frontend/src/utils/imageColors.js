@@ -1,164 +1,70 @@
 import { useEffect, useState } from "react";
-import {
-  QuantizerCelebi,
-  Score,
-  Hct,
-  argbFromRgb,
-  hexFromArgb,
-} from "@material/material-color-utilities";
-
-const SAMPLE_SIZE = 128;
-const MAX_COLORS = 128;
-const gradientCache = new Map();
-
 import { normalizeMediaUrl } from "./normalizeMediaUrl.js";
 
-function isExternalUrl(url) {
-  try {
-    const parsed = new URL(url, window.location.origin);
-    return parsed.origin !== window.location.origin;
-  } catch {
-    return false;
-  }
-}
+const N = 64;
+const gradientCache = new Map();
 
 function proxyImageUrl(src) {
-  const normalized = normalizeMediaUrl(src);
-  if (!normalized || normalized.startsWith("data:") || normalized.startsWith("blob:")) {
-    return normalized;
+  const u = normalizeMediaUrl(src);
+  if (!u || /^(data:|blob:|\/api\/image-proxy)/.test(u)) return u;
+  if (u.startsWith("/") || u.startsWith(location.origin)) return u;
+  return `/api/image-proxy?src=${encodeURIComponent(u)}`;
+}
+
+function avgHex(data, y0, y1) {
+  let r = 0,
+    g = 0,
+    b = 0,
+    n = 0;
+  for (let i = y0 * N * 4; i < y1 * N * 4; i += 4) {
+    if (data[i + 3] < 128) continue;
+    r += data[i];
+    g += data[i + 1];
+    b += data[i + 2];
+    n++;
   }
-  if (normalized.startsWith("/api/image-proxy")) return normalized;
-  if (!isExternalUrl(normalized)) return normalized;
-  return `/api/image-proxy?src=${encodeURIComponent(normalized)}`;
-}
-
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.decoding = "async";
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Image load failed"));
-    image.src = proxyImageUrl(src);
-  });
-}
-
-function readSampledImageData(src) {
-  return loadImage(src).then((image) => {
-    const canvas = document.createElement("canvas");
-    canvas.width = SAMPLE_SIZE;
-    canvas.height = SAMPLE_SIZE;
-    const context = canvas.getContext("2d");
-    if (!context) {
-      throw new Error("Could not get canvas context");
-    }
-    context.drawImage(image, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-    return context.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-  });
-}
-
-function argbPixelsFromImageData(imageData) {
-  const pixels = [];
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] < 255) continue;
-    pixels.push(argbFromRgb(data[i], data[i + 1], data[i + 2]));
-  }
-  return pixels;
-}
-
-function splitTopBottomPixels(imageData) {
-  const { width, height, data } = imageData;
-  const midpoint = Math.floor(height / 2);
-  const top = [];
-  const bottom = [];
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const index = (y * width + x) * 4;
-      if (data[index + 3] < 255) continue;
-      const argb = argbFromRgb(data[index], data[index + 1], data[index + 2]);
-      if (y < midpoint) {
-        top.push(argb);
-      } else {
-        bottom.push(argb);
-      }
-    }
-  }
-  return { top, bottom };
-}
-
-function scoreBestColor(pixels, fallbackArgb) {
-  if (!pixels.length) return fallbackArgb;
-  const quantizerResult = QuantizerCelebi.quantize(pixels, MAX_COLORS);
-  const ranked = Score.score(quantizerResult, {
-    desired: 1,
-    fallbackColorARGB: fallbackArgb,
-    filter: true,
-  });
-  return ranked[0] ?? fallbackArgb;
-}
-
-function enhanceGradientColor(argb) {
-  const hct = Hct.fromInt(argb);
-  const chroma = Math.min(hct.chroma * 1.35 + 8, 56);
-  const tone = Math.max(18, Math.min(hct.tone * 0.72, 38));
-  return Hct.from(hct.hue, chroma, tone).toInt();
-}
-
-function argbToCssHex(argb) {
-  return hexFromArgb(argb | 0xff000000);
+  if (!n) return null;
+  const h = (v) => Math.round(v / n).toString(16).padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}`;
 }
 
 export async function extractTwoToneGradientFromImage(src) {
   if (!src) return null;
-  if (gradientCache.has(src)) {
-    return gradientCache.get(src);
-  }
-
-  const request = readSampledImageData(src)
-    .then((imageData) => {
-      const { top, bottom } = splitTopBottomPixels(imageData);
-      const allPixels = argbPixelsFromImageData(imageData);
-      const fallback = scoreBestColor(allPixels, 0xff121212);
-      const topArgb = enhanceGradientColor(scoreBestColor(top, fallback));
-      const bottomArgb = enhanceGradientColor(scoreBestColor(bottom, topArgb || fallback));
-      return {
-        top: argbToCssHex(topArgb),
-        bottom: argbToCssHex(bottomArgb),
-      };
+  if (gradientCache.has(src)) return gradientCache.get(src);
+  const request = new Promise((ok, err) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => ok(img);
+    img.onerror = err;
+    img.src = proxyImageUrl(src);
+  })
+    .then((img) => {
+      const c = Object.assign(document.createElement("canvas"), { width: N, height: N });
+      const ctx = c.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(img, 0, 0, N, N);
+      const { data } = ctx.getImageData(0, 0, N, N);
+      const top = avgHex(data, 0, N >> 1);
+      const bottom = avgHex(data, N >> 1, N);
+      return top || bottom ? { top: top || bottom, bottom: bottom || top } : null;
     })
     .catch(() => null);
-
   gradientCache.set(src, request);
   const result = await request;
-  if (!result) {
-    gradientCache.delete(src);
-  }
+  if (!result) gradientCache.delete(src);
   return result;
 }
 
 export function useImageGradientColors(src) {
   const [colors, setColors] = useState(null);
-
   useEffect(() => {
-    if (!src) {
-      setColors(null);
-      return undefined;
-    }
-
-    let cancelled = false;
+    if (!src) return void setColors(null);
+    let dead = false;
     setColors(null);
-
-    extractTwoToneGradientFromImage(src).then((result) => {
-      if (!cancelled) {
-        setColors(result);
-      }
-    });
-
+    extractTwoToneGradientFromImage(src).then((r) => !dead && setColors(r));
     return () => {
-      cancelled = true;
+      dead = true;
     };
   }, [src]);
-
   return colors;
 }

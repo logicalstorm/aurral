@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useAudioQueue } from "./useAudioQueue";
+import { useAudioQueue } from "../contexts/audioQueueContext";
 
 export function useAlbumTrackListToolbar({ getQueueTracks, playbackSource }) {
   const {

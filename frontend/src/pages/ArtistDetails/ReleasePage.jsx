@@ -1,4 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  addSharedPlaylistTracks,
+  createSharedPlaylist,
+} from "../../utils/api/endpoints/playlists.js";
+import {
+  getDownloadStatus,
+  getLibraryTracks,
+  lookupAlbumsInLibraryBatch,
+  requestAlbumFromSearch,
+} from "../../utils/api/endpoints/library.js";
+import {
+  getReleaseGroupCover,
+  getReleaseGroupDetails,
+  getReleaseGroupTracks,
+} from "../../utils/api/endpoints/artists.js";
+import { useSharedPlaylists } from "../../hooks/useSharedPlaylists";
+
 import { Link, useLocation, useParams } from "react-router-dom";
 import { CornerUpLeft, ExternalLink, Music } from "lucide-react";
 import SearchLibraryCheck from "../../components/SearchLibraryCheck";
@@ -18,19 +35,6 @@ import {
   resolveReleaseLibraryDisplay,
   sumTrackDurationMs,
 } from "./utils";
-import {
-  addSharedPlaylistTracks,
-  createSharedPlaylist,
-  getDownloadStatus,
-  getLibraryTracks,
-  getReleaseGroupCover,
-  getReleaseGroupDetails,
-  getReleaseGroupTracks,
-  lookupAlbumsInLibraryBatch,
-  requestAlbumFromSearch,
-} from "../../utils/api";
-import { useSharedPlaylists } from "../../hooks/useSharedPlaylists";
-
 const getReleaseTypeLabel = (release) => {
   const types = [
     release?.["primary-type"],

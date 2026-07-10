@@ -1,13 +1,12 @@
 import { memo, useCallback, useState, useEffect } from "react";
-import PropTypes from "prop-types";
+import { getReleaseGroupCover, getArtistCover } from "../utils/api/endpoints/artists.js";
+
 import { Music } from "lucide-react";
 import ArtistImage from "../components/ArtistImage";
 import AddAlbumButton from "../components/AddAlbumButton";
 import { ArtistContextMenu } from "../components/ArtistContextMenu";
 import SearchLibraryCheck from "../components/SearchLibraryCheck";
 import { getReleaseNavigationTarget } from "../utils/searchNavigation";
-import { getReleaseGroupCover, getArtistCover } from "../utils/api";
-
 const parseCalendarDate = (value) => {
   if (!value) return null;
   const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -175,38 +174,6 @@ export const ArtistCard = memo(
 );
 
 ArtistCard.displayName = "ArtistCard";
-ArtistCard.propTypes = {
-  artist: PropTypes.shape({
-    id: PropTypes.string,
-    name: PropTypes.string.isRequired,
-    image: PropTypes.string,
-    imageUrl: PropTypes.string,
-    type: PropTypes.string,
-    sourceArtist: PropTypes.string,
-    metaText: PropTypes.string,
-    subtitle: PropTypes.string,
-    navigateTo: PropTypes.string,
-    matchedTags: PropTypes.arrayOf(PropTypes.string),
-    reasonCodes: PropTypes.arrayOf(PropTypes.string),
-    discoveryTier: PropTypes.string,
-    supportingSeeds: PropTypes.arrayOf(
-      PropTypes.shape({
-        artistName: PropTypes.string,
-      }),
-    ),
-  }).isRequired,
-  status: PropTypes.string,
-  isInLibrary: PropTypes.bool,
-  canAddArtist: PropTypes.bool,
-  onNavigate: PropTypes.func.isRequired,
-  onAddToLibrary: PropTypes.func,
-  onFeedback: PropTypes.func,
-  feedbackUsed: PropTypes.shape({
-    more_like_this: PropTypes.bool,
-    less_like_this: PropTypes.bool,
-  }),
-};
-
 export const AlbumCard = memo(
   ({
     album,
@@ -369,24 +336,6 @@ export const AlbumCard = memo(
 );
 
 AlbumCard.displayName = "AlbumCard";
-AlbumCard.propTypes = {
-  album: PropTypes.shape({
-    id: PropTypes.string,
-    mbid: PropTypes.string,
-    foreignAlbumId: PropTypes.string,
-    albumName: PropTypes.string.isRequired,
-    artistName: PropTypes.string,
-    artistMbid: PropTypes.string,
-    foreignArtistId: PropTypes.string,
-    releaseDate: PropTypes.string,
-    coverUrl: PropTypes.string,
-  }).isRequired,
-  onNavigate: PropTypes.func.isRequired,
-  canAddAlbum: PropTypes.bool,
-  isPending: PropTypes.bool,
-  onAlbumAction: PropTypes.func,
-};
-
 export const ViewAllCard = memo(({ onClick, label = "View All" }) => {
   return (
     <button type="button" onClick={onClick} className="artist-view-all-card--discover">
@@ -398,7 +347,3 @@ export const ViewAllCard = memo(({ onClick, label = "View All" }) => {
 });
 
 ViewAllCard.displayName = "ViewAllCard";
-ViewAllCard.propTypes = {
-  onClick: PropTypes.func.isRequired,
-  label: PropTypes.string,
-};

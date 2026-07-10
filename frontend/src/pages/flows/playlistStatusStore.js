@@ -1,4 +1,4 @@
-import { getFlowStatus } from "../../utils/api";
+import { getFlowStatus } from "../../utils/api/endpoints/playlists.js";
 
 let cached = null;
 let lastWsAt = 0;

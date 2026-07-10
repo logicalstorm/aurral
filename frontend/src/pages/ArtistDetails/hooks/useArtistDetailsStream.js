@@ -2,15 +2,17 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import {
   getArtistDetails,
   getArtistCover,
+  getSimilarArtistsForArtist,
+  getReleaseGroupCoversBatch,
+} from "../../../utils/api/endpoints/artists.js";
+import {
   lookupArtistInLibrary,
   getLibraryAlbums,
   getLibraryArtist,
-  getSimilarArtistsForArtist,
-  getAppSettings,
-  getReleaseGroupCoversBatch,
-  getStoredAuth,
   readLibraryLookupCache,
-} from "../../../utils/api";
+} from "../../../utils/api/endpoints/library.js";
+import { getAppSettings } from "../../../utils/api/endpoints/settings.js";
+import { getStoredAuth } from "../../../utils/api/core.js";
 import { allReleaseTypes, emptyArtistShape } from "../constants";
 
 const buildReleaseGroupCoverRequest = (rgId, artist, libraryAlbums, pageArtistName) => {

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
-import { Loader2, Search } from "lucide-react";
-import { getTagSuggestions, searchUnified } from "../../../utils/api";
-import { TAG_COLORS } from "../../ArtistDetails/constants";
+import { getTagSuggestions } from "../../../utils/api/endpoints/discovery.js";
+import { searchUnified } from "../../../utils/api/endpoints/search.js";
+import { TAG_COLORS } from "../../discoverUtils";
 import { getTagColor } from "../../ArtistDetails/utils";
 import { useDebouncedTask } from "../../../hooks/useDebouncedTask";
 
+import { Loader2, Search } from "lucide-react";
 const SOURCE_MIX_COLORS = {
   discover: TAG_COLORS[10],
   mix: TAG_COLORS[4],

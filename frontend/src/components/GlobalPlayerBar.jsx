@@ -11,7 +11,7 @@ import {
   VolumeX,
   X,
 } from "lucide-react";
-import { useAudioQueue } from "../hooks/useAudioQueue";
+import { useAudioQueue } from "../contexts/audioQueueContext";
 
 function formatTime(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";

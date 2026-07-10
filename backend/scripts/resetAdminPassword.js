@@ -1,6 +1,6 @@
-import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { dbOps, userOps } from "../db/helpers/index.js";
+import { hashPassword } from "../middleware/passwordHash.js";
 
 function parseArgs(argv) {
   const args = {
@@ -124,7 +124,7 @@ function main() {
     process.exit(1);
   }
 
-  const hash = bcrypt.hashSync(password, 10);
+  const hash = hashPassword(password);
   const existing = userOps.getUserByUsername(username);
 
   let resultUser = null;

@@ -1,22 +1,11 @@
 import axios from "../../lib/axiosFetch.js";
 import { dbOps } from "../db/helpers/index.js";
+import { normalizeBaseUrl, normalizeInteger } from "./usenetClientCommon.js";
 
 const DEFAULT_MUSIC_CATEGORIES = [3000];
 const DEFAULT_MAX_RESULTS = 60;
 
 let connectionCache = { checkedAt: 0, result: null };
-
-function normalizeBaseUrl(value) {
-  return String(value || "")
-    .trim()
-    .replace(/\/+$/, "");
-}
-
-function normalizeInteger(value, fallback = null) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.trunc(parsed);
-}
 
 function normalizePositiveInteger(value, fallback) {
   const parsed = normalizeInteger(value, null);

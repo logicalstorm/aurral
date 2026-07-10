@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import PropTypes from "prop-types";
 import { Library, Loader2, MoreVertical, ThumbsDown, ThumbsUp } from "lucide-react";
 import { getDiscoveryFeedbackLabel } from "../utils/discoveryFeedback";
 
@@ -272,18 +271,3 @@ export function ArtistContextMenu({
     </div>
   );
 }
-
-ArtistContextMenu.propTypes = {
-  artist: PropTypes.object.isRequired,
-  artistName: PropTypes.string,
-  isInLibrary: PropTypes.bool,
-  canAddArtist: PropTypes.bool,
-  onAddToLibrary: PropTypes.func,
-  onFeedback: PropTypes.func,
-  feedbackUsed: PropTypes.shape({
-    more_like_this: PropTypes.bool,
-    less_like_this: PropTypes.bool,
-  }),
-  className: PropTypes.string,
-  buttonClassName: PropTypes.string,
-};

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import PropTypes from "prop-types";
 import { ChevronDown } from "lucide-react";
 
 const STATUS_LABELS = {
@@ -178,44 +177,3 @@ function SectionGroup({ section, isExpanded, isCollapsible, onToggle }) {
     </>
   );
 }
-
-SectionGroup.propTypes = {
-  isCollapsible: PropTypes.bool.isRequired,
-  isExpanded: PropTypes.bool.isRequired,
-  onToggle: PropTypes.func.isRequired,
-  section: PropTypes.shape({
-    id: PropTypes.string.isRequired,
-    title: PropTypes.string.isRequired,
-    status: PropTypes.oneOf(["pass", "fail", "warn", "skip"]).isRequired,
-    skipReason: PropTypes.string,
-    steps: PropTypes.array,
-  }).isRequired,
-};
-
-StorageHealthDashboard.propTypes = {
-  loading: PropTypes.bool,
-  result: PropTypes.shape({
-    ok: PropTypes.bool,
-    partial: PropTypes.bool,
-    failedCount: PropTypes.number,
-    warningCount: PropTypes.number,
-    checkedAt: PropTypes.string,
-    sections: PropTypes.arrayOf(
-      PropTypes.shape({
-        id: PropTypes.string.isRequired,
-        title: PropTypes.string.isRequired,
-        status: PropTypes.oneOf(["pass", "fail", "warn", "skip"]).isRequired,
-        skipReason: PropTypes.string,
-        steps: PropTypes.arrayOf(
-          PropTypes.shape({
-            id: PropTypes.string.isRequired,
-            status: PropTypes.oneOf(["pass", "fail", "warn"]).isRequired,
-            label: PropTypes.string.isRequired,
-            detail: PropTypes.string,
-            fix: PropTypes.string,
-          }),
-        ),
-      }),
-    ),
-  }),
-};

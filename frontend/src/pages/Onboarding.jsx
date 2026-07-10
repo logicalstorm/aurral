@@ -1,11 +1,10 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { ChevronRight, ChevronLeft } from "lucide-react";
 import {
   completeOnboarding,
   getLidarrMetadataProfilesOnboarding,
   getLidarrProfilesOnboarding,
   testLidarrOnboarding,
-} from "../utils/api";
+} from "../utils/api/endpoints/auth.js";
 import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -18,6 +17,7 @@ import {
   STEPS,
 } from "./onboardingUtils.jsx";
 
+import { ChevronRight, ChevronLeft } from "lucide-react";
 function Onboarding() {
   useDocumentTitle("Setup");
   const [step, setStep] = useState(0);

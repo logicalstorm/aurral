@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { getFlowStatus } from "../utils/api";
+import { getFlowStatus } from "../utils/api/endpoints/playlists.js";
 import { useToast } from "../contexts/ToastContext";
 
 export function useSharedPlaylists() {

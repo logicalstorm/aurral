@@ -1,7 +1,8 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { useState, useEffect, Suspense, lazy, useRef } from "react";
 import Layout from "./components/Layout";
-import { clearAuthStorage, checkHealthLive, getBootstrapStatus, getStoredAuth } from "./utils/api";
+import { clearAuthStorage, getStoredAuth } from "./utils/api/core.js";
+import { checkHealthLive, getBootstrapStatus } from "./utils/api/endpoints/auth.js";
 import { getAppBasePath } from "./utils/basePath.js";
 import {
   PROXY_RELOAD_TS_KEY,
@@ -20,11 +21,20 @@ import { AlertTriangle, XCircle } from "lucide-react";
 import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
 import { useWebSocketChannel } from "./hooks/useWebSocket";
-import {
-  ActivitySourceRedirect,
-  ActivityRootRedirect,
-  LegacyHistoryRedirect,
-} from "./navigation/ActivityRedirects";
+import { buildActivityPath, DEFAULT_ACTIVITY_VIEW } from "./navigation/activityNavConfig";
+
+function LegacyHistoryRedirect() {
+  return <Navigate to="/activity/history" replace />;
+}
+
+function ActivitySourceRedirect() {
+  const { view } = useParams();
+  return <Navigate to={buildActivityPath(view)} replace />;
+}
+
+function ActivityRootRedirect() {
+  return <Navigate to={buildActivityPath(DEFAULT_ACTIVITY_VIEW)} replace />;
+}
 
 const Login = lazy(() => import("./pages/Login"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));

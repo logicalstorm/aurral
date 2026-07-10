@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { getLibraryArtists } from "../utils/api/endpoints/library.js";
+import ArtistImage from "../components/ArtistImage";
+
 import { useNavigate } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { ArrowDown, ArrowUp, ChevronDown, LayoutGrid, List, Loader, Music, AlertCircle, Search } from "lucide-react";
-import { getLibraryArtists } from "../utils/api";
-import ArtistImage from "../components/ArtistImage";
-
 const PAGE_SIZE = 48;
 const ALPHABET = ["#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
 const SORT_OPTIONS = [

@@ -24,137 +24,69 @@ function appendParams(url, params) {
   }
   const query = search.toString();
   if (!query) return url;
-  const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}${query}`;
+  return `${url}${url.includes("?") ? "&" : "?"}${query}`;
 }
 
-function createApiClient({ baseURL, timeout = 30000, headers = {} }) {
-  const requestInterceptors = [];
-  const responseInterceptors = [];
+async function request(config) {
+  const method = String(config.method || "GET").toUpperCase();
+  let url = appendParams(joinUrl(API_BASE_URL, config.url || ""), config.params);
+  const controller = new AbortController();
+  const timeoutMs = Number(config.timeout ?? 30000);
+  const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  const headers = { "Content-Type": "application/json", ...config.headers };
+  const token = getRequestToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
 
-  async function runRequestInterceptors(config) {
-    let next = { ...config, headers: { ...headers, ...config.headers } };
-    for (const { fulfilled, rejected } of requestInterceptors) {
+  try {
+    const init = { method, headers, signal: controller.signal };
+    if (config.data != null && method !== "GET" && method !== "HEAD") {
+      init.body = typeof config.data === "string" ? config.data : JSON.stringify(config.data);
+    }
+    const res = await fetch(url, init);
+    const contentType = res.headers.get("content-type") || "";
+    let data;
+    if (contentType.includes("json")) {
       try {
-        next = await fulfilled(next);
-      } catch (error) {
-        if (rejected) return rejected(error);
-        throw error;
+        data = await res.json();
+      } catch {
+        data = null;
       }
+    } else {
+      data = await res.text();
     }
-    return next;
-  }
-
-  async function runResponseInterceptors(response) {
-    let next = response;
-    for (const { fulfilled } of responseInterceptors) {
-      next = await fulfilled(next);
-    }
-    return next;
-  }
-
-  async function runResponseErrorInterceptors(error) {
-    let next = error;
-    for (const { rejected } of responseInterceptors) {
-      if (!rejected) continue;
-      next = await rejected(next);
-    }
-    return next;
-  }
-
-  async function request(config) {
-    const cfg = await runRequestInterceptors(config);
-    const method = String(cfg.method || "GET").toUpperCase();
-    let url = appendParams(joinUrl(baseURL, cfg.url || ""), cfg.params);
-    const controller = new AbortController();
-    const timeoutMs = Number(cfg.timeout ?? timeout);
-    const timer =
-      timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
-
-    try {
-      const init = {
-        method,
-        headers: { ...cfg.headers },
-        signal: controller.signal,
-      };
-      if (cfg.data != null && method !== "GET" && method !== "HEAD") {
-        init.body = typeof cfg.data === "string" ? cfg.data : JSON.stringify(cfg.data);
-        if (!init.headers["Content-Type"] && !init.headers["content-type"]) {
-          init.headers["Content-Type"] = "application/json";
+    const response = { status: res.status, statusText: res.statusText, headers: res.headers, data };
+    if (!res.ok) {
+      const error = new Error(`Request failed with status code ${res.status}`);
+      error.response = response;
+      if (res.status === 401 && data?.code === "SESSION_INVALID") {
+        clearAuthStorage();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event(AUTH_INVALID_EVENT));
         }
       }
-
-      const res = await fetch(url, init);
-      const contentType = res.headers.get("content-type") || "";
-      let data;
-      if (contentType.includes("json")) {
-        try {
-          data = await res.json();
-        } catch {
-          data = null;
-        }
-      } else {
-        data = await res.text();
-      }
-
-      const response = {
-        status: res.status,
-        statusText: res.statusText,
-        headers: res.headers,
-        data,
-      };
-
-      if (!res.ok) {
-        const error = new Error(`Request failed with status code ${res.status}`);
-        error.response = response;
-        throw await runResponseErrorInterceptors(error);
-      }
-
-      return runResponseInterceptors(response);
-    } catch (error) {
-      if (error?.response) throw error;
-      throw await runResponseErrorInterceptors(error);
-    } finally {
-      if (timer) clearTimeout(timer);
+      throw error;
     }
+    return response;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-
-  return {
-    interceptors: {
-      request: {
-        use: (fulfilled, rejected) => requestInterceptors.push({ fulfilled, rejected }),
-      },
-      response: {
-        use: (fulfilled, rejected) => responseInterceptors.push({ fulfilled, rejected }),
-      },
-    },
-    get: (url, config = {}) => request({ ...config, method: "GET", url }),
-    post: (url, data, config = {}) => request({ ...config, method: "POST", url, data }),
-    put: (url, data, config = {}) => request({ ...config, method: "PUT", url, data }),
-    patch: (url, data, config = {}) => request({ ...config, method: "PATCH", url, data }),
-    delete: (url, config = {}) => request({ ...config, method: "DELETE", url }),
-  };
 }
 
-const api = createApiClient({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
+const api = {
+  get: (url, config = {}) => request({ ...config, method: "GET", url }),
+  post: (url, data, config = {}) => request({ ...config, method: "POST", url, data }),
+  put: (url, data, config = {}) => request({ ...config, method: "PUT", url, data }),
+  patch: (url, data, config = {}) => request({ ...config, method: "PATCH", url, data }),
+  delete: (url, config = {}) => request({ ...config, method: "DELETE", url }),
+};
 
 export const AUTH_INVALID_EVENT = "aurral:auth-invalid";
 
 const AUTH_TOKEN_KEY = "auth_token";
-const AUTH_PASSWORD_KEY = "auth_password";
-const AUTH_USER_KEY = "auth_user";
 
 function readAuthFromStorage(storage) {
   if (!storage) return { token: "" };
-  return {
-    token: storage.getItem(AUTH_TOKEN_KEY) || "",
-  };
+  return { token: storage.getItem(AUTH_TOKEN_KEY) || "" };
 }
 
 export const getStoredAuth = () => {
@@ -181,16 +113,11 @@ export const setStoredAuth = ({ token = "" } = {}) => {
   }
   globalThis?.sessionStorage?.setItem(AUTH_TOKEN_KEY, token);
   globalThis?.localStorage?.setItem(AUTH_TOKEN_KEY, token);
-  globalThis.localStorage?.removeItem(AUTH_PASSWORD_KEY);
-  globalThis.localStorage?.removeItem(AUTH_USER_KEY);
 };
 
 export const clearAuthStorage = () => {
   globalThis?.sessionStorage?.removeItem(AUTH_TOKEN_KEY);
   globalThis?.localStorage?.removeItem(AUTH_TOKEN_KEY);
-  globalThis?.sessionStorage?.removeItem(AUTH_PASSWORD_KEY);
-  globalThis?.localStorage?.removeItem(AUTH_PASSWORD_KEY);
-  globalThis?.localStorage?.removeItem(AUTH_USER_KEY);
 };
 
 export const libraryLookupCache = new Map();
@@ -206,34 +133,23 @@ export const flowStatusInflight = new Map();
 
 export const setLibraryLookupCacheEntry = (id, value) => {
   if (id == null) return;
-  if (libraryLookupCache.has(id)) {
-    libraryLookupCache.delete(id);
-  }
+  if (libraryLookupCache.has(id)) libraryLookupCache.delete(id);
   libraryLookupCache.set(id, value);
   if (libraryLookupCache.size > MAX_LIBRARY_LOOKUP_CACHE_SIZE) {
     const oldestKey = libraryLookupCache.keys().next().value;
-    if (oldestKey !== undefined) {
-      libraryLookupCache.delete(oldestKey);
-    }
+    if (oldestKey !== undefined) libraryLookupCache.delete(oldestKey);
   }
 };
 
-const setCoverCacheEntry = (key, value) => {
+export const setCoverCacheEntry = (key, value) => {
   if (!key) return;
   const images = Array.isArray(value?.images) ? value.images : [];
   const ttlMs = images.length > 0 ? COVER_CACHE_TTL_MS : EMPTY_COVER_CACHE_TTL_MS;
-  if (coverResponseCache.has(key)) {
-    coverResponseCache.delete(key);
-  }
-  coverResponseCache.set(key, {
-    value,
-    expiresAt: Date.now() + ttlMs,
-  });
+  if (coverResponseCache.has(key)) coverResponseCache.delete(key);
+  coverResponseCache.set(key, { value, expiresAt: Date.now() + ttlMs });
   if (coverResponseCache.size > MAX_COVER_CACHE_SIZE) {
     const oldestKey = coverResponseCache.keys().next().value;
-    if (oldestKey !== undefined) {
-      coverResponseCache.delete(oldestKey);
-    }
+    if (oldestKey !== undefined) coverResponseCache.delete(oldestKey);
   }
 };
 
@@ -248,13 +164,8 @@ export const getCoverCacheEntry = (key) => {
 };
 
 export const fetchInflightOnce = async (store, key, requestFactory) => {
-  if (store.has(key)) {
-    return store.get(key);
-  }
-
-  const request = requestFactory().finally(() => {
-    store.delete(key);
-  });
+  if (store.has(key)) return store.get(key);
+  const request = requestFactory().finally(() => store.delete(key));
   store.set(key, request);
   return request;
 };
@@ -262,11 +173,8 @@ export const fetchInflightOnce = async (store, key, requestFactory) => {
 export const fetchCoverWithMemo = async (key, requestFactory, { bypassCache = false } = {}) => {
   if (!bypassCache) {
     const cached = getCoverCacheEntry(key);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
   }
-
   return fetchInflightOnce(coverInflightRequests, key, () =>
     requestFactory().then((response) => {
       setCoverCacheEntry(key, response);
@@ -275,7 +183,7 @@ export const fetchCoverWithMemo = async (key, requestFactory, { bypassCache = fa
   );
 };
 
-const responseData = (request) => request.then((response) => response.data);
+const responseData = (req) => req.then((response) => response.data);
 export const getData = (url, config) => responseData(api.get(url, config));
 export const postData = (url, data, config) => responseData(api.post(url, data, config));
 export const putData = (url, data, config) => responseData(api.put(url, data, config));
@@ -300,40 +208,9 @@ export const buildAuthenticatedApiUrl = (path, params = {}) => {
     if (value != null && value !== "") query.set(key, String(value));
   });
   const queryString = query.toString();
-  const separator = normalizedPath.includes("?") ? "&" : "?";
   return `${getApiBaseUrl()}${normalizedPath}${
-    queryString ? `${separator}${queryString}` : ""
+    queryString ? `${normalizedPath.includes("?") ? "&" : "?"}${queryString}` : ""
   }`;
 };
-
-api.interceptors.request.use(
-  (config) => {
-    const token = getRequestToken();
-    if (token) {
-      config.headers["Authorization"] = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  },
-);
-
-api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
-  (error) => {
-    const status = error?.response?.status;
-    const code = error?.response?.data?.code;
-    if (status === 401 && code === "SESSION_INVALID") {
-      clearAuthStorage();
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event(AUTH_INVALID_EVENT));
-      }
-    }
-    return Promise.reject(error);
-  },
-);
 
 export default api;

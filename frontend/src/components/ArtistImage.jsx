@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import PropTypes from "prop-types";
-import { Music, Loader, Play } from "lucide-react";
-import { getArtistCover } from "../utils/api";
+import { getArtistCover } from "../utils/api/endpoints/artists.js";
 import { normalizeMediaUrl } from "../utils/normalizeMediaUrl";
 import { useArtistPreviewPlayback } from "../hooks/useArtistPreviewPlayback";
 
+import { Music, Loader, Play } from "lucide-react";
 const queue = [];
 let active = 0;
 const MAX_CONCURRENT = 4;
@@ -278,19 +277,6 @@ const ArtistImage = ({
       {previewButton}
     </div>
   );
-};
-
-ArtistImage.propTypes = {
-  mbid: PropTypes.string,
-  src: PropTypes.string,
-  alt: PropTypes.string,
-  artistName: PropTypes.string,
-  className: PropTypes.string,
-  showLoading: PropTypes.bool,
-  enableBackendFallback: PropTypes.bool,
-  enablePreviewPlayback: PropTypes.bool,
-  isInLibrary: PropTypes.bool,
-  loading: PropTypes.oneOf(["eager", "lazy"]),
 };
 
 export default ArtistImage;

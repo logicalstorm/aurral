@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
-import { useAudioQueue } from "./useAudioQueue";
-import { getArtistPreview, getLibraryArtist, getLibraryAlbums, getLibraryTracks } from "../utils/api";
+import { useAudioQueue } from "../contexts/audioQueueContext";
+import { getArtistPreview } from "../utils/api/endpoints/artists.js";
+import { getLibraryArtist, getLibraryAlbums, getLibraryTracks } from "../utils/api/endpoints/library.js";
 import { isDownloadedLibraryAlbum, normalizePreviewTrack, normalizeQueueTrack } from "../utils/audioQueue";
 
 export function useArtistPreviewPlayback({ mbid, artistName, enabled = true, isInLibrary = false } = {}) {

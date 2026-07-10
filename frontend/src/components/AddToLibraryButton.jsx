@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import PropTypes from "prop-types";
 import { Plus, Check, Loader } from "lucide-react";
 
 const AddToLibraryButton = ({
@@ -49,14 +48,6 @@ const AddToLibraryButton = ({
       </div>
     </button>
   );
-};
-
-AddToLibraryButton.propTypes = {
-  onClick: PropTypes.func,
-  className: PropTypes.string,
-  disabled: PropTypes.bool,
-  isLoading: PropTypes.bool,
-  label: PropTypes.string,
 };
 
 export default AddToLibraryButton;

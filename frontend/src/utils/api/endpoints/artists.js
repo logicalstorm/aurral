@@ -4,32 +4,9 @@ import {
   putData,
   fetchCoverWithMemo,
   getCoverCacheEntry,
+  setCoverCacheEntry,
   coverInflightRequests,
-  coverResponseCache,
 } from "../core.js";
-
-const COVER_CACHE_TTL_MS = 30 * 60 * 1000;
-const EMPTY_COVER_CACHE_TTL_MS = 60 * 1000;
-const MAX_COVER_CACHE_SIZE = 1000;
-
-const setCoverCacheEntry = (key, value) => {
-  if (!key) return;
-  const images = Array.isArray(value?.images) ? value.images : [];
-  const ttlMs = images.length > 0 ? COVER_CACHE_TTL_MS : EMPTY_COVER_CACHE_TTL_MS;
-  if (coverResponseCache.has(key)) {
-    coverResponseCache.delete(key);
-  }
-  coverResponseCache.set(key, {
-    value,
-    expiresAt: Date.now() + ttlMs,
-  });
-  if (coverResponseCache.size > MAX_COVER_CACHE_SIZE) {
-    const oldestKey = coverResponseCache.keys().next().value;
-    if (oldestKey !== undefined) {
-      coverResponseCache.delete(oldestKey);
-    }
-  }
-};
 
 export const getArtistDetails = async (
   mbid,

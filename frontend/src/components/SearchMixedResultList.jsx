@@ -1,8 +1,9 @@
-import PropTypes from "prop-types";
+import { lazy } from "react";
 import { Music } from "lucide-react";
 import ArtistImage from "./ArtistImage";
 import { getSearchResultKey, navigateFromSearchResult } from "../utils/searchNavigation";
-import { getSearchPlaylistArtworkUrl } from "../utils/playlistArtworkUrls";
+import { getDiscoverArtworkUrl } from "../utils/api/endpoints/discovery.js";
+import { getFlowArtworkUrl } from "../utils/api/endpoints/playlists.js";
 import { getArtistRecordId } from "../utils/artistTaste";
 
 const handleMainKeyDown = (event, onClick) => {
@@ -10,6 +11,23 @@ const handleMainKeyDown = (event, onClick) => {
   event.preventDefault();
   onClick();
 };
+
+function getSearchPlaylistArtworkUrl(playlist) {
+  if (!playlist) return null;
+  if (playlist.coverUrl) return playlist.coverUrl;
+  const presetId = String(playlist.discoverPresetId || "").trim();
+  if (playlist.source === "discover" && presetId) {
+    return getDiscoverArtworkUrl(presetId);
+  }
+  const playlistId = String(playlist.id || "").trim();
+  if (playlistId && !playlistId.startsWith("discover:")) {
+    return getFlowArtworkUrl(playlistId);
+  }
+  if (presetId) {
+    return getDiscoverArtworkUrl(presetId);
+  }
+  return null;
+}
 
 function getTypeLabel(item) {
   if (item.type === "artist") return "Artist";
@@ -162,20 +180,5 @@ function SearchMixedResultList({
     </ul>
   );
 }
-
-SearchMixedResultList.propTypes = {
-  items: PropTypes.arrayOf(PropTypes.object).isRequired,
-  navigate: PropTypes.func.isRequired,
-  query: PropTypes.string,
-  artistImages: PropTypes.object,
-  albumCovers: PropTypes.object,
-  renderAction: PropTypes.func,
-};
-
-ResultThumbnail.propTypes = {
-  item: PropTypes.object.isRequired,
-  artistImages: PropTypes.object.isRequired,
-  albumCovers: PropTypes.object.isRequired,
-};
 
 export default SearchMixedResultList;

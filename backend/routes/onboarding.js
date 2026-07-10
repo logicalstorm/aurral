@@ -1,6 +1,6 @@
 import express from "express";
-import bcrypt from "bcrypt";
 import { dbOps, userOps } from "../db/helpers/index.js";
+import { hashPassword } from "../middleware/passwordHash.js";
 import { getDefaultListenHistoryProfile } from "../services/listeningHistory.js";
 import { defaultData } from "../config/constants.js";
 import { validateExternalUrl } from "../middleware/urlValidator.js";
@@ -204,7 +204,7 @@ router.post("/complete", async (req, res) => {
     const authUserFinal = integrations?.general?.authUser || "admin";
     const authPasswordFinal = integrations?.general?.authPassword || "";
     if (authPasswordFinal && userOps.getAllUsers().length === 0) {
-      const hash = bcrypt.hashSync(authPasswordFinal, 10);
+      const hash = hashPassword(authPasswordFinal);
       const created = userOps.createUser(authUserFinal, hash, "admin", null);
       const initialListenHistory = getDefaultListenHistoryProfile(nextSettings);
       if (created && initialListenHistory) {

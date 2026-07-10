@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import PropTypes from "prop-types";
 import { Music } from "lucide-react";
 import SearchLibraryCheck from "./SearchLibraryCheck";
 import AddAlbumButton from "./AddAlbumButton";
@@ -205,27 +204,5 @@ function SearchAlbumResults({
     </div>
   );
 }
-
-SearchAlbumResults.propTypes = {
-  albums: PropTypes.arrayOf(PropTypes.object).isRequired,
-  albumCovers: PropTypes.object.isRequired,
-  canAddAlbum: PropTypes.bool.isRequired,
-  pendingAlbumIds: PropTypes.object.isRequired,
-  onAlbumAction: PropTypes.func.isRequired,
-  navigate: PropTypes.func.isRequired,
-  viewMode: PropTypes.oneOf(["grid", "list"]),
-};
-
-AlbumCover.propTypes = {
-  src: PropTypes.string,
-  alt: PropTypes.string,
-};
-
-AlbumAction.propTypes = {
-  album: PropTypes.object.isRequired,
-  isPending: PropTypes.bool.isRequired,
-  canAddAlbum: PropTypes.bool.isRequired,
-  onAlbumAction: PropTypes.func.isRequired,
-};
 
 export default SearchAlbumResults;

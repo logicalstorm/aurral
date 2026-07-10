@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { lookupArtistsInLibraryBatch, readLibraryLookupCache } from "../../../utils/api/endpoints/library.js";
+import { getArtistFeedbackFlags } from "../../../utils/discoveryFeedback";
+import { getArtistRecordId } from "../../../utils/artistTaste";
+
 import { Loader, ChevronLeft, ChevronRight } from "lucide-react";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import ArtistImage from "../../../components/ArtistImage";
 import { ArtistContextMenu } from "../../../components/ArtistContextMenu";
-import { lookupArtistsInLibraryBatch, readLibraryLookupCache } from "../../../utils/api";
-import { getArtistFeedbackFlags } from "../../../utils/discoveryFeedback";
-import { getArtistRecordId } from "../../../utils/artistTaste";
-
 export function ArtistDetailsSimilar({
   loadingSimilar,
   similarArtists,

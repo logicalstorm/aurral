@@ -1,9 +1,9 @@
-import bcrypt from "bcrypt";
 import crypto from "crypto";
 import os from "os";
 import { dbOps, userOps } from "../db/helpers/index.js";
 import { getDefaultListenHistoryProfile } from "../services/listeningHistory.js";
 import { getSessionByToken } from "../config/session-helpers.js";
+import { hashPassword, verifyPassword, needsRehash } from "./passwordHash.js";
 
 const safeCompare = (a, b) => {
   const bufA = Buffer.from(String(a));
@@ -434,7 +434,7 @@ export function reconcileLocalNetworkBypassSetting() {
 }
 
 function createProxyUser(username, role) {
-  const passwordHash = bcrypt.hashSync(crypto.randomBytes(32).toString("hex"), 10);
+  const passwordHash = hashPassword(crypto.randomBytes(32).toString("hex"));
   const created = userOps.createUser(username, passwordHash, role, null);
   return created
     ? toResolvedUser(userOps.getUserByUsername(created.username) || created)
@@ -477,7 +477,7 @@ function migrateLegacyAdmin() {
   const authUser = settings.integrations?.general?.authUser || "admin";
   const authPassword = settings.integrations?.general?.authPassword;
   if (!onboardingComplete || !authPassword) return;
-  const hash = bcrypt.hashSync(authPassword, 10);
+  const hash = hashPassword(authPassword);
   const created = userOps.createUser(authUser, hash, "admin", null);
   const initialListenHistory = getDefaultListenHistoryProfile(settings);
   if (created && initialListenHistory) {
@@ -495,9 +495,10 @@ function resolveUser(username, password) {
     .toLowerCase();
   const u = userOps.getUserByUsername(un);
   if (!u || !password) return null;
-  // ponytail: sync compare kept; Basic auth is the rare path and going async cascades through resolveRequestUser/verifyTokenAuth callers in 9 files
-  const ok = bcrypt.compareSync(password, u.passwordHash);
-  if (!ok) return null;
+  if (!verifyPassword(password, u.passwordHash)) return null;
+  if (needsRehash(u.passwordHash)) {
+    userOps.updateUser(u.id, { passwordHash: hashPassword(password) });
+  }
   const perms = buildPermissions(u.role, u.permissions);
   return {
     id: u.id,

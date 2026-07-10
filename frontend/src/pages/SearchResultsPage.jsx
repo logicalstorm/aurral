@@ -1,21 +1,17 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
-import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
-import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { Grid3X3, List, Loader, Music, SlidersHorizontal, X } from "lucide-react";
 import {
   addArtistToLibrary,
-  addSharedPlaylistTracks,
-  createSharedPlaylist,
-  getDiscovery,
-  getArtistCover,
-  getReleaseGroupCover,
   lookupAlbumsInLibraryBatch,
   lookupArtistsInLibraryBatch,
   requestAlbumFromSearch,
-  searchCatalog,
-  searchUnified,
-} from "../utils/api";
+} from "../utils/api/endpoints/library.js";
+import {
+  addSharedPlaylistTracks,
+  createSharedPlaylist,
+} from "../utils/api/endpoints/playlists.js";
+import { getDiscovery } from "../utils/api/endpoints/discovery.js";
+import { getArtistCover, getReleaseGroupCover } from "../utils/api/endpoints/artists.js";
+import { searchCatalog, searchUnified } from "../utils/api/endpoints/search.js";
 import SearchAlbumResults from "../components/SearchAlbumResults";
 import SearchArtistResults from "../components/SearchArtistResults";
 import AddAlbumButton from "../components/AddAlbumButton";
@@ -52,6 +48,10 @@ import {
   ARTIST_IMAGE_HYDRATION_CONCURRENCY,
   ALBUM_COVER_HYDRATION_CONCURRENCY,
 } from "./searchPageUtils";
+import { useSearchParams } from "react-router-dom";
+import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { Grid3X3, List, Loader, Music, SlidersHorizontal, X } from "lucide-react";
 function SearchResultsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";

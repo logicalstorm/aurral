@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useToast } from "../../contexts/ToastContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import SettingsMetadataSponsorSection from "../../components/SettingsMetadataSponsorSection";
 import { useSettingsData } from "./hooks/useSettingsData";
 import { useUnsavedGuard } from "./hooks/useUnsavedGuard";
 import { useSettingsTabs } from "./hooks/useSettingsTabs";
@@ -11,15 +12,15 @@ import { UnsavedModal } from "./components/UnsavedModal";
 import { CommunityGuideModal } from "./components/CommunityGuideModal";
 import { SettingsMobileNav } from "./components/SettingsMobileNav";
 import { SettingsStorageTab } from "./components/SettingsStorageTab";
-import { SettingsLibraryTab } from "./components/SettingsLibraryTab";
-import { SettingsIndexersTab } from "./components/SettingsIndexersTab";
-import { SettingsDownloadClientsTab } from "./components/SettingsDownloadClientsTab";
+import { LidarrSettingsSection } from "./components/LidarrSettingsModalContent";
+import { SettingsIndexersSection } from "./components/SettingsIndexersSection";
+import { SettingsDownloadClientsSection } from "./components/SettingsDownloadClientsSection";
 import { SettingsTasksTab } from "./components/SettingsTasksTab";
 import { SettingsPlaybackTab } from "./components/SettingsPlaybackTab";
 import { SettingsConnectTab } from "./components/SettingsConnectTab";
 import { SettingsDiscoverTab } from "./components/SettingsDiscoverTab";
 import { SettingsUsersTab } from "./components/SettingsUsersTab";
-import { SettingsMetadataPanel } from "./components/SettingsMetadataPanel";
+import { SettingsMetadataTab } from "./components/SettingsMetadataTab";
 import { SettingsArrToolbar } from "./components/SettingsArrToolbar";
 import { DEFAULT_SETTINGS_TAB, normalizeSettingsTabId } from "./settingsTabsConfig";
 import "./settingsArr.css";
@@ -93,67 +94,70 @@ function SettingsPage() {
         );
       case "lidarr":
         return (
-          <SettingsLibraryTab
-            key="settings-lidarr"
-            settings={data.settings}
-            updateSettings={data.updateSettings}
-            health={data.health}
-            lidarrRootFolders={data.lidarrRootFolders}
-            loadingLidarrRootFolders={data.loadingLidarrRootFolders}
-            setLoadingLidarrRootFolders={data.setLoadingLidarrRootFolders}
-            setLidarrRootFolders={data.setLidarrRootFolders}
-            lidarrProfiles={data.lidarrProfiles}
-            loadingLidarrProfiles={data.loadingLidarrProfiles}
-            setLoadingLidarrProfiles={data.setLoadingLidarrProfiles}
-            setLidarrProfiles={data.setLidarrProfiles}
-            lidarrMetadataProfiles={data.lidarrMetadataProfiles}
-            loadingLidarrMetadataProfiles={data.loadingLidarrMetadataProfiles}
-            setLoadingLidarrMetadataProfiles={data.setLoadingLidarrMetadataProfiles}
-            setLidarrMetadataProfiles={data.setLidarrMetadataProfiles}
-            lidarrTags={data.lidarrTags}
-            loadingLidarrTags={data.loadingLidarrTags}
-            setLoadingLidarrTags={data.setLoadingLidarrTags}
-            setLidarrTags={data.setLidarrTags}
-            testingLidarr={data.testingLidarr}
-            setTestingLidarr={data.setTestingLidarr}
-            applyingCommunityGuide={data.applyingCommunityGuide}
-            setShowCommunityGuideModal={data.setShowCommunityGuideModal}
-            hasUnsavedChanges={data.hasUnsavedChanges}
-            saving={data.saving}
-            handleSaveSettings={data.handleSaveSettings}
-            fetchSettings={data.fetchSettings}
-            showSuccess={showSuccess}
-            showError={showError}
-            showInfo={showInfo}
-          />
+          <div key="settings-lidarr" className="arr-page">
+            <form onSubmit={data.handleSaveSettings} className="arr-form" autoComplete="off">
+              <LidarrSettingsSection
+                settings={data.settings}
+                updateSettings={data.updateSettings}
+                health={data.health}
+                lidarrRootFolders={data.lidarrRootFolders}
+                loadingLidarrRootFolders={data.loadingLidarrRootFolders}
+                setLoadingLidarrRootFolders={data.setLoadingLidarrRootFolders}
+                setLidarrRootFolders={data.setLidarrRootFolders}
+                lidarrProfiles={data.lidarrProfiles}
+                loadingLidarrProfiles={data.loadingLidarrProfiles}
+                setLoadingLidarrProfiles={data.setLoadingLidarrProfiles}
+                setLidarrProfiles={data.setLidarrProfiles}
+                lidarrMetadataProfiles={data.lidarrMetadataProfiles}
+                loadingLidarrMetadataProfiles={data.loadingLidarrMetadataProfiles}
+                setLoadingLidarrMetadataProfiles={data.setLoadingLidarrMetadataProfiles}
+                setLidarrMetadataProfiles={data.setLidarrMetadataProfiles}
+                lidarrTags={data.lidarrTags}
+                loadingLidarrTags={data.loadingLidarrTags}
+                setLoadingLidarrTags={data.setLoadingLidarrTags}
+                setLidarrTags={data.setLidarrTags}
+                testingLidarr={data.testingLidarr}
+                setTestingLidarr={data.setTestingLidarr}
+                applyingCommunityGuide={data.applyingCommunityGuide}
+                setShowCommunityGuideModal={data.setShowCommunityGuideModal}
+                showSuccess={showSuccess}
+                showError={showError}
+                showInfo={showInfo}
+              />
+            </form>
+          </div>
         );
       case "indexers":
         return (
-          <SettingsIndexersTab
-            settings={data.settings}
-            updateSettings={data.updateSettings}
-            health={data.health}
-            hasUnsavedChanges={data.hasUnsavedChanges}
-            saving={data.saving}
-            handleSaveSettings={data.handleSaveSettings}
-            showSuccess={showSuccess}
-            showError={showError}
-            showInfo={showInfo}
-          />
+          <div className="arr-page">
+            <form onSubmit={data.handleSaveSettings} className="arr-form" autoComplete="off">
+              <SettingsIndexersSection
+                settings={data.settings}
+                updateSettings={data.updateSettings}
+                health={data.health}
+                handleSaveSettings={data.handleSaveSettings}
+                showSuccess={showSuccess}
+                showError={showError}
+                showInfo={showInfo}
+              />
+            </form>
+          </div>
         );
       case "download-clients":
         return (
-          <SettingsDownloadClientsTab
-            settings={data.settings}
-            updateSettings={data.updateSettings}
-            health={data.health}
-            hasUnsavedChanges={data.hasUnsavedChanges}
-            saving={data.saving}
-            handleSaveSettings={data.handleSaveSettings}
-            showSuccess={showSuccess}
-            showError={showError}
-            showInfo={showInfo}
-          />
+          <div className="arr-page">
+            <form onSubmit={data.handleSaveSettings} className="arr-form" autoComplete="off">
+              <SettingsDownloadClientsSection
+                settings={data.settings}
+                updateSettings={data.updateSettings}
+                health={data.health}
+                handleSaveSettings={data.handleSaveSettings}
+                showSuccess={showSuccess}
+                showError={showError}
+                showInfo={showInfo}
+              />
+            </form>
+          </div>
         );
       case "tasks":
         return <SettingsTasksTab showError={showError} showSuccess={showSuccess} />;
@@ -204,14 +208,18 @@ function SettingsPage() {
         );
       case "metadata":
         return (
-          <SettingsMetadataPanel
-            settings={data.settings}
-            updateSettings={data.updateSettings}
-            health={data.health}
-            hasUnsavedChanges={data.hasUnsavedChanges}
-            saving={data.saving}
-            handleSaveSettings={data.handleSaveSettings}
-          />
+          <>
+            <SettingsMetadataSponsorSection />
+            <SettingsMetadataTab
+              settings={data.settings}
+              updateSettings={data.updateSettings}
+              health={data.health}
+              hasUnsavedChanges={data.hasUnsavedChanges}
+              saving={data.saving}
+              handleSaveSettings={data.handleSaveSettings}
+              hidePanelHeader
+            />
+          </>
         );
       case "users":
         return (

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
-import { Check, Loader2, Play, FilePlus2, Download, Trash2, Search, RefreshCw, ClipboardCopy } from "lucide-react";
+import { Check, Loader2, Play, FilePlus2, Download, Trash2, Search, RefreshCw, ClipboardCopy, ListMusic } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   getFlowJobs,
@@ -23,7 +23,7 @@ import {
   reSearchMissingSharedPlaylistTracks,
   syncSharedPlaylistImport,
   getFlowLidarrImportListUrl,
-} from "../utils/api";
+} from "../utils/api/endpoints/playlists.js";
 import { CreatePlaylistModal, RenamePlaylistModal } from "../components/PlaylistModals";
 import PillToggle from "../components/PillToggle";
 import { useAuth } from "../contexts/AuthContext";
@@ -46,13 +46,10 @@ import {
   FlowLibraryCreateMenu,
   LibrarySidebarToggleIcon,
 } from "./flows/FlowPlaylistUI";
-import { useFlowMobileLayout } from "./flows/useFlowMobileLayout";
 import { FlowTracksPanel } from "./flows/flowComponents/flowTrackComponents.jsx";
 import { FlowEmptyState } from "./flows/flowComponents/FlowEmptyState.jsx";
-import { FlowDetailPlaceholder } from "./flows/flowComponents/FlowDetailPlaceholder.jsx";
 import { ConfirmModal } from "./flows/flowComponents/ConfirmModal.jsx";
 import { MoreMenu } from "./flows/flowComponents/MoreMenu.jsx";
-import { SYNC_INTERVAL_OPTIONS } from "./flows/syncIntervalOptions";
 import { getApiErrorMessage } from "./onboardingUtils.jsx";
 import {
   NEW_FLOW_TEMPLATE,
@@ -75,6 +72,39 @@ import {
   reserveUniqueFlowName,
   slugifyFilePart,
 } from "./flows/flowPageUtils";
+
+const SYNC_INTERVAL_OPTIONS = [
+  { value: 0, label: "None" },
+  { value: 6, label: "Every 6 hours" },
+  { value: 12, label: "Every 12 hours" },
+  { value: 24, label: "Every 24 hours" },
+  { value: 72, label: "Every 3 days" },
+];
+
+const FLOW_MOBILE_LAYOUT_QUERY = "(max-width: 767px)";
+
+function useFlowMobileLayout() {
+  const [isMobileLayout, setIsMobileLayout] = useState(() =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia(FLOW_MOBILE_LAYOUT_QUERY).matches
+      : false,
+  );
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
+      return undefined;
+    }
+    const mediaQuery = window.matchMedia(FLOW_MOBILE_LAYOUT_QUERY);
+    const handleChange = (event) => setIsMobileLayout(event.matches);
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  return isMobileLayout;
+}
 
 const PlaylistImportModal = lazy(() =>
   import("./flows/import/PlaylistImportModal.jsx").then((m) => ({
@@ -1780,7 +1810,14 @@ function FlowPage() {
                   creatingFlow={creating}
                 />
               ) : (
-                <FlowDetailPlaceholder />
+                <div className="flow-page__detail-placeholder">
+                  <div className="flow-page__detail-placeholder__icon" aria-hidden="true">
+                    <ListMusic className="artist-icon-lg" />
+                  </div>
+                  <p className="flow-page__detail-placeholder__message">
+                    Select a playlist or flow to view tracks and settings.
+                  </p>
+                </div>
               )
             ) : (
               selectedDetailContent

@@ -12,8 +12,8 @@ import {
   getDownloadStatus,
   addArtistToLibrary,
   lookupArtistInLibrary,
-  getMyLidarrPreferences,
-} from "../../../utils/api";
+} from "../../../utils/api/endpoints/library.js";
+import { getMyLidarrPreferences } from "../../../utils/api/endpoints/auth.js";
 import { deduplicateAlbums } from "../utils";
 import { useWebSocketChannel } from "../../../hooks/useWebSocket";
 
@@ -544,7 +544,7 @@ export function useArtistDetailsLibrary({
         }));
         addedOptimistic = true;
 
-        const { addLibraryAlbum } = await import("../../../utils/api");
+        const { addLibraryAlbum } = await import("../../../utils/api/endpoints/library.js");
         let addedAlbum = null;
         try {
           addedAlbum = await addLibraryAlbum(currentLibraryArtist.id, albumId, title);

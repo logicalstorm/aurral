@@ -1,6 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import PropTypes from "prop-types";
 import { Library, Sparkles, Activity, AudioWaveform, Ticket, Settings } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useFlowWorkerActivity } from "../pages/flows/useFlowWorkerActivity";
@@ -11,7 +10,7 @@ import {
   DEFAULT_ACTIVITY_VIEW,
   buildActivityPath,
 } from "../navigation/activityNavConfig";
-import { useDiscoverRecent } from "../hooks/useDiscoverRecent";
+import { useDiscoverRecent } from "../contexts/DiscoverRecentProvider";
 import {
   getDiscoverArtistPath,
   getDiscoverRecentPageLinkState,
@@ -405,10 +404,5 @@ function Sidebar({ mode, width = 208 }) {
     </aside>
   );
 }
-
-Sidebar.propTypes = {
-  mode: PropTypes.oneOf(["full", "icons", "hidden"]).isRequired,
-  width: PropTypes.number,
-};
 
 export default Sidebar;

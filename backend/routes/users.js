@@ -1,6 +1,6 @@
 import express from "express";
-import bcrypt from "bcrypt";
 import { userOps, dbOps } from "../db/helpers/index.js";
+import { hashPassword, verifyPassword } from "../middleware/passwordHash.js";
 import { requireAuth, requireAdmin } from "../middleware/requirePermission.js";
 import { reconcileLocalNetworkBypassSetting } from "../middleware/auth.js";
 import { requirePasswordStrength } from "../middleware/auth.js";
@@ -184,7 +184,7 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
     if (!passwordValidation.valid) {
       return res.status(400).json({ error: passwordValidation.error });
     }
-    const hash = await bcrypt.hash(password, 10);
+    const hash = hashPassword(password);
     const perms = permissions ? { ...userOps.getDefaultPermissions(), ...permissions } : null;
     const created = userOps.createUser(un, hash, role, perms);
     if (!created) {
@@ -244,14 +244,14 @@ router.patch("/:id", requireAuth, async (req, res) => {
         if (!currentPassword) {
           return res.status(400).json({ error: "currentPassword required to change password" });
         }
-        if (!(await bcrypt.compare(currentPassword, existing.passwordHash))) {
+        if (!verifyPassword(currentPassword, existing.passwordHash)) {
           return res.status(401).json({ error: "Current password is incorrect" });
         }
         const passwordValidation = requirePasswordStrength(password);
         if (!passwordValidation.valid) {
           return res.status(400).json({ error: passwordValidation.error });
         }
-        updates.passwordHash = await bcrypt.hash(password, 10);
+        updates.passwordHash = hashPassword(password);
       }
       if (Object.keys(updates).length === 0) {
         return res.json({
@@ -278,7 +278,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
       if (!passwordValidation.valid) {
         return res.status(400).json({ error: passwordValidation.error });
       }
-      updates.passwordHash = await bcrypt.hash(password, 10);
+      updates.passwordHash = hashPassword(password);
     }
     if (permissions !== undefined) updates.permissions = permissions;
     if (role !== undefined) updates.role = role;
@@ -507,10 +507,10 @@ router.post("/me/password", requireAuth, async (req, res) => {
       return res.status(400).json({ error: passwordValidation.error });
     }
     const u = userOps.getUserById(req.user.id);
-    if (!u || !(await bcrypt.compare(currentPassword || "", u.passwordHash))) {
+    if (!u || !verifyPassword(currentPassword || "", u.passwordHash)) {
       return res.status(401).json({ error: "Current password is incorrect" });
     }
-    const hash = await bcrypt.hash(newPassword, 10);
+    const hash = hashPassword(newPassword);
     userOps.updateUser(req.user.id, { passwordHash: hash });
     deleteSessionsByUserId(req.user.id);
     res.json({ success: true });

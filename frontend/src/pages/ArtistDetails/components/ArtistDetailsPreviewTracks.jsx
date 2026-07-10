@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader, Pause, Play } from "lucide-react";
-import { getArtistTopSongVideo } from "../../../utils/api";
+import { getArtistTopSongVideo } from "../../../utils/api/endpoints/artists.js";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
 
+import { Loader, Pause, Play } from "lucide-react";
 export function ArtistDetailsPreviewTracks({
   mbid,
   artistName,

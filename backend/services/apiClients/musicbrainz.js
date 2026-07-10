@@ -9,7 +9,6 @@ import {
   APP_VERSION,
 } from "../../config/constants.js";
 import {
-  getAlbumByMbid as getMetadataAlbumByMbid,
   getArtistNameByMbid as getMetadataArtistNameByMbid,
   getMetadataBaseUrl,
   legacyMusicbrainzRequest,
@@ -17,7 +16,6 @@ import {
   resolveAlbumByArtistAndTitle,
   resolveArtistByName as resolveMetadataArtistByName,
 } from "../providers/brainzmashProvider.js";
-import { selectBestAlbumImage } from "../imageService.js";
 import { getMusicBrainzContact } from "./config.js";
 
 const mbCache = createCache(300);
@@ -199,23 +197,6 @@ const musicbrainzRequestWithRetry = async (
 
 export const musicbrainzRequest = async (endpoint, params = {}) =>
   legacyMusicbrainzRequest(endpoint, params);
-
-export async function fetchCoverArtArchiveReleaseGroup(releaseGroupMbid) {
-  if (!releaseGroupMbid) return null;
-  try {
-    const album = await getMetadataAlbumByMbid(releaseGroupMbid);
-    const image = selectBestAlbumImage(album?.images);
-    if (image?.url) {
-      return {
-        imageUrl: image.url,
-        types: [image.kind || "Front"],
-      };
-    }
-    return { imageUrl: null, types: [], notFound: true };
-  } catch {
-    return { imageUrl: null, types: [], transientError: true };
-  }
-}
 
 function normalizeArtistReleaseTypeSelection(selectedReleaseTypes = []) {
   const list = Array.isArray(selectedReleaseTypes) ? selectedReleaseTypes : [];
@@ -453,20 +434,6 @@ export async function musicbrainzGetArtistAppearsOnReleaseGroups(
   }
 }
 
-export async function musicbrainzGetArtistReleaseGroupsPreview(
-  mbid,
-  limit = 50,
-) {
-  if (!mbid) return [];
-  const parsedLimit = Number.parseInt(limit, 10);
-  const safeLimit =
-    Number.isFinite(parsedLimit) && parsedLimit > 0
-      ? Math.min(100, parsedLimit)
-      : 50;
-  const items = await musicbrainzGetArtistReleaseGroups(mbid);
-  return items.slice(0, safeLimit);
-}
-
 export async function musicbrainzGetArtistNameByMbid(mbid) {
   if (!mbid) return null;
   const cached = musicbrainzArtistNameCache.get(mbid);
@@ -525,23 +492,6 @@ export async function musicbrainzResolveArtistMbidByName(artistName) {
       return cached.mbid || null;
     }
     return null;
-  }
-}
-
-export async function searchMusicbrainzRecordings(query, { limit = 5 } = {}) {
-  const trimmed = String(query || "").trim();
-  if (!trimmed) return [];
-  try {
-    const data = await mbLimiter.schedule(() =>
-      musicbrainzRequestWithRetry("/recording", {
-        query: trimmed,
-        limit: Math.min(25, Math.max(1, limit)),
-        inc: "artist-credits+releases",
-      }),
-    );
-    return Array.isArray(data?.recordings) ? data.recordings : [];
-  } catch {
-    return [];
   }
 }
 
