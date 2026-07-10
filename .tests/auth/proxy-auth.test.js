@@ -37,6 +37,7 @@ function resetProxyEnv() {
   delete process.env.AUTH_PROXY_DEFAULT_ROLE;
   delete process.env.AUTH_PROXY_ADMIN_USERS;
   delete process.env.AUTH_PROXY_ROLE_HEADER;
+  delete process.env.AUTH_PROXY_ADMIN_GROUPS;
 }
 
 test.beforeEach(() => {
@@ -51,6 +52,7 @@ test.after(async () => {
   delete process.env.AUTH_PROXY_DEFAULT_ROLE;
   delete process.env.AUTH_PROXY_ADMIN_USERS;
   delete process.env.AUTH_PROXY_ROLE_HEADER;
+  delete process.env.AUTH_PROXY_ADMIN_GROUPS;
   await cleanupIsolatedState(isolatedState);
 });
 
@@ -101,4 +103,49 @@ test("proxy auth does not create users from untrusted proxy IPs", () => {
 
   assert.equal(resolved, null);
   assert.equal(userOps.getAllUsers().length, 0);
+});
+
+test("proxy auth grants admin via AUTH_PROXY_ADMIN_GROUPS membership", () => {
+  process.env.AUTH_PROXY_ROLE_HEADER = "remote-groups";
+  process.env.AUTH_PROXY_ADMIN_GROUPS = "app-arrstack-admin";
+
+  const resolved = resolveProxyUser(
+    proxyRequest({
+      "x-forwarded-user": "bob",
+      "remote-groups": "app-arrstack-admin,users",
+    }),
+  );
+
+  assert.ok(resolved);
+  assert.equal(resolved.role, "admin");
+  assert.equal(userOps.getUserByUsername("bob")?.role, "admin");
+});
+
+test("proxy auth does not grant admin for a literal 'admin' group unless configured", () => {
+  process.env.AUTH_PROXY_ROLE_HEADER = "remote-groups";
+
+  const resolved = resolveProxyUser(
+    proxyRequest({
+      "x-forwarded-user": "carol",
+      "remote-groups": "admin",
+    }),
+  );
+
+  assert.ok(resolved);
+  assert.equal(resolved.role, "user");
+});
+
+test("proxy auth re-syncs role on every request instead of only at creation", () => {
+  const created = resolveProxyUser(proxyRequest({ "x-forwarded-user": "dave" }));
+  assert.equal(created.role, "user");
+
+  process.env.AUTH_PROXY_ADMIN_USERS = "dave";
+  const promoted = resolveProxyUser(proxyRequest({ "x-forwarded-user": "dave" }));
+  assert.equal(promoted.role, "admin");
+  assert.equal(userOps.getUserByUsername("dave")?.role, "admin");
+
+  delete process.env.AUTH_PROXY_ADMIN_USERS;
+  const demoted = resolveProxyUser(proxyRequest({ "x-forwarded-user": "dave" }));
+  assert.equal(demoted.role, "user");
+  assert.equal(userOps.getUserByUsername("dave")?.role, "user");
 });

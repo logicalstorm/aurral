@@ -5,8 +5,7 @@ import path from "path";
 import fs from "fs";
 import { createServer } from "http";
 import { fileURLToPath } from "url";
-
-import { authMiddleware } from "./middleware/auth.js";
+import { authMiddleware, isProxyAuthEnabled } from "./middleware/auth.js";
 import { logger } from "./services/logger.js";
 import { websocketService } from "./services/websocketService.js";
 import { getAllDownloadStatuses } from "./routes/library/handlers/downloads.js";
@@ -89,6 +88,20 @@ const trustProxyValue =
           : Number(process.env.TRUST_PROXY);
 app.set("trust proxy", trustProxyValue);
 
+if (isProxyAuthEnabled() && !process.env.AUTH_PROXY_TRUSTED_IPS) {
+  logger.warn(
+    "system",
+    "AUTH_PROXY_ENABLED is on but AUTH_PROXY_TRUSTED_IPS is not set - any client that can reach " +
+      "this server directly can impersonate any user via the proxy identity header. Set " +
+      "AUTH_PROXY_TRUSTED_IPS to your reverse proxy's address to restrict this.",
+  );
+}
+
+const connectSrcDirectives = ["'self'", "ws:", "wss:", "https://api.github.com"];
+if (process.env.AUTH_PROXY_DOMAIN) {
+  connectSrcDirectives.push(process.env.AUTH_PROXY_DOMAIN);
+}
+
 app.use(corsMiddleware);
 app.use(
   helmet({
@@ -116,7 +129,7 @@ app.use(
           "https://lastfm.freetls.fastly.net",
           "https://*.fanart.tv",
         ],
-        connectSrc: ["'self'", "ws:", "wss:", "https://api.github.com"],
+        connectSrc: connectSrcDirectives,
         mediaSrc: ["'self'", "https://*.dzcdn.net", "https://*.deezer.com"],
         frameSrc: ["'self'", "https://www.youtube-nocookie.com", "https://www.youtube.com"],
         frameAncestors: null,

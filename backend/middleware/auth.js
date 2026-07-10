@@ -441,6 +441,32 @@ function createProxyUser(username, role) {
     : toResolvedUser(userOps.getUserByUsername(username));
 }
 
+function isProxyAdmin(req, username) {
+  const adminUsers = parseCsv(process.env.AUTH_PROXY_ADMIN_USERS).map((u) => u.toLowerCase());
+  if (adminUsers.includes(username.toLowerCase())) return true;
+
+  const headerRoleName = process.env.AUTH_PROXY_ROLE_HEADER
+    ? String(process.env.AUTH_PROXY_ROLE_HEADER).trim().toLowerCase()
+    : "";
+  if (!headerRoleName) return false;
+
+  const groups = String(getHeaderValue(req, headerRoleName) || "")
+    .split(",")
+    .map((g) => g.trim().toLowerCase())
+    .filter(Boolean);
+
+  const adminGroups = parseCsv(process.env.AUTH_PROXY_ADMIN_GROUPS).map((g) => g.toLowerCase());
+  return groups.some((g) => adminGroups.includes(g));
+}
+
+function resolveProxyRole(req, username) {
+  const defaultRole =
+    (process.env.AUTH_PROXY_DEFAULT_ROLE || "user").trim().toLowerCase() === "admin"
+      ? "admin"
+      : "user";
+  return isProxyAdmin(req, username) ? "admin" : defaultRole;
+}
+
 export function resolveProxyUser(req) {
   if (!isProxyAuthEnabled()) return null;
   if (!isTrustedProxy(req)) return null;
@@ -448,25 +474,16 @@ export function resolveProxyUser(req) {
   const rawUsername = getHeaderValue(req, headerName);
   const username = String(rawUsername || "").trim();
   if (!username) return null;
+
+  const role = resolveProxyRole(req, username);
   const existing = userOps.getUserByUsername(username);
   if (existing) {
+    if (existing.role !== role) {
+      const updated = userOps.updateUser(existing.id, { role });
+      return toResolvedUser(updated || existing);
+    }
     return toResolvedUser(existing);
   }
-  const adminUsers = parseCsv(process.env.AUTH_PROXY_ADMIN_USERS).map((u) => u.toLowerCase());
-  const headerRoleName = process.env.AUTH_PROXY_ROLE_HEADER
-    ? String(process.env.AUTH_PROXY_ROLE_HEADER).trim().toLowerCase()
-    : "";
-  const headerRole = headerRoleName
-    ? String(getHeaderValue(req, headerRoleName) || "")
-        .trim()
-        .toLowerCase()
-    : "";
-  const defaultRole =
-    (process.env.AUTH_PROXY_DEFAULT_ROLE || "user").trim().toLowerCase() === "admin"
-      ? "admin"
-      : "user";
-  const role =
-    headerRole === "admin" || adminUsers.includes(username.toLowerCase()) ? "admin" : defaultRole;
   return createProxyUser(username, role);
 }
 
