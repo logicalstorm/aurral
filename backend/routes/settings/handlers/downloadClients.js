@@ -103,6 +103,28 @@ export function registerDownloadClients(router) {
     }
   });
 
+  router.post("/ytdlp/test", async (req, res) => {
+    try {
+      const { ytdlpClient } = await import("../../../services/ytdlpClient.js");
+      const result = await ytdlpClient.testConnection({ force: true });
+      if (!result.configured) {
+        return res.status(400).json(result);
+      }
+      if (!result.ok) {
+        return res.status(502).json(result);
+      }
+      return res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        error: "yt-dlp test failed",
+        message: error.message,
+      });
+    }
+  });
+
   router.post("/gotify/test", async (req, res) => {
     try {
       const { sendGotifyTest } =

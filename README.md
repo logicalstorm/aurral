@@ -15,7 +15,7 @@
 Aurral is a self-hosted music discovery app for the Lidarr stack. Find new artists, request albums, custom automatic rotating playlists, and import existing spotify playlists. Built by a developer with over a decade of experience.
 
 > [!NOTE]
-> **[Aurral v2 is here.](V2.md)** Spotify import, Usenet downloads, Plex sync, Gotify/webhook notifications, reverse-proxy auth, per-user discovery, and more.
+> **[Aurral v2 is here.](V2.md)** Spotify import, yt-dlp and Usenet downloads, Plex sync, Gotify/webhook notifications, reverse-proxy auth, per-user discovery, and more.
 
 > [!NOTE]
 > **AI disclosure** - Aurral is built with a hybrid approach to development. The foundation is hand-written code. For feature work, specifications are written by a developer, and any AI-generated code is thoroughly reviewed before being merged.
@@ -32,8 +32,8 @@ Aurral is a self-hosted music discovery app for the Lidarr stack. Find new artis
 - **Search** — Find artists and albums, preview tracks, and add to Lidarr with your defaults.
 - **Library** — Browse and search artists already in Lidarr.
 - **Playlists** — Run scheduled flows, adopt discover playlists like Release Radar, import static playlists, and convert flows to fixed tracklists.
-- **Activity** — Queue, review, and history for Lidarr requests, slskd and Usenet downloads, and Aurral playlist jobs.
-- **Integrations** — Lidarr, Last.fm, ListenBrainz, Koito, slskd, SABnzbd/NZBGet, Navidrome, Plex, Ticketmaster, Gotify, and webhooks.
+- **Activity** — Queue, review, and history for Lidarr requests, yt-dlp / slskd / Usenet downloads, and Aurral playlist jobs.
+- **Integrations** — Lidarr, Last.fm, ListenBrainz, Koito, yt-dlp, slskd, SABnzbd/NZBGet, Navidrome, Plex, Ticketmaster, Gotify, and webhooks.
 - **Playback** — Stream through Navidrome (M3U playlists) or Plex/Plexamp (API-synced playlists) from a dedicated download folder.
 - **Multi-user** — Per-user profiles, discovery layout, permissions, local auth, LAN auto-login, and reverse-proxy SSO.
 
@@ -57,7 +57,8 @@ Aurral only needs Lidarr to get started. It works best with the stack self-hoste
 | App or service                             | Role                                                        |
 | ------------------------------------------ | ----------------------------------------------------------- |
 | [Lidarr](https://github.com/Lidarr/Lidarr) | Library management, artist and album requests, queue status |
-| [slskd](https://github.com/slskd/slskd)    | Soulseek-backed downloads for flows and playlists           |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Built-in YouTube/web fallback for flows and playlists       |
+| [slskd](https://github.com/slskd/slskd)    | Optional Soulseek-backed downloads for flows and playlists  |
 | [Navidrome](https://www.navidrome.org)     | Streaming and playback via generated M3U playlists          |
 
 ## Quick Start

@@ -28,7 +28,7 @@ Every service mounts the same media root at `/data` inside the container.
 | slskd     | `/data:/data`    | Downloads `/data/downloads/slskd/complete`      |
 | NZBGet    | `/data:/data`    | Completed `/data/downloads/nzbget/completed`    |
 | SABnzbd   | `/data:/data`    | Completed per SABnzbd config                    |
-| Aurral    | `/data:/data`    | `DOWNLOAD_FOLDER=/data/downloads/aurral`        |
+| Aurral    | `/data:/data`    | `DOWNLOAD_FOLDER=/data/downloads/aurral` (yt-dlp needs no extra mount) |
 | Navidrome | `/data:/data:ro` | Scan `/data/music` and `/data/downloads/aurral` |
 | Plex      | `/data:/data`    | Read `/data/downloads/aurral/aurral-weekly-flow`|
 

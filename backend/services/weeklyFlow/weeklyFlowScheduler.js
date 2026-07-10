@@ -1,7 +1,7 @@
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
 import { flowPlaylistConfig } from "./weeklyFlowPlaylistConfig.js";
-import { slskdClient } from "../slskdClient.js";
+import { isAnyDownloadSourceConfigured } from "../downloadSourceService.js";
 import { weeklyFlowOperationQueue } from "./weeklyFlowOperationQueue.js";
 import {
   createWeeklyFlowOperationToken,
@@ -9,7 +9,7 @@ import {
 } from "./weeklyFlowOperations.js";
 
 export async function runScheduledRefresh() {
-  if (!slskdClient.isConfigured()) return;
+  if (!isAnyDownloadSourceConfigured()) return;
 
   const due = flowPlaylistConfig.getDueForRefresh();
   if (due.length === 0) return;

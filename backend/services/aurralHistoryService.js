@@ -62,10 +62,16 @@ const resolveTrackDownloadHistorySource = (downloadSource, downloadClient) => {
     if (client === "sabnzbd") return "sabnzbd";
     return "nzbget";
   }
+  if (normalized === "ytdlp") return "ytdlp";
   return "slskd";
 };
 
-const CLIENT_LABELS = { sabnzbd: "SABnzbd", nzbget: "NZBGet", slskd: "slskd" };
+const CLIENT_LABELS = {
+  sabnzbd: "SABnzbd",
+  nzbget: "NZBGet",
+  slskd: "slskd",
+  ytdlp: "yt-dlp",
+};
 const resolveDownloadClientLabel = (downloadSource, downloadClient) =>
   CLIENT_LABELS[resolveTrackDownloadHistorySource(downloadSource, downloadClient)] || "slskd";
 

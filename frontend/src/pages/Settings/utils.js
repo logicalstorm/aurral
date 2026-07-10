@@ -134,6 +134,11 @@ export const normalizeSettings = (savedSettings) => {
         addPaused: false,
         ...(savedSettings.integrations?.sabnzbd || {}),
       },
+      ytdlp: {
+        enabled: true,
+        priority: 50,
+        ...(savedSettings.integrations?.ytdlp || {}),
+      },
       ticketmaster: {
         apiKey: "",
         searchRadiusMiles: 250,

@@ -233,6 +233,20 @@ export function registerGeneral(router) {
           ? Math.min(1000, Math.max(1, priority))
           : 10;
       }
+      if (integrations?.ytdlp) {
+        const nextYtdlp = {
+          ...(currentSettings.integrations?.ytdlp || {}),
+          ...integrations.ytdlp,
+        };
+        nextYtdlp.enabled = nextYtdlp.enabled !== false;
+        const priority = Number.parseInt(nextYtdlp.priority, 10);
+        nextYtdlp.priority = Number.isFinite(priority)
+          ? Math.min(1000, Math.max(1, priority))
+          : 50;
+        delete nextYtdlp.binaryPath;
+        delete nextYtdlp.audioFormat;
+        integrations.ytdlp = nextYtdlp;
+      }
       if (integrations?.navidrome) {
         integrations.navidrome.m3uPathMode = normalizeM3uPathMode(
           integrations.navidrome.m3uPathMode,
@@ -242,7 +256,7 @@ export function registerGeneral(router) {
         );
       }
 
-      const INTEGRATION_KEYS = ["lidarr", "navidrome", "slskd", "prowlarr", "nzbget", "lastfm", "ticketmaster", "metadata", "general", "gotify", "webhookEvents"];
+      const INTEGRATION_KEYS = ["lidarr", "navidrome", "slskd", "prowlarr", "nzbget", "ytdlp", "lastfm", "ticketmaster", "metadata", "general", "gotify", "webhookEvents"];
       let mergedIntegrations =
         currentSettings.integrations || defaultData.settings.integrations || {};
       if (integrations) {

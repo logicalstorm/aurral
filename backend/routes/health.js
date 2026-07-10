@@ -263,6 +263,7 @@ function buildBootstrapPayload(req) {
     nzbgetConfigured: downloadSources.usenet.nzbgetConfigured,
     sabnzbdConfigured: downloadSources.usenet.sabnzbdConfigured,
     usenetConfigured: downloadSources.usenet.configured,
+    ytdlpConfigured: downloadSources.ytdlp.configured,
     downloadSources,
     metadataProviders: getMetadataProviderHealthSnapshot(),
     localNetworkBypass,

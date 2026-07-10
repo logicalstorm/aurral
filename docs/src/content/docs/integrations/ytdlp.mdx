@@ -1,0 +1,27 @@
+---
+title: yt-dlp
+description: YouTube and web-backed downloads for flows and playlists.
+---
+
+yt-dlp is Aurral's built-in fallback download source. It searches YouTube for artist and title matches, extracts audio with ffmpeg, then imports into your `DOWNLOAD_FOLDER`.
+
+No separate daemon is required. The Docker image includes `yt-dlp` and `ffmpeg`. On bare metal, install both on the host and keep `yt-dlp` on `PATH`.
+
+## Setup
+
+1. Open **Settings → Download Clients → yt-dlp**.
+2. Leave **Enable yt-dlp** on (default).
+3. Optionally set **Source priority** (default `50`; slskd is `10`, Usenet is `20`).
+4. **Test connection**, then save.
+
+## Behavior
+
+Aurral tries download sources in priority order. With defaults, slskd and Usenet run first when configured; yt-dlp fills gaps or works alone when nothing else is set up.
+
+Results are ranked by title, artist, duration, and noise filters (karaoke, live loops, and similar junk are skipped). Downloaded audio still passes the same track validation used by other sources.
+
+Audio from YouTube is typically lossy. Prefer slskd or Usenet when you want higher quality.
+
+## Download source priority
+
+See [Usenet](/integrations/usenet/#download-source-priority-and-fallback) for how priority and fallback work across sources.

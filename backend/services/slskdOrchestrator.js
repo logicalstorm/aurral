@@ -18,6 +18,7 @@ import {
   recordSlskdTransferOutcome,
 } from "./slskdTransferHistory.js";
 import { processUsenetPipelinePayload } from "./usenetOrchestrator.js";
+import { processYtdlpPipelinePayload } from "./ytdlpOrchestrator.js";
 import {
   getDownloadSourceNotConfiguredMessage,
   getEnabledDownloadSources,
@@ -319,6 +320,7 @@ function buildNextSourcePayload(payload, failedSource = null, reason = null) {
     legacyTransfer: null,
     nzbId: null,
     history: null,
+    downloadedPath: null,
     triedSources: [...tried],
     sourceErrors,
   };
@@ -1101,6 +1103,13 @@ export async function processPipelinePayload(payload) {
       return job ? failOrTryNextSource(payload, job, "Usenet is not configured") : null;
     }
     return processUsenetPipelinePayload(payload, { failOrTryNextSource });
+  }
+  if (payload.source === "ytdlp") {
+    if (!isSourceConfigured("ytdlp")) {
+      const job = downloadTracker.getJob(payload.jobId);
+      return job ? failOrTryNextSource(payload, job, "yt-dlp is not configured") : null;
+    }
+    return processYtdlpPipelinePayload(payload, { failOrTryNextSource });
   }
   if (payload.source !== "slskd") {
     const job = downloadTracker.getJob(payload.jobId);
