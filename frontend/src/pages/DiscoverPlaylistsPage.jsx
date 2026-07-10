@@ -10,7 +10,8 @@ import {
   getDiscoverArtworkUrl,
 } from "../utils/api";
 import { useToast } from "../contexts/ToastContext";
-import { Crosshair, Loader } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
+import { Crosshair, Loader, Music } from "lucide-react";
 
 const DISCOVER_FLOW_PRESET_ORDER = [
   "discover-weekly",
@@ -58,6 +59,8 @@ export default function DiscoverPlaylistsPage() {
   const { data, error } = useDiscoverData();
   const navigate = useDiscoverNavigation();
   const { showSuccess, showError } = useToast();
+  const { bootstrap } = useAuth();
+  const lastfmConfigured = bootstrap?.lastfmConfigured === true;
 
   const isUpdating = data?.isUpdating || false;
   const playlistsUpdating = data?.playlistsUpdating || false;
@@ -154,19 +157,50 @@ export default function DiscoverPlaylistsPage() {
           </div>
         </header>
         {isUpdating || playlistsUpdating ? (
-          <div className="arr-page__empty">
-            <Loader className="animate-spin artist-icon-md" />
-            <p>{playlistsUpdating ? (playlistsUpdateMessage || "Building playlists...") : (updateProgressMessage || "Refreshing discovery...")}</p>
+          <div className="search-empty-panel">
+            <Loader className="artist-icon-lg animate-spin" />
+            <h2 className="search-empty-panel__title">
+              {playlistsUpdating ? "Building playlists" : "Refreshing discovery"}
+            </h2>
+            <p className="search-empty-panel__message">
+              {playlistsUpdating
+                ? playlistsUpdateMessage || "Building playlists..."
+                : updateProgressMessage || "Refreshing discovery..."}
+            </p>
           </div>
         ) : error ? (
-          <div className="arr-page__empty">
-            <p>{error}</p>
+          <div className="search-empty-panel">
+            <div className="search-empty-panel__icon" aria-hidden="true">
+              <Music className="artist-icon-lg" />
+            </div>
+            <h2 className="search-empty-panel__title">Something went wrong</h2>
+            <p className="search-empty-panel__message">{error}</p>
+          </div>
+        ) : !lastfmConfigured ? (
+          <div className="search-empty-panel">
+            <div className="search-empty-panel__icon" aria-hidden="true">
+              <Music className="artist-icon-lg" />
+            </div>
+            <h2 className="search-empty-panel__title">Connect Last.fm</h2>
+            <p className="search-empty-panel__message">
+              Connect a Last.fm API key in Settings → Connect to generate discover playlists.
+            </p>
+            <Link to="/settings/connect" className="btn btn-secondary btn-sm">
+              Open Last.fm settings
+            </Link>
           </div>
         ) : (
-          <div className="arr-page__empty">
-            <Loader className="animate-spin artist-icon-md" />
-            <p>Run a discovery refresh to generate playlists.</p>
-            <Link to="/settings?tab=discover" className="arr-link">Open Discovery Settings</Link>
+          <div className="search-empty-panel">
+            <div className="search-empty-panel__icon" aria-hidden="true">
+              <Music className="artist-icon-lg" />
+            </div>
+            <h2 className="search-empty-panel__title">No playlists yet</h2>
+            <p className="search-empty-panel__message">
+              Run a discovery refresh to generate playlists.
+            </p>
+            <Link to="/settings/discover" className="btn btn-secondary btn-sm">
+              Open Discovery Settings
+            </Link>
           </div>
         )}
       </div>

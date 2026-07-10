@@ -74,11 +74,6 @@ export const testNavidromeOnboarding = (url, username, password) =>
     password,
   });
 
-export const testLidarrLibraryAccessOnboarding = (url, apiKey) =>
-  getData("/onboarding/lidarr/test-library-access", {
-    params: lidarrCredentialParams(url, apiKey),
-  });
-
 export const getLidarrProfilesOnboarding = (url, apiKey) =>
   getData("/onboarding/lidarr/profiles", {
     params: lidarrCredentialParams(url, apiKey),
@@ -87,18 +82,6 @@ export const getLidarrProfilesOnboarding = (url, apiKey) =>
 export const getLidarrMetadataProfilesOnboarding = (url, apiKey) =>
   getData("/onboarding/lidarr/metadata-profiles", {
     params: lidarrCredentialParams(url, apiKey),
-  });
-
-export const applyLidarrCommunityGuideOnboarding = (url, apiKey) =>
-  postData("/onboarding/lidarr/apply-community-guide", {
-    url: url?.replace(/\/+$/, ""),
-    apiKey,
-  });
-
-export const testSlskdOnboarding = (url, apiKey) =>
-  postData("/onboarding/slskd/test", {
-    url: url?.replace(/\/+$/, ""),
-    apiKey,
   });
 
 export const getUsers = () => getData("/users");

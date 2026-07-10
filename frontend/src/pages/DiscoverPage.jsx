@@ -600,7 +600,9 @@ function DiscoverPage() {
             <h3 className="discover-recommended-status__heading">
               {isUpdating
                 ? "Building your recommendations"
-                : "Not enough listening data yet"}
+                : provider === "lastfm"
+                  ? "Not enough listening data yet"
+                  : "Connect Last.fm"}
             </h3>
             <p className="discover-recommended-status__message">
               {isUpdating
@@ -608,16 +610,27 @@ function DiscoverPage() {
                   "Scanning your library and Last.fm history. The first setup can take up to 10 minutes."
                 : provider === "lastfm"
                   ? "Add artists to your library or keep scrobbling on Last.fm. Recommendations improve as Aurral learns your taste."
-                  : "Add artists to your library or connect Last.fm in Settings to unlock personalized recommendations."}
-            </p>            {!isUpdating ? (
+                  : "Connect a Last.fm API key for personalized recommendations, related artists, and flows."}
+            </p>
+            {!isUpdating ? (
               <div className="discover-recommended-status__actions">
-                <button
-                  type="button"
-                  onClick={() => navigate("/search")}
-                  className="btn btn-primary btn--bold btn-min-h"
-                >
-                  Search Artists
-                </button>
+                {provider !== "lastfm" ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/settings/connect")}
+                    className="btn btn-primary btn--bold btn-min-h"
+                  >
+                    Connect Last.fm
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/search")}
+                    className="btn btn-primary btn--bold btn-min-h"
+                  >
+                    Search Artists
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => navigate("/library")}
@@ -903,8 +916,8 @@ function DiscoverPage() {
             <span>Configure Last.fm (API key and username) in Settings</span>
           </li>
         </ul>
-        <button onClick={() => navigate("/settings")} className="btn btn-primary">
-          Go to Settings
+        <button onClick={() => navigate("/settings/connect")} className="btn btn-primary">
+          Connect Last.fm
         </button>
       </div>
     );

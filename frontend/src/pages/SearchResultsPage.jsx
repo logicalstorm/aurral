@@ -1264,17 +1264,24 @@ function SearchResultsPage() {
   const localSearchConfigured = unifiedResults?.localSearchConfigured !== false;
 
   const emptyMessage =
-    normalizedType === "recommended" || normalizedType === "trending"
-      ? "Nothing to show here yet."
-      : isUnifiedSearch && !localSearchConfigured
-        ? "Configure the search server in Settings to search artists, releases, and tracks."
-        : isUnifiedSearch
-          ? `We couldn't find anything matching "${trimmedQuery}"`
-          : isAlbumSearch
-            ? `We couldn't find any albums matching "${trimmedQuery}"`
-            : isTagSearch
-              ? `We couldn't find any artists for tag "${trimmedQuery.replace(/^#/, "")}"`
-              : `We couldn't find any artists matching "${trimmedQuery}"`;
+    normalizedType === "recommended" && lastfmConfigured === false
+      ? "Connect a Last.fm API key in Settings → Connect to populate recommendations."
+      : normalizedType === "recommended" || normalizedType === "trending"
+        ? "Nothing to show here yet."
+        : isUnifiedSearch && !localSearchConfigured
+          ? "Configure the search server in Settings to search artists, releases, and tracks."
+          : isUnifiedSearch
+            ? `We couldn't find anything matching "${trimmedQuery}"`
+            : isAlbumSearch
+              ? `We couldn't find any albums matching "${trimmedQuery}"`
+              : isTagSearch
+                ? `We couldn't find any artists for tag "${trimmedQuery.replace(/^#/, "")}"`
+                : `We couldn't find any artists matching "${trimmedQuery}"`;
+
+  const emptyTitle =
+    normalizedType === "recommended" && lastfmConfigured === false
+      ? "Connect Last.fm"
+      : "No Results Found";
 
   const pageSubtitle =
     normalizedType === "recommended"
@@ -1469,8 +1476,17 @@ function SearchResultsPage() {
               <div className="search-empty-panel__icon" aria-hidden="true">
                 <Music className="artist-icon-lg" />
               </div>
-              <h2 className="search-empty-panel__title">No Results Found</h2>
+              <h2 className="search-empty-panel__title">{emptyTitle}</h2>
               <p className="search-empty-panel__message">{emptyMessage}</p>
+              {normalizedType === "recommended" && lastfmConfigured === false ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => navigate("/settings/connect")}
+                >
+                  Open Last.fm settings
+                </button>
+              ) : null}
             </div>
           ) : (
             <>

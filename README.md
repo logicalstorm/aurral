@@ -86,7 +86,7 @@ Change `/data:/data` to the **same host media path Lidarr already mounts**. If L
 docker compose up -d
 ```
 
-Open `http://localhost:3001` and complete onboarding.
+Open `http://localhost:3001`, create your admin account, and connect Lidarr.
 
 For a full stack with Lidarr, slskd, and Navidrome or Plex, see [`docker-compose.example.yml`](docker-compose.example.yml). Plex setup: [docs](https://docs.aurral.org/integrations/plex/).
 

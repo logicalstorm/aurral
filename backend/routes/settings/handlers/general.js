@@ -228,7 +228,7 @@ export function registerGeneral(router) {
       }
       if (integrations?.slskd) {
         const priority = Number.parseInt(integrations.slskd.priority, 10);
-        integrations.slskd.enabled = integrations.slskd.enabled !== false;
+        integrations.slskd.enabled = integrations.slskd.enabled === true;
         integrations.slskd.priority = Number.isFinite(priority)
           ? Math.min(1000, Math.max(1, priority))
           : 10;

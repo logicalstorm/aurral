@@ -44,7 +44,7 @@ export const defaultData = {
         discoveryMode: "balanced",
       },
       slskd: {
-        enabled: true,
+        enabled: false,
         url: "",
         apiKey: "",
         priority: 10,

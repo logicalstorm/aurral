@@ -80,7 +80,7 @@ export function SettingsDownloadClientsSection({
   const ytdlpConfigured = health?.ytdlpConfigured === true;
   const nzbgetConfigured = Boolean(nzbget.url);
   const sabnzbdConfigured = Boolean(sabnzbd.url && sabnzbd.apiKey);
-  const slskdEnabled = slskd.enabled !== false;
+  const slskdEnabled = slskd.enabled === true;
   const ytdlpEnabled = ytdlp.enabled !== false;
   const nzbgetEnabled = nzbget.enabled === true;
   const sabnzbdEnabled = sabnzbd.enabled === true;

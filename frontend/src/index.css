@@ -6152,6 +6152,10 @@ textarea {
   line-height: 1.55;
 }
 
+.search-empty-panel .btn {
+  margin-top: 1.25rem;
+}
+
 .search-page .artist-heading-row {
   margin-top: 0.25rem;
 }

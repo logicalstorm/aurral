@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getMyListeningHistory } from "../utils/api";
+import { getBootstrapStatus } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 
 const LEGACY_DISMISS_KEY = "lastfm_banner_dismissed";
@@ -30,9 +30,11 @@ const readDismissed = (user) => {
 };
 
 const LastfmBanner = () => {
-  const { user } = useAuth();
+  const { user, bootstrap } = useAuth();
   const [dismissed, setDismissed] = useState(() => readDismissed(user));
-  const [listenHistoryConfigured, setListenHistoryConfigured] = useState(null);
+  const [lastfmConfigured, setLastfmConfigured] = useState(
+    bootstrap ? !!bootstrap.lastfmConfigured : null,
+  );
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -40,19 +42,17 @@ const LastfmBanner = () => {
   }, [user]);
 
   useEffect(() => {
+    if (bootstrap) {
+      setLastfmConfigured(!!bootstrap.lastfmConfigured);
+      return;
+    }
     if (dismissed) return;
-    getMyListeningHistory()
-      .then((d) => {
-        const configured =
-          d.listenHistoryProvider === "koito"
-            ? !!String(d.listenHistoryUrl || "").trim()
-            : !!String(d.listenHistoryUsername || "").trim();
-        setListenHistoryConfigured(configured);
-      })
-      .catch(() => {});
-  }, [dismissed]);
+    getBootstrapStatus()
+      .then((status) => setLastfmConfigured(!!status.lastfmConfigured))
+      .catch(() => setLastfmConfigured(false));
+  }, [bootstrap, dismissed]);
 
-  if (dismissed || listenHistoryConfigured === null || listenHistoryConfigured) {
+  if (dismissed || lastfmConfigured === null || lastfmConfigured) {
     return null;
   }
 
@@ -61,17 +61,17 @@ const LastfmBanner = () => {
       <div className="app-banner__content">
         <p className="app-banner__title">Personalize your discovery</p>
         <p className="app-banner__text">
-          Discover can use ListenBrainz fallback trends without setup. Connect Last.fm for
-          personalized recommendations, related artists, full tag search, and flows.
+          Connect Last.fm for personalized recommendations, related artists, full tag search, and
+          flows.
         </p>
       </div>
       <div className="app-banner__actions">
         <button
           type="button"
           className="btn btn-secondary btn-sm"
-          onClick={() => navigate("/profile")}
+          onClick={() => navigate("/settings/connect")}
         >
-          Connect History
+          Connect Last.fm
         </button>
         <button
           type="button"
