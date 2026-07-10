@@ -12,7 +12,7 @@
 ![Discord](https://img.shields.io/discord/1457052417580339285?style=flat)
 [![Sponsor](https://img.shields.io/github/sponsors/lklynet?label=Sponsor&logo=GitHub-Sponsors&logoColor=fe8a76)](https://github.com/sponsors/lklynet/)
 
-Aurral is a self-hosted music discovery app for the Lidarr stack. Find new artists, request albums, custom automatic rotating playlists, and import existing spotify playlists. Built by a developer with over a decade of experience.
+Aurral is the Lidarr companion for self-hosted music discovery. Best-in-class recommendations, rotating flows, and playlist downloads, built on Lidarr instead of replacing it. Expand the stack you already trust.
 
 > [!NOTE]
 > **[Aurral v2 is here.](V2.md)** Spotify import, yt-dlp and Usenet downloads, Plex sync, Gotify/webhook notifications, reverse-proxy auth, per-user discovery, and more.
@@ -28,14 +28,14 @@ Aurral is a self-hosted music discovery app for the Lidarr stack. Find new artis
 
 ## Features
 
-- **Discover** — Personalized recommendations, trends, tags, recent releases, discover playlists, and nearby shows.
-- **Search** — Find artists and albums, preview tracks, and add to Lidarr with your defaults.
-- **Library** — Browse and search artists already in Lidarr.
-- **Playlists** — Run scheduled flows, adopt discover playlists like Release Radar, import static playlists, and convert flows to fixed tracklists.
-- **Activity** — Queue, review, and history for Lidarr requests, yt-dlp / slskd / Usenet downloads, and Aurral playlist jobs.
-- **Integrations** — Lidarr, Last.fm, ListenBrainz, Koito, yt-dlp, slskd, SABnzbd/NZBGet, Navidrome, Plex, Ticketmaster, Gotify, and webhooks.
-- **Playback** — Stream through Navidrome (M3U playlists) or Plex/Plexamp (API-synced playlists) from a dedicated download folder.
-- **Multi-user** — Per-user profiles, discovery layout, permissions, local auth, LAN auto-login, and reverse-proxy SSO.
+- **Discover**: Best-in-class personalized recommendations, trends, tags, recent releases, discover playlists, and nearby shows.
+- **Search**: Find artists and albums, preview tracks, and add to Lidarr with your defaults.
+- **Library**: Browse and search artists already in Lidarr.
+- **Playlists**: Run scheduled flows, adopt discover playlists like Release Radar, import static playlists, and convert flows to fixed tracklists.
+- **Activity**: Queue, review, and history for Lidarr requests, yt-dlp / slskd / Usenet downloads, and Aurral playlist jobs.
+- **Integrations**: Lidarr, Last.fm, ListenBrainz, Koito, yt-dlp, slskd, SABnzbd/NZBGet, Navidrome, Plex, Ticketmaster, Gotify, and webhooks.
+- **Playback**: Stream through Navidrome (M3U playlists) or Plex/Plexamp (API-synced playlists) from a dedicated download folder.
+- **Multi-user**: Per-user profiles, discovery layout, permissions, local auth, LAN auto-login, and reverse-proxy SSO.
 
 ## Screenshots
 
@@ -52,7 +52,7 @@ Aurral is a self-hosted music discovery app for the Lidarr stack. Find new artis
 
 ## Recommended Stack
 
-Aurral only needs Lidarr to get started. It works best with the stack self-hosters already trust:
+Aurral needs Lidarr. Everything else is optional. We build on the tools self-hosters already trust, rather than reinventing them:
 
 | App or service                             | Role                                                        |
 | ------------------------------------------ | ----------------------------------------------------------- |
@@ -80,7 +80,7 @@ services:
       - ./config:/config
 ```
 
-Change `/data:/data` to the host path you use for media. For file reuse, slskd downloads, and generated playlists, mount the **same root directory** into Aurral, Lidarr, slskd, and your player (Navidrome or Plex) at the same container path. See [shared storage](https://docs.aurral.org/getting-started/storage/).
+Change `/data:/data` to the **same host media path Lidarr already mounts**. If Lidarr's stack works, Aurral's filesystem is already right. Then set the Downloads Folder path in the UI. See [Match Lidarr](https://docs.aurral.org/getting-started/storage/).
 
 ```bash
 docker compose up -d

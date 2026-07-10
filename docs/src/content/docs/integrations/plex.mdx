@@ -9,7 +9,7 @@ Plex does not read Aurral's `.m3u` files. Playlist sync uses the Plex API after 
 
 ## Setup
 
-1. Follow [Shared storage](/getting-started/storage/) so Plex can read the same `DOWNLOAD_FOLDER` tree Aurral writes.
+1. Match Lidarr's media mount so Plex can read Aurral's Downloads Folder tree ([Match Lidarr](/getting-started/storage/)).
 2. Open **Settings → Playback → Plex**.
 3. Click **Connect Plex account** and approve the PIN in the Plex popup.
 4. Select your Plex server and confirm the server URL.
@@ -33,7 +33,7 @@ Navidrome's M3U path settings do not affect Plex.
 
 ## Plex downloads path (optional)
 
-Leave blank when Aurral and Plex share the same filesystem view — same host, or same Docker volume mounted at the same path in both containers.
+Leave blank when Aurral and Plex share the same filesystem view: same host, or the same Docker volume mounted at the same path in both containers.
 
 Set it when Plex runs in a different container or host and sees a different mount prefix than Aurral. Enter the downloads folder as Plex sees it. Aurral appends `/aurral-weekly-flow` when creating the library.
 
@@ -44,7 +44,7 @@ Set it when Plex runs in a different container or host and sees a different moun
 
 **Browse** shows folders as Aurral sees them. If Plex's mount differs, type Plex's path manually.
 
-This is the Plex equivalent of aligning library roots — not the same as Navidrome's M3U path toggle.
+This is the Plex equivalent of aligning library roots. It is not the same as Navidrome's M3U path toggle.
 
 ## Sync behavior
 
@@ -56,23 +56,22 @@ Aurral skips no-op rebuilds when the track set has not changed. Disabling a flow
 
 ## Mixed Docker setups
 
-When Aurral and Plex both run in Docker with the same `/data` mount, leave **Plex downloads path** empty:
+When Aurral and Plex both run in Docker with the same `/data` mount Lidarr uses, leave **Plex downloads path** empty:
 
 ```yaml
 services:
   aurral:
-    environment:
-      - DOWNLOAD_FOLDER=/data/downloads/aurral
     volumes:
       - /srv/media:/data
+      - ./config:/config
 
   plex:
     volumes:
       - /srv/media:/data
 ```
 
-In Plex, you do not need to add the folder manually — Aurral creates the **Aurral** library via API.
+Set Downloads Folder path in the UI (for example `/data/downloads/aurral`). In Plex, you do not need to add the folder manually. Aurral creates the **Aurral** library via API.
 
-If Aurral uses `PATH_MAPPINGS` for Lidarr reuse on Windows, that affects how Aurral reads files internally. It does not replace **Plex downloads path**.
+If Aurral uses remote path mappings for Lidarr reuse on Windows, that affects how Aurral reads files internally. It does not replace **Plex downloads path**.
 
-See [Shared storage](/getting-started/storage/) and [Troubleshooting — Plex](/admin/troubleshooting/#plex-playlists-are-empty-or-tracks-are-missing).
+See [Match Lidarr](/getting-started/storage/) and [Troubleshooting: Plex](/admin/troubleshooting/#plex-playlists-are-empty-or-tracks-are-missing).
