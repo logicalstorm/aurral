@@ -1,5 +1,3 @@
-import path from "path";
-import fs from "fs/promises";
 import { randomUUID } from "crypto";
 import { dbOps } from "../../db/helpers/index.js";
 import {
@@ -7,11 +5,6 @@ import {
   recordFlowTracksGenerated,
   recordPlaylistTracksAdded,
 } from "../aurralHistoryService.js";
-import {
-  PLAYLIST_LIBRARY_DIR,
-  isPathInsideRoot,
-  remapLegacyPath as remapLegacyWeeklyFlowPath,
-} from "../playlistPaths.js";
 import {
   dedupeSharedTracks,
   filterMissingSharedTracks,
@@ -21,6 +14,7 @@ import {
 } from "./weeklyFlowPlaylistConfig.js";
 import {
   normalizeExistingFileMode,
+  removePlaylistFileIfUnshared,
   reuseTrackForPlaylist,
   sortJobsForTrackReuse,
 } from "./weeklyFlowFileReuse.js";
@@ -71,20 +65,12 @@ function normalizeTrackList(value) {
     .filter(Boolean);
 }
 
-const getPlaylistLibraryRoot = (playlistType) =>
-  path.resolve(
-    weeklyFlowWorker.weeklyFlowRoot,
-    PLAYLIST_LIBRARY_DIR,
-    String(playlistType || "").trim(),
-  );
-
 const removePlaylistLocalTrackFile = async (job, playlistId) => {
   if (!job || typeof job.finalPath !== "string") return;
-  const playlistRoot = getPlaylistLibraryRoot(playlistId);
-  const safeFinalPath = remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowWorker.weeklyFlowRoot);
-  if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
-    await fs.rm(safeFinalPath, { force: true });
-  }
+  await removePlaylistFileIfUnshared(job.finalPath, playlistId, {
+    weeklyFlowRoot: weeklyFlowWorker.weeklyFlowRoot,
+    excludeJobIds: job.id ? [job.id] : [],
+  });
 };
 
 const jobToSharedTrack = (job) =>
@@ -143,7 +129,6 @@ export async function reconcileSharedPlaylistJobs(playlistId) {
   const groups = groupJobsByMembership(existingJobs);
   const keptJobs = [];
   const removedJobIds = [];
-  const playlistRoot = getPlaylistLibraryRoot(safePlaylistId);
 
   for (const group of groups) {
     const [kept, ...dupes] = sortJobsForTrackReuse(group);
@@ -153,13 +138,10 @@ export async function reconcileSharedPlaylistJobs(playlistId) {
         const keptPath =
           kept?.status === "done" && typeof kept.finalPath === "string" ? kept.finalPath : null;
         if (!keptPath || dupe.finalPath !== keptPath) {
-          const safeFinalPath = remapLegacyWeeklyFlowPath(
-            dupe.finalPath,
-            weeklyFlowWorker.weeklyFlowRoot,
-          );
-          if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
-            await fs.rm(safeFinalPath, { force: true });
-          }
+          await removePlaylistFileIfUnshared(dupe.finalPath, safePlaylistId, {
+            weeklyFlowRoot: weeklyFlowWorker.weeklyFlowRoot,
+            excludeJobIds: [dupe.id, kept?.id].filter(Boolean),
+          });
         }
       }
       downloadTracker.removeJob(dupe.id);
@@ -539,17 +521,13 @@ async function updateSharedPlaylist({
         }
       }
 
-      const playlistRoot = getPlaylistLibraryRoot(safePlaylistId);
       for (const job of existingJobs) {
         if (matchedJobIds.has(job.id)) continue;
         if (job.status === "done" && typeof job.finalPath === "string") {
-          const safeFinalPath = remapLegacyWeeklyFlowPath(
-            job.finalPath,
-            weeklyFlowWorker.weeklyFlowRoot,
-          );
-          if (isPathInsideRoot(safeFinalPath, playlistRoot)) {
-            await fs.rm(safeFinalPath, { force: true });
-          }
+          await removePlaylistFileIfUnshared(job.finalPath, safePlaylistId, {
+            weeklyFlowRoot: weeklyFlowWorker.weeklyFlowRoot,
+            excludeJobIds: [job.id, ...matchedJobIds],
+          });
         }
         downloadTracker.removeJob(job.id);
       }

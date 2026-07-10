@@ -30,10 +30,6 @@ export const WEEKDAY_OPTIONS = [
 ];
 
 export const FLOW_WORKER_CONCURRENCY_OPTIONS = [1, 2, 3];
-export const FLOW_WORKER_EXISTING_FILE_OPTIONS = [
-  { id: "download", label: "Download" },
-  { id: "reuse", label: "Reuse existing files" },
-];
 const FLOW_FOCUS_SUGGESTION_DEBOUNCE_MS = 250;
 const FLOW_FOCUS_SUGGESTION_LIMIT = 8;
 export const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [

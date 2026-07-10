@@ -14,13 +14,16 @@ import {
 const isolatedState = await createIsolatedStateDir("weekly-flow-file-reuse");
 applyIsolatedBackendEnv(isolatedState);
 
-const [{ db }, trackerModule, reuseModule] = await Promise.all([
+const [{ db }, { dbOps }, trackerModule, reuseModule, playlistConfigModule] = await Promise.all([
   importFromRepo("backend/config/db-sqlite.js"),
+  importFromRepo("backend/db/helpers/index.js"),
   importFromRepo("backend/services/weeklyFlow/weeklyFlowDownloadTracker.js"),
   importFromRepo("backend/services/weeklyFlow/weeklyFlowFileReuse.js"),
+  importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
 ]);
 
 const { downloadTracker } = trackerModule;
+const { flowPlaylistConfig } = playlistConfigModule;
 const {
   pathsShareDevice,
   reuseTrackForPlaylist,
@@ -29,12 +32,20 @@ const {
   repairOrphanedPlaylistTrackPaths,
   repairReusableTrackLinks,
   restoreCompletedTrack,
+  relocateSharedFilesBeforePlaylistRemoval,
+  removePlaylistFileIfUnshared,
 } = reuseModule;
 
 const weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER;
 
 test.beforeEach(async () => {
   await resetDatabase(db);
+  dbOps.updateSettings({
+    integrations: {},
+    onboardingComplete: true,
+    flows: [],
+    sharedPlaylists: [],
+  });
   downloadTracker.clearAll();
   await fs.rm(weeklyFlowRoot, { recursive: true, force: true });
 });
@@ -320,4 +331,129 @@ test("repairReusableTrackLinks requeues missing completed tracks and refreshes p
 
   assert.equal(result.requeued, 1);
   assert.equal(downloadTracker.getJob(jobId)?.status, "pending");
+});
+
+test("reuseTrackForPlaylist path-shares flow files until refresh relocates them", async () => {
+  const flow = flowPlaylistConfig.createFlow({ name: "Discover Weekly", size: 10 });
+  const track = {
+    artistName: "Burial",
+    trackName: "Archangel",
+    albumName: "Untrue",
+  };
+  const sourcePath = path.join(
+    weeklyFlowRoot,
+    "aurral-weekly-flow",
+    flow.id,
+    "Burial",
+    "Untrue",
+    "Archangel.flac",
+  );
+  await fs.mkdir(path.dirname(sourcePath), { recursive: true });
+  await fs.writeFile(sourcePath, "audio");
+  const sourceJobId = downloadTracker.addJob(track, flow.id);
+  downloadTracker.setDone(sourceJobId, sourcePath, track.albumName);
+
+  const result = await reuseTrackForPlaylist(track, "keepers", {
+    existingFileMode: "reuse",
+    weeklyFlowRoot,
+  });
+
+  assert.equal(result.reused, true);
+  assert.equal(result.sourceType, "aurral");
+  assert.equal(result.finalPath, sourcePath);
+  assert.equal(downloadTracker.getJob(result.jobId)?.finalPath, sourcePath);
+  assert.equal(await fs.readFile(sourcePath, "utf8"), "audio");
+
+  const relocated = await relocateSharedFilesBeforePlaylistRemoval(flow.id, {
+    weeklyFlowRoot,
+  });
+  const expectedPath = path.join(
+    weeklyFlowRoot,
+    "aurral-weekly-flow",
+    "keepers",
+    "Burial",
+    "Untrue",
+    "Archangel.flac",
+  );
+  assert.equal(relocated.relocated, 1);
+  assert.equal(downloadTracker.getJob(result.jobId)?.finalPath, expectedPath);
+  assert.equal(await fs.readFile(expectedPath, "utf8"), "audio");
+  await assert.rejects(fs.access(sourcePath));
+});
+test("relocateSharedFilesBeforePlaylistRemoval moves shared files to a survivor playlist", async () => {
+  const track = {
+    artistName: "Four Tet",
+    trackName: "Two Thousand and Seventeen",
+    albumName: "New Energy",
+  };
+  const ownerPath = path.join(
+    weeklyFlowRoot,
+    "aurral-weekly-flow",
+    "owner-playlist",
+    "Four Tet",
+    "New Energy",
+    "Two Thousand and Seventeen.flac",
+  );
+  await fs.mkdir(path.dirname(ownerPath), { recursive: true });
+  await fs.writeFile(ownerPath, "audio");
+  const ownerJobId = downloadTracker.addJob(track, "owner-playlist");
+  downloadTracker.setDone(ownerJobId, ownerPath, track.albumName);
+  const sharedJobId = downloadTracker.addJob(track, "survivor-playlist");
+  downloadTracker.setDone(sharedJobId, ownerPath, track.albumName);
+
+  const result = await relocateSharedFilesBeforePlaylistRemoval("owner-playlist", {
+    weeklyFlowRoot,
+  });
+
+  const expectedPath = path.join(
+    weeklyFlowRoot,
+    "aurral-weekly-flow",
+    "survivor-playlist",
+    "Four Tet",
+    "New Energy",
+    "Two Thousand and Seventeen.flac",
+  );
+  assert.equal(result.relocated, 1);
+  assert.equal(downloadTracker.getJob(sharedJobId)?.finalPath, expectedPath);
+  assert.equal(await fs.readFile(expectedPath, "utf8"), "audio");
+  await assert.rejects(fs.access(ownerPath));
+});
+
+test("removePlaylistFileIfUnshared relocates when another playlist still references the file", async () => {
+  const track = {
+    artistName: "Aphex Twin",
+    trackName: "Xtal",
+    albumName: "Selected Ambient Works",
+  };
+  const ownerPath = path.join(
+    weeklyFlowRoot,
+    "aurral-weekly-flow",
+    "owner-playlist",
+    "Aphex Twin",
+    "Selected Ambient Works",
+    "Xtal.flac",
+  );
+  await fs.mkdir(path.dirname(ownerPath), { recursive: true });
+  await fs.writeFile(ownerPath, "audio");
+  const ownerJobId = downloadTracker.addJob(track, "owner-playlist");
+  downloadTracker.setDone(ownerJobId, ownerPath, track.albumName);
+  const sharedJobId = downloadTracker.addJob(track, "other-playlist");
+  downloadTracker.setDone(sharedJobId, ownerPath, track.albumName);
+
+  const result = await removePlaylistFileIfUnshared(ownerPath, "owner-playlist", {
+    weeklyFlowRoot,
+    excludeJobIds: [ownerJobId],
+  });
+
+  const expectedPath = path.join(
+    weeklyFlowRoot,
+    "aurral-weekly-flow",
+    "other-playlist",
+    "Aphex Twin",
+    "Selected Ambient Works",
+    "Xtal.flac",
+  );
+  assert.equal(result.action, "relocated");
+  assert.equal(downloadTracker.getJob(sharedJobId)?.finalPath, expectedPath);
+  assert.equal(await fs.readFile(expectedPath, "utf8"), "audio");
 });

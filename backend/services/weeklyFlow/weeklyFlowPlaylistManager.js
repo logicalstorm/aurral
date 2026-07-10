@@ -594,6 +594,12 @@ export class WeeklyFlowPlaylistManager {
       }
       const playlistDir = path.join(this.playlistLibraryRoot, playlistType);
       try {
+        const { relocateSharedFilesBeforePlaylistRemoval } = await import(
+          "./weeklyFlowFileReuse.js"
+        );
+        await relocateSharedFilesBeforePlaylistRemoval(playlistType, {
+          weeklyFlowRoot: this.weeklyFlowRoot,
+        });
         await fs.rm(playlistDir, { recursive: true, force: true });
         console.log(`[WeeklyFlowPlaylistManager] Deleted files for ${playlistType}`);
       } catch (error) {

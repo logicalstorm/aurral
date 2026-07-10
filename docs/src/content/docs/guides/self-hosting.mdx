@@ -206,12 +206,7 @@ After startup:
 
 ### File reuse
 
-On the **Playlists** page, choose how generated playlists handle files that already exist:
-
-| Mode                     | When to use                                                             |
-| ------------------------ | ----------------------------------------------------------------------- |
-| **Download**             | Simple first setup and troubleshooting                                  |
-| **Reuse existing files** | Same-disk efficiency when Aurral or Lidarr already has a matching track |
+Aurral reuses matching Lidarr, static-playlist, or flow files instead of downloading again. Saving a flow find into a static playlist shares the same file until the flow refreshes, then the file moves to the static playlist. Shared paths stay as one file on disk so Navidrome does not see duplicates.
 
 Reuse requires Aurral to mount Lidarr's library paths at the same container locations Lidarr reports. See [Playlist imports — file reuse](/using/playlist-imports/#existing-file-reuse).
 

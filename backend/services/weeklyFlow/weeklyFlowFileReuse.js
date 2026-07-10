@@ -1,8 +1,12 @@
 import fs from "fs/promises";
 import path from "path";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
-import { buildSharedTrackIdentity } from "./weeklyFlowPlaylistConfig.js";
+import {
+  buildSharedTrackIdentity,
+  flowPlaylistConfig,
+} from "./weeklyFlowPlaylistConfig.js";
 import { libraryManager } from "../libraryManager.js";
+import { commitImportToPlaylistLibrary } from "../playlistDownloadUtils.js";
 import {
   isPathInsideRoot,
   PLAYLIST_LIBRARY_DIR,
@@ -107,6 +111,10 @@ function sortReusableJobs(jobs) {
   });
 }
 
+function isFlowPlaylistType(playlistType) {
+  return Boolean(flowPlaylistConfig.getFlow(String(playlistType || "").trim()));
+}
+
 async function findAurralSource(track, options = {}) {
   const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || resolveWeeklyFlowRoot());
   const targetPlaylistType = String(options.targetPlaylistType || "").trim();
@@ -129,7 +137,9 @@ async function findAurralSource(track, options = {}) {
     if (!(await fileExists(sourcePath))) continue;
     candidates.push(job);
   }
-  const sourceJob = sortReusableJobs(candidates)[0];
+  const staticJobs = candidates.filter((job) => !isFlowPlaylistType(job.playlistType));
+  const flowJobs = candidates.filter((job) => isFlowPlaylistType(job.playlistType));
+  const sourceJob = sortReusableJobs(staticJobs)[0] || sortReusableJobs(flowJobs)[0];
   if (!sourceJob) return null;
   return {
     sourceType: "aurral",
@@ -137,6 +147,111 @@ async function findAurralSource(track, options = {}) {
     sourceJob,
     albumName: sourceJob.albumName || track.albumName || null,
   };
+}
+
+function retargetJobsToPath(oldPath, newPath, weeklyFlowRoot, albumName = null) {
+  const resolvedOld = path.resolve(oldPath);
+  const resolvedNew = path.resolve(newPath);
+  if (resolvedOld === resolvedNew) return;
+  for (const job of downloadTracker.getAll()) {
+    if (job?.status !== "done" || typeof job.finalPath !== "string") continue;
+    const current = path.resolve(remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot));
+    if (current !== resolvedOld) continue;
+    downloadTracker.setDone(
+      job.id,
+      resolvedNew,
+      albumName || job.albumName || null,
+      job.externalPath || null,
+    );
+  }
+}
+
+export async function adoptFileIntoPlaylist(sourcePath, targetPlaylistType, weeklyFlowRoot) {
+  const safeTarget = String(targetPlaylistType || "").trim();
+  const root = path.resolve(weeklyFlowRoot || resolveWeeklyFlowRoot());
+  const resolvedSource = path.resolve(remapLegacyWeeklyFlowPath(sourcePath, root));
+  if (!safeTarget || !(await fileExists(resolvedSource))) return null;
+
+  const targetRoot = path.resolve(root, PLAYLIST_LIBRARY_DIR, safeTarget);
+  if (isPathInsideRoot(resolvedSource, targetRoot)) return resolvedSource;
+
+  const sourcePlaylistId = parsePlaylistIdFromFinalPath(resolvedSource, root);
+  const sourceRoot = sourcePlaylistId
+    ? path.resolve(root, PLAYLIST_LIBRARY_DIR, sourcePlaylistId)
+    : null;
+  const relative =
+    sourceRoot && isPathInsideRoot(resolvedSource, sourceRoot)
+      ? path.relative(sourceRoot, resolvedSource)
+      : path.basename(resolvedSource);
+  const destPath = path.join(targetRoot, relative);
+  const committed = await commitImportToPlaylistLibrary(resolvedSource, destPath);
+  retargetJobsToPath(resolvedSource, committed, root);
+  return path.resolve(committed);
+}
+
+export async function relocateSharedFilesBeforePlaylistRemoval(playlistType, options = {}) {
+  const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || resolveWeeklyFlowRoot());
+  const safePlaylistType = String(playlistType || "").trim();
+  if (!safePlaylistType) return { relocated: 0 };
+
+  const removedDir = path.resolve(weeklyFlowRoot, PLAYLIST_LIBRARY_DIR, safePlaylistType);
+  const byPath = new Map();
+  for (const job of downloadTracker.getAll()) {
+    if (job?.status !== "done" || typeof job.finalPath !== "string") continue;
+    if (String(job.playlistType || "") === safePlaylistType) continue;
+    const finalPath = path.resolve(remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot));
+    if (!isPathInsideRoot(finalPath, removedDir)) continue;
+    if (!(await fileExists(finalPath))) continue;
+    const list = byPath.get(finalPath) || [];
+    list.push(job);
+    byPath.set(finalPath, list);
+  }
+
+  let relocated = 0;
+  for (const [oldPath, jobs] of byPath) {
+    const survivor = sortReusableJobs(jobs)[0];
+    const nextPath = await adoptFileIntoPlaylist(
+      oldPath,
+      survivor.playlistType,
+      weeklyFlowRoot,
+    );
+    if (nextPath) relocated += 1;
+  }
+  return { relocated };
+}
+
+export async function removePlaylistFileIfUnshared(finalPath, playlistId, options = {}) {
+  const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || resolveWeeklyFlowRoot());
+  const safePlaylistId = String(playlistId || "").trim();
+  if (!safePlaylistId || typeof finalPath !== "string") return { action: "skipped" };
+
+  const playlistRoot = path.resolve(weeklyFlowRoot, PLAYLIST_LIBRARY_DIR, safePlaylistId);
+  const resolved = path.resolve(remapLegacyWeeklyFlowPath(finalPath, weeklyFlowRoot));
+  if (!isPathInsideRoot(resolved, playlistRoot)) return { action: "skipped" };
+
+  const excludeJobIds = new Set(
+    (Array.isArray(options.excludeJobIds) ? options.excludeJobIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean),
+  );
+  const others = [];
+  for (const job of downloadTracker.getAll()) {
+    if (!job || job.status !== "done" || typeof job.finalPath !== "string") continue;
+    if (excludeJobIds.has(String(job.id || ""))) continue;
+    const current = path.resolve(remapLegacyWeeklyFlowPath(job.finalPath, weeklyFlowRoot));
+    if (current === resolved) others.push(job);
+  }
+  if (others.length > 0) {
+    const survivor = sortReusableJobs(others)[0];
+    const nextPath = await adoptFileIntoPlaylist(
+      resolved,
+      survivor.playlistType,
+      weeklyFlowRoot,
+    );
+    return { action: nextPath ? "relocated" : "skipped" };
+  }
+  await fs.rm(resolved, { force: true });
+  return { action: "deleted" };
 }
 
 function findMatchingArtist(artists, track) {
