@@ -1,4 +1,3 @@
-import { lazy } from "react";
 import { Music } from "lucide-react";
 import ArtistImage from "./ArtistImage";
 import { getSearchResultKey, navigateFromSearchResult } from "../utils/searchNavigation";
