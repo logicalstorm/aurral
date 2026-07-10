@@ -3,22 +3,17 @@ import assert from "node:assert/strict";
 import http from "node:http";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
   startServerProcess,
-  buildApiUrl,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("onboarding-lidarr-api");
-applyIsolatedBackendEnv(isolatedState);
-
-const [{ db }, { dbOps }] = await Promise.all([
-  importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/db/helpers/index.js"),
-]);
+const [isolatedState, { db }, { dbOps }] = await setupIsolatedBackend(
+  "onboarding-lidarr-api",
+  "backend/config/db-sqlite.js",
+  "backend/db/helpers/index.js",
+);
 
 function json(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json" });
@@ -115,7 +110,7 @@ test("GET /api/onboarding/lidarr/test uses supplied credentials before onboardin
     apiKey: "fake-key",
   });
   const response = await fetch(
-    buildApiUrl(server.port, `/api/onboarding/lidarr/test?${params.toString()}`),
+    `http://127.0.0.1:${server.port}/api/onboarding/lidarr/test?${params.toString()}`,
   );
   const payload = await response.json();
 
@@ -134,10 +129,7 @@ test("GET /api/onboarding/lidarr/profiles uses supplied credentials before onboa
     apiKey: "fake-key",
   });
   const response = await fetch(
-    buildApiUrl(
-      server.port,
-      `/api/onboarding/lidarr/profiles?${params.toString()}`,
-    ),
+    `http://127.0.0.1:${server.port}/api/onboarding/lidarr/profiles?${params.toString()}`,
   );
   const payload = await response.json();
 
@@ -146,7 +138,7 @@ test("GET /api/onboarding/lidarr/profiles uses supplied credentials before onboa
 });
 
 test("POST /api/onboarding/complete requires Lidarr and auto-picks profiles", async () => {
-  const response = await fetch(buildApiUrl(server.port, "/api/onboarding/complete"), {
+  const response = await fetch(`http://127.0.0.1:${server.port}/api/onboarding/complete`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

@@ -2,23 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("listening-history");
-applyIsolatedBackendEnv(isolatedState);
+const [isolatedState, { db }, { userOps }, listeningHistoryModule] =
+  await setupIsolatedBackend(
+    "listening-history",
+    "backend/config/db-sqlite.js",
+    "backend/db/helpers/index.js",
+    "backend/services/listeningHistory.js",
+  );
 
-const [{ db }, { userOps }, listeningHistoryModule, bcryptModule] =
-  await Promise.all([
-    importFromRepo("backend/config/db-sqlite.js"),
-    importFromRepo("backend/db/helpers/index.js"),
-    importFromRepo("backend/services/listeningHistory.js"),
-    import("bcrypt"),
-  ]);
+const bcryptModule = await import("bcrypt");
 
 const bcrypt = bcryptModule.default;
 const {

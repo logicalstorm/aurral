@@ -3,20 +3,20 @@ import assert from "node:assert/strict";
 import path from "path";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("weekly-flow-paths");
-applyIsolatedBackendEnv(isolatedState);
+const [isolatedState, playlistPaths] = await setupIsolatedBackend(
+  "weekly-flow-paths",
+  "backend/services/playlistPaths.js",
+);
 
 const {
   resolvePlaylistRoot: resolveWeeklyFlowRoot,
   remapLegacyPath: remapLegacyWeeklyFlowPath,
   resolveExistingTrackPath: resolveExistingWeeklyFlowTrackPath,
-} = await importFromRepo("backend/services/playlistPaths.js");
+} = playlistPaths;
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);

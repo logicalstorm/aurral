@@ -2,20 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
   importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("aurral-history");
-applyIsolatedBackendEnv(isolatedState);
-
-const [{ db }, historyModule] = await Promise.all([
-  importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/services/aurralHistoryService.js"),
-]);
+const [isolatedState, { db }, historyModule] = await setupIsolatedBackend(
+  "aurral-history",
+  "backend/config/db-sqlite.js",
+  "backend/services/aurralHistoryService.js",
+);
 
 const { upsertAurralHistory, getAurralHistoryRequests, recordTrackJobBlocked } = historyModule;
 const { downloadTracker } = await importFromRepo(

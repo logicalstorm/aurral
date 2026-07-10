@@ -2,29 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("playlist-mbid-enrichment");
-applyIsolatedBackendEnv(isolatedState);
-
 const [
+  isolatedState,
   { db },
   { dbOps },
   { flowPlaylistConfig },
   { downloadTracker },
   { enrichSharedPlaylistMbids },
-] = await Promise.all([
-  importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/db/helpers/index.js"),
-  importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
-  importFromRepo("backend/services/weeklyFlow/weeklyFlowDownloadTracker.js"),
-  importFromRepo("backend/services/playlistMbidEnrichmentService.js"),
-]);
+] = await setupIsolatedBackend(
+  "playlist-mbid-enrichment",
+  "backend/config/db-sqlite.js",
+  "backend/db/helpers/index.js",
+  "backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js",
+  "backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
+  "backend/services/playlistMbidEnrichmentService.js",
+);
 
 test.beforeEach(() => {
   downloadTracker.clearAll();

@@ -2,20 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("download-tracker");
-applyIsolatedBackendEnv(isolatedState);
-
-const [{ db }, trackerModule] = await Promise.all([
-  importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/services/weeklyFlow/weeklyFlowDownloadTracker.js"),
-]);
+const [isolatedState, { db }, trackerModule] = await setupIsolatedBackend(
+  "download-tracker",
+  "backend/config/db-sqlite.js",
+  "backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
+);
 
 const { WeeklyFlowDownloadTracker } = trackerModule;
 

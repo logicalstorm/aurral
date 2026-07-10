@@ -2,21 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("playlist-config");
-applyIsolatedBackendEnv(isolatedState);
-
-const [{ db }, { dbOps }, playlistConfigModule] = await Promise.all([
-  importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/db/helpers/index.js"),
-  importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
-]);
+const [isolatedState, { db }, { dbOps }, playlistConfigModule] =
+  await setupIsolatedBackend(
+    "playlist-config",
+    "backend/config/db-sqlite.js",
+    "backend/db/helpers/index.js",
+    "backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js",
+  );
 const { flowPlaylistConfig, tracksShareMembership } = playlistConfigModule;
 
 test.beforeEach(() => {

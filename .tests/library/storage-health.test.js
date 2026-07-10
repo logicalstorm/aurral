@@ -5,25 +5,23 @@ import os from "os";
 import path from "path";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
   importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("storage-health");
-applyIsolatedBackendEnv(isolatedState);
 const previousFileBrowseRoots = process.env.FILE_BROWSE_ROOTS;
 const previousPathMappings = process.env.PATH_MAPPINGS;
 
-const [{ db }, { dbOps }, { runStorageHealthCheck }, { resolvePlaylistRoot }] =
-  await Promise.all([
-    importFromRepo("backend/config/db-sqlite.js"),
-    importFromRepo("backend/db/helpers/index.js"),
-    importFromRepo("backend/services/storageHealthService.js"),
-    importFromRepo("backend/services/playlistPaths.js"),
-  ]);
+const [isolatedState, { db }, { dbOps }, { runStorageHealthCheck }, { resolvePlaylistRoot }] =
+  await setupIsolatedBackend(
+    "storage-health",
+    "backend/config/db-sqlite.js",
+    "backend/db/helpers/index.js",
+    "backend/services/storageHealthService.js",
+    "backend/services/playlistPaths.js",
+  );
 
 test.beforeEach(async () => {
   await resetDatabase(db);

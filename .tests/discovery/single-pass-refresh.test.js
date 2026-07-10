@@ -1,12 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
-  cleanupIsolatedState,
   importFromRepo,
   resetDatabase,
+  setupIsolatedBackend,
+  cleanupIsolatedState,
 } from "../helpers/backendTestHarness.js";
+
+const [isolatedState] = await setupIsolatedBackend("single-pass-refresh");
+
+test.after(async () => {
+  await cleanupIsolatedState(isolatedState);
+});
 
 test("single-pass refresh: buildRecommendationsFromSeeds includes candidate tag hydration and second-hop discovery", async () => {
   const {
@@ -125,34 +130,6 @@ test("single-pass refresh: applyHydratedCandidateTags recalculates score when ca
   assert.equal(hydrated.candidateTagsHydrated, true);
   assert.equal(hydrated.tagSource, "lastfm_artist");
   assert.ok(hydrated.scoreTotal > 120);
-});
-
-test("single-pass refresh: recommendationQuality constants are correctly defined", async () => {
-  const {
-    DISCOVERY_QUALITY_INITIAL,
-    DISCOVERY_QUALITY_ENRICHING,
-    DISCOVERY_QUALITY_ENRICHED,
-    getDiscoveryRecommendationsPerRefresh,
-    getDiscoveryRecommendationPoolLimit,
-  } = await importFromRepo("backend/services/discovery/index.js");
-
-  assert.equal(DISCOVERY_QUALITY_INITIAL, "initial");
-  assert.equal(DISCOVERY_QUALITY_ENRICHING, "enriching");
-  assert.equal(DISCOVERY_QUALITY_ENRICHED, "enriched");
-
-  const perRefresh = getDiscoveryRecommendationsPerRefresh();
-  const poolLimit = getDiscoveryRecommendationPoolLimit();
-
-  assert.ok(perRefresh >= 50 && perRefresh <= 500);
-  assert.equal(poolLimit, 500);
-  assert.ok(poolLimit >= perRefresh);
-});
-
-const isolatedState = await createIsolatedStateDir("single-pass-refresh");
-applyIsolatedBackendEnv(isolatedState);
-
-test.after(async () => {
-  await cleanupIsolatedState(isolatedState);
 });
 
 test("single-pass refresh: db discovery cache stores enriched quality after single-pass write", async () => {

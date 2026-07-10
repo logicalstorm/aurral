@@ -4,20 +4,16 @@ import path from "path";
 import { pathToFileURL } from "url";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("discovery-cache-hydration");
-applyIsolatedBackendEnv(isolatedState);
-
-const [{ db }, { dbOps }] = await Promise.all([
-  importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/db/helpers/index.js"),
-]);
+const [isolatedState, { db }, { dbOps }] = await setupIsolatedBackend(
+  "discovery-cache-hydration",
+  "backend/config/db-sqlite.js",
+  "backend/db/helpers/index.js",
+);
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);

@@ -4,19 +4,19 @@ import path from "node:path";
 import fs from "node:fs/promises";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("discover-playlist-artwork");
-applyIsolatedBackendEnv(isolatedState);
+const [isolatedState, playlistArtworkBuilder] = await setupIsolatedBackend(
+  "discover-playlist-artwork",
+  "backend/services/discovery/playlistArtworkBuilder.js",
+);
 
 const {
   getDiscoverArtworkDirectory,
   pruneObsoleteDiscoverArtwork,
-} = await importFromRepo("backend/services/discovery/playlistArtworkBuilder.js");
+} = playlistArtworkBuilder;
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);

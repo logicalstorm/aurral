@@ -1,24 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
 } from "./helpers/backendTestHarness.js";
 import {
   defaultData,
   DEFAULT_METADATA_BASE_URL,
 } from "../backend/config/constants.js";
 
-const isolatedState = await createIsolatedStateDir("metadata-providers");
-applyIsolatedBackendEnv(isolatedState);
+const [isolatedState, { dbOps }, apiClients] = await setupIsolatedBackend(
+  "metadata-providers",
+  "backend/db/helpers/index.js",
+  "backend/services/apiClients/index.js",
+);
 
-const { dbOps } = await importFromRepo("backend/db/helpers/index.js");
 const {
   getMetadataProviderHealthSnapshot,
   getMusicbrainzApiBaseUrl,
-} = await importFromRepo("backend/services/apiClients/index.js");
+} = apiClients;
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);

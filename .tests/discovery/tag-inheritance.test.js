@@ -1,12 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
-  cleanupIsolatedState,
-  importFromRepo,
-  resetDatabase,
-} from "../helpers/backendTestHarness.js";
+import { importFromRepo } from "../helpers/backendTestHarness.js";
 
 test("tag inheritance: candidate with >= 3 seed tags inherits tags and skips artist.getTopTags", async () => {
   const { canInheritTagsFromSeeds } = await importFromRepo(

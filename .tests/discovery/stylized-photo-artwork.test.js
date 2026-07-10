@@ -2,15 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import sharp from "sharp";
 
-import { importFromRepo } from "../helpers/backendTestHarness.js";
-
-const {
+import {
   pickSeededPhotoArtworkPalette,
   renderStylizedPhotoArtwork,
-} = await importFromRepo("backend/services/discovery/stylizedArtwork.js");
-const { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } = await importFromRepo(
-  "backend/config/discoverPlaylistPresets.js",
-);
+} from "../../backend/services/discovery/stylizedArtwork.js";
+import { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } from "../../backend/config/discoverPlaylistPresets.js";
 
 test("renderStylizedPhotoArtwork returns a square JPEG cover", async () => {
   const sourceBuffer = await sharp({
