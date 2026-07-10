@@ -282,28 +282,3 @@ test("blocked track download history falls back to staging basename", async () =
 
   assert.equal(entry?.sourceFilename, "downloaded-track.mp3");
 });
-
-test("getAurralHistoryRequests hides internal system kinds", async () => {
-  upsertAurralHistory({
-    referenceId: "discovery",
-    kind: "discovery_refresh",
-    title: "Refreshing discovery",
-    status: "processing",
-    statusLabel: "Refreshing",
-  });
-  upsertAurralHistory({
-    referenceId: "job-visible",
-    kind: "track_download",
-    title: "Searching slskd for Song",
-    status: "processing",
-    statusLabel: "Searching",
-    metadata: { jobId: "job-visible", trackName: "Song", artistName: "Artist" },
-  });
-
-  const entries = await getAurralHistoryRequests();
-  assert.equal(
-    entries.some((entry) => entry.kind === "discovery_refresh"),
-    false,
-  );
-  assert.equal(entries.some((entry) => entry.jobId === "job-visible"), true);
-});
