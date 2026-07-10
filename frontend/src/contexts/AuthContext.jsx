@@ -106,6 +106,9 @@ export const AuthProvider = ({ children }) => {
       setStoredAuth({ token: result.token });
       setUser(result.user || null);
       setIsAuthenticated(true);
+      try {
+        setBootstrap(await getBootstrapStatus());
+      } catch {}
       return true;
     } catch {
       return false;
