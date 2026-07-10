@@ -22,7 +22,8 @@ Self-hosting music works best when each tool has a narrow job.
 | [Lidarr](https://github.com/Lidarr/Lidarr)        | Artists, albums, metadata, imports, and long-term library state         |
 | [Aurral](https://aurral.org)                      | Discovery, flows, imported playlists, and Lidarr adds                   |
 | [Navidrome](https://www.navidrome.org)            | Main library and Aurral-generated playback over Subsonic                |
-| [slskd](https://github.com/slskd/slskd)           | Soulseek client used by Aurral for flow and playlist downloads          |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp)         | Built-in YouTube/web fallback for Aurral flow and playlist downloads    |
+| [slskd](https://github.com/slskd/slskd)           | Optional Soulseek client for Aurral flow and playlist downloads         |
 | [Tubifarry](https://github.com/TypNull/Tubifarry) | Optional Lidarr plugin for Soulseek-backed **album** searches in Lidarr |
 | [Amperfy](https://github.com/BLeeEZ/amperfy)      | Native-feeling iOS playback against Navidrome                           |
 | [Tailscale](https://tailscale.com)                | Private remote access without exposing admin tools publicly             |
@@ -32,9 +33,9 @@ Self-hosting music works best when each tool has a narrow job.
 Keep these separate in your head:
 
 1. **Library albums** — Lidarr (optionally with Tubifarry + slskd as indexer and download client) pulls full albums into `/data/music`.
-2. **Flows and playlists** — Aurral talks to slskd directly, picks candidates, and moves completed files into `DOWNLOAD_FOLDER` under `aurral-weekly-flow/`.
+2. **Flows and playlists** — Aurral downloads via yt-dlp, slskd, and/or Usenet, then writes completed files into `DOWNLOAD_FOLDER` under `aurral-weekly-flow/`.
 
-Aurral does not route flow downloads through Lidarr. Lidarr and Aurral can both use the same slskd instance, but they serve different jobs.
+Aurral does not route flow downloads through Lidarr. Lidarr and Aurral can share the same slskd instance when you use Soulseek, but they serve different jobs.
 
 :::note
 Tubifarry requires [Lidarr nightly](https://github.com/Lidarr/Lidarr) for plugin support. Aurral itself works with stable Lidarr — nightly is only needed if you want the Tubifarry plugin path for album acquisition.
@@ -82,10 +83,11 @@ If you want Soulseek-backed **album** downloads inside Lidarr:
 
 For **Aurral flows and playlists**, connect download clients in **Settings → Download Clients**:
 
+- **yt-dlp** for YouTube/web fallback — enabled by default when `yt-dlp` and ffmpeg are available. No separate daemon. See [yt-dlp](/integrations/ytdlp/).
 - **slskd** for Soulseek — Aurral sends searches, selects the best candidate, and moves completed files from slskd's download directory into your `DOWNLOAD_FOLDER`.
 - **Prowlarr + SABnzbd/NZBGet** for Usenet — Aurral searches indexers via Prowlarr, queues NZBs in the download client, and imports completed files the same way. See [Usenet](/integrations/usenet/).
 
-You can run both and set **source priority** so Aurral falls back when one source fails.
+You can run any combination and set **source priority** so Aurral falls back when one source fails.
 
 ### Aurral and slskd are separate from Lidarr album downloads
 

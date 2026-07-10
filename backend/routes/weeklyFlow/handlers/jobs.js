@@ -225,7 +225,9 @@ export function registerJobs(router) {
     const deniedSourceKey =
       job.downloadSource === "usenet"
         ? String(job.releaseGuid || "").trim()
-        : `${String(job.remoteUsername || "").trim()}\0${String(job.remoteFilename || "").trim()}`;
+        : job.downloadSource === "ytdlp"
+          ? String(job.releaseGuid || "").trim()
+          : `${String(job.remoteUsername || "").trim()}\0${String(job.remoteFilename || "").trim()}`;
     if (job.downloadSource && deniedSourceKey) {
       downloadTracker.recordDeniedSource(job.id, job.downloadSource, deniedSourceKey);
     }

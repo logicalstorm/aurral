@@ -1,6 +1,5 @@
 import { enqueueWeeklyFlowOperationJob, getHonkerQueueDepth } from "../honkerDb.js";
 
-let workerRunning = false;
 let workerCurrentLabel = null;
 
 class WeeklyFlowOperationQueue {
@@ -15,7 +14,7 @@ class WeeklyFlowOperationQueue {
       pending = getHonkerQueueDepth("weekly-flow-operation");
     } catch {}
     return {
-      processing: workerRunning,
+      processing: Boolean(workerCurrentLabel) || pending > 0,
       pending,
       durablePending: 0,
       currentLabel: workerCurrentLabel,
@@ -24,10 +23,8 @@ class WeeklyFlowOperationQueue {
 }
 
 export function setWeeklyFlowOperationWorkerState({
-  running = false,
   currentLabel = null,
 } = {}) {
-  workerRunning = running === true;
   workerCurrentLabel =
     currentLabel == null ? null : String(currentLabel).trim() || null;
 }

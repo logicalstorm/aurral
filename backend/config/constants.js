@@ -78,6 +78,10 @@ export const defaultData = {
         priority: 20,
         addPaused: false,
       },
+      ytdlp: {
+        enabled: true,
+        priority: 50,
+      },
       ticketmaster: {
         apiKey: "",
         searchRadiusMiles: 250,

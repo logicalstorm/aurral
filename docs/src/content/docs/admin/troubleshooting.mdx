@@ -17,7 +17,8 @@ description: Common setup and runtime issues.
 
 ## Playlists are not downloading
 
-- Confirm at least one download client is configured in **Settings → Download Clients** and/or an indexer in **Settings → Indexers** (slskd and/or Prowlarr + SABnzbd/NZBGet).
+- Confirm at least one download client is configured in **Settings → Download Clients** and/or an indexer in **Settings → Indexers** (yt-dlp, slskd, and/or Prowlarr + SABnzbd/NZBGet).
+- For yt-dlp: **Test connection** and confirm `yt-dlp` plus ffmpeg are installed (included in the Docker image).
 - For slskd: check connection and Soulseek login status.
 - For Usenet: confirm Prowlarr indexers are enabled and the download client can reach completed files.
 - Try disabling **Strict format only** on the slskd card, or switch preferred format to MP3 if FLAC matches are scarce.

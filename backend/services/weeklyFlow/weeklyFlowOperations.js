@@ -20,7 +20,10 @@ import {
 } from "./weeklyFlowFileReuse.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import { playlistManager } from "./weeklyFlowPlaylistManager.js";
-import { slskdClient } from "../slskdClient.js";
+import {
+  getDownloadSourceNotConfiguredMessage,
+  isAnyDownloadSourceConfigured,
+} from "../downloadSourceService.js";
 import { weeklyFlowWorker } from "./weeklyFlowWorker.js";
 import {
   restartWorkerIfPending,
@@ -33,8 +36,6 @@ import { schedulePlaylistMbidEnrichment } from "../playlistMbidEnrichmentService
 
 const DEFAULT_LIMIT = 30;
 const OPERATION_TOKENS_KEY = "weeklyFlowOperationTokens";
-const SLSKD_NOT_CONFIGURED_MESSAGE =
-  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
 
 export function createWeeklyFlowOperationToken() {
   return `${Date.now()}-${randomUUID()}`;
@@ -268,8 +269,10 @@ async function runFlowSeed({
   if (!isLatestWeeklyFlowOperationToken(tokenScope, token)) {
     return { cancelled: true };
   }
-  if (!slskdClient.isConfigured()) {
-    throw new Error(SLSKD_NOT_CONFIGURED_MESSAGE);
+  if (!isAnyDownloadSourceConfigured()) {
+    const error = new Error(getDownloadSourceNotConfiguredMessage());
+    error.code = "NO_DOWNLOAD_SOURCE";
+    throw error;
   }
   const flow = flowPlaylistConfig.getFlow(safeFlowId);
   if (!flow) return { missing: true };

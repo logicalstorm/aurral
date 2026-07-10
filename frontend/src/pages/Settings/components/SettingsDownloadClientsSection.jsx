@@ -12,7 +12,7 @@ import {
 import { SettingsArrFieldSet, SettingsArrFormGroup } from "./arr/SettingsArrLayout";
 import { getProviderStatus } from "../utils/integrationStatus";
 import { PATH_MAPPING_SOURCE_OPTIONS, PathMappingModal } from "./PathMappingModal";
-import { testNzbgetConnection, testSabnzbdConnection, testSlskdConnection } from "../../../utils/api";
+import { testNzbgetConnection, testSabnzbdConnection, testSlskdConnection, testYtdlpConnection } from "../../../utils/api";
 
 const PATH_MAPPING_SOURCE_VALUES = new Set(
   PATH_MAPPING_SOURCE_OPTIONS.map((option) => option.value),
@@ -45,6 +45,7 @@ function sourceLabel(source) {
 
 const CLIENT_MODALS = {
   slskd: "slskd",
+  ytdlp: "ytdlp",
   nzbget: "nzbget",
   sabnzbd: "sabnzbd",
 };
@@ -60,6 +61,7 @@ export function SettingsDownloadClientsSection({
 }) {
   const [activeModal, setActiveModal] = useState(null);
   const [testingSlskd, setTestingSlskd] = useState(false);
+  const [testingYtdlp, setTestingYtdlp] = useState(false);
   const [testingNzbget, setTestingNzbget] = useState(false);
   const [testingSabnzbd, setTestingSabnzbd] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -67,6 +69,7 @@ export function SettingsDownloadClientsSection({
 
   const integrations = settings.integrations || {};
   const slskd = integrations.slskd || {};
+  const ytdlp = integrations.ytdlp || {};
   const nzbget = integrations.nzbget || {};
   const sabnzbd = integrations.sabnzbd || {};
   const pathMappings = coercePathMappings(settings.pathMappings).filter(
@@ -74,9 +77,11 @@ export function SettingsDownloadClientsSection({
   );
 
   const slskdConfigured = Boolean(slskd.url && slskd.apiKey);
+  const ytdlpConfigured = health?.ytdlpConfigured === true;
   const nzbgetConfigured = Boolean(nzbget.url);
   const sabnzbdConfigured = Boolean(sabnzbd.url && sabnzbd.apiKey);
   const slskdEnabled = slskd.enabled !== false;
+  const ytdlpEnabled = ytdlp.enabled !== false;
   const nzbgetEnabled = nzbget.enabled === true;
   const sabnzbdEnabled = sabnzbd.enabled === true;
 
@@ -200,6 +205,24 @@ export function SettingsDownloadClientsSection({
     }
   };
 
+  const handleTestYtdlp = async () => {
+    setTestingYtdlp(true);
+    try {
+      await handleSaveSettings();
+      const result = await testYtdlpConnection();
+      showSuccess(result.message || "yt-dlp OK");
+    } catch (error) {
+      showError(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          error.message ||
+          "yt-dlp test failed",
+      );
+    } finally {
+      setTestingYtdlp(false);
+    }
+  };
+
   return (
     <>
       <div className="settings-page__section">
@@ -218,6 +241,13 @@ export function SettingsDownloadClientsSection({
             status={getProviderStatus(slskdEnabled, slskdConfigured)}
             meta={`Priority ${slskd.priority ?? 10}`}
             onClick={() => setActiveModal(CLIENT_MODALS.slskd)}
+          />
+          <IntegrationCard
+            title="yt-dlp"
+            subtitle="YouTube / web"
+            status={getProviderStatus(ytdlpEnabled, ytdlpConfigured)}
+            meta={`Priority ${ytdlp.priority ?? 50}`}
+            onClick={() => setActiveModal(CLIENT_MODALS.ytdlp)}
           />
           <IntegrationCard
             title="NZBGet"
@@ -434,6 +464,48 @@ export function SettingsDownloadClientsSection({
                 }
               />
             </SettingsModalToggleGroup>
+          </SettingsModalSection>
+        </SettingsIntegrationModal>
+      )}
+
+      {activeModal === CLIENT_MODALS.ytdlp && (
+        <SettingsIntegrationModal
+          title="yt-dlp"
+          onClose={() => setActiveModal(null)}
+          footerActions={
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={testingYtdlp}
+              onClick={handleTestYtdlp}
+            >
+              <RefreshCw className={`artist-icon-sm${testingYtdlp ? " animate-spin" : ""}`} />
+              {testingYtdlp ? "Testing..." : "Test connection"}
+            </button>
+          }
+        >
+          <SettingsModalSection title="General">
+            <SettingsModalToggle
+              label="Enable yt-dlp"
+              checked={ytdlpEnabled}
+              onChange={(event) => updateIntegration("ytdlp", { enabled: event.target.checked })}
+            />
+          </SettingsModalSection>
+
+          <SettingsModalSection title="Behavior">
+            <SettingsModalField label="Source priority">
+              <SettingsInput
+                type="number"
+                min="1"
+                max="1000"
+                value={ytdlp.priority ?? 50}
+                onChange={(event) =>
+                  updateIntegration("ytdlp", {
+                    priority: toNumber(event.target.value, 50),
+                  })
+                }
+              />
+            </SettingsModalField>
           </SettingsModalSection>
         </SettingsIntegrationModal>
       )}

@@ -3,13 +3,16 @@ import { getWeeklyFlowOperationQueue } from "../honkerDb.js";
 import { processWeeklyFlowOperation } from "./weeklyFlowOperations.js";
 import { setWeeklyFlowOperationWorkerState } from "./weeklyFlowOperationQueue.js";
 
-const PERMANENT_ERROR_CODES = new Set(["SHARED_PLAYLIST_NAME_CONFLICT", "FLOW_NAME_CONFLICT"]);
+const PERMANENT_ERROR_CODES = new Set([
+  "SHARED_PLAYLIST_NAME_CONFLICT",
+  "FLOW_NAME_CONFLICT",
+  "NO_DOWNLOAD_SOURCE",
+]);
 
 let currentLabel = null;
 
-function syncWorkerState(running) {
+function syncWorkerState() {
   setWeeklyFlowOperationWorkerState({
-    running,
     currentLabel,
   });
 }
@@ -23,15 +26,15 @@ const worker = createHonkerWorker({
   maxAttempts: 3,
   onJobDequeue(payload) {
     currentLabel = payload?.label || payload?.kind || null;
-    syncWorkerState(true);
+    syncWorkerState();
   },
   onJobSuccess() {
     currentLabel = null;
-    syncWorkerState(worker.isRunning());
+    syncWorkerState();
   },
   onJobError() {
     currentLabel = null;
-    syncWorkerState(worker.isRunning());
+    syncWorkerState();
   },
   resolveRetry(error, job) {
     const message = error?.message || String(error);

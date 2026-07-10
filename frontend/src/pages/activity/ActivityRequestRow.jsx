@@ -73,7 +73,9 @@ export default function ActivityRequestRow({
 }) {
   const isSlskd = request.source === "slskd";
   const isUsenet = request.source === "nzbget" || request.source === "sabnzbd";
-  const isTrackDownload = isSlskd || isUsenet || request.kind === "track_download";
+  const isYtdlp = request.source === "ytdlp";
+  const isTrackDownload =
+    isSlskd || isUsenet || isYtdlp || request.kind === "track_download";
   const isAurral = request.source === "aurral" && !isTrackDownload;
   const isActivity = request.type === "activity";
   const isAlbum = request.type === "album";
@@ -93,7 +95,7 @@ export default function ActivityRequestRow({
       : metaLine;
   const artistMbid = isAlbum ? request.artistMbid : request.mbid;
   const canNavigate =
-    ((isSlskd || isUsenet) && request.playlistId) ||
+    ((isSlskd || isUsenet || isYtdlp) && request.playlistId) ||
     ((isAurral || isActivity) && request.href) ||
     (artistMbid && artistMbid !== "null" && artistMbid !== "undefined");
   const timelineTime = formatTimelineTime(request.requestedAt);
