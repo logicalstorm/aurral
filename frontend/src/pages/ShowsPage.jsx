@@ -1,53 +1,17 @@
-import { useState, useEffect, useMemo } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { Loader, Music, MapPin, AlertCircle } from "lucide-react";
-import { getNearbyShows } from "../utils/api";
 import NearbyLocationControl from "../components/NearbyLocationControl";
 import ShowCard from "../components/ShowCard";
 import { PageSectionMobileNav } from "../components/PageSectionMobileNav";
+import { useNearbyShows } from "../hooks/useNearbyShows";
 import {
   DEFAULT_SHOWS_FILTER,
   normalizeShowsFilter,
   SHOWS_FILTERS,
 } from "../navigation/showsNavConfig";
 
-const NEARBY_MODE_KEY = "discoverNearbyMode";
-const NEARBY_ZIP_KEY = "discoverNearbyZip";
 const SHOWS_PAGE_LIMIT = 60;
-
-const DEFAULT_LOCATION_STATE = {
-  locationMode: "ip",
-  appliedZip: "",
-};
-
-const readStoredLocationState = () => {
-  try {
-    const storedMode = globalThis.localStorage?.getItem(NEARBY_MODE_KEY);
-    const storedZip = globalThis.localStorage?.getItem(NEARBY_ZIP_KEY) || "";
-    return {
-      locationMode:
-        storedMode === "zip" || storedMode === "ip"
-          ? storedMode
-          : DEFAULT_LOCATION_STATE.locationMode,
-      appliedZip: storedZip,
-    };
-  } catch {
-    return DEFAULT_LOCATION_STATE;
-  }
-};
-
-const writeStoredLocationMode = (mode) => {
-  try {
-    globalThis.localStorage?.setItem(NEARBY_MODE_KEY, mode);
-  } catch {}
-};
-
-const writeStoredZip = (zipCode) => {
-  try {
-    globalThis.localStorage?.setItem(NEARBY_ZIP_KEY, zipCode);
-  } catch {}
-};
 
 const getShowGroups = (showsData) => ({
   all: Array.isArray(showsData?.shows) ? showsData.shows : [],
@@ -56,7 +20,7 @@ const getShowGroups = (showsData) => ({
 });
 
 const getShowKey = (show, index) =>
-  [show?.id || `show-${index}`, show?.artistName, show?.sourceType || show?.matchType || "show"]
+  [show?.id || `show-${index}`, show?.artistName, show?.sourceType || "show"]
     .filter(Boolean)
     .join("-");
 
@@ -71,59 +35,25 @@ function ShowsPage() {
       ? "Shows"
       : `${SHOWS_FILTERS.find((entry) => entry.id === showFilter)?.label || "Shows"} - Shows`,
   );
-  const [showsData, setShowsData] = useState(null);
-  const [showsLoading, setShowsLoading] = useState(false);
-  const [showsError, setShowsError] = useState(null);
-  const [{ locationMode, appliedZip }, setLocationState] = useState(readStoredLocationState);
+
+  const {
+    data: showsData,
+    loading: showsLoading,
+    error: showsError,
+    locationMode,
+    appliedZip,
+    setLocationMode,
+    setAppliedZip,
+    locationLabel,
+  } = useNearbyShows({ limit: SHOWS_PAGE_LIMIT });
+
   const zipModeActive = locationMode === "zip";
-
-  useEffect(() => {
-    const shouldUseZip = locationMode === "zip";
-    const trimmedZip = appliedZip.trim();
-    if (shouldUseZip && !trimmedZip) {
-      setShowsData(null);
-      setShowsError(null);
-      setShowsLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    setShowsLoading(true);
-    setShowsError(null);
-    setShowsData(null);
-
-    getNearbyShows(shouldUseZip ? trimmedZip : "", SHOWS_PAGE_LIMIT, {
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (controller.signal.aborted) return;
-        setShowsData(response);
-        setShowsError(null);
-      })
-      .catch((error) => {
-        if (controller.signal.aborted) return;
-        setShowsError(error.response?.data?.message || "Failed to load nearby shows");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setShowsLoading(false);
-        }
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [locationMode, appliedZip]);
-
-  const showGroups = useMemo(() => getShowGroups(showsData), [showsData]);
+  const showGroups = getShowGroups(showsData);
   const shows = showGroups[showFilter] || showGroups.all;
   const hasAnyShows = Object.values(showGroups).some((group) => group.length > 0);
-  const locationLabel =
-    showsData?.location?.label || showsData?.location?.postalCode || "your area";
   const pageSubtitle = showsLoading
     ? "Finding Ticketmaster events matched to your library and recommendations."
     : `Upcoming concerts around ${locationLabel}.`;
-
   const emptyMessage =
     showFilter === "library"
       ? `We could not find local Ticketmaster shows for artists from your library around ${locationLabel}.`
@@ -151,29 +81,9 @@ function ShowsPage() {
             locationMode={locationMode}
             appliedZip={appliedZip}
             location={showsData?.location}
-            onSelectYourLocation={() => {
-              setLocationState((current) => ({
-                ...current,
-                locationMode: "ip",
-              }));
-              writeStoredLocationMode("ip");
-            }}
-            onStartCustomLocation={() => {
-              setLocationState((current) => ({
-                ...current,
-                locationMode: "zip",
-              }));
-              writeStoredLocationMode("zip");
-            }}
-            onApplyZip={(sanitized) => {
-              const nextZip = sanitized.trim();
-              setLocationState({
-                locationMode: "zip",
-                appliedZip: nextZip,
-              });
-              writeStoredLocationMode("zip");
-              writeStoredZip(nextZip);
-            }}
+            onSelectYourLocation={() => setLocationMode("ip")}
+            onStartCustomLocation={() => setLocationMode("zip")}
+            onApplyZip={setAppliedZip}
           />
         </div>
       </header>

@@ -1,11 +1,10 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useWebSocketChannel } from "../hooks/useWebSocket";
 import { useToast } from "../contexts/ToastContext";
 import { useAuth } from "../contexts/AuthContext";
 import {
   addArtistToLibrary,
   getDiscovery,
-  getNearbyShows,
   getRecentlyAdded,
   getRecentReleases,
   downloadAlbum,
@@ -13,22 +12,18 @@ import {
 } from "../utils/api";
 import { getArtistRecordId } from "../utils/artistTaste";
 import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
+import { useNearbyShows } from "../hooks/useNearbyShows";
 import {
-  readStoredNearbyLocation,
   readStoredRecentlyAdded,
   writeStoredRecentlyAdded,
   readStoredRecentReleases,
   writeStoredRecentReleases,
-  readStoredNearbyShows,
-  writeStoredNearbyShows,
   readStoredDiscoveryData,
   writeStoredDiscoveryData,
   normalizeDiscoveryData,
   mergeDiscoveryHttp,
   isStoredRecentlyAddedFresh,
   isStoredRecentReleasesFresh,
-  DISCOVER_NEARBY_MODE_KEY,
-  DISCOVER_NEARBY_ZIP_KEY,
 } from "./discoverUtils";
 
 const getArtistId = (artist) => getArtistRecordId(artist);
@@ -36,7 +31,16 @@ const getArtistId = (artist) => getArtistRecordId(artist);
 export function useDiscoverData() {
   const { user: authUser, hasPermission, bootstrap } = useAuth();
   const { showSuccess, showError } = useToast();
-  const initialNearbyLocation = useMemo(() => readStoredNearbyLocation(), []);
+  const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
+  const {
+    data: nearbyShowsData,
+    loading: nearbyShowsLoading,
+    error: nearbyShowsError,
+    locationMode: nearbyLocationMode,
+    appliedZip: appliedNearbyZip,
+    setLocationMode: setNearbyLocationMode,
+    setAppliedZip: setAppliedNearbyZip,
+  } = useNearbyShows({ enabled: ticketmasterConfigured });
 
   const [data, setData] = useState(() => readStoredDiscoveryData(authUser?.id));
   const [recentlyAdded, setRecentlyAdded] = useState(
@@ -50,29 +54,6 @@ export function useDiscoverData() {
   const [libraryLookup, setLibraryLookup] = useState({});
   const { lookup: artistFeedbackLookup, submitFeedback } =
     useArtistTasteFeedback();
-  const [nearbyShowsData, setNearbyShowsData] = useState(() =>
-    readStoredNearbyShows(
-      authUser?.id,
-      initialNearbyLocation.mode,
-      initialNearbyLocation.zip,
-    ),
-  );
-  const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
-  const [nearbyShowsLoading, setNearbyShowsLoading] = useState(
-    () =>
-      !readStoredNearbyShows(
-        authUser?.id,
-        initialNearbyLocation.mode,
-        initialNearbyLocation.zip,
-      ),
-  );
-  const [nearbyShowsError, setNearbyShowsError] = useState(null);
-  const [nearbyLocationMode, setNearbyLocationMode] = useState(
-    initialNearbyLocation.mode,
-  );
-  const [appliedNearbyZip, setAppliedNearbyZip] = useState(
-    initialNearbyLocation.zip,
-  );
   const lastDiscoveryWsMessageAtRef = useRef(0);
   const discoveryPollInFlightRef = useRef(false);
   const canAddArtist = hasPermission("addArtist");
@@ -405,79 +386,6 @@ export function useDiscoverData() {
       setTicketmasterConfigured(!!bootstrap.ticketmasterConfigured);
     }
   }, [bootstrap]);
-
-  useEffect(() => {
-    try {
-      const storedMode = localStorage.getItem(DISCOVER_NEARBY_MODE_KEY);
-      const storedZip = localStorage.getItem(DISCOVER_NEARBY_ZIP_KEY) || "";
-      if (storedMode === "zip" || storedMode === "ip") {
-        setNearbyLocationMode(storedMode);
-      }
-      setAppliedNearbyZip(storedZip);
-    } catch {}
-  }, [authUser?.id]);
-
-  useEffect(() => {
-    if (!ticketmasterConfigured) {
-      setNearbyShowsData(null);
-      setNearbyShowsError(null);
-      setNearbyShowsLoading(false);
-      return;
-    }
-    const shouldUseZip = nearbyLocationMode === "zip";
-    if (shouldUseZip && !appliedNearbyZip.trim()) {
-      setNearbyShowsData(null);
-      setNearbyShowsError(null);
-      setNearbyShowsLoading(false);
-      return;
-    }
-    const locationMode = shouldUseZip ? "zip" : "ip";
-    const locationZip = shouldUseZip ? appliedNearbyZip : "";
-    const cachedNearbyShows = readStoredNearbyShows(
-      authUser?.id,
-      locationMode,
-      locationZip,
-    );
-    if (cachedNearbyShows) {
-      setNearbyShowsData(cachedNearbyShows);
-    }
-    let cancelled = false;
-    setNearbyShowsLoading(!cachedNearbyShows);
-    setNearbyShowsError(null);
-    getNearbyShows(locationZip)
-      .then((response) => {
-        if (cancelled) return;
-        setNearbyShowsData(response);
-        writeStoredNearbyShows(
-          response,
-          authUser?.id,
-          locationMode,
-          locationZip,
-        );
-        setNearbyShowsError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        if (!cachedNearbyShows) {
-          setNearbyShowsError(
-            err.response?.data?.message || "Failed to load nearby shows",
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setNearbyShowsLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    authUser?.id,
-    nearbyLocationMode,
-    appliedNearbyZip,
-    ticketmasterConfigured,
-  ]);
 
   const getLibraryArtistImage = (artist) => {
     if (artist.images && artist.images.length > 0) {

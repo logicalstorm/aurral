@@ -25,8 +25,6 @@ import {
   DEFAULT_DISCOVER_SECTIONS,
   getFallbackGenreSectionId,
   getFallbackGenreFromSectionId,
-  DISCOVER_NEARBY_MODE_KEY,
-  DISCOVER_NEARBY_ZIP_KEY,
   DISCOVER_PREVIEW_ITEM_LIMIT,
   normalizeDiscoverLayout,
   readStoredDiscoverLayout,
@@ -654,26 +652,9 @@ function DiscoverPage() {
             locationMode={nearbyLocationMode}
             appliedZip={appliedNearbyZip}
             location={nearbyShowsData?.location}
-            onSelectYourLocation={() => {
-              setNearbyLocationMode("ip");
-              try {
-                localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "ip");
-              } catch {}
-            }}
-            onStartCustomLocation={() => {
-              setNearbyLocationMode("zip");
-              try {
-                localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "zip");
-              } catch {}
-            }}
-            onApplyZip={(sanitized) => {
-              setAppliedNearbyZip(sanitized);
-              setNearbyLocationMode("zip");
-              try {
-                localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "zip");
-                localStorage.setItem(DISCOVER_NEARBY_ZIP_KEY, sanitized);
-              } catch {}
-            }}
+            onSelectYourLocation={() => setNearbyLocationMode("ip")}
+            onStartCustomLocation={() => setNearbyLocationMode("zip")}
+            onApplyZip={setAppliedNearbyZip}
           />
         ) : null;
       if (nearbyShowsData?.configured === false) {
@@ -748,7 +729,7 @@ function DiscoverPage() {
             <>
               {nearbyShows.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((show) => (
                 <div
-                  key={`${show.id}-${show.artistName}-${show.sourceType || show.matchType || "show"}`}
+                  key={`${show.id}-${show.artistName}-${show.sourceType || "show"}`}
                   className="artist-discover-show-rail-card"
                 >
                   <ShowCard show={show} />
