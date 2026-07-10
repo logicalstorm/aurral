@@ -35,8 +35,12 @@ When a proxied username first reaches Aurral, a matching local user is created. 
 - An exact match in `AUTH_PROXY_ADMIN_USERS`
 - Group membership via `AUTH_PROXY_ROLE_HEADER` (e.g. Authelia's `Remote-Groups`), checked against `AUTH_PROXY_ADMIN_GROUPS`
 
-This is re-evaluated on every request, so promoting or demoting someone on the proxy/IdP side takes effect on their next request. 
+This is re-evaluated on every request, so promoting or demoting someone on the proxy/IdP side takes effect on their next request.
 No manual account edits needed in Aurral.
+
+Set `AUTH_PROXY_TRUSTED_IPS` to your reverse proxy's address. Without it, identity headers are accepted from any client that can reach Aurral.
+
+For Authelia or similar forwardAuth, set `AUTH_PROXY_DOMAIN` to the login origin. When a session expires, Aurral navigates to `/api/auth/reauth` so the proxy can show its login page, then returns the user to the app.
 
 Proxy-created users cannot use local password login until an admin sets a password. After creation, admins can manage the account from **Settings → Users**.
 

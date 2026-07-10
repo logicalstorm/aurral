@@ -72,6 +72,8 @@ See [Plex integration](/integrations/plex/).
 ## Page keeps reloading or stays blank behind a reverse proxy
 
 - Usually means `AUTH_PROXY_TRUSTED_IPS` doesn't match the address your reverse proxy actually connects from. This isn't the same value as `TRUST_PROXY` — check your proxy's own access logs to confirm its real source address.
+- If `AUTH_PROXY_TRUSTED_IPS` is unset with proxy auth enabled, Aurral logs a startup warning — set it before exposing the app.
+- For Authelia/forwardAuth, set `AUTH_PROXY_DOMAIN` to your auth origin or the browser may block the login redirect and reauth bounce.
 - Only affects proxy-auth setups (`AUTH_PROXY_ENABLED`/`AUTH_PROXY_HEADER`); plain password-login installs aren't affected by this.
 - The reload should stop on its own after a few attempts rather than loop forever - check the browser console for a message explaining why it stopped.
 
