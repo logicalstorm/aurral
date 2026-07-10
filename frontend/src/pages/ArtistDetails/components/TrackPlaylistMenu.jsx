@@ -1,5 +1,4 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import PropTypes from "prop-types";
 import { ChevronRight, Loader, Plus } from "lucide-react";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import { playlistContainsTrack } from "../../../utils/sharedTrackIdentity";
@@ -310,47 +309,3 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
     </div>
   );
 });
-
-TrackPlaylistPickerContent.propTypes = {
-  track: PropTypes.object,
-  playlists: PropTypes.array,
-  loading: PropTypes.bool,
-  saving: PropTypes.bool,
-  error: PropTypes.string,
-  defaultNewPlaylistName: PropTypes.string,
-  excludedPlaylistIds: PropTypes.array,
-  onSelect: PropTypes.func,
-};
-
-TrackPlaylistSubmenu.propTypes = {
-  label: PropTypes.string.isRequired,
-  icon: PropTypes.elementType,
-  track: PropTypes.object,
-  playlists: PropTypes.array,
-  loading: PropTypes.bool,
-  saving: PropTypes.bool,
-  error: PropTypes.string,
-  defaultNewPlaylistName: PropTypes.string,
-  excludedPlaylistIds: PropTypes.array,
-  onSelect: PropTypes.func,
-  onClose: PropTypes.func,
-  toggleOnClick: PropTypes.bool,
-  isOpen: PropTypes.bool,
-  onToggle: PropTypes.func,
-};
-
-TrackPlaylistMenu.propTypes = {
-  track: PropTypes.object,
-  playlists: PropTypes.array,
-  loading: PropTypes.bool,
-  saving: PropTypes.bool,
-  error: PropTypes.string,
-  defaultNewPlaylistName: PropTypes.string,
-  excludedPlaylistIds: PropTypes.array,
-  triggerLabel: PropTypes.string,
-  triggerVariant: PropTypes.oneOf(["expand", "compact", "hidden"]),
-  onLoadPlaylists: PropTypes.func,
-  onSelect: PropTypes.func,
-  onOpenChange: PropTypes.func,
-  menuVariant: PropTypes.oneOf(["preview-tracks", "search-suggestion"]),
-};

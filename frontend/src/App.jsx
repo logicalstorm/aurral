@@ -35,9 +35,8 @@ const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const SettingsPage = lazy(() => import("./pages/Settings/SettingsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetails/ArtistDetailsPage"));
-const ArtistAlbumsPage = lazy(() => import("./pages/ArtistDetails/ArtistAlbumsPage"));
+const ArtistReleaseListPage = lazy(() => import("./pages/ArtistDetails/ArtistReleaseListPage"));
 const ReleasePage = lazy(() => import("./pages/ArtistDetails/ReleasePage"));
-const ArtistAppearsOnPage = lazy(() => import("./pages/ArtistDetails/ArtistAppearsOnPage"));
 const ActivityPage = lazy(() => import("./pages/ActivityPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
 const DiscoverPlaylistsPage = lazy(() => import("./pages/DiscoverPlaylistsPage"));
@@ -288,9 +287,15 @@ function AppContent() {
                 <Route path="/activity" element={<ActivityRootRedirect />} />
                 <Route path="/activity/:view" element={<ActivityPage />} />
                 <Route path="/activity/:view/:source" element={<ActivitySourceRedirect />} />
-                <Route path="/artist/:mbid/albums" element={<ArtistAlbumsPage />} />
+                <Route
+                  path="/artist/:mbid/albums"
+                  element={<ArtistReleaseListPage mode="releases" />}
+                />
                 <Route path="/artist/:mbid/release/:releaseMbid" element={<ReleasePage />} />
-                <Route path="/artist/:mbid/appears-on" element={<ArtistAppearsOnPage />} />
+                <Route
+                  path="/artist/:mbid/appears-on"
+                  element={<ArtistReleaseListPage mode="appearsOn" />}
+                />
                 <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
                 <Route
                   path="/settings/:tab?"

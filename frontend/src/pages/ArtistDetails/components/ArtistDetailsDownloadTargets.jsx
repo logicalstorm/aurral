@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import PropTypes from "prop-types";
 import { Loader, Music, Star } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { useImageGradientColors } from "../../../utils/imageColors";
@@ -23,12 +22,6 @@ function PickCover({ pick, albumCovers, artistCoverImage }) {
     </div>
   );
 }
-
-PickCover.propTypes = {
-  pick: PropTypes.object.isRequired,
-  albumCovers: PropTypes.object,
-  artistCoverImage: PropTypes.string,
-};
 
 const formatDuration = (track) => {
   const duration = Number(track?.length || track?.duration_ms || 0);
@@ -310,27 +303,3 @@ export function ArtistDetailsDownloadTargets({
     </section>
   );
 }
-
-ArtistDetailsDownloadTargets.propTypes = {
-  releaseGroups: PropTypes.arrayOf(PropTypes.object),
-  getAlbumStatus: PropTypes.func.isRequired,
-  artist: PropTypes.object,
-  albumCovers: PropTypes.object,
-  artistCoverImage: PropTypes.string,
-  canAddAlbum: PropTypes.bool,
-  requestingAlbum: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  handleRequestAlbum: PropTypes.func.isRequired,
-  artistName: PropTypes.string,
-  playbackSource: PropTypes.shape({
-    type: PropTypes.string,
-    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    label: PropTypes.string,
-  }),
-  onAddTrackToPlaylist: PropTypes.func,
-  playlists: PropTypes.array,
-  playlistsLoading: PropTypes.bool,
-  playlistSavingKey: PropTypes.string,
-  playlistError: PropTypes.string,
-  getDefaultPlaylistName: PropTypes.func,
-  onLoadPlaylists: PropTypes.func,
-};

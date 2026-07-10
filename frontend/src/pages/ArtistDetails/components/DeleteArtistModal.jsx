@@ -1,5 +1,4 @@
 import { Loader } from "lucide-react";
-import PropTypes from "prop-types";
 
 export function DeleteArtistModal({
   show,
@@ -58,14 +57,3 @@ export function DeleteArtistModal({
     </div>
   );
 }
-
-DeleteArtistModal.propTypes = {
-  show: PropTypes.bool,
-  artistName: PropTypes.string,
-  libraryArtistName: PropTypes.string,
-  deleteFiles: PropTypes.bool,
-  onDeleteFilesChange: PropTypes.func,
-  onCancel: PropTypes.func,
-  onConfirm: PropTypes.func,
-  deleting: PropTypes.bool,
-};

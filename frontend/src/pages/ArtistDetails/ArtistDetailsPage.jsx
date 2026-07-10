@@ -9,7 +9,7 @@ import { useArtistDetailsStream } from "./hooks/useArtistDetailsStream";
 import { usePreviewPlayer } from "./hooks/usePreviewPlayer";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
 import { useArtistSearchFocus } from "./hooks/useArtistSearchFocus";
-import { allReleaseTypes, ARTIST_DETAILS_APPEARS_ON_LIMIT } from "./constants";
+import { ARTIST_DETAILS_APPEARS_ON_LIMIT, allReleaseTypes } from "./constants";
 import { ArtistDetailsHero } from "./components/ArtistDetailsHero";
 import { ArtistDetailsActionBar } from "./components/ArtistDetailsActionBar";
 import { ArtistDetailsDownloadTargets } from "./components/ArtistDetailsDownloadTargets";
@@ -35,7 +35,7 @@ import {
 } from "../../utils/api";
 import {
   buildSharedPlaylistTrackPayload,
-  getArtistPosterImage,
+  getCoverImage,
   reserveUniquePlaylistName,
 } from "./utils";
 import { useArtistTasteFeedback } from "../../hooks/useArtistTasteFeedback";
@@ -80,9 +80,7 @@ function ArtistDetailsPage() {
   const [visibleAppearsOnCoverIds, setVisibleAppearsOnCoverIds] = useState([]);
   const [visibleLibraryCoverIds, setVisibleLibraryCoverIds] = useState([]);
 
-  const selectedReleaseTypes = allReleaseTypes;
-
-  const stream = useArtistDetailsStream(mbid, artistNameFromNav, selectedReleaseTypes, {
+  const stream = useArtistDetailsStream(mbid, artistNameFromNav, {
     visibleCoverIds: [
       ...visibleReleaseGroupCoverIds,
       ...visibleAppearsOnCoverIds,
@@ -207,7 +205,6 @@ function ArtistDetailsPage() {
     appSettings,
     showSuccess,
     showError,
-    selectedReleaseTypes,
   });
 
   useArtistSearchFocus({
@@ -283,9 +280,7 @@ function ArtistDetailsPage() {
       setShowEditIdsModal(false);
       const name = artist?.name || artistNameFromNav || "";
       const [details, cover, previewData, similar] = await Promise.all([
-        getArtistDetails(mbid, name, {
-          releaseTypes: selectedReleaseTypes,
-        }).catch(() => null),
+        getArtistDetails(mbid, name, { releaseTypes: allReleaseTypes }).catch(() => null),
         getArtistCover(mbid, name, true).catch(() => ({ images: [] })),
         getArtistPreview(mbid, name).catch(() => ({ tracks: [] })),
         getSimilarArtistsForArtist(mbid, name).catch(() => ({ artists: [] })),
@@ -445,7 +440,7 @@ function ArtistDetailsPage() {
     return null;
   }
 
-  const artistCoverImage = getArtistPosterImage(coverImages);
+  const artistCoverImage = getCoverImage(coverImages);
   const playbackSource = {
     type: "artist",
     id: mbid,
@@ -465,25 +460,13 @@ function ArtistDetailsPage() {
       />
 
       <ArtistDetailsActionBar
+        library={library}
         existsInLibrary={existsInLibrary}
         loadingLibrary={loadingLibrary}
-        showRemoveDropdown={library.showRemoveDropdown}
-        setShowRemoveDropdown={library.setShowRemoveDropdown}
-        showMonitorOptionMenu={library.showMonitorOptionMenu}
-        setShowMonitorOptionMenu={library.setShowMonitorOptionMenu}
-        updatingMonitor={library.updatingMonitor}
         canChangeMonitoring={canChangeMonitoring}
-        getCurrentMonitorOption={library.getCurrentMonitorOption}
-        handleUpdateMonitorOption={library.handleUpdateMonitorOption}
         canDeleteArtist={canDeleteArtist}
-        handleDeleteClick={library.handleDeleteClick}
         canAddArtist={canAddArtist}
-        handleAddToLibrary={library.handleAddToLibrary}
-        handleOpenAddCustomizeModal={library.handleOpenAddCustomizeModal}
-        addingToLibrary={library.addingToLibrary}
         canRefreshArtist={canChangeMonitoring}
-        handleRefreshArtist={library.handleRefreshArtist}
-        refreshingArtist={library.refreshingArtist}
         buildingQueue={buildingQueue}
         isArtistPlaybackActive={isArtistPlaybackActive}
         handlePreviewPlayAll={handlePreviewPlayAll}

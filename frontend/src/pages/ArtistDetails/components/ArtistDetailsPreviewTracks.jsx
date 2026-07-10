@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import PropTypes from "prop-types";
 import { Loader, Pause, Play } from "lucide-react";
 import { getArtistTopSongVideo } from "../../../utils/api";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
@@ -152,20 +151,3 @@ export function ArtistDetailsPreviewTracks({
     </section>
   );
 }
-
-ArtistDetailsPreviewTracks.propTypes = {
-  mbid: PropTypes.string,
-  artistName: PropTypes.string,
-  loadingPreview: PropTypes.bool,
-  previewTracks: PropTypes.array,
-  playingPreviewId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  isArtistPlaybackActive: PropTypes.bool,
-  handlePreviewPlay: PropTypes.func.isRequired,
-  onAddTrackToPlaylist: PropTypes.func,
-  playlists: PropTypes.array,
-  playlistsLoading: PropTypes.bool,
-  playlistSavingKey: PropTypes.string,
-  playlistError: PropTypes.string,
-  getDefaultPlaylistName: PropTypes.func,
-  onLoadPlaylists: PropTypes.func,
-};

@@ -1,9 +1,8 @@
 import {
   RELEASE_LIST_VIEW_MODE_KEY,
   TAG_COLORS,
-  allReleaseTypes,
-  secondaryReleaseTypes,
 } from "./constants";
+import { shouldTriggerAlbumSearch } from "../../utils/albumAddAction.js";
 
 export const readReleaseListViewMode = () => {
   if (typeof window === "undefined") return "grid";
@@ -30,31 +29,6 @@ export const getTagColor = (name) => {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
   return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
-};
-
-export const getPopularityScale = (releaseGroups) => {
-  if (!Array.isArray(releaseGroups) || releaseGroups.length === 0) {
-    return { pivot: 0 };
-  }
-  const counts = releaseGroups
-    .map((rg) => (typeof rg?.fans === "number" ? rg.fans : 0))
-    .filter((value) => value > 0)
-    .sort((a, b) => a - b);
-  if (counts.length === 0) return { pivot: 0 };
-  const mid = Math.floor(counts.length / 2);
-  const pivot = counts.length % 2 === 0 ? (counts[mid - 1] + counts[mid]) / 2 : counts[mid];
-  return { pivot };
-};
-
-export const segmentsFromScale = (count, pivot, totalSegments = 10) => {
-  const safeCount = typeof count === "number" ? count : 0;
-  if (safeCount <= 0) return 0;
-  const safePivot = Number.isFinite(pivot) && pivot > 0 ? pivot : safeCount;
-  const logRatio = Math.log(safeCount / safePivot);
-  const slope = 0.6;
-  const scaled = 1 / (1 + Math.exp(-slope * logRatio));
-  const clamped = Math.min(1, Math.max(0, scaled));
-  return Math.round(clamped * totalSegments);
 };
 
 export const isVisibleLibraryAlbum = (album, { requestingAlbum = null } = {}) => {
@@ -152,31 +126,6 @@ export const getArtistType = (type) => {
   return types[type] || type;
 };
 
-export const matchesReleaseTypeFilter = (releaseGroup, selectedReleaseTypes) => {
-  if (!selectedReleaseTypes || selectedReleaseTypes.length === 0) return true;
-  const primaryType = releaseGroup["primary-type"];
-  const secondaryTypes = releaseGroup["secondary-types"] || [];
-  if (!selectedReleaseTypes.includes(primaryType)) return false;
-  if (secondaryTypes.length > 0) {
-    const normalizedSecondaryTypes = [
-      ...new Set(
-        secondaryTypes.map((secondaryType) =>
-          secondaryReleaseTypes.includes(secondaryType) ? secondaryType : "Other",
-        ),
-      ),
-    ];
-    return normalizedSecondaryTypes.every((secondaryType) =>
-      selectedReleaseTypes.includes(secondaryType),
-    );
-  }
-  return true;
-};
-
-export const hasActiveFilters = (selectedReleaseTypes) => {
-  if (selectedReleaseTypes.length !== allReleaseTypes.length) return true;
-  return !allReleaseTypes.every((type) => selectedReleaseTypes.includes(type));
-};
-
 export const getCoverImage = (coverImages) => {
   if (!coverImages?.length) return null;
   const front = coverImages.find((img) => img.front);
@@ -202,14 +151,12 @@ const imageMatchesKinds = (image, kinds) => {
   return imageKinds.some((kind) => kinds.includes(kind));
 };
 
-export const getArtistPosterImage = (coverImages) => getCoverImage(coverImages);
-
 export const getArtistHeroImage = (coverImages) => {
   if (!coverImages?.length) return null;
   const fanart = coverImages.find((image) =>
     imageMatchesKinds(image, ["fanart", "background", "banner"]),
   );
-  return fanart?.image || getArtistPosterImage(coverImages);
+  return fanart?.image || getCoverImage(coverImages);
 };
 
 export const getReleaseYear = (releaseGroupOrAlbum) => {
@@ -261,10 +208,6 @@ export const formatAlbumDuration = (durationMs) => {
   if (hours > 0) return `${hours} hr ${minutes} min`;
   return `${minutes} min`;
 };
-
-import {
-  shouldTriggerAlbumSearch,
-} from "../../utils/albumAddAction.js";
 
 export const resolveReleaseLibraryDisplay = (libraryInfo, downloadStatus) => {
   const withAction = (display) => ({
@@ -416,13 +359,6 @@ export const buildLastfmArtistUrl = (artistName) =>
 
 export const buildLastfmAlbumUrl = (artistName, albumTitle) =>
   `${buildLastfmArtistUrl(artistName)}/${encodeLastfmPathSegment(albumTitle)}`;
-
-export const getArtistReleaseGridColumnCount = () => {
-  if (typeof window === "undefined") return 2;
-  if (window.matchMedia("(min-width: 1024px)").matches) return 6;
-  if (window.matchMedia("(min-width: 640px)").matches) return 3;
-  return 2;
-};
 
 export const isLibraryPlaybackTrack = (track) =>
   track?.previewProvider === "lidarr" || !!track?.streamPath;

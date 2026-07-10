@@ -11,7 +11,7 @@ import {
   getStoredAuth,
   readLibraryLookupCache,
 } from "../../../utils/api";
-import { emptyArtistShape } from "../constants";
+import { allReleaseTypes, emptyArtistShape } from "../constants";
 
 const buildReleaseGroupCoverRequest = (rgId, artist, libraryAlbums, pageArtistName) => {
   const releaseGroup =
@@ -43,12 +43,8 @@ const buildInitialArtist = (mbid, artistNameFromNav) =>
       }
     : null;
 
-const normalizeReleaseTypesSelection = (selectedReleaseTypes = []) =>
-  [
-    ...new Set((Array.isArray(selectedReleaseTypes) ? selectedReleaseTypes : []).filter(Boolean)),
-  ].sort();
-
 const EMPTY_ARRAY = [];
+const RELEASE_TYPES_PARAM = allReleaseTypes.join(",");
 
 const normalizePositiveLimit = (value) => {
   const parsed = Number.parseInt(value, 10);
@@ -68,19 +64,12 @@ const getAppearsOnCoverIds = (releaseGroups, limit) => {
     .filter(Boolean);
 };
 
-const isReleaseTypeSelectionCovered = (selectedReleaseTypes = [], fetchedReleaseTypes = []) => {
-  const fetched = new Set(normalizeReleaseTypesSelection(fetchedReleaseTypes));
-  return normalizeReleaseTypesSelection(selectedReleaseTypes).every((type) => fetched.has(type));
-};
-
 export function useArtistDetailsStream(
   mbid,
   artistNameFromNav,
-  selectedReleaseTypes = [],
   { visibleCoverIds = EMPTY_ARRAY, initialLibraryHint = null, appearsOnLimit = null } = {},
 ) {
   const initialArtist = buildInitialArtist(mbid, artistNameFromNav);
-  const selectedReleaseTypesKey = normalizeReleaseTypesSelection(selectedReleaseTypes).join("\0");
   const normalizedAppearsOnLimit = normalizePositiveLimit(appearsOnLimit);
   const appearsOnLimitKey = normalizedAppearsOnLimit ? String(normalizedAppearsOnLimit) : "";
   const visibleCoverIdsKey = Array.isArray(visibleCoverIds)
@@ -133,10 +122,7 @@ export function useArtistDetailsStream(
   const artistRef = useRef(artist);
   const libraryAlbumsRef = useRef(libraryAlbums);
   const artistNameRef = useRef(artistNameFromNav || "");
-  const selectedReleaseTypesRef = useRef(selectedReleaseTypes);
   const visibleCoverIdsRef = useRef(visibleCoverIds);
-  const fetchedReleaseTypesRef = useRef(normalizeReleaseTypesSelection(selectedReleaseTypes));
-  const releaseRefreshRequestRef = useRef(0);
   const streamRequestRef = useRef(0);
 
   if (artistMbidRef.current !== mbid) {
@@ -150,7 +136,6 @@ export function useArtistDetailsStream(
     fulfilledCoverIdsRef.current = fulfilledCoverIds;
     artistRef.current = artist;
     libraryAlbumsRef.current = libraryAlbums;
-    selectedReleaseTypesRef.current = selectedReleaseTypes;
     visibleCoverIdsRef.current = visibleCoverIds;
   });
 
@@ -193,10 +178,6 @@ export function useArtistDetailsStream(
     setLibraryAlbums([]);
     setExistsInLibrary(nextSeededExistsInLibrary === true);
     setLoadingLibrary(nextSeededExistsInLibrary === undefined);
-    fetchedReleaseTypesRef.current = normalizeReleaseTypesSelection(
-      selectedReleaseTypesRef.current,
-    );
-    releaseRefreshRequestRef.current += 1;
 
     getAppSettings()
       .then((settings) => {
@@ -220,15 +201,8 @@ export function useArtistDetailsStream(
     if (normalizedAppearsOnLimit) {
       streamParams.push(`appearsOnLimit=${encodeURIComponent(normalizedAppearsOnLimit)}`);
     }
-    if (streamParams.length) streamUrl += `?${streamParams.join("&")}`;
-    if (
-      Array.isArray(selectedReleaseTypesRef.current) &&
-      selectedReleaseTypesRef.current.length > 0
-    ) {
-      streamUrl += `${streamParams.length ? "&" : "?"}releaseTypes=${encodeURIComponent(
-        selectedReleaseTypesRef.current.join(","),
-      )}`;
-    }
+    streamParams.push(`releaseTypes=${encodeURIComponent(RELEASE_TYPES_PARAM)}`);
+    streamUrl += `?${streamParams.join("&")}`;
 
     const detailsMode = normalizedAppearsOnLimit ? "full" : "core";
 
@@ -321,7 +295,7 @@ export function useArtistDetailsStream(
       try {
         const artistData = await getArtistDetails(mbid, artistNameFromNav, {
           mode: detailsMode,
-          releaseTypes: selectedReleaseTypesRef.current,
+          releaseTypes: allReleaseTypes,
           appearsOnLimit: normalizedAppearsOnLimit,
         });
         if (!artistData || !artistData.id) {
@@ -531,69 +505,6 @@ export function useArtistDetailsStream(
     mbid,
     artistNameFromNav,
     stableInitialLibraryHint,
-    appearsOnLimitKey,
-    normalizedAppearsOnLimit,
-  ]);
-
-  useEffect(() => {
-    if (!mbid || !artistId) return;
-
-    const requestedReleaseTypes = normalizeReleaseTypesSelection(selectedReleaseTypesRef.current);
-    const fetchedReleaseTypes = fetchedReleaseTypesRef.current;
-
-    if (
-      requestedReleaseTypes.join(",") === fetchedReleaseTypes.join(",") ||
-      isReleaseTypeSelectionCovered(requestedReleaseTypes, fetchedReleaseTypes)
-    ) {
-      return;
-    }
-
-    let cancelled = false;
-    const requestId = ++releaseRefreshRequestRef.current;
-    setLoadingReleases(true);
-
-    getArtistDetails(mbid, artistNameRef.current || artistName || artistNameFromNav || "", {
-      mode: normalizedAppearsOnLimit ? "full" : "core",
-      releaseTypes: requestedReleaseTypes,
-      appearsOnLimit: normalizedAppearsOnLimit,
-    })
-      .then((artistData) => {
-        if (cancelled || requestId !== releaseRefreshRequestRef.current || !artistData?.id) {
-          return;
-        }
-        fetchedReleaseTypesRef.current = requestedReleaseTypes;
-        setArtist((prev) => {
-          if (!prev) return artistData;
-          return {
-            ...prev,
-            "release-groups": artistData["release-groups"] || [],
-            "appears-on-release-groups":
-              artistData["appears-on-release-groups"] || prev["appears-on-release-groups"] || [],
-            "release-group-count":
-              artistData["release-group-count"] ?? prev["release-group-count"] ?? 0,
-            "release-count": artistData["release-count"] ?? prev["release-count"] ?? 0,
-          };
-        });
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled && requestId === releaseRefreshRequestRef.current) {
-          setLoadingReleases(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-      if (requestId === releaseRefreshRequestRef.current) {
-        setLoadingReleases(false);
-      }
-    };
-  }, [
-    mbid,
-    artistId,
-    artistName,
-    artistNameFromNav,
-    selectedReleaseTypesKey,
     appearsOnLimitKey,
     normalizedAppearsOnLimit,
   ]);

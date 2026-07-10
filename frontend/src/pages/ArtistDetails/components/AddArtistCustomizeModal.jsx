@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import { Loader } from "lucide-react";
 
 export function AddArtistCustomizeModal({
@@ -134,38 +133,3 @@ export function AddArtistCustomizeModal({
     </div>
   );
 }
-
-AddArtistCustomizeModal.propTypes = {
-  show: PropTypes.bool,
-  artistName: PropTypes.string,
-  loading: PropTypes.bool,
-  preferences: PropTypes.shape({
-    configured: PropTypes.bool,
-    rootFolders: PropTypes.arrayOf(
-      PropTypes.shape({
-        path: PropTypes.string,
-      }),
-    ),
-    qualityProfiles: PropTypes.arrayOf(
-      PropTypes.shape({
-        id: PropTypes.number,
-        name: PropTypes.string,
-      }),
-    ),
-    tags: PropTypes.arrayOf(
-      PropTypes.shape({
-        id: PropTypes.number,
-        label: PropTypes.string,
-      }),
-    ),
-  }),
-  rootFolderPath: PropTypes.string,
-  setRootFolderPath: PropTypes.func,
-  qualityProfileId: PropTypes.string,
-  setQualityProfileId: PropTypes.func,
-  tagId: PropTypes.string,
-  setTagId: PropTypes.func,
-  onClose: PropTypes.func,
-  onConfirm: PropTypes.func,
-  confirming: PropTypes.bool,
-};

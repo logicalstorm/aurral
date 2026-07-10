@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import PropTypes from "prop-types";
 import { MapPin } from "lucide-react";
 import { formatLifeSpan, getArtistHeroImage, getArtistType, getTagColor } from "../utils";
 
@@ -113,13 +112,3 @@ export function ArtistDetailsHero({
     </section>
   );
 }
-
-ArtistDetailsHero.propTypes = {
-  artist: PropTypes.object.isRequired,
-  coverImages: PropTypes.array,
-  loadingCover: PropTypes.bool,
-  existsInLibrary: PropTypes.bool,
-  loadingLibrary: PropTypes.bool,
-  onCoverError: PropTypes.func,
-  onNavigate: PropTypes.func,
-};

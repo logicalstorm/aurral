@@ -20,16 +20,17 @@ import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useArtistDetailsStream } from "./hooks/useArtistDetailsStream";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
 import { useArtistSearchFocus } from "./hooks/useArtistSearchFocus";
-import { allReleaseTypes } from "./constants";
 import { navigateToReleaseGroup } from "../../utils/searchNavigation";
 import {
-  getArtistPosterImage,
+  getCoverImage,
   getReleaseMetric,
   getReleaseYear,
   readReleaseListViewMode,
   writeReleaseListViewMode,
 } from "./utils";
 import { getAlbumAddButtonLabel } from "../../utils/albumAddAction";
+
+const APPEARS_ON_LIMIT = 250;
 
 const sortOptions = [
   { value: "date", label: "Date", defaultDirection: "desc" },
@@ -84,7 +85,8 @@ const sortReleaseGroups = (items, sortKey, sortDirection) =>
     return String(a?.title || "").localeCompare(String(b?.title || ""));
   });
 
-function ArtistAlbumsPage() {
+function ArtistReleaseListPage({ mode = "releases" }) {
+  const isAppearsOn = mode === "appearsOn";
   const { mbid } = useParams();
   const { state } = useLocation();
   const navigate = useDiscoverNavigation();
@@ -100,12 +102,13 @@ function ArtistAlbumsPage() {
   const artistNameFromNav = state?.artistName || "";
   const canAddAlbum = hasPermission("addAlbum");
 
-  const stream = useArtistDetailsStream(mbid, artistNameFromNav, allReleaseTypes, {
+  const stream = useArtistDetailsStream(mbid, artistNameFromNav, {
     visibleCoverIds,
     initialLibraryHint: {
       existsInLibrary: typeof state?.inLibrary === "boolean" ? state.inLibrary : undefined,
       libraryArtist: state?.libraryArtist || null,
     },
+    appearsOnLimit: isAppearsOn ? APPEARS_ON_LIMIT : null,
   });
 
   const {
@@ -123,10 +126,16 @@ function ArtistAlbumsPage() {
     albumCovers,
     coverImages,
   } = stream;
-  const artistCoverImage = getArtistPosterImage(coverImages);
+  const artistCoverImage = getCoverImage(coverImages);
 
   const artistDisplayName = artist?.name || artistNameFromNav || "";
-  useDocumentTitle(artistDisplayName ? `${artistDisplayName}'s Releases` : "");
+  useDocumentTitle(
+    artistDisplayName
+      ? isAppearsOn
+        ? `Featuring ${artistDisplayName}`
+        : `${artistDisplayName}'s Releases`
+      : "",
+  );
 
   const library = useArtistDetailsLibrary({
     artist,
@@ -139,10 +148,13 @@ function ArtistAlbumsPage() {
     appSettings,
     showSuccess,
     showError,
-    selectedReleaseTypes: allReleaseTypes,
   });
 
-  const releaseGroups = useMemo(() => artist?.["release-groups"] || [], [artist]);
+  const releaseGroups = useMemo(
+    () =>
+      artist?.[isAppearsOn ? "appears-on-release-groups" : "release-groups"] || [],
+    [artist, isAppearsOn],
+  );
   const filteredReleaseGroups = useMemo(
     () =>
       sortReleaseGroups(
@@ -173,9 +185,9 @@ function ArtistAlbumsPage() {
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [optionsOpen]);
 
-  const handleViewModeChange = (mode) => {
-    setViewMode(mode);
-    writeReleaseListViewMode(mode);
+  const handleViewModeChange = (next) => {
+    setViewMode(next);
+    writeReleaseListViewMode(next);
   };
 
   const handleSortOptionClick = (option) => {
@@ -225,6 +237,10 @@ function ArtistAlbumsPage() {
       artistCoverImage;
     const isComplete = status?.status === "available" || status?.status === "added";
     const releaseTypeLabel = getReleaseTypeLabel(releaseGroup);
+    const artistCredit = isAppearsOn ? releaseGroup["artist-credit"]?.[0]?.name || "" : "";
+    const metaLabel = [getReleaseYear(releaseGroup), artistCredit || releaseTypeLabel]
+      .filter(Boolean)
+      .join(" · ");
 
     if (viewMode === "list") {
       return (
@@ -244,9 +260,12 @@ function ArtistAlbumsPage() {
           </div>
           <div className="artist-min-0">
             <h2 className="artist-release-card__title artist-truncate">{releaseGroup.title}</h2>
-            <p className="artist-release-card__meta artist-truncate">
-              {[getReleaseYear(releaseGroup), releaseTypeLabel].filter(Boolean).join(" · ")}
-            </p>
+            <p className="artist-release-card__meta artist-truncate">{metaLabel}</p>
+            {isAppearsOn && releaseGroup._appearsOnTrack ? (
+              <p className="artist-release-card__meta artist-truncate">
+                {releaseGroup._appearsOnTrack}
+              </p>
+            ) : null}
           </div>
           <div className="artist-row-actions">
             {metric.label && (
@@ -313,12 +332,18 @@ function ArtistAlbumsPage() {
             ) : null}
           </div>
         </div>
-        <h2 className="artist-release-card__title artist-truncate" title={releaseGroup.title}>
+        <h2
+          className={`artist-release-card__title ${isAppearsOn ? "artist-clamp-2" : "artist-truncate"}`}
+          title={releaseGroup.title}
+        >
           {releaseGroup.title}
         </h2>
-        <p className="artist-release-card__meta artist-truncate">
-          {[getReleaseYear(releaseGroup), releaseTypeLabel].filter(Boolean).join(" · ")}
-        </p>
+        <p className="artist-release-card__meta artist-truncate">{metaLabel}</p>
+        {isAppearsOn && releaseGroup._appearsOnTrack ? (
+          <p className="artist-release-card__meta artist-truncate">
+            {releaseGroup._appearsOnTrack}
+          </p>
+        ) : null}
         {metric.label && (
           <p className="artist-release-card__metric">
             <Star className="artist-star-icon" />
@@ -328,6 +353,9 @@ function ArtistAlbumsPage() {
       </article>
     );
   };
+
+  const noun = isAppearsOn ? "appearance" : "release";
+  const optionsLabel = isAppearsOn ? "Appears on display options" : "Album display options";
 
   return (
     <div className="artist-details-page">
@@ -344,7 +372,7 @@ function ArtistAlbumsPage() {
           {loadingReleases && (
             <p className="artist-meta-line">
               <Loader className="artist-icon-sm animate-spin" />
-              Loading releases
+              {isAppearsOn ? "Loading appearances" : "Loading releases"}
             </p>
           )}
         </div>
@@ -374,8 +402,8 @@ function ArtistAlbumsPage() {
             type="button"
             onClick={() => setOptionsOpen((current) => !current)}
             className="btn btn-surface btn-icon-square"
-            aria-label="Album display options"
-            title="Album display options"
+            aria-label={optionsLabel}
+            title={optionsLabel}
             aria-expanded={optionsOpen}
           >
             <SlidersHorizontal className="artist-icon-sm" />
@@ -426,7 +454,7 @@ function ArtistAlbumsPage() {
       </div>
 
       <div className="artist-count">
-        {filteredReleaseGroups.length.toLocaleString()} release
+        {filteredReleaseGroups.length.toLocaleString()} {noun}
         {filteredReleaseGroups.length === 1 ? "" : "s"}
       </div>
 
@@ -437,4 +465,4 @@ function ArtistAlbumsPage() {
   );
 }
 
-export default ArtistAlbumsPage;
+export default ArtistReleaseListPage;

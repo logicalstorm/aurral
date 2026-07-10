@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import { Pause, Play, Shuffle } from "lucide-react";
 
 export function ArtistTrackListToolbar({
@@ -31,11 +30,3 @@ export function ArtistTrackListToolbar({
     </div>
   );
 }
-
-ArtistTrackListToolbar.propTypes = {
-  disabled: PropTypes.bool,
-  isPlaying: PropTypes.bool,
-  isShuffleEnabled: PropTypes.bool,
-  onPlayAll: PropTypes.func.isRequired,
-  onShufflePlay: PropTypes.func.isRequired,
-};

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef } from "react";
-import PropTypes from "prop-types";
 import { Loader } from "lucide-react";
 import { TrackPlayButton } from "./TrackPlayButton";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
@@ -169,24 +168,3 @@ export function ArtistDetailsReleaseTrackList({
     </div>
   );
 }
-
-ArtistDetailsReleaseTrackList.propTypes = {
-  release: PropTypes.object,
-  trackKey: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  tracks: PropTypes.array,
-  loading: PropTypes.bool,
-  artistName: PropTypes.string,
-  playbackSource: PropTypes.shape({
-    type: PropTypes.string,
-    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    label: PropTypes.string,
-  }),
-  onAddTrackToPlaylist: PropTypes.func,
-  playlists: PropTypes.array,
-  playlistsLoading: PropTypes.bool,
-  playlistSavingKey: PropTypes.string,
-  playlistError: PropTypes.string,
-  getDefaultPlaylistName: PropTypes.func,
-  onLoadPlaylists: PropTypes.func,
-  highlightTrackId: PropTypes.string,
-};

@@ -1,5 +1,4 @@
 import { Fragment, useMemo } from "react";
-import PropTypes from "prop-types";
 import { ExternalLink } from "lucide-react";
 import { getArtistHeroImage, getArtistType, getTagColor } from "../utils";
 import lidarrLogo from "../../../../images/logos/lidarr.svg?raw";
@@ -274,12 +273,3 @@ export function ArtistDetailsAbout({
     </section>
   );
 }
-
-ArtistDetailsAbout.propTypes = {
-  artist: PropTypes.object.isRequired,
-  libraryArtist: PropTypes.object,
-  appSettings: PropTypes.object,
-  existsInLibrary: PropTypes.bool,
-  coverImages: PropTypes.array,
-  onNavigate: PropTypes.func,
-};

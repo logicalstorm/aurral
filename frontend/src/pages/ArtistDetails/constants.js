@@ -42,6 +42,5 @@ export const emptyArtistShape = {
   "release-count": 0,
 };
 
-export const ARTIST_DETAILS_FILTER_KEY = "artistDetailsFilterSettings";
 export const RELEASE_LIST_VIEW_MODE_KEY = "aurralReleaseListViewMode";
 export const ARTIST_DETAILS_APPEARS_ON_LIMIT = 6;
