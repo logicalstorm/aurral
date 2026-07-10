@@ -9,7 +9,6 @@
  * re-export them here.
  */
 export {
-  AUTH_INVALID_EVENT,
   getStoredAuth,
   getRequestToken,
   setStoredAuth,
@@ -29,6 +28,7 @@ export {
   deleteData,
   lidarrCredentialParams,
   buildAuthenticatedApiUrl,
+  forceProxyReauthNavigation,
   default as api,
 } from "./api/core.js";
 
@@ -38,6 +38,7 @@ export {
   checkHealth,
   checkHealthLive,
   getBootstrapStatus,
+  invalidateBootstrapCache,
   browseFilesystem,
   ensureFilesystemPath,
   loginApi,

@@ -1,13 +1,19 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect, Suspense, lazy, useRef } from "react";
 import Layout from "./components/Layout";
-import { clearAuthStorage, checkHealthLive, getBootstrapStatus, getStoredAuth } from "./utils/api";
+import {
+  checkHealthLive,
+  forceProxyReauthNavigation,
+  getBootstrapStatus,
+  getStoredAuth,
+} from "./utils/api";
 import { getAppBasePath } from "./utils/basePath.js";
 import {
   PROXY_RELOAD_TS_KEY,
   clearAuthRecoveryFlags,
   hardNavigateHome,
   isProxyAuthActive,
+  registerReauthAttempt,
   resetClientCache,
 } from "./utils/authRecovery.js";
 import { DISCOVERY_MANUAL_REFRESH_KEY } from "./utils/discoverRecentNavigation.js";
@@ -97,7 +103,7 @@ function AppContent() {
   const [appVersion, setAppVersion] = useState(null);
   const discoveryToastShownRef = useRef(false);
   const healthCheckInFlightRef = useRef(false);
-  const { isAuthenticated, user, bootstrap, authRequired, logout, refreshAuth } = useAuth();
+  const { isAuthenticated, user, bootstrap, refreshAuth } = useAuth();
   const { showSuccess, showError } = useToast();
 
   const RELOAD_COOLDOWN_MS = 10000;
@@ -147,6 +153,13 @@ function AppContent() {
       healthCheckInFlightRef.current = true;
       try {
         const bootstrap = await getBootstrapStatus();
+
+        if (bootstrap?.proxyAuthEnabled && bootstrap?.authRequired && !bootstrap?.user) {
+          healthCheckInFlightRef.current = false;
+          forceProxyReauthNavigation();
+          return;
+        }
+
         applyBootstrapHealth(bootstrap);
       } catch {
         try {
@@ -179,16 +192,6 @@ function AppContent() {
     };
   }, [isAuthenticated, refreshAuth]);
 
-  const handleReauth = async () => {
-    await resetClientCache();
-    clearAuthStorage();
-    clearAuthRecoveryFlags();
-    try {
-      await logout();
-    } catch {}
-    hardNavigateHome(basePath);
-  };
-
   useEffect(() => {
     if (isHealthy === null) return;
     if (isHealthy !== false || healthIssue === "degraded") {
@@ -197,14 +200,24 @@ function AppContent() {
     }
 
     const hasStoredToken = !!getStoredAuth().token;
-    if (!isAuthenticated && !isProxyAuthActive() && !hasStoredToken) return;
+    const proxyAuthRequired = bootstrap?.proxyAuthEnabled && bootstrap?.authRequired && !bootstrap?.user;
+
+    if (!isAuthenticated && !isProxyAuthActive() && !proxyAuthRequired && !hasStoredToken) return;
 
     const lastReload = Number(globalThis?.sessionStorage?.getItem(PROXY_RELOAD_TS_KEY) || 0);
     if (Date.now() - lastReload < RELOAD_COOLDOWN_MS) return;
 
+    if (!registerReauthAttempt()) {
+      console.error(
+        "[Aurral] Repeated unhealthy-backend reload attempts detected in a short window; " +
+          "stopping to avoid a loop.",
+      );
+      return;
+    }
+
     globalThis?.sessionStorage?.setItem(PROXY_RELOAD_TS_KEY, String(Date.now()));
     void resetClientCache().then(() => hardNavigateHome(basePath));
-  }, [basePath, healthIssue, isHealthy, isAuthenticated]);
+  }, [basePath, healthIssue, isHealthy, isAuthenticated, bootstrap]);
 
   return (
     <Router
@@ -243,13 +256,8 @@ function AppContent() {
             <div className="app-status-banner app-status-banner--error">
               <XCircle className="app-status-banner__icon app-status-banner__icon--error" />
               <p className="app-status-banner__text app-status-banner__text--error">
-                Unable to connect to the Aurral backend. Your session may have expired.
+                Unable to connect to the Aurral backend. Please check your configuration.
               </p>
-              {authRequired && (
-                <button type="button" className="btn btn-primary btn--sm" onClick={handleReauth}>
-                  Sign in again
-                </button>
-              )}
             </div>
           )}
 
