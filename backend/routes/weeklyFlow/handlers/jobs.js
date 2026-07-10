@@ -6,9 +6,6 @@ import {
   flowPlaylistConfig,
 } from "../../../services/weeklyFlow/weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "../../../services/weeklyFlow/weeklyFlowOperationQueue.js";
-import {
-  reconcileSharedPlaylistJobs,
-} from "../../../services/weeklyFlow/weeklyFlowOperations.js";
 import { getWeeklyFlowStatusSnapshot } from "../../../services/weeklyFlow/weeklyFlowStatusSnapshot.js";
 import { noCache } from "../../../middleware/cache.js";
 import { requireAdmin } from "../../../middleware/requirePermission.js";
@@ -33,35 +30,13 @@ import { invalidateRequestsCache } from "../../requests.js";
 
 export function registerJobs(router) {
   router.get("/status", noCache, (req, res) => {
-    const includeJobs =
-      req.query.includeJobs === "1" || req.query.includeJobs === "true";
-    const flowId = req.query.flowId ? String(req.query.flowId) : null;
-    const parsedLimit = Number(req.query.jobsLimit);
-    const jobsLimit =
-      Number.isFinite(parsedLimit) && parsedLimit > 0
-        ? Math.min(Math.floor(parsedLimit), 500)
-        : null;
-    const snapshot = getWeeklyFlowStatusSnapshot({
-      user: req.user,
-      includeJobs,
-      flowId,
-      jobsLimit,
-    });
-    res.json({
-      ...snapshot,
-      slskd: snapshot.slskd,
-    });
+    res.json(getWeeklyFlowStatusSnapshot({ user: req.user }));
   });
 
   router.get("/jobs/:flowId", async (req, res) => {
     const { flowId } = req.params;
     if (!canAccessPlaylistType(req.user, flowId)) {
       return res.status(404).json({ error: "Playlist not found" });
-    }
-    if (flowPlaylistConfig.getSharedPlaylist(flowId)) {
-      try {
-        await reconcileSharedPlaylistJobs(flowId);
-      } catch {}
     }
     const rawLimit =
       req.query.limit == null ? "" : String(req.query.limit).trim();

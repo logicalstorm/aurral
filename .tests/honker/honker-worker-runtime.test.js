@@ -1,21 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
   importFromRepo,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("honker-worker-runtime");
-applyIsolatedBackendEnv(isolatedState);
-
-await importFromRepo("backend/config/db-sqlite.js");
-
-const honkerDb = await importFromRepo("backend/services/honkerDb.js");
-const runtime = await importFromRepo("backend/services/honkerWorkerRuntime.js");
-const taskStatus = await importFromRepo("backend/services/honkerTaskStatus.js");
-const operationQueueModule = await importFromRepo(
+const [
+  isolatedState,
+  _dbSqlite,
+  honkerDb,
+  runtime,
+  taskStatus,
+  operationQueueModule,
+] = await setupIsolatedBackend(
+  "honker-worker-runtime",
+  "backend/config/db-sqlite.js",
+  "backend/services/honkerDb.js",
+  "backend/services/honkerWorkerRuntime.js",
+  "backend/services/honkerTaskStatus.js",
   "backend/services/weeklyFlow/weeklyFlowOperationQueue.js",
 );
 

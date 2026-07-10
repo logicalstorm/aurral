@@ -28,7 +28,6 @@ export const DISCOVER_LAYOUT_KEY = "discoverLayout";
 const DISCOVERY_CACHE_KEY = "discoverData";
 const DISCOVER_RECENTLY_ADDED_KEY = "discoverRecentlyAdded";
 const DISCOVER_RECENT_RELEASES_KEY = "discoverRecentReleases";
-const DISCOVER_NEARBY_SHOWS_KEY = "discoverNearbyShows";
 
 export const DEFAULT_DISCOVER_SECTIONS = [
   { id: "recentlyAdded", label: "Recently Added", enabled: true },
@@ -70,15 +69,6 @@ const getDiscoverRecentReleasesStorageKey = (userId) =>
     ? `${DISCOVER_RECENT_RELEASES_KEY}:${userId}`
     : DISCOVER_RECENT_RELEASES_KEY;
 
-const getDiscoverNearbyShowsStorageKey = (userId, locationMode, zip) => {
-  const base = userId
-    ? `${DISCOVER_NEARBY_SHOWS_KEY}:${userId}`
-    : DISCOVER_NEARBY_SHOWS_KEY;
-  const locationKey =
-    locationMode === "zip" ? `zip:${String(zip || "").trim()}` : "ip";
-  return `${base}:${locationKey}`;
-};
-
 export const DISCOVER_CACHE_FRESH_TTL_MS = 5 * 60 * 1000;
 
 const markStoredAt = (key) => {
@@ -115,6 +105,17 @@ export const readStoredNearbyLocation = () => {
   } catch {
     return { mode: "ip", zip: "" };
   }
+};
+
+export const writeStoredNearbyLocation = ({ mode, zip } = {}) => {
+  try {
+    if (mode === "zip" || mode === "ip") {
+      localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, mode);
+    }
+    if (typeof zip === "string") {
+      localStorage.setItem(DISCOVER_NEARBY_ZIP_KEY, zip);
+    }
+  } catch {}
 };
 
 export const readStoredRecentlyAdded = (userId) => {
@@ -170,46 +171,6 @@ export const writeStoredRecentReleases = (value, userId) => {
     markStoredAt(getDiscoverRecentReleasesStorageKey(userId));
   } catch {
     console.warn("Failed to write discover recent-releases");
-  }
-};
-
-const normalizeNearbyShowsData = (value) => {
-  if (!value || typeof value !== "object") return null;
-  if (!Array.isArray(value.shows)) return null;
-  return value;
-};
-
-export const readStoredNearbyShows = (userId, locationMode, zip) => {
-  try {
-    const primaryKey = getDiscoverNearbyShowsStorageKey(
-      userId,
-      locationMode,
-      zip,
-    );
-    const primary = normalizeNearbyShowsData(
-      JSON.parse(localStorage.getItem(primaryKey) || "null"),
-    );
-    if (primary) return primary;
-    if (!userId) return null;
-    const legacyKey = getDiscoverNearbyShowsStorageKey(null, locationMode, zip);
-    return normalizeNearbyShowsData(
-      JSON.parse(localStorage.getItem(legacyKey) || "null"),
-    );
-  } catch {
-    return null;
-  }
-};
-
-export const writeStoredNearbyShows = (value, userId, locationMode, zip) => {
-  const normalized = normalizeNearbyShowsData(value);
-  if (!normalized) return;
-  try {
-    localStorage.setItem(
-      getDiscoverNearbyShowsStorageKey(userId, locationMode, zip),
-      JSON.stringify(normalized),
-    );
-  } catch {
-    console.warn("Failed to write discover nearby-shows");
   }
 };
 
@@ -270,9 +231,51 @@ export const normalizeDiscoveryData = (value) => {
   };
 };
 
+export const stripDiscoveryStatusForStorage = (value) => {
+  const normalized = normalizeDiscoveryData(value);
+  if (!normalized) return null;
+  return {
+    ...normalized,
+    isUpdating: false,
+    updatePhase: null,
+    updateProgress: null,
+    updateProgressMessage: null,
+    playlistsUpdating: false,
+    playlistsUpdateMessage: null,
+    isEnriching: false,
+    enrichmentProgressMessage: null,
+    stale: false,
+  };
+};
+
+export const mergeDiscoveryHttp = (
+  prev,
+  http,
+  { allowClearStatus = true } = {},
+) => {
+  const next = normalizeDiscoveryData(http);
+  if (!next) return prev || null;
+  if (allowClearStatus || !prev) return next;
+  if (prev.isUpdating && !next.isUpdating) {
+    next.isUpdating = true;
+    next.updatePhase = prev.updatePhase;
+    next.updateProgress = prev.updateProgress;
+    next.updateProgressMessage = prev.updateProgressMessage;
+  }
+  if (prev.playlistsUpdating && !next.playlistsUpdating) {
+    next.playlistsUpdating = true;
+    next.playlistsUpdateMessage = prev.playlistsUpdateMessage;
+  }
+  if (prev.isEnriching && !next.isEnriching) {
+    next.isEnriching = true;
+    next.enrichmentProgressMessage = prev.enrichmentProgressMessage;
+  }
+  return next;
+};
+
 export const readStoredDiscoveryData = (userId) => {
   const fromStorage = (raw) => {
-    const normalized = normalizeDiscoveryData(raw);
+    const normalized = stripDiscoveryStatusForStorage(raw);
     if (!normalized) return null;
     return {
       ...normalized,
@@ -297,7 +300,7 @@ export const readStoredDiscoveryData = (userId) => {
 };
 
 export const writeStoredDiscoveryData = (value, userId) => {
-  const normalized = normalizeDiscoveryData(value);
+  const normalized = stripDiscoveryStatusForStorage(value);
   if (!normalized) return;
   try {
     localStorage.setItem(

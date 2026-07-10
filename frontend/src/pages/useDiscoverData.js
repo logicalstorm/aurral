@@ -1,42 +1,46 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useWebSocketChannel } from "../hooks/useWebSocket";
-import { useToast } from "../contexts/ToastContext";
-import { useAuth } from "../contexts/AuthContext";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   addArtistToLibrary,
-  getDiscovery,
-  getNearbyShows,
   getRecentlyAdded,
   getRecentReleases,
   downloadAlbum,
   updateLibraryAlbum,
-} from "../utils/api";
+} from "../utils/api/endpoints/library.js";
+import { getDiscovery } from "../utils/api/endpoints/discovery.js";
 import { getArtistRecordId } from "../utils/artistTaste";
 import { useArtistTasteFeedback } from "../hooks/useArtistTasteFeedback";
+import { useNearbyShows } from "../hooks/useNearbyShows";
 import {
-  readStoredNearbyLocation,
   readStoredRecentlyAdded,
   writeStoredRecentlyAdded,
   readStoredRecentReleases,
   writeStoredRecentReleases,
-  readStoredNearbyShows,
-  writeStoredNearbyShows,
   readStoredDiscoveryData,
   writeStoredDiscoveryData,
   normalizeDiscoveryData,
-  isStoredDiscoveryFresh,
+  mergeDiscoveryHttp,
   isStoredRecentlyAddedFresh,
   isStoredRecentReleasesFresh,
-  DISCOVER_NEARBY_MODE_KEY,
-  DISCOVER_NEARBY_ZIP_KEY,
 } from "./discoverUtils";
 
+import { useWebSocketChannel } from "../hooks/useWebSocket";
+import { useToast } from "../contexts/ToastContext";
+import { useAuth } from "../contexts/AuthContext";
 const getArtistId = (artist) => getArtistRecordId(artist);
 
 export function useDiscoverData() {
   const { user: authUser, hasPermission, bootstrap } = useAuth();
   const { showSuccess, showError } = useToast();
-  const initialNearbyLocation = useMemo(() => readStoredNearbyLocation(), []);
+  const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
+  const {
+    data: nearbyShowsData,
+    loading: nearbyShowsLoading,
+    error: nearbyShowsError,
+    locationMode: nearbyLocationMode,
+    appliedZip: appliedNearbyZip,
+    setLocationMode: setNearbyLocationMode,
+    setAppliedZip: setAppliedNearbyZip,
+  } = useNearbyShows({ enabled: ticketmasterConfigured });
 
   const [data, setData] = useState(() => readStoredDiscoveryData(authUser?.id));
   const [recentlyAdded, setRecentlyAdded] = useState(
@@ -50,52 +54,37 @@ export function useDiscoverData() {
   const [libraryLookup, setLibraryLookup] = useState({});
   const { lookup: artistFeedbackLookup, submitFeedback } =
     useArtistTasteFeedback();
-  const [nearbyShowsData, setNearbyShowsData] = useState(() =>
-    readStoredNearbyShows(
-      authUser?.id,
-      initialNearbyLocation.mode,
-      initialNearbyLocation.zip,
-    ),
-  );
-  const [ticketmasterConfigured, setTicketmasterConfigured] = useState(true);
-  const [nearbyShowsLoading, setNearbyShowsLoading] = useState(
-    () =>
-      !readStoredNearbyShows(
-        authUser?.id,
-        initialNearbyLocation.mode,
-        initialNearbyLocation.zip,
-      ),
-  );
-  const [nearbyShowsError, setNearbyShowsError] = useState(null);
-  const [nearbyLocationMode, setNearbyLocationMode] = useState(
-    initialNearbyLocation.mode,
-  );
-  const [appliedNearbyZip, setAppliedNearbyZip] = useState(
-    initialNearbyLocation.zip,
-  );
   const lastDiscoveryWsMessageAtRef = useRef(0);
   const discoveryPollInFlightRef = useRef(false);
   const canAddArtist = hasPermission("addArtist");
   const canAddAlbum = hasPermission("addAlbum");
 
   const applyDiscoveryData = useCallback(
-    (nextValue) => {
-      const normalizedData = normalizeDiscoveryData(nextValue);
-      if (!normalizedData) return;
-      setData(normalizedData);
-      writeStoredDiscoveryData(normalizedData, authUser?.id);
+    (nextValue, { allowClearStatus = true } = {}) => {
+      setData((prev) => {
+        const normalizedData = mergeDiscoveryHttp(prev, nextValue, {
+          allowClearStatus,
+        });
+        if (!normalizedData) return prev;
+        writeStoredDiscoveryData(normalizedData, authUser?.id);
+        return normalizedData;
+      });
     },
     [authUser?.id],
   );
 
   const fetchAndApplyDiscovery = useCallback(
-    (cacheBust = false) =>
-      getDiscovery(cacheBust)
+    (cacheBust = false, { allowClearStatus } = {}) => {
+      const clearStatus =
+        allowClearStatus ??
+        Date.now() - lastDiscoveryWsMessageAtRef.current >= 20000;
+      return getDiscovery(cacheBust)
         .then((discoveryData) => {
-          applyDiscoveryData(discoveryData);
+          applyDiscoveryData(discoveryData, { allowClearStatus: clearStatus });
           setError(null);
         })
-        .catch(console.warn),
+        .catch(console.warn);
+    },
     [applyDiscoveryData],
   );
 
@@ -288,32 +277,16 @@ export function useDiscoverData() {
   );
 
   useEffect(() => {
-    if (!isDiscoverySocketConnected) return;
-    if (!data?.isUpdating && !data?.isEnriching && !data?.stale) return;
-    fetchAndApplyDiscovery();
-  }, [
-    authUser?.id,
-    isDiscoverySocketConnected,
-    data?.isUpdating,
-    data?.isEnriching,
-    data?.stale,
-    fetchAndApplyDiscovery,
-  ]);
-
-  useEffect(() => {
-    if (!data?.playlistsUpdating) return;
-    fetchAndApplyDiscovery(true);
-  }, [authUser?.id, data?.playlistsUpdating, fetchAndApplyDiscovery]);
-
-  useEffect(() => {
-    if (!data?.isUpdating && !data?.isEnriching) return;
+    if (!data?.isUpdating && !data?.isEnriching && !data?.playlistsUpdating) {
+      return;
+    }
     const pollDiscovery = () => {
       if (discoveryPollInFlightRef.current) return;
       const hasRecentWsUpdate =
         Date.now() - lastDiscoveryWsMessageAtRef.current < 20000;
       if (isDiscoverySocketConnected && hasRecentWsUpdate) return;
       discoveryPollInFlightRef.current = true;
-      fetchAndApplyDiscovery(true)
+      fetchAndApplyDiscovery(true, { allowClearStatus: true })
         .finally(() => {
           discoveryPollInFlightRef.current = false;
         });
@@ -325,6 +298,7 @@ export function useDiscoverData() {
     authUser?.id,
     data?.isUpdating,
     data?.isEnriching,
+    data?.playlistsUpdating,
     isDiscoverySocketConnected,
     fetchAndApplyDiscovery,
   ]);
@@ -333,7 +307,7 @@ export function useDiscoverData() {
     if (!data?.stale || data?.isUpdating || data?.isEnriching) return;
     if (isDiscoverySocketConnected) return;
     const id = setTimeout(() => {
-      fetchAndApplyDiscovery(true);
+      fetchAndApplyDiscovery(true, { allowClearStatus: true });
     }, 15000);
     return () => clearTimeout(id);
   }, [
@@ -346,54 +320,37 @@ export function useDiscoverData() {
   ]);
 
   useEffect(() => {
-    if (!data) return;
-    if (data.isUpdating && !data.stale) {
-      lastDiscoveryWsMessageAtRef.current = 0;
-    }
-  }, [data, data?.isUpdating, data?.stale]);
-
-  useEffect(() => {
     const cachedDiscovery = readStoredDiscoveryData(authUser?.id);
-    const discoveryIsFresh =
-      cachedDiscovery &&
-      isStoredDiscoveryFresh(authUser?.id) &&
-      !cachedDiscovery.isUpdating &&
-      !cachedDiscovery.isEnriching &&
-      !cachedDiscovery.playlistsUpdating &&
-      !cachedDiscovery.stale;
-
-    if (discoveryIsFresh) {
+    if (cachedDiscovery) {
       setData(cachedDiscovery);
       setError(null);
-    } else {
-      getDiscovery()
-        .then((discoveryData) => {
-          const normalizedData = normalizeDiscoveryData(discoveryData);
-          setData(normalizedData);
-          writeStoredDiscoveryData(normalizedData, authUser?.id);
-          setError(null);
-        })
-        .catch((err) => {
-          setError(
-            err.response?.data?.message || "Failed to load discovery data",
-          );
-          setData({
-            recommendations: [],
-            globalTop: [],
-            basedOn: [],
-            topTags: [],
-            topGenres: [],
-            fallbackGenres: [],
-            provider: "lastfm",
-            capabilities: null,
-            lastUpdated: null,
-            isUpdating: false,
-            stale: false,
-            discoveryMode: "balanced",
-            configured: false,
-          });
-        });
     }
+    getDiscovery()
+      .then((discoveryData) => {
+        applyDiscoveryData(discoveryData, { allowClearStatus: true });
+        setError(null);
+      })
+      .catch((err) => {
+        if (cachedDiscovery) return;
+        setError(
+          err.response?.data?.message || "Failed to load discovery data",
+        );
+        setData({
+          recommendations: [],
+          globalTop: [],
+          basedOn: [],
+          topTags: [],
+          topGenres: [],
+          fallbackGenres: [],
+          provider: "lastfm",
+          capabilities: null,
+          lastUpdated: null,
+          isUpdating: false,
+          stale: false,
+          discoveryMode: "balanced",
+          configured: false,
+        });
+      });
 
     const cachedRecentlyAdded = readStoredRecentlyAdded(authUser?.id);
     if (cachedRecentlyAdded && isStoredRecentlyAddedFresh(authUser?.id)) {
@@ -422,86 +379,13 @@ export function useDiscoverData() {
           showError(err?.message || "Failed to load recent releases");
         });
     }
-  }, [authUser?.id, showError]);
+  }, [authUser?.id, showError, applyDiscoveryData]);
 
   useEffect(() => {
     if (bootstrap) {
       setTicketmasterConfigured(!!bootstrap.ticketmasterConfigured);
     }
   }, [bootstrap]);
-
-  useEffect(() => {
-    try {
-      const storedMode = localStorage.getItem(DISCOVER_NEARBY_MODE_KEY);
-      const storedZip = localStorage.getItem(DISCOVER_NEARBY_ZIP_KEY) || "";
-      if (storedMode === "zip" || storedMode === "ip") {
-        setNearbyLocationMode(storedMode);
-      }
-      setAppliedNearbyZip(storedZip);
-    } catch {}
-  }, [authUser?.id]);
-
-  useEffect(() => {
-    if (!ticketmasterConfigured) {
-      setNearbyShowsData(null);
-      setNearbyShowsError(null);
-      setNearbyShowsLoading(false);
-      return;
-    }
-    const shouldUseZip = nearbyLocationMode === "zip";
-    if (shouldUseZip && !appliedNearbyZip.trim()) {
-      setNearbyShowsData(null);
-      setNearbyShowsError(null);
-      setNearbyShowsLoading(false);
-      return;
-    }
-    const locationMode = shouldUseZip ? "zip" : "ip";
-    const locationZip = shouldUseZip ? appliedNearbyZip : "";
-    const cachedNearbyShows = readStoredNearbyShows(
-      authUser?.id,
-      locationMode,
-      locationZip,
-    );
-    if (cachedNearbyShows) {
-      setNearbyShowsData(cachedNearbyShows);
-    }
-    let cancelled = false;
-    setNearbyShowsLoading(!cachedNearbyShows);
-    setNearbyShowsError(null);
-    getNearbyShows(locationZip)
-      .then((response) => {
-        if (cancelled) return;
-        setNearbyShowsData(response);
-        writeStoredNearbyShows(
-          response,
-          authUser?.id,
-          locationMode,
-          locationZip,
-        );
-        setNearbyShowsError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        if (!cachedNearbyShows) {
-          setNearbyShowsError(
-            err.response?.data?.message || "Failed to load nearby shows",
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setNearbyShowsLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    authUser?.id,
-    nearbyLocationMode,
-    appliedNearbyZip,
-    ticketmasterConfigured,
-  ]);
 
   const getLibraryArtistImage = (artist) => {
     if (artist.images && artist.images.length > 0) {

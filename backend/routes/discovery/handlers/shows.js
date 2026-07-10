@@ -1,6 +1,6 @@
 import { requireAuth } from "../../../middleware/requirePermission.js";
 import { dbOps, userOps } from "../../../db/helpers/index.js";
-import { getTicketmasterApiKey } from "../../../services/apiClients/index.js";
+import { getTicketmasterApiKey, getLastfmApiKey } from "../../../services/apiClients/index.js";
 import { libraryManager } from "../../../services/libraryManager.js";
 import {
   getDiscoveryCache,
@@ -8,7 +8,6 @@ import {
   getLocalDiscoveryPreferences,
   serveCachedRecommendations,
 } from "../../../services/discovery/index.js";
-import { getLastfmApiKey } from "../../../services/apiClients/index.js";
 import {
   getListenHistoryCacheNamespace,
   getListenHistoryProfile,
@@ -25,17 +24,13 @@ export function registerShows(router) {
           configured: false,
           location: null,
           shows: [],
+          libraryShows: [],
+          recommendedShows: [],
           total: 0,
-          counts: {
-            libraryArtists: 0,
-            matchedLibraryShows: 0,
-            matchedRecommendedShows: 0,
-          },
         });
       }
 
       const zipCode = String(req.query.zip || "").trim();
-      const limit = req.query.limit;
       const settings = dbOps.getSettings();
       const configuredRadius = Number(
         settings.integrations?.ticketmaster?.searchRadiusMiles,
@@ -66,7 +61,7 @@ export function registerShows(router) {
         libraryArtists,
         recommendedArtists,
         trendingArtists,
-        limit,
+        limit: req.query.limit,
         radiusMiles,
       });
 

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import PropTypes from "prop-types";
 import { useDiscoverNavigation } from "../../../hooks/useDiscoverNavigation";
 import { ArrowRight, Loader, Music, Star } from "lucide-react";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
@@ -174,17 +173,3 @@ export function ArtistDetailsReleaseGroups({
     </section>
   );
 }
-
-ArtistDetailsReleaseGroups.propTypes = {
-  artist: PropTypes.object.isRequired,
-  loadingReleases: PropTypes.bool,
-  albumCovers: PropTypes.object,
-  artistCoverImage: PropTypes.string,
-  getAlbumStatus: PropTypes.func.isRequired,
-  canAddAlbum: PropTypes.bool,
-  handleRequestAlbum: PropTypes.func.isRequired,
-  requestingAlbum: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  artistName: PropTypes.string,
-  onVisibleCoverIdsChange: PropTypes.func,
-  onViewAll: PropTypes.func.isRequired,
-};

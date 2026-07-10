@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import PropTypes from "prop-types";
 import { ListMusic, Loader2, MoreVertical, Plus, RefreshCw } from "lucide-react";
 
 const MAIN_CONTENT_PORTAL_SELECTOR = ".app-main-wrap";
@@ -264,14 +263,3 @@ export function DiscoverPlaylistContextMenu({
     </div>
   );
 }
-
-DiscoverPlaylistContextMenu.propTypes = {
-  playlist: PropTypes.object.isRequired,
-  canAdopt: PropTypes.bool,
-  adoptingFlowId: PropTypes.string,
-  adoptingPlaylistId: PropTypes.string,
-  onAdoptFlow: PropTypes.func,
-  onAdoptPlaylist: PropTypes.func,
-  triggerVariant: PropTypes.oneOf(["icon", "add"]),
-  className: PropTypes.string,
-};

@@ -1,19 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import http from "http";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
+  createMockHttpServer,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("slskd-client");
-applyIsolatedBackendEnv(isolatedState);
-
 const [
+  isolatedState,
   {
     isSearchComplete,
     isSearchInProgress,
@@ -23,12 +19,13 @@ const [
   { recordSlskdTransferOutcome },
   { dbOps },
   { db },
-] = await Promise.all([
-  importFromRepo("backend/services/slskdClient.js"),
-  importFromRepo("backend/services/slskdTransferHistory.js"),
-  importFromRepo("backend/db/helpers/index.js"),
-  importFromRepo("backend/config/db-sqlite.js"),
-]);
+] = await setupIsolatedBackend(
+  "slskd-client",
+  "backend/services/slskdClient.js",
+  "backend/services/slskdTransferHistory.js",
+  "backend/db/helpers/index.js",
+  "backend/config/db-sqlite.js",
+);
 
 test.beforeEach(() => {
   resetDatabase(db);
@@ -37,19 +34,6 @@ test.beforeEach(() => {
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);
 });
-
-function createMockServer(handler) {
-  const server = http.createServer(handler);
-  return new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      resolve({
-        url: `http://127.0.0.1:${address.port}`,
-        close: () => new Promise((done) => server.close(done)),
-      });
-    });
-  });
-}
 
 test("slskd search state helpers recognize active and completed searches", () => {
   assert.equal(isSearchInProgress({ state: "Requested" }), true);
@@ -141,7 +125,7 @@ test("settleSearch cancels in-progress searches when requested", async () => {
 test("createSearch sends slskd search timeout in milliseconds", async () => {
   const originalSettings = dbOps.getSettings();
   let requestBody = null;
-  const mock = await createMockServer(async (request, response) => {
+  const mock = await createMockHttpServer(async (request, response) => {
     let body = "";
     request.on("data", (chunk) => {
       body += chunk.toString();
@@ -183,7 +167,7 @@ test("createSearch sends slskd search timeout in milliseconds", async () => {
 
 test("enqueueBatch rejects slskd all-failed enqueue responses", async () => {
   const originalSettings = dbOps.getSettings();
-  const mock = await createMockServer(async (request, response) => {
+  const mock = await createMockHttpServer(async (request, response) => {
     request.resume();
     if (
       request.method === "POST" &&
@@ -232,7 +216,7 @@ test("enqueueBatch uses current slskd download endpoint", async () => {
   const originalSettings = dbOps.getSettings();
   const transferId = "00000000-0000-4000-8000-000000000002";
   const calls = [];
-  const mock = await createMockServer(async (request, response) => {
+  const mock = await createMockHttpServer(async (request, response) => {
     let body = "";
     request.on("data", (chunk) => {
       body += chunk.toString();
@@ -315,7 +299,7 @@ test("isSlskdCleanupAfterRunsEnabled reads the integrations setting", () => {
 test("cleanupAfterRun removes Aurral-owned searches and transfers", async () => {
   const originalSettings = dbOps.getSettings();
   const calls = [];
-  const mock = await createMockServer((request, response) => {
+  const mock = await createMockHttpServer((request, response) => {
     calls.push({ method: request.method, url: request.url });
     if (
       request.method === "DELETE" &&

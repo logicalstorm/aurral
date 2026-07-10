@@ -4,23 +4,26 @@ import fs from "fs/promises";
 import path from "path";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("weekly-flow-file-reuse");
-applyIsolatedBackendEnv(isolatedState);
-
-const [{ db }, { dbOps }, trackerModule, reuseModule, playlistConfigModule] = await Promise.all([
-  importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/db/helpers/index.js"),
-  importFromRepo("backend/services/weeklyFlow/weeklyFlowDownloadTracker.js"),
-  importFromRepo("backend/services/weeklyFlow/weeklyFlowFileReuse.js"),
-  importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
-]);
+const [
+  isolatedState,
+  { db },
+  { dbOps },
+  trackerModule,
+  reuseModule,
+  playlistConfigModule,
+] = await setupIsolatedBackend(
+  "weekly-flow-file-reuse",
+  "backend/config/db-sqlite.js",
+  "backend/db/helpers/index.js",
+  "backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
+  "backend/services/weeklyFlow/weeklyFlowFileReuse.js",
+  "backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js",
+);
 
 const { downloadTracker } = trackerModule;
 const { flowPlaylistConfig } = playlistConfigModule;

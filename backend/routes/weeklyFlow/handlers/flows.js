@@ -22,8 +22,8 @@ import {
   validateFlowPayload,
   markFlowMutationToken,
   getAccessibleFlow,
-  queueFlowEnableRefresh,
-  queueFlowDisableCleanup,
+  queueFlowSideEffect,
+  enqueueResearchTrack,
 } from "./utils.js";
 
 export function registerFlows(router) {
@@ -57,37 +57,14 @@ export function registerFlows(router) {
             : flow.size || DEFAULT_LIMIT,
       });
 
-      if (result?.missing) {
-        return res.status(404).json({ error: "Flow not found" });
-      }
-      if (result?.cancelled) {
-        return res.status(409).json({
-          error: "Flow start superseded by another change",
-        });
-      }
-      if (result?.empty) {
-        return res.status(400).json({
-          error: `No tracks found for flow: ${result.flowName || flow.name}`,
-        });
-      }
-      if (result?.queued) {
-        return res.json({
-          success: true,
-          flowId,
-          queued: true,
-          operationId: result.operationId,
-          tracksQueued: 0,
-          jobIds: [],
-          reserveTracks: 0,
-        });
-      }
-
-      res.json({
+      return res.json({
         success: true,
         flowId,
-        tracksQueued: result?.tracksQueued || 0,
-        jobIds: result?.jobIds || [],
-        reserveTracks: result?.reserveTracks || 0,
+        queued: true,
+        operationId: result.operationId,
+        tracksQueued: 0,
+        jobIds: [],
+        reserveTracks: 0,
       });
     } catch (error) {
       res.status(500).json({
@@ -104,7 +81,6 @@ export function registerFlows(router) {
         mix,
         size,
         deepDive,
-        recipe,
         tags,
         relatedArtists,
         scheduleDays,
@@ -119,7 +95,6 @@ export function registerFlows(router) {
         mix,
         size,
         deepDive,
-        recipe,
         tags,
         relatedArtists,
         scheduleDays,
@@ -154,7 +129,6 @@ export function registerFlows(router) {
         mix,
         size,
         deepDive,
-        recipe,
         tags,
         relatedArtists,
         scheduleDays,
@@ -172,7 +146,6 @@ export function registerFlows(router) {
         mix,
         size,
         deepDive,
-        recipe,
         tags,
         relatedArtists,
         scheduleDays,
@@ -211,18 +184,12 @@ export function registerFlows(router) {
         tokenScope,
         token,
       });
-      if (deleted?.queued) {
-        return res.json({ success: true, flowId, queued: true });
-      }
-      if (deleted?.cancelled) {
-        return res.status(409).json({
-          error: "Flow delete superseded by another change",
-        });
-      }
-      if (!deleted) {
-        return res.status(404).json({ error: "Flow not found" });
-      }
-      res.json({ success: true, flowId });
+      return res.json({
+        success: true,
+        flowId,
+        queued: true,
+        operationId: deleted.operationId,
+      });
     } catch (error) {
       res.status(500).json({
         error: "Failed to delete flow",
@@ -266,7 +233,7 @@ export function registerFlows(router) {
           message: "Flow enabled. Tracks will start queueing shortly.",
         });
 
-        queueFlowEnableRefresh(flowId);
+        queueFlowSideEffect("enable-flow-refresh", "enable", flowId);
       } else {
         flowPlaylistConfig.setEnabled(flowId, false);
         await playlistManager.ensureSmartPlaylists();
@@ -276,7 +243,7 @@ export function registerFlows(router) {
           flowId,
           enabled: false,
         });
-        queueFlowDisableCleanup(flowId);
+        queueFlowSideEffect("disable-flow-cleanup", "disable", flowId);
       }
     } catch (error) {
       res.status(500).json({
@@ -401,47 +368,7 @@ export function registerFlows(router) {
   router.post("/flows/:flowId/tracks/:jobId/research", async (req, res) => {
     try {
       const { flowId, jobId } = req.params;
-      const flow = getAccessibleFlow(req.user, flowId);
-      if (!flow) {
-        return res.status(404).json({ error: "Flow not found" });
-      }
-
-      const job = downloadTracker.getJob(jobId);
-      if (!job || job.playlistType !== flowId) {
-        return res.status(404).json({ error: "Track not found" });
-      }
-
-      if (job.status === "pending" || job.status === "downloading") {
-        return res.status(409).json({
-          error: "Track is already being processed",
-        });
-      }
-
-      const result = await weeklyFlowOperationQueue.enqueuePayload({
-        kind: "shared-playlist-research-track",
-        label: `flow:${flowId}:track:${jobId}:research`,
-        playlistId: flowId,
-        jobId,
-      });
-      if (result?.missingPlaylist) {
-        return res.status(404).json({ error: "Flow not found" });
-      }
-      if (result?.missingJob) {
-        return res.status(404).json({ error: "Track not found" });
-      }
-      if (result?.alreadyProcessing) {
-        return res.status(409).json({
-          error: "Track is already being processed",
-        });
-      }
-
-      res.json({
-        success: true,
-        jobId,
-        playlistId: flowId,
-        reused: result?.reused === true,
-        queued: result?.queued === true,
-      });
+      return await enqueueResearchTrack(req, res, flowId, jobId, "flow");
     } catch (error) {
       res.status(500).json({
         error: "Failed to re-search flow track",

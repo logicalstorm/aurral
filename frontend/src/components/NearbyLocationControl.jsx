@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import PropTypes from "prop-types";
 import { ChevronDown, Locate } from "lucide-react";
 
 function getNearbyCityLabel(location) {
@@ -35,23 +34,19 @@ function NearbyLocationControl({
 
   useEffect(() => {
     if (!menuOpen) return undefined;
-    const handleClickOutside = (event) => {
-      if (wrapRef.current && !wrapRef.current.contains(event.target)) {
-        setMenuOpen(false);
-        setShowZipForm(false);
+    const close = (event) => {
+      if (event.type === "keydown" && event.key !== "Escape") return;
+      if (event.type === "mousedown" && wrapRef.current?.contains(event.target)) {
+        return;
       }
+      setMenuOpen(false);
+      setShowZipForm(false);
     };
-    const handleEscape = (event) => {
-      if (event.key === "Escape") {
-        setMenuOpen(false);
-        setShowZipForm(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
     };
   }, [menuOpen]);
 
@@ -63,17 +58,6 @@ function NearbyLocationControl({
   const closeMenu = () => {
     setMenuOpen(false);
     setShowZipForm(false);
-  };
-
-  const handleYourLocation = () => {
-    onSelectYourLocation();
-    closeMenu();
-  };
-
-  const handleEnterLocation = () => {
-    onStartCustomLocation();
-    setShowZipForm(true);
-    setZipDraft(appliedZip);
   };
 
   const saveZip = () => {
@@ -100,87 +84,72 @@ function NearbyLocationControl({
         />
       </button>
       {menuOpen && (
-        <>
+        <div
+          className="artist-dropdown artist-dropdown--right artist-nearby-location__menu"
+          role="menu"
+        >
           <button
             type="button"
-            className="artist-backdrop-button"
-            onClick={closeMenu}
-            aria-label="Close location menu"
-          />
-          <div
-            className="artist-dropdown artist-dropdown--right artist-nearby-location__menu"
-            role="menu"
+            role="menuitem"
+            onClick={() => {
+              onSelectYourLocation();
+              closeMenu();
+            }}
+            className={`artist-menu-item${!zipModeActive ? " is-active" : ""}`}
           >
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleYourLocation}
-              className={`artist-menu-item${!zipModeActive ? " is-active" : ""}`}
-            >
-              <span className="artist-menu-item__label">
-                <Locate className="artist-icon-sm" aria-hidden="true" />
-                Your location
-              </span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleEnterLocation}
-              className={`artist-menu-item${zipModeActive ? " is-active" : ""}`}
-            >
-              Enter a location
-            </button>
-            {zipFormVisible && (
-              <div className="artist-nearby-zip-editor artist-nearby-zip-editor--menu">
-                <div className="artist-nearby-zip-editor__field">
-                  <input
-                    ref={zipInputRef}
-                    type="text"
-                    value={zipDraft}
-                    onChange={(event) => setZipDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter") return;
-                      event.preventDefault();
-                      saveZip();
-                    }}
-                    className="artist-nearby-zip-editor__input"
-                    placeholder="ZIP or postal code"
-                  />
-                </div>
-                <div className="artist-nearby-zip-editor__actions">
-                  <button type="button" onClick={closeMenu} className="btn btn-secondary btn-sm">
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={saveZip}
-                    className="btn btn-primary btn-sm"
-                    disabled={!zipDraft.trim()}
-                  >
-                    Save
-                  </button>
-                </div>
+            <span className="artist-menu-item__label">
+              <Locate className="artist-icon-sm" aria-hidden="true" />
+              Your location
+            </span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onStartCustomLocation();
+              setShowZipForm(true);
+              setZipDraft(appliedZip);
+            }}
+            className={`artist-menu-item${zipModeActive ? " is-active" : ""}`}
+          >
+            Enter a location
+          </button>
+          {zipFormVisible && (
+            <div className="artist-nearby-zip-editor artist-nearby-zip-editor--menu">
+              <div className="artist-nearby-zip-editor__field">
+                <input
+                  ref={zipInputRef}
+                  type="text"
+                  value={zipDraft}
+                  onChange={(event) => setZipDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    saveZip();
+                  }}
+                  className="artist-nearby-zip-editor__input"
+                  placeholder="ZIP or postal code"
+                />
               </div>
-            )}
-          </div>
-        </>
+              <div className="artist-nearby-zip-editor__actions">
+                <button type="button" onClick={closeMenu} className="btn btn-secondary btn-sm">
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveZip}
+                  className="btn btn-primary btn-sm"
+                  disabled={!zipDraft.trim()}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
 }
-
-NearbyLocationControl.propTypes = {
-  locationMode: PropTypes.oneOf(["ip", "zip"]).isRequired,
-  appliedZip: PropTypes.string.isRequired,
-  location: PropTypes.shape({
-    city: PropTypes.string,
-    label: PropTypes.string,
-    postalCode: PropTypes.string,
-  }),
-  onSelectYourLocation: PropTypes.func.isRequired,
-  onStartCustomLocation: PropTypes.func.isRequired,
-  onApplyZip: PropTypes.func.isRequired,
-  className: PropTypes.string,
-};
 
 export default NearbyLocationControl;

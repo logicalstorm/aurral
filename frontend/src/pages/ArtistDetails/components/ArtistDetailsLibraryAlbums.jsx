@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import PropTypes from "prop-types";
 import { useDiscoverNavigation } from "../../../hooks/useDiscoverNavigation";
 import {
   Loader,
@@ -12,7 +11,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { navigateToLibraryAlbum } from "../../../utils/searchNavigation";
-import { getPopularityScale, isVisibleLibraryAlbum } from "../utils";
+import { isVisibleLibraryAlbum } from "../utils";
 
 export function ArtistDetailsLibraryAlbums({
   artist,
@@ -45,7 +44,6 @@ export function ArtistDetailsLibraryAlbums({
   );
 
   const releaseGroups = artist?.["release-groups"] || [];
-  getPopularityScale(releaseGroups);
   const popularityById = new Map(
     releaseGroups.map((rg) => [rg.id, typeof rg?.fans === "number" ? rg.fans : 0]),
   );
@@ -494,23 +492,3 @@ export function ArtistDetailsLibraryAlbums({
     </section>
   );
 }
-
-ArtistDetailsLibraryAlbums.propTypes = {
-  artist: PropTypes.object,
-  libraryAlbums: PropTypes.arrayOf(PropTypes.object),
-  downloadStatuses: PropTypes.object,
-  requestingAlbum: PropTypes.string,
-  reSearchingAlbum: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  reSearchingMissingAlbums: PropTypes.bool,
-  albumCovers: PropTypes.object,
-  artistCoverImage: PropTypes.string,
-  albumDropdownOpen: PropTypes.string,
-  setAlbumDropdownOpen: PropTypes.func,
-  canDeleteAlbum: PropTypes.bool,
-  handleDeleteAlbumClick: PropTypes.func,
-  canReSearchAlbum: PropTypes.bool,
-  handleReSearchAlbum: PropTypes.func,
-  handleReSearchMissingDownloads: PropTypes.func,
-  onVisibleCoverIdsChange: PropTypes.func,
-  artistName: PropTypes.string,
-};

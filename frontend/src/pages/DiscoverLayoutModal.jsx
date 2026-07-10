@@ -1,6 +1,5 @@
 import { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
-import PropTypes from "prop-types";
 import {
   DndContext,
   KeyboardSensor,
@@ -84,15 +83,6 @@ function SortableSectionRow({ item, onToggle, showUnavailable }) {
   );
 }
 
-SortableSectionRow.propTypes = {
-  item: PropTypes.shape({
-    id: PropTypes.string.isRequired,
-    label: PropTypes.string.isRequired,
-    enabled: PropTypes.bool.isRequired,
-  }).isRequired,
-  onToggle: PropTypes.func.isRequired,
-  showUnavailable: PropTypes.bool.isRequired,
-};
 
 export function DiscoverLayoutModal({
   open,
@@ -245,19 +235,3 @@ export function DiscoverLayoutModal({
   );
 }
 
-DiscoverLayoutModal.propTypes = {
-  open: PropTypes.bool.isRequired,
-  sections: PropTypes.arrayOf(
-    PropTypes.shape({
-      id: PropTypes.string.isRequired,
-      label: PropTypes.string.isRequired,
-      enabled: PropTypes.bool.isRequired,
-    }),
-  ).isRequired,
-  onSectionsChange: PropTypes.func.isRequired,
-  sectionAvailability: PropTypes.object.isRequired,
-  isSaving: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
-  onSave: PropTypes.func.isRequired,
-  onReset: PropTypes.func.isRequired,
-};

@@ -25,9 +25,6 @@ const LASTFM_MAX_RETRIES = 2;
 const lastfmInflightRequests = new Map();
 const lastfmErrorLogAt = new Map();
 
-let _lastfmApiCallCount = 0;
-const _lastfmApiCallCountByMethod = new Map();
-
 export const lastfmRequest = lastfmLimiter.wrap(
   async (method, params = {}, options = {}) => {
     const apiKey = getLastfmApiKey();
@@ -38,9 +35,6 @@ export const lastfmRequest = lastfmLimiter.wrap(
     if (cached) return cached;
     const inflight = lastfmInflightRequests.get(cacheKey);
     if (inflight) return inflight;
-    _lastfmApiCallCount += 1;
-    const currentByMethod = _lastfmApiCallCountByMethod.get(method) || 0;
-    _lastfmApiCallCountByMethod.set(method, currentByMethod + 1);
     const timeoutMs = Number.isFinite(Number(options?.timeoutMs))
       ? Math.max(500, Math.floor(Number(options.timeoutMs)))
       : LASTFM_TIMEOUT_MS;
@@ -123,98 +117,5 @@ export const lastfmRequest = lastfmLimiter.wrap(
     }
   },
 );
-
-export async function lastfmGetArtistNameByMbid(mbid) {
-  const data = await lastfmRequest("artist.getInfo", { mbid });
-  const name = data?.artist?.name;
-  return name && typeof name === "string" ? name.trim() : null;
-}
-
-export async function lastfmGetArtistImageUrlByName(artistName) {
-  const name = String(artistName || "").trim();
-  if (!name) return null;
-  try {
-    const data = await lastfmRequest("artist.getInfo", { artist: name });
-    const images = Array.isArray(data?.artist?.image) ? data.artist.image : [];
-    for (let index = images.length - 1; index >= 0; index -= 1) {
-      const url = String(images[index]?.["#text"] || "").trim();
-      if (url) return url;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-export async function lastfmSearchArtists(query, { limit = 5 } = {}) {
-  const trimmed = String(query || "").trim();
-  if (!trimmed || !getLastfmApiKey()) return [];
-  const data = await lastfmRequest("artist.search", {
-    artist: trimmed,
-    limit: Math.min(30, Math.max(1, limit)),
-  });
-  const results = data?.results?.artistmatches?.artist;
-  return results ? [].concat(results) : [];
-}
-
-export async function lastfmSearchAlbums(query, { limit = 5 } = {}) {
-  const trimmed = String(query || "").trim();
-  if (!trimmed || !getLastfmApiKey()) return [];
-  const data = await lastfmRequest("album.search", {
-    album: trimmed,
-    limit: Math.min(30, Math.max(1, limit)),
-  });
-  const results = data?.results?.albummatches?.album;
-  return results ? [].concat(results) : [];
-}
-
-export async function lastfmSearchTracks(query, { limit = 5 } = {}) {
-  const trimmed = String(query || "").trim();
-  if (!trimmed || !getLastfmApiKey()) return [];
-  const data = await lastfmRequest("track.search", {
-    track: trimmed,
-    limit: Math.min(30, Math.max(1, limit)),
-  });
-  const results = data?.results?.trackmatches?.track;
-  return results ? [].concat(results) : [];
-}
-
-function stripHtml(html) {
-  if (typeof html !== "string") return "";
-  return html.replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim();
-}
-
-export async function lastfmGetArtistBio(mbid) {
-  if (!mbid) return null;
-  try {
-    const data = await lastfmRequest("artist.getInfo", { mbid });
-    const bio = data?.artist?.bio;
-    if (!bio) return null;
-    const summary =
-      typeof bio.summary === "string" && bio.summary.trim()
-        ? stripHtml(bio.summary.trim())
-        : null;
-    const content =
-      typeof bio.content === "string" && bio.content.trim()
-        ? stripHtml(bio.content.trim())
-        : null;
-    return summary || content || null;
-  } catch (e) {
-    return null;
-  }
-}
-
-export function getLastfmApiCallCount() {
-  return _lastfmApiCallCount;
-}
-
-export function getLastfmApiCallCountByMethod() {
-  return Object.fromEntries(_lastfmApiCallCountByMethod);
-}
-
-export function resetLastfmApiCallCount() {
-  _lastfmApiCallCount = 0;
-  _lastfmApiCallCountByMethod.clear();
-}
 
 export { lastfmCache };

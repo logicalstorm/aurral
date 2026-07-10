@@ -12,13 +12,10 @@ import {
   getDownloadStatus,
   addArtistToLibrary,
   lookupArtistInLibrary,
-  getMyLidarrPreferences,
-} from "../../../utils/api";
-import {
-  deduplicateAlbums,
-  isVisibleLibraryAlbum,
-  matchesReleaseTypeFilter,
-} from "../utils";import { useWebSocketChannel } from "../../../hooks/useWebSocket";
+} from "../../../utils/api/endpoints/library.js";
+import { getMyLidarrPreferences } from "../../../utils/api/endpoints/auth.js";
+import { deduplicateAlbums } from "../utils";
+import { useWebSocketChannel } from "../../../hooks/useWebSocket";
 
 const DELETE_FILES_PREFERENCE_KEY = "aurral:library-delete-files";
 
@@ -47,14 +44,12 @@ export function useArtistDetailsLibrary({
   appSettings,
   showSuccess,
   showError,
-  selectedReleaseTypes,
 }) {
   const [requestingAlbum, setRequestingAlbum] = useState(null);
   const [removingAlbum, setRemovingAlbum] = useState(null);
   const [albumDropdownOpen, setAlbumDropdownOpen] = useState(null);
   const [showDeleteAlbumModal, setShowDeleteAlbumModal] = useState(null);
   const [deleteAlbumFiles, setDeleteAlbumFilesState] = useState(() => readDeleteFilesPreference());
-  const [processingBulk, setProcessingBulk] = useState(false);
   const [showRemoveDropdown, setShowRemoveDropdown] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteFiles, setDeleteFilesState] = useState(() => readDeleteFilesPreference());
@@ -549,7 +544,7 @@ export function useArtistDetailsLibrary({
         }));
         addedOptimistic = true;
 
-        const { addLibraryAlbum } = await import("../../../utils/api");
+        const { addLibraryAlbum } = await import("../../../utils/api/endpoints/library.js");
         let addedAlbum = null;
         try {
           addedAlbum = await addLibraryAlbum(currentLibraryArtist.id, albumId, title);
@@ -784,48 +779,6 @@ export function useArtistDetailsLibrary({
     }
   };
 
-  const isReleaseGroupDownloadedInLibrary = (releaseGroupId) => {
-    if (!existsInLibrary || !libraryAlbums?.length) return false;
-    const album = libraryAlbums.find(
-      (a) => a.mbid === releaseGroupId || a.foreignAlbumId === releaseGroupId,
-    );
-    if (!album || String(album.id ?? "").startsWith("pending-")) return false;
-    return isVisibleLibraryAlbum(album, { requestingAlbum });
-  };
-
-  const handleMonitorAll = async () => {
-    if (!libraryAlbums.length || !artist?.["release-groups"]) return;
-    const visibleReleaseGroups = artist["release-groups"].filter((rg) =>
-      matchesReleaseTypeFilter(rg, selectedReleaseTypes),
-    );
-    const visibleMbids = new Set(visibleReleaseGroups.map((rg) => rg.id));
-    const unmonitored = libraryAlbums.filter((a) => !a.monitored && visibleMbids.has(a.mbid));
-    if (unmonitored.length === 0) {
-      showSuccess("No new unmonitored albums in current view!");
-      return;
-    }
-    setProcessingBulk(true);
-    try {
-      const ids = unmonitored.map((a) => a.id);
-      for (const id of ids) {
-        const album = libraryAlbums.find((a) => a.id === id);
-        if (album) {
-          await updateLibraryAlbum(id, { ...album, monitored: true });
-          await downloadAlbum(libraryArtist.id, id);
-        }
-      }
-      setLibraryAlbums((prev) =>
-        prev.map((a) => (ids.includes(a.id) ? { ...a, monitored: true } : a)),
-      );
-      showSuccess(`Added ${ids.length} albums to monitor`);
-    } catch (err) {
-      console.error(err);
-      showError("Failed to add albums");
-    } finally {
-      setProcessingBulk(false);
-    }
-  };
-
   const getAlbumStatus = (releaseGroupId) => {
     if (!existsInLibrary || !libraryArtist || libraryAlbums.length === 0) {
       return null;
@@ -1056,7 +1009,6 @@ export function useArtistDetailsLibrary({
     showDeleteAlbumModal,
     deleteAlbumFiles,
     setDeleteAlbumFiles: updateDeleteFilesPreference,
-    processingBulk,
     showRemoveDropdown,
     setShowRemoveDropdown,
     showDeleteModal,
@@ -1096,8 +1048,6 @@ export function useArtistDetailsLibrary({
     handleDeleteAlbumClick,
     handleDeleteAlbumCancel,
     handleDeleteAlbumConfirm,
-    handleMonitorAll,
     getAlbumStatus,
-    isReleaseGroupDownloadedInLibrary,
   };
 }

@@ -1,12 +1,8 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { useState, useEffect, Suspense, lazy, useRef } from "react";
 import Layout from "./components/Layout";
-import {
-  checkHealthLive,
-  forceProxyReauthNavigation,
-  getBootstrapStatus,
-  getStoredAuth,
-} from "./utils/api";
+import { forceProxyReauthNavigation, getStoredAuth } from "./utils/api/core.js";
+import { checkHealthLive, getBootstrapStatus } from "./utils/api/endpoints/auth.js";
 import { getAppBasePath } from "./utils/basePath.js";
 import {
   PROXY_RELOAD_TS_KEY,
@@ -26,11 +22,20 @@ import { AlertTriangle, XCircle } from "lucide-react";
 import ReloadPrompt from "./components/ReloadPrompt";
 import UpdateBanner from "./components/UpdateBanner";
 import { useWebSocketChannel } from "./hooks/useWebSocket";
-import {
-  ActivitySourceRedirect,
-  ActivityRootRedirect,
-  LegacyHistoryRedirect,
-} from "./navigation/ActivityRedirects";
+import { buildActivityPath, DEFAULT_ACTIVITY_VIEW } from "./navigation/activityNavConfig";
+
+function LegacyHistoryRedirect() {
+  return <Navigate to="/activity/history" replace />;
+}
+
+function ActivitySourceRedirect() {
+  const { view } = useParams();
+  return <Navigate to={buildActivityPath(view)} replace />;
+}
+
+function ActivityRootRedirect() {
+  return <Navigate to={buildActivityPath(DEFAULT_ACTIVITY_VIEW)} replace />;
+}
 
 const Login = lazy(() => import("./pages/Login"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
@@ -41,9 +46,8 @@ const LibraryPage = lazy(() => import("./pages/LibraryPage"));
 const SettingsPage = lazy(() => import("./pages/Settings/SettingsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const ArtistDetailsPage = lazy(() => import("./pages/ArtistDetails/ArtistDetailsPage"));
-const ArtistAlbumsPage = lazy(() => import("./pages/ArtistDetails/ArtistAlbumsPage"));
+const ArtistReleaseListPage = lazy(() => import("./pages/ArtistDetails/ArtistReleaseListPage"));
 const ReleasePage = lazy(() => import("./pages/ArtistDetails/ReleasePage"));
-const ArtistAppearsOnPage = lazy(() => import("./pages/ArtistDetails/ArtistAppearsOnPage"));
 const ActivityPage = lazy(() => import("./pages/ActivityPage"));
 const FlowPage = lazy(() => import("./pages/FlowPage"));
 const DiscoverPlaylistsPage = lazy(() => import("./pages/DiscoverPlaylistsPage"));
@@ -296,9 +300,15 @@ function AppContent() {
                 <Route path="/activity" element={<ActivityRootRedirect />} />
                 <Route path="/activity/:view" element={<ActivityPage />} />
                 <Route path="/activity/:view/:source" element={<ActivitySourceRedirect />} />
-                <Route path="/artist/:mbid/albums" element={<ArtistAlbumsPage />} />
+                <Route
+                  path="/artist/:mbid/albums"
+                  element={<ArtistReleaseListPage mode="releases" />}
+                />
                 <Route path="/artist/:mbid/release/:releaseMbid" element={<ReleasePage />} />
-                <Route path="/artist/:mbid/appears-on" element={<ArtistAppearsOnPage />} />
+                <Route
+                  path="/artist/:mbid/appears-on"
+                  element={<ArtistReleaseListPage mode="appearsOn" />}
+                />
                 <Route path="/artist/:mbid" element={<ArtistDetailsPage />} />
                 <Route
                   path="/settings/:tab?"

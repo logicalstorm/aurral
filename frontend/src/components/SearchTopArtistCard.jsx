@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import { ChevronRight, ListMusic, Music } from "lucide-react";
 import ArtistImage from "./ArtistImage";
 import SearchLibraryCheck from "./SearchLibraryCheck";
@@ -197,23 +196,5 @@ function SearchTopArtistCard({
     </article>
   );
 }
-
-SearchTopArtistCard.propTypes = {
-  item: PropTypes.object,
-  artist: PropTypes.object,
-  artistImages: PropTypes.object.isRequired,
-  albumCovers: PropTypes.object,
-  libraryLookup: PropTypes.object.isRequired,
-  navigate: PropTypes.func.isRequired,
-  query: PropTypes.string,
-  previewTracks: PropTypes.arrayOf(PropTypes.object),
-};
-
-TopResultArtwork.propTypes = {
-  item: PropTypes.object.isRequired,
-  artistImages: PropTypes.object.isRequired,
-  albumCovers: PropTypes.object.isRequired,
-  isInLibrary: PropTypes.bool,
-};
 
 export default SearchTopArtistCard;

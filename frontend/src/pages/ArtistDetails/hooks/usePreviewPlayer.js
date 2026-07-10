@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { useAudioQueue } from "../../../hooks/useAudioQueue";
-import { getArtistPreview } from "../../../utils/api";
+import { useAudioQueue } from "../../../contexts/audioQueueContext";
+import { getArtistPreview } from "../../../utils/api/endpoints/artists.js";
 import { buildArtistPlaybackQueue } from "../../../utils/buildArtistPlaybackQueue";
 import { normalizePreviewTrack } from "../../../utils/audioQueue";
 

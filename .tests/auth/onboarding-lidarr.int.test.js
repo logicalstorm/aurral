@@ -3,22 +3,17 @@ import assert from "node:assert/strict";
 import http from "node:http";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
   startServerProcess,
-  buildApiUrl,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("onboarding-lidarr-api");
-applyIsolatedBackendEnv(isolatedState);
-
-const [{ db }, { dbOps }] = await Promise.all([
-  importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/db/helpers/index.js"),
-]);
+const [isolatedState, { db }, { dbOps }] = await setupIsolatedBackend(
+  "onboarding-lidarr-api",
+  "backend/config/db-sqlite.js",
+  "backend/db/helpers/index.js",
+);
 
 function json(res, statusCode, payload) {
   res.writeHead(statusCode, { "Content-Type": "application/json" });
@@ -115,7 +110,7 @@ test("GET /api/onboarding/lidarr/test uses supplied credentials before onboardin
     apiKey: "fake-key",
   });
   const response = await fetch(
-    buildApiUrl(server.port, `/api/onboarding/lidarr/test?${params.toString()}`),
+    `http://127.0.0.1:${server.port}/api/onboarding/lidarr/test?${params.toString()}`,
   );
   const payload = await response.json();
 
@@ -128,36 +123,13 @@ test("GET /api/onboarding/lidarr/test uses supplied credentials before onboardin
   assert.equal(fakeLidarr.requests[0].apiKey, "fake-key");
 });
 
-test("GET /api/onboarding/lidarr/test-library-access keeps supplied credentials through root folder lookup", async () => {
-  const params = new URLSearchParams({
-    url: fakeLidarr.url,
-    apiKey: "fake-key",
-  });
-  const response = await fetch(
-    buildApiUrl(
-      server.port,
-      `/api/onboarding/lidarr/test-library-access?${params.toString()}`,
-    ),
-  );
-  const payload = await response.json();
-
-  assert.equal(response.status, 200, JSON.stringify(payload));
-  const rootStep = payload.steps?.find((step) => step.id === "root");
-  assert.notEqual(rootStep?.detail, "Lidarr API key not configured");
-  assert.equal(rootStep?.status, "pass");
-  assert.match(String(rootStep?.detail || ""), /\/music\/main/);
-});
-
 test("GET /api/onboarding/lidarr/profiles uses supplied credentials before onboarding is complete", async () => {
   const params = new URLSearchParams({
     url: fakeLidarr.url,
     apiKey: "fake-key",
   });
   const response = await fetch(
-    buildApiUrl(
-      server.port,
-      `/api/onboarding/lidarr/profiles?${params.toString()}`,
-    ),
+    `http://127.0.0.1:${server.port}/api/onboarding/lidarr/profiles?${params.toString()}`,
   );
   const payload = await response.json();
 
@@ -165,19 +137,27 @@ test("GET /api/onboarding/lidarr/profiles uses supplied credentials before onboa
   assert.deepEqual(payload, [{ id: 1, name: "Aurral - HQ" }]);
 });
 
-test("GET /api/onboarding/lidarr/metadata-profiles uses supplied credentials before onboarding is complete", async () => {
-  const params = new URLSearchParams({
-    url: fakeLidarr.url,
-    apiKey: "fake-key",
+test("POST /api/onboarding/complete requires Lidarr and auto-picks profiles", async () => {
+  const response = await fetch(`http://127.0.0.1:${server.port}/api/onboarding/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      authUser: "admin",
+      authPassword: "password123",
+      security: { localNetworkBypass: { enabled: true } },
+      lidarr: {
+        url: fakeLidarr.url,
+        apiKey: "fake-key",
+      },
+    }),
   });
-  const response = await fetch(
-    buildApiUrl(
-      server.port,
-      `/api/onboarding/lidarr/metadata-profiles?${params.toString()}`,
-    ),
-  );
   const payload = await response.json();
-
   assert.equal(response.status, 200, JSON.stringify(payload));
-  assert.deepEqual(payload, [{ id: 2, name: "Aurral - Standard" }]);
+
+  const settings = dbOps.getSettings();
+  assert.equal(settings.onboardingComplete, true);
+  assert.equal(settings.integrations?.lidarr?.apiKey, "fake-key");
+  assert.equal(settings.integrations?.lidarr?.qualityProfileId, 1);
+  assert.equal(settings.integrations?.lidarr?.metadataProfileId, 2);
+  assert.equal(settings.security?.localNetworkBypass?.enabled, true);
 });

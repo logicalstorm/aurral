@@ -1,10 +1,11 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
-import { Loader2, Search } from "lucide-react";
-import { getTagSuggestions, searchUnified } from "../../../utils/api";
-import { TAG_COLORS } from "../../ArtistDetails/constants";
+import { getTagSuggestions } from "../../../utils/api/endpoints/discovery.js";
+import { searchUnified } from "../../../utils/api/endpoints/search.js";
+import { TAG_COLORS } from "../../discoverUtils";
 import { getTagColor } from "../../ArtistDetails/utils";
 import { useDebouncedTask } from "../../../hooks/useDebouncedTask";
 
+import { Loader2, Search } from "lucide-react";
 const SOURCE_MIX_COLORS = {
   discover: TAG_COLORS[10],
   mix: TAG_COLORS[4],
@@ -29,17 +30,8 @@ export const WEEKDAY_OPTIONS = [
   { id: 6, short: "S", full: "Saturday" },
 ];
 
-export const FLOW_WORKER_CONCURRENCY_OPTIONS = [1, 2, 3];
 const FLOW_FOCUS_SUGGESTION_DEBOUNCE_MS = 250;
 const FLOW_FOCUS_SUGGESTION_LIMIT = 8;
-export const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [
-  { minutes: 15, label: "15 min" },
-  { minutes: 30, label: "30 min" },
-  { minutes: 60, label: "1 hour" },
-  { minutes: 360, label: "6 hours" },
-  { minutes: 720, label: "12 hours" },
-  { minutes: 1440, label: "1 day" },
-];
 export const SCHEDULE_HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => {
   const normalized = `${String(hour).padStart(2, "0")}:00`;
   const suffix = hour >= 12 ? "PM" : "AM";
@@ -378,7 +370,6 @@ export function getFocusDraftValidation(draft, normalizeMixPercent) {
     getCommaTokenInputState(draft?.includeRelatedArtists, { commitAll: true }).committed.length > 0;
   return {
     focusEnabled,
-    hasFocusFilters,
     focusValidationError:
       focusEnabled && !hasFocusFilters
         ? "Focus needs at least one genre tag or related artist."

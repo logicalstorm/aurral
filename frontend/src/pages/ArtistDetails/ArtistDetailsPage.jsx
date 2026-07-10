@@ -1,4 +1,25 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  getArtistCover,
+  getArtistDetails,
+  getArtistOverrides,
+  getArtistPreview,
+  getSimilarArtistsForArtist,
+  updateArtistOverrides,
+} from "../../utils/api/endpoints/artists.js";
+import { addArtistToLibrary } from "../../utils/api/endpoints/library.js";
+import {
+  addSharedPlaylistTracks,
+  createSharedPlaylist,
+} from "../../utils/api/endpoints/playlists.js";
+import {
+  buildSharedPlaylistTrackPayload,
+  getCoverImage,
+  reserveUniquePlaylistName,
+} from "./utils";
+import { useArtistTasteFeedback } from "../../hooks/useArtistTasteFeedback";
+import { useSharedPlaylists } from "../../hooks/useSharedPlaylists";
+
 import { useParams, useLocation } from "react-router-dom";
 import { useDiscoverNavigation } from "../../hooks/useDiscoverNavigation";
 import { Loader, Music, X } from "lucide-react";
@@ -9,7 +30,7 @@ import { useArtistDetailsStream } from "./hooks/useArtistDetailsStream";
 import { usePreviewPlayer } from "./hooks/usePreviewPlayer";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
 import { useArtistSearchFocus } from "./hooks/useArtistSearchFocus";
-import { allReleaseTypes, ARTIST_DETAILS_APPEARS_ON_LIMIT } from "./constants";
+import { ARTIST_DETAILS_APPEARS_ON_LIMIT, allReleaseTypes } from "./constants";
 import { ArtistDetailsHero } from "./components/ArtistDetailsHero";
 import { ArtistDetailsActionBar } from "./components/ArtistDetailsActionBar";
 import { ArtistDetailsDownloadTargets } from "./components/ArtistDetailsDownloadTargets";
@@ -22,25 +43,6 @@ import { ArtistDetailsSimilar } from "./components/ArtistDetailsSimilar";
 import { DeleteArtistModal } from "./components/DeleteArtistModal";
 import { DeleteAlbumModal } from "./components/DeleteAlbumModal";
 import { AddArtistCustomizeModal } from "./components/AddArtistCustomizeModal";
-import {
-  addArtistToLibrary,
-  addSharedPlaylistTracks,
-  getArtistCover,
-  getArtistDetails,
-  getArtistOverrides,
-  getArtistPreview,
-  getSimilarArtistsForArtist,
-  createSharedPlaylist,
-  updateArtistOverrides,
-} from "../../utils/api";
-import {
-  buildSharedPlaylistTrackPayload,
-  getArtistPosterImage,
-  reserveUniquePlaylistName,
-} from "./utils";
-import { useArtistTasteFeedback } from "../../hooks/useArtistTasteFeedback";
-import { useSharedPlaylists } from "../../hooks/useSharedPlaylists";
-
 const MBID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function ArtistDetailsPage() {
@@ -80,9 +82,7 @@ function ArtistDetailsPage() {
   const [visibleAppearsOnCoverIds, setVisibleAppearsOnCoverIds] = useState([]);
   const [visibleLibraryCoverIds, setVisibleLibraryCoverIds] = useState([]);
 
-  const selectedReleaseTypes = allReleaseTypes;
-
-  const stream = useArtistDetailsStream(mbid, artistNameFromNav, selectedReleaseTypes, {
+  const stream = useArtistDetailsStream(mbid, artistNameFromNav, {
     visibleCoverIds: [
       ...visibleReleaseGroupCoverIds,
       ...visibleAppearsOnCoverIds,
@@ -207,7 +207,6 @@ function ArtistDetailsPage() {
     appSettings,
     showSuccess,
     showError,
-    selectedReleaseTypes,
   });
 
   useArtistSearchFocus({
@@ -283,9 +282,7 @@ function ArtistDetailsPage() {
       setShowEditIdsModal(false);
       const name = artist?.name || artistNameFromNav || "";
       const [details, cover, previewData, similar] = await Promise.all([
-        getArtistDetails(mbid, name, {
-          releaseTypes: selectedReleaseTypes,
-        }).catch(() => null),
+        getArtistDetails(mbid, name, { releaseTypes: allReleaseTypes }).catch(() => null),
         getArtistCover(mbid, name, true).catch(() => ({ images: [] })),
         getArtistPreview(mbid, name).catch(() => ({ tracks: [] })),
         getSimilarArtistsForArtist(mbid, name).catch(() => ({ artists: [] })),
@@ -445,7 +442,7 @@ function ArtistDetailsPage() {
     return null;
   }
 
-  const artistCoverImage = getArtistPosterImage(coverImages);
+  const artistCoverImage = getCoverImage(coverImages);
   const playbackSource = {
     type: "artist",
     id: mbid,
@@ -465,25 +462,13 @@ function ArtistDetailsPage() {
       />
 
       <ArtistDetailsActionBar
+        library={library}
         existsInLibrary={existsInLibrary}
         loadingLibrary={loadingLibrary}
-        showRemoveDropdown={library.showRemoveDropdown}
-        setShowRemoveDropdown={library.setShowRemoveDropdown}
-        showMonitorOptionMenu={library.showMonitorOptionMenu}
-        setShowMonitorOptionMenu={library.setShowMonitorOptionMenu}
-        updatingMonitor={library.updatingMonitor}
         canChangeMonitoring={canChangeMonitoring}
-        getCurrentMonitorOption={library.getCurrentMonitorOption}
-        handleUpdateMonitorOption={library.handleUpdateMonitorOption}
         canDeleteArtist={canDeleteArtist}
-        handleDeleteClick={library.handleDeleteClick}
         canAddArtist={canAddArtist}
-        handleAddToLibrary={library.handleAddToLibrary}
-        handleOpenAddCustomizeModal={library.handleOpenAddCustomizeModal}
-        addingToLibrary={library.addingToLibrary}
         canRefreshArtist={canChangeMonitoring}
-        handleRefreshArtist={library.handleRefreshArtist}
-        refreshingArtist={library.refreshingArtist}
         buildingQueue={buildingQueue}
         isArtistPlaybackActive={isArtistPlaybackActive}
         handlePreviewPlayAll={handlePreviewPlayAll}

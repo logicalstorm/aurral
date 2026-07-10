@@ -1,22 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
 } from "../helpers/backendTestHarness.js";
+import { createDiscoveryArtistBatcher } from "../helpers/discoveryFixtures.js";
 
-const isolatedState = await createIsolatedStateDir("discovery-recommendation-pool");
-applyIsolatedBackendEnv(isolatedState);
+const [
+  isolatedState,
+  recommendationPipeline,
+  discoveryIndex,
+] = await setupIsolatedBackend(
+  "discovery-recommendation-pool",
+  "backend/services/discovery/recommendationPipeline.js",
+  "backend/services/discovery/index.js",
+);
 
 const { mergeRetainedRecommendationPool, filterRecommendationsForServe } =
-  await importFromRepo("backend/services/discovery/recommendationPipeline.js");
+  recommendationPipeline;
 const {
   getDiscoveryRecommendationsPerRefresh,
   getDiscoveryRecommendationPoolLimit,
   rerankCachedRecommendations,
-} = await importFromRepo("backend/services/discovery/index.js");
+} = discoveryIndex;
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);
@@ -25,37 +31,7 @@ test.after(async () => {
 const PER_REFRESH = getDiscoveryRecommendationsPerRefresh();
 const POOL_LIMIT = getDiscoveryRecommendationPoolLimit();
 
-function makeArtist(index, score, prefix = "artist") {
-  const padded = String(index).padStart(12, "0");
-  return {
-    id: `00000000-0000-4000-8000-${padded}`,
-    name: `${prefix}-${index}`,
-    matchedTags: ["indie"],
-    supportingSeeds: [{ artistName: "Seed", weight: 1 }],
-    scoreSimilarity: score,
-    scoreTagAffinity: 10,
-    scoreSeedCoverage: 8,
-    scoreNovelty: 6,
-    scorePopularityPenalty: 2,
-    scoreTotal: score,
-    seedCount: 1,
-    sourceType: "lastfm",
-  };
-}
-
-let nextArtistOffset = 0;
-
-function makeBatch(count, baseScore, prefix = "artist") {
-  const start = nextArtistOffset;
-  nextArtistOffset += count;
-  return Array.from({ length: count }, (_, offset) =>
-    makeArtist(start + offset, baseScore - offset, prefix),
-  );
-}
-
-function resetArtistIds() {
-  nextArtistOffset = 0;
-}
+const artists = createDiscoveryArtistBatcher();
 
 function simulatePhase({
   existingRecommendations = [],
@@ -64,7 +40,7 @@ function simulatePhase({
   prefix = "artist",
   runStartedAt = new Date().toISOString(),
 } = {}) {
-  const candidates = makeBatch(candidateCount, baseScore, prefix);
+  const candidates = artists.makeBatch(candidateCount, baseScore, prefix);
   const freshRecommendations = rerankCachedRecommendations({
     recommendations: candidates,
     discoveryMode: "balanced",
@@ -80,7 +56,7 @@ function simulatePhase({
 }
 
 test("two-phase refresh grows pool from initial hydration through enrichment", () => {
-  resetArtistIds();
+  artists.reset();
   const runStartedAt = "2026-06-18T00:00:00.000Z";
   const phaseOnePool = simulatePhase({
     existingRecommendations: [],
@@ -122,7 +98,7 @@ test("two-phase refresh grows pool from initial hydration through enrichment", (
 });
 
 test("repeated refreshes build the pool to the 500 cap", () => {
-  resetArtistIds();
+  artists.reset();
   let pool = [];
   for (let cycle = 0; cycle < 4; cycle += 1) {
     pool = simulatePhase({
@@ -148,9 +124,9 @@ test("repeated refreshes build the pool to the 500 cap", () => {
 });
 
 test("rotation drops lowest retained artists when fresh batch arrives", () => {
-  resetArtistIds();
-  const weakRetained = makeBatch(POOL_LIMIT, 40, "weak");
-  const freshBatch = makeBatch(PER_REFRESH, 250, "fresh");
+  artists.reset();
+  const weakRetained = artists.makeBatch(POOL_LIMIT, 40, "weak");
+  const freshBatch = artists.makeBatch(PER_REFRESH, 250, "fresh");
   const freshRecommendations = rerankCachedRecommendations({
     recommendations: freshBatch,
     discoveryMode: "balanced",
@@ -182,7 +158,7 @@ test("rotation drops lowest retained artists when fresh batch arrives", () => {
 });
 
 test("full two-phase refresh cycles reach the 500 pool cap", () => {
-  resetArtistIds();
+  artists.reset();
   let pool = [];
   for (let cycle = 0; cycle < 3; cycle += 1) {
     pool = simulatePhase({
@@ -212,7 +188,7 @@ test("full two-phase refresh cycles reach the 500 pool cap", () => {
 });
 
 test("filterRecommendationsForServe keeps stored order and hides exact negative feedback", () => {
-  const storedPool = makeBatch(5, 180, "stored");
+  const storedPool = artists.makeBatch(5, 180, "stored");
   const hidden = storedPool[2];
   const filtered = filterRecommendationsForServe(storedPool, [
     {
@@ -229,8 +205,8 @@ test("filterRecommendationsForServe keeps stored order and hides exact negative 
 });
 
 test("rerankCachedRecommendations still trims refresh batches to the per-refresh limit", () => {
-  resetArtistIds();
-  const storedPool = makeBatch(350, 180, "stored");
+  artists.reset();
+  const storedPool = artists.makeBatch(350, 180, "stored");
   const servedWithRefreshLimit = rerankCachedRecommendations({
     recommendations: storedPool,
     discoveryMode: "balanced",
@@ -246,7 +222,7 @@ test("rerankCachedRecommendations still trims refresh batches to the per-refresh
 });
 
 test("enrichment marks returning artists as fresh while preserving firstDiscoveredAt", () => {
-  resetArtistIds();
+  artists.reset();
   const runStartedAt = "2026-06-18T00:00:00.000Z";
   const initialPool = simulatePhase({
     existingRecommendations: [],
@@ -265,7 +241,7 @@ test("enrichment marks returning artists as fresh while preserving firstDiscover
   const enrichmentFresh = rerankCachedRecommendations({
     recommendations: [
       enrichedCandidate,
-      ...makeBatch(PER_REFRESH - 1, 190, "enriched"),
+      ...artists.makeBatch(PER_REFRESH - 1, 190, "enriched"),
     ],
     discoveryMode: "balanced",
     limit: PER_REFRESH,
@@ -291,11 +267,11 @@ test("enrichment marks returning artists as fresh while preserving firstDiscover
 });
 
 test("merge retains existing artists alongside fresh when fresh batch falls short of pool limit", () => {
-  resetArtistIds();
+  artists.reset();
   const runStartedAt = "2026-06-22T00:00:00.000Z";
 
-  const existing = makeBatch(100, 160, "existing");
-  const freshFull = makeBatch(250, 220, "fresh-full");
+  const existing = artists.makeBatch(100, 160, "existing");
+  const freshFull = artists.makeBatch(250, 220, "fresh-full");
   const freshRanked = rerankCachedRecommendations({
     recommendations: freshFull,
     discoveryMode: "balanced",

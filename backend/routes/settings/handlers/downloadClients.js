@@ -1,50 +1,45 @@
 import { validateExternalUrl } from "../../../middleware/urlValidator.js";
 
-export function registerDownloadClients(router) {
-  router.post("/slskd/test", async (req, res) => {
+function registerClientTest(router, path, importClient, label, { warning } = {}) {
+  router.post(path, async (_req, res) => {
     try {
-      const { slskdClient } = await import("../../../services/slskdClient.js");
-      const result = await slskdClient.testConnection({ force: true });
+      const client = await importClient();
+      const result = await client.testConnection({ force: true });
       if (!result.configured) {
         return res.status(400).json(result);
       }
       if (!result.ok) {
         return res.status(502).json(result);
       }
-      return res.json({
-        success: true,
-        warning: result.warning === true,
-        ...result,
-      });
+      return res.json(
+        warning
+          ? { success: true, warning: result.warning === true, ...result }
+          : { success: true, ...result },
+      );
     } catch (error) {
       return res.status(500).json({
-        error: "slskd test failed",
+        error: `${label} test failed`,
         message: error.message,
       });
     }
   });
+}
 
-  router.post("/prowlarr/test", async (req, res) => {
-    try {
-      const { prowlarrClient } = await import("../../../services/prowlarrClient.js");
-      const result = await prowlarrClient.testConnection({ force: true });
-      if (!result.configured) {
-        return res.status(400).json(result);
-      }
-      if (!result.ok) {
-        return res.status(502).json(result);
-      }
-      return res.json({
-        success: true,
-        ...result,
-      });
-    } catch (error) {
-      return res.status(500).json({
-        error: "Prowlarr test failed",
-        message: error.message,
-      });
-    }
-  });
+export function registerDownloadClients(router) {
+  registerClientTest(
+    router,
+    "/slskd/test",
+    async () => (await import("../../../services/slskdClient.js")).slskdClient,
+    "slskd",
+    { warning: true },
+  );
+
+  registerClientTest(
+    router,
+    "/prowlarr/test",
+    async () => (await import("../../../services/prowlarrClient.js")).prowlarrClient,
+    "Prowlarr",
+  );
 
   router.get("/prowlarr/indexers", async (_req, res) => {
     try {
@@ -59,71 +54,26 @@ export function registerDownloadClients(router) {
     }
   });
 
-  router.post("/nzbget/test", async (req, res) => {
-    try {
-      const { nzbgetClient } = await import("../../../services/nzbgetClient.js");
-      const result = await nzbgetClient.testConnection({ force: true });
-      if (!result.configured) {
-        return res.status(400).json(result);
-      }
-      if (!result.ok) {
-        return res.status(502).json(result);
-      }
-      return res.json({
-        success: true,
-        ...result,
-      });
-    } catch (error) {
-      return res.status(500).json({
-        error: "NZBGet test failed",
-        message: error.message,
-      });
-    }
-  });
+  registerClientTest(
+    router,
+    "/nzbget/test",
+    async () => (await import("../../../services/nzbgetClient.js")).nzbgetClient,
+    "NZBGet",
+  );
 
-  router.post("/sabnzbd/test", async (req, res) => {
-    try {
-      const { sabnzbdClient } = await import("../../../services/sabnzbdClient.js");
-      const result = await sabnzbdClient.testConnection({ force: true });
-      if (!result.configured) {
-        return res.status(400).json(result);
-      }
-      if (!result.ok) {
-        return res.status(502).json(result);
-      }
-      return res.json({
-        success: true,
-        ...result,
-      });
-    } catch (error) {
-      return res.status(500).json({
-        error: "SABnzbd test failed",
-        message: error.message,
-      });
-    }
-  });
+  registerClientTest(
+    router,
+    "/sabnzbd/test",
+    async () => (await import("../../../services/sabnzbdClient.js")).sabnzbdClient,
+    "SABnzbd",
+  );
 
-  router.post("/ytdlp/test", async (req, res) => {
-    try {
-      const { ytdlpClient } = await import("../../../services/ytdlpClient.js");
-      const result = await ytdlpClient.testConnection({ force: true });
-      if (!result.configured) {
-        return res.status(400).json(result);
-      }
-      if (!result.ok) {
-        return res.status(502).json(result);
-      }
-      return res.json({
-        success: true,
-        ...result,
-      });
-    } catch (error) {
-      return res.status(500).json({
-        error: "yt-dlp test failed",
-        message: error.message,
-      });
-    }
-  });
+  registerClientTest(
+    router,
+    "/ytdlp/test",
+    async () => (await import("../../../services/ytdlpClient.js")).ytdlpClient,
+    "yt-dlp",
+  );
 
   router.post("/gotify/test", async (req, res) => {
     try {

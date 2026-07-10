@@ -1,33 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import http from "http";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
+  createMockHttpServer,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("usenet-integration");
-applyIsolatedBackendEnv(isolatedState);
-
 const [
+  isolatedState,
   { prowlarrClient },
   { nzbgetClient },
   { getEnabledDownloadSources },
   { rankUsenetReleases, selectRankedUsenetCandidates },
   { dbOps },
   { db },
-] = await Promise.all([
-  importFromRepo("backend/services/prowlarrClient.js"),
-  importFromRepo("backend/services/nzbgetClient.js"),
-  importFromRepo("backend/services/downloadSourceService.js"),
-  importFromRepo("backend/services/weeklyFlow/weeklyFlowUsenetMatcher.js"),
-  importFromRepo("backend/db/helpers/index.js"),
-  importFromRepo("backend/config/db-sqlite.js"),
-]);
+] = await setupIsolatedBackend(
+  "usenet-integration",
+  "backend/services/prowlarrClient.js",
+  "backend/services/nzbgetClient.js",
+  "backend/services/downloadSourceService.js",
+  "backend/services/weeklyFlow/weeklyFlowUsenetMatcher.js",
+  "backend/db/helpers/index.js",
+  "backend/config/db-sqlite.js",
+);
 
 test.beforeEach(() => {
   resetDatabase(db);
@@ -37,19 +34,6 @@ test.after(async () => {
   await cleanupIsolatedState(isolatedState);
 });
 
-function createMockServer(handler) {
-  const server = http.createServer(handler);
-  return new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      resolve({
-        url: `http://127.0.0.1:${address.port}`,
-        close: () => new Promise((done) => server.close(done)),
-      });
-    });
-  });
-}
-
 function sendJson(res, status, body) {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(body));
@@ -57,7 +41,7 @@ function sendJson(res, status, body) {
 
 test("Prowlarr client lists enabled Usenet indexers and searches audio releases", async () => {
   const requests = [];
-  const server = await createMockServer((req, res) => {
+  const server = await createMockHttpServer((req, res) => {
     requests.push(req.url);
     assert.equal(req.headers["x-api-key"], "prowlarr-key");
     const url = new URL(req.url, "http://mock");
@@ -168,7 +152,7 @@ test("Prowlarr client lists enabled Usenet indexers and searches audio releases"
 
 test("NZBGet client uses JSON-RPC append signature and exposes completed paths", async () => {
   const calls = [];
-  const server = await createMockServer((req, res) => {
+  const server = await createMockHttpServer((req, res) => {
     if (req.url !== "/jsonrpc") {
       sendJson(res, 404, {});
       return;
@@ -256,6 +240,9 @@ test("download source selection orders enabled sources by priority", () => {
         enabled: true,
         url: "http://nzbget.local",
         priority: 5,
+      },
+      ytdlp: {
+        enabled: false,
       },
     },
   });

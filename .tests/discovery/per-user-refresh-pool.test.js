@@ -1,12 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
-  cleanupIsolatedState,
-  importFromRepo,
-  resetDatabase,
-} from "../helpers/backendTestHarness.js";
+import { importFromRepo } from "../helpers/backendTestHarness.js";
+import { createDiscoveryArtistBatcher } from "../helpers/discoveryFixtures.js";
 
 test("per-user refresh: rerankCachedRecommendations produces a personalized slice from the global pool", async () => {
   const { rerankRecommendations } = await importFromRepo(
@@ -113,37 +108,12 @@ test("per-user refresh: mergeRetainedRecommendationPool preserves per-user retai
 
   const runStartedAt = "2026-06-22T00:00:00.000Z";
 
-  function makeArtist(index, score, prefix) {
-    const padded = String(index).padStart(12, "0");
-    return {
-      id: `aaaaaaaa-aaaa-4000-8000-${padded}`,
-      name: `${prefix}-${index}`,
-      matchedTags: ["indie"],
-      supportingSeeds: [{ artistName: "Seed", weight: 1 }],
-      scoreSimilarity: score,
-      scoreTagAffinity: 10,
-      scoreSeedCoverage: 8,
-      scoreNovelty: 6,
-      scorePopularityPenalty: 2,
-      scoreTotal: score,
-      seedCount: 1,
-      sourceType: "lastfm",
-    };
-  }
+  const artists = createDiscoveryArtistBatcher("aaaaaaaa-aaaa-4000-8000");
 
-  let offset = 0;
-  function batch(count, score, prefix) {
-    const start = offset;
-    offset += count;
-    return Array.from({ length: count }, (_, index) =>
-      makeArtist(start + index, score - index, prefix),
-    );
-  }
-
-  const perUserRetained = batch(80, 160, "per-user-retained");
+  const perUserRetained = artists.makeBatch(80, 160, "per-user-retained");
 
   const globalPoolReranked = rerankCachedRecommendations({
-    recommendations: batch(200, 220, "global-fresh"),
+    recommendations: artists.makeBatch(200, 220, "global-fresh"),
     feedback: [
       {
         id: "user-fb",

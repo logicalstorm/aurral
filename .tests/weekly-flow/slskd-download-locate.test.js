@@ -4,14 +4,12 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 
-import { importFromRepo } from "../helpers/backendTestHarness.js";
-
-const {
+import {
   commitImportToPlaylistLibrary,
   locateCompletedDownload,
   parseSlskdRemoteFile,
   predictSlskdLocalPathCandidates,
-} = await importFromRepo("backend/services/slskdOrchestrator.js");
+} from "../../backend/services/slskdOrchestrator.js";
 
 test("parseSlskdRemoteFile reads parent folder and basename from remote paths", () => {
   assert.deepEqual(

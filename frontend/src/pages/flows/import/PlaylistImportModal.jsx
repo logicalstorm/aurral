@@ -10,9 +10,17 @@ import {
   importSpotifyPlaylist,
   previewSpotifyPlaylist,
   startSpotifyOAuth,
-} from "../../../utils/api";
+} from "../../../utils/api/endpoints/playlists.js";
 import { getAppBasePath, normalizeBasePathWithTrailingSlash } from "../../../utils/basePath";
 import { parseFlowImportFile, reserveUniqueFlowName, normalizeNameKey } from "../flowPageUtils";
+
+const SYNC_INTERVAL_OPTIONS = [
+  { value: 0, label: "None" },
+  { value: 6, label: "Every 6 hours" },
+  { value: 12, label: "Every 12 hours" },
+  { value: 24, label: "Every 24 hours" },
+  { value: 72, label: "Every 3 days" },
+];
 
 const SPOTIFY_OAUTH_BROADCAST_CHANNEL = "aurral-spotify-oauth";
 
@@ -26,14 +34,6 @@ function tokensFromHandoffPayload(payload) {
     expiresIn: payload?.expires_in,
   };
 }
-
-export const SYNC_INTERVAL_OPTIONS = [
-  { value: 0, label: "None" },
-  { value: 6, label: "Every 6 hours" },
-  { value: 12, label: "Every 12 hours" },
-  { value: 24, label: "Every 24 hours" },
-  { value: 72, label: "Every 3 days" },
-];
 
 function getOAuthCallbackUrl() {
   const base = normalizeBasePathWithTrailingSlash(getAppBasePath());

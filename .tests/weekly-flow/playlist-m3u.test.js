@@ -4,31 +4,28 @@ import fs from "fs/promises";
 import path from "path";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("playlist-m3u");
-applyIsolatedBackendEnv(isolatedState);
-
 const [
+  isolatedState,
   { db },
   trackerModule,
   configModule,
   m3uModule,
   m3uPathsModule,
   { WeeklyFlowPlaylistManager },
-] = await Promise.all([
-  importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/services/weeklyFlow/weeklyFlowDownloadTracker.js"),
-  importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
-  importFromRepo("backend/services/playlistM3u.js"),
-  importFromRepo("backend/services/playlistM3uPaths.js"),
-  importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistManager.js"),
-]);
+] = await setupIsolatedBackend(
+  "playlist-m3u",
+  "backend/config/db-sqlite.js",
+  "backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
+  "backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js",
+  "backend/services/playlistM3u.js",
+  "backend/services/playlistM3uPaths.js",
+  "backend/services/weeklyFlow/weeklyFlowPlaylistManager.js",
+);
 
 const { downloadTracker } = trackerModule;
 const { flowPlaylistConfig } = configModule;

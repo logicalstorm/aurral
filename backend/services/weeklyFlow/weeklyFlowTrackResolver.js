@@ -8,7 +8,11 @@ import {
   listArtistAlbums,
   resolveAlbumByArtistAndTitle,
 } from "../providers/brainzmashProvider.js";
-import { scoreTextMatch as scoreTextMatchBase, getYear } from "../providers/brainzmashRanking.js";
+import {
+  artistNamesMatch,
+  scoreTextMatch as scoreTextMatchBase,
+  getYear,
+} from "../providers/brainzmashRanking.js";
 
 const artistAliasCache = new Map();
 const releaseGroupSearchCache = new Map();
@@ -166,6 +170,11 @@ async function fetchReleaseContext(albumMbid) {
   const promise = (async () => {
     try {
       const album = await getAlbumByMbid(key);
+      const primaryArtist = Array.isArray(album?.artists) ? album.artists[0] : null;
+      const artistId =
+        String(album?.artistId || primaryArtist?.id || "").trim() || null;
+      const artistName =
+        String(primaryArtist?.name || "").trim() || null;
       const releases = Array.isArray(album?.releases) ? album.releases : [];
       const pickedRelease =
         releases.find((release) => String(release?.status || "").toLowerCase() === "official") ||
@@ -174,6 +183,8 @@ async function fetchReleaseContext(albumMbid) {
         null;
       if (!pickedRelease) {
         return {
+          artistId,
+          artistName,
           releaseYear: getYear(album?.releaseDate),
           albumTrackCount: null,
           albumTrackTitles: [],
@@ -189,6 +200,8 @@ async function fetchReleaseContext(albumMbid) {
           }))
         : [];
       return {
+        artistId,
+        artistName,
         releaseYear: getYear(pickedRelease?.releaseDate) || getYear(album?.releaseDate),
         albumTrackCount: tracks.length > 0 ? tracks.length : null,
         albumTrackTitles: tracks.map((track) => track.title),
@@ -243,7 +256,7 @@ export async function resolveWeeklyFlowTrackContext(track) {
   }
 
   const lastfmInfo =
-    !base.albumName || !base.trackMbid || !base.durationMs
+    !base.artistMbid || !base.albumName || !base.trackMbid || !base.durationMs
       ? await fetchLastfmTrackInfo(base)
       : null;
   const lastfmTrack = lastfmInfo?.track || null;
@@ -251,6 +264,7 @@ export async function resolveWeeklyFlowTrackContext(track) {
     lastfmTrack?.album?.title || lastfmTrack?.album?.["#text"] || "",
   ).trim();
   const lastfmTrackMbid = String(lastfmTrack?.mbid || "").trim();
+  const lastfmArtistMbid = String(lastfmTrack?.artist?.mbid || "").trim();
   const lastfmDuration =
     lastfmTrack?.duration != null && Number.isFinite(Number(lastfmTrack.duration))
       ? Math.max(0, Math.round(Number(lastfmTrack.duration)))
@@ -265,13 +279,12 @@ export async function resolveWeeklyFlowTrackContext(track) {
   if (!base.durationMs && lastfmDuration) {
     base.durationMs = lastfmDuration;
   }
+  if (!base.artistMbid && lastfmArtistMbid) {
+    base.artistMbid = lastfmArtistMbid;
+  }
 
   if (!base.artistMbid) {
     base.artistMbid = await musicbrainzResolveArtistMbidByName(base.artistName);
-  }
-
-  if ((base.artistAliases?.length || 0) === 0 && base.artistMbid) {
-    base.artistAliases = await fetchArtistAliases(base.artistMbid);
   }
 
   let releaseContext = null;
@@ -298,6 +311,12 @@ export async function resolveWeeklyFlowTrackContext(track) {
 
   if (base.albumMbid) {
     releaseContext = await fetchReleaseContext(base.albumMbid);
+    if (
+      releaseContext?.artistId &&
+      artistNamesMatch(base.artistName, releaseContext.artistName)
+    ) {
+      base.artistMbid = releaseContext.artistId;
+    }
     if (releaseContext?.releaseYear && !base.releaseYear) {
       base.releaseYear = releaseContext.releaseYear;
     }
@@ -322,6 +341,10 @@ export async function resolveWeeklyFlowTrackContext(track) {
     base.albumTrackCount = null;
     base.albumTrackTitles = [];
     base.trackNumber = null;
+  }
+
+  if ((base.artistAliases?.length || 0) === 0 && base.artistMbid) {
+    base.artistAliases = await fetchArtistAliases(base.artistMbid);
   }
 
   return base;

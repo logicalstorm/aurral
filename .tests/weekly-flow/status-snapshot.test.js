@@ -2,23 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
   importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("status-snapshot");
-applyIsolatedBackendEnv(isolatedState);
-
-const [{ db }, { dbOps }, { flowPlaylistConfig }, snapshotModule] =
-  await Promise.all([
-    importFromRepo("backend/config/db-sqlite.js"),
-    importFromRepo("backend/db/helpers/index.js"),
-    importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
-    importFromRepo("backend/services/weeklyFlow/weeklyFlowStatusSnapshot.js"),
-  ]);
+const [isolatedState, { db }, { dbOps }, { flowPlaylistConfig }, snapshotModule] =
+  await setupIsolatedBackend(
+    "status-snapshot",
+    "backend/config/db-sqlite.js",
+    "backend/db/helpers/index.js",
+    "backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js",
+    "backend/services/weeklyFlow/weeklyFlowStatusSnapshot.js",
+  );
 
 const { getWeeklyFlowStatusSnapshot } = snapshotModule;
 

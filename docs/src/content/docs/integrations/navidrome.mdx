@@ -9,9 +9,12 @@ Navidrome is optional, but it is the cleanest way to play generated flows and im
 
 ## Setup
 
-1. Follow [Shared storage](/getting-started/storage/) so Navidrome can scan the same `DOWNLOAD_FOLDER` tree Aurral writes.
-2. Connect Navidrome in **Settings → Playback → Navidrome**.
-3. Let Aurral create or update its generated library and playlist files under `aurral-weekly-flow`.
+1. Match Lidarr's media mount in Aurral and Navidrome ([Match Lidarr](/getting-started/storage/)).
+2. In Navidrome, scan Lidarr's library **and** Aurral's Downloads Folder path (for example `/data/downloads/aurral`).
+3. Connect Navidrome in **Settings → Playback → Navidrome**.
+4. Let Aurral create or update its generated library and playlist files under `aurral-weekly-flow`.
+
+Navidrome talking to Aurral is API-only. Playback still needs Navidrome to see the files on disk.
 
 ## Mixed Windows and Docker Navidrome
 
@@ -25,7 +28,7 @@ Aurral writes M3U playlists under `aurral-weekly-flow` with one track path per l
 
 ### What remote mode does
 
-With path mappings, Aurral translates Lidarr's Windows paths into container paths so it can read files — for example `N:\ServerFolders\Music\Music\Artist\track.mp3` becomes `/music/Music/Artist/track.mp3` inside Docker.
+With path mappings, Aurral translates Lidarr's Windows paths into container paths so it can read files. For example, `N:\ServerFolders\Music\Music\Artist\track.mp3` becomes `/music/Music/Artist/track.mp3` inside Docker.
 
 By default, M3U files use Aurral's container paths. Navidrome cannot resolve `/music/...` if it runs natively on Windows, or if its container mounts the same files at a different path. Playlists may appear but tracks fail to play.
 
@@ -37,7 +40,6 @@ By default, M3U files use Aurral's container paths. Navidrome cannot resolve `/m
 services:
   aurral:
     environment:
-      - DOWNLOAD_FOLDER=/music/Aurral
       - PATH_MAPPINGS=N:/ServerFolders/Music|/music
       - M3U_PATH_MODE=remote
       - M3U_PATH_MAPPINGS=/music|N:/ServerFolders/Music
@@ -46,9 +48,11 @@ services:
       - ./config:/config
 ```
 
+Set **Downloads Folder → Path** to something under `/music` (for example `/music/Aurral`) in the UI.
+
 After enabling remote mode, refresh affected playlists by re-running a flow or editing and saving a shared playlist.
 
-See also [Shared storage — Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
+See also [Match Lidarr: Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
 
 ## Recommended Navidrome setting
 

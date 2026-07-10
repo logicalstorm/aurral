@@ -5,23 +5,19 @@ import fs from "node:fs/promises";
 import sharp from "sharp";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("playlist-artwork");
-applyIsolatedBackendEnv(isolatedState);
-
-const [{ db }, { dbOps }, { flowPlaylistConfig }, { WeeklyFlowPlaylistManager }] =
-  await Promise.all([
-    importFromRepo("backend/config/db-sqlite.js"),
-    importFromRepo("backend/db/helpers/index.js"),
-    importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
-    importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistManager.js"),
-  ]);
+const [isolatedState, { db }, { dbOps }, { flowPlaylistConfig }, { WeeklyFlowPlaylistManager }] =
+  await setupIsolatedBackend(
+    "playlist-artwork",
+    "backend/config/db-sqlite.js",
+    "backend/db/helpers/index.js",
+    "backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js",
+    "backend/services/weeklyFlow/weeklyFlowPlaylistManager.js",
+  );
 
 test.beforeEach(() => {
   resetDatabase(db);

@@ -26,23 +26,23 @@ description: Common setup and runtime issues.
 
 ## Files do not appear in Navidrome
 
-- Confirm the shared root containing `DOWNLOAD_FOLDER` is mounted into Aurral, Navidrome, slskd, and your Usenet client.
-- Confirm `DOWNLOAD_FOLDER` points to the mounted path Aurral writes — typically `/data/downloads/aurral`.
-- Confirm Navidrome scans the `aurral-weekly-flow` folder.
+- Confirm Aurral mounts the same media root as Lidarr ([Match Lidarr](/getting-started/storage/)).
+- Confirm **Settings → Download Clients → Downloads Folder → Path** is under that mount.
+- Confirm Navidrome scans Aurral's downloads path (not only Lidarr's library).
 - Enable missing-track purging in Navidrome.
 
 ## Library reuse or download handoff fails on Windows
 
 Symptoms: logs like `Lidarr track exists but file is not accessible from Aurral`, completed slskd or Usenet files not moving, or **Test library access** failing while Lidarr itself works.
 
-- Mount the parent host folder into Aurral — not separate mounts for library and downloads. Example: `N:/ServerFolders/Music:/music`.
-- Set `DOWNLOAD_FOLDER` to a path under that mount, e.g. `/music/Aurral`.
+- Mount the same parent host folder Lidarr uses into Aurral. Do not use separate mounts for library and downloads. Example: `N:/ServerFolders/Music:/music`.
+- Set **Downloads Folder → Path** under that mount, e.g. `/music/Aurral`.
 - After changing compose `volumes` or `environment`, recreate the container: `docker compose up -d --force-recreate`.
 - Run **Settings → Lidarr → Test library access** to see the exact path Aurral cannot read.
-- If needed, set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose, or add mappings under **Settings → System → Remote Path Mappings**.
+- If needed, set `PATH_MAPPINGS=N:/ServerFolders/Music|/music` in compose, or add mappings under **Settings → Download Clients → Remote Path Mappings**.
 - For NZBGet on Windows, set **Completed download path** in **Settings → Download Clients → NZBGet** if Aurral cannot detect the folder automatically.
 
-See [Shared storage — Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
+See [Match Lidarr: Windows and mixed Docker setups](/getting-started/storage/#windows-and-mixed-docker-setups).
 
 ## Navidrome playlists show but tracks won't play
 
@@ -55,7 +55,7 @@ Symptoms: flows or shared playlists appear in Navidrome after a scan, but playba
 
 Leave **Use Navidrome paths in M3U files** off when Navidrome runs in Docker with the same mounts as Aurral.
 
-See [Navidrome — Mixed Windows and Docker](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
+See [Navidrome: Mixed Windows and Docker](/integrations/navidrome/#mixed-windows-and-docker-navidrome).
 
 ## Plex playlists are empty or tracks are missing
 
@@ -78,7 +78,7 @@ See [Plex integration](/integrations/plex/).
 ## Permission errors
 
 - Make sure mounted folders are writable by the container user.
-- Set `PUID` and `PGID` to match your host folder owner.
+- Set `PUID` and `PGID` to match your host folder owner. Follow [Servarr's Docker Guide](https://wiki.servarr.com/docker-guide) for shared-group setups.
 
 ## Need more logs
 

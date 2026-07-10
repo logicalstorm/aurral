@@ -22,19 +22,19 @@ Flows are dynamic playlists that refresh automatically based on your listening c
 
 Use **Import playlist** for Spotify (connect in-app) or a JSON tracklist. See [Playlist imports](/using/playlist-imports/).
 
-Flows can expose a **Lidarr import URL** so Lidarr polls the current flow tracklist as a custom import list. See [Lidarr — Import list feeds](/integrations/lidarr/#import-list-feeds).
+Flows can expose a **Lidarr import URL** so Lidarr polls the current flow tracklist as a custom import list. See [Lidarr: Import list feeds](/integrations/lidarr/#import-list-feeds).
 
 ## Where files go
 
-Generated playlists are written inside your `DOWNLOAD_FOLDER`, typically:
+Generated playlists land under your Downloads Folder path (set in **Settings → Download Clients**), typically:
 
 ```text
 /data/downloads/aurral/aurral-weekly-flow/<playlist-id>/
 ```
 
-Navidrome can scan the same tree and play `.m3u` playlists. Plex can index the track folders and receive API-synced playlists for Plexamp. See [Navidrome](/integrations/navidrome/), [Plex](/integrations/plex/), [yt-dlp](/integrations/ytdlp/), [slskd](/integrations/slskd/), [Usenet](/integrations/usenet/), and [Shared storage](/getting-started/storage/).
+Navidrome can scan that tree and play `.m3u` playlists. Plex can index the track folders and receive API-synced playlists for Plexamp. See [Navidrome](/integrations/navidrome/), [Plex](/integrations/plex/), [yt-dlp](/integrations/ytdlp/), [slskd](/integrations/slskd/), [Usenet](/integrations/usenet/), and [Match Lidarr](/getting-started/storage/).
 
 ## Next steps
 
-- [Flows](/using/flows/) — schedule, source mix, focus, and generation behavior
-- [Playlist imports](/using/playlist-imports/) — Spotify connect, JSON formats, retries, and file reuse
+- [Flows](/using/flows/): schedule, source mix, focus, and generation behavior
+- [Playlist imports](/using/playlist-imports/): Spotify connect, JSON formats, retries, and file reuse

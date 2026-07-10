@@ -1,20 +1,14 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { Clock, Loader2, Search } from "lucide-react";
-import AddAlbumButton from "./AddAlbumButton";
-import AddToLibraryButton from "./AddToLibraryButton";
-import SearchLibraryCheck from "./SearchLibraryCheck";
-import { TrackPlaylistMenu } from "../pages/ArtistDetails/components/TrackPlaylistMenu";
-import { useAuth } from "../contexts/AuthContext";
-import { useToast } from "../contexts/ToastContext";
 import {
   addArtistToLibrary,
+  requestAlbumFromSearch,
+} from "../utils/api/endpoints/library.js";
+import {
   addSharedPlaylistTracks,
   createSharedPlaylist,
-  getTagSuggestions,
-  requestAlbumFromSearch,
-  searchUnified,
-} from "../utils/api";
+} from "../utils/api/endpoints/playlists.js";
+import { getTagSuggestions } from "../utils/api/endpoints/discovery.js";
+import { searchUnified } from "../utils/api/endpoints/search.js";
 import { getArtistRecordId } from "../utils/artistTaste";
 import {
   buildUnifiedSuggestionSections,
@@ -43,6 +37,14 @@ import {
 import { getAlbumAddButtonLabel, shouldTriggerAlbumSearch } from "../utils/albumAddAction";
 import { useDebouncedTask } from "../hooks/useDebouncedTask";
 import { useSharedPlaylists } from "../hooks/useSharedPlaylists";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Clock, Loader2, Search } from "lucide-react";
+import AddAlbumButton from "./AddAlbumButton";
+import AddToLibraryButton from "./AddToLibraryButton";
+import SearchLibraryCheck from "./SearchLibraryCheck";
+import { TrackPlaylistMenu } from "../pages/ArtistDetails/components/TrackPlaylistMenu";
+import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
 function GlobalSearch() {
   const [searchQuery, setSearchQuery] = useState("");
   const [lastfmConfigured, setLastfmConfigured] = useState(true);

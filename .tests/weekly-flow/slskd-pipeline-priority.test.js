@@ -2,17 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("slskd-pipeline-priority");
-applyIsolatedBackendEnv(isolatedState);
+const [isolatedState, honkerDb] = await setupIsolatedBackend(
+  "slskd-pipeline-priority",
+  "backend/services/honkerDb.js",
+);
 
 const { getPipelinePriorityForPhase, getPipelineQueue, enqueuePipelineJob } =
-  await importFromRepo("backend/services/honkerDb.js");
+  honkerDb;
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);

@@ -1,8 +1,78 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import PropTypes from "prop-types";
 import { ChevronRight, Loader, Plus } from "lucide-react";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
-import { playlistContainsTrack } from "../../../utils/sharedTrackIdentity";
+
+function normalizeTrackForSharedIdentity(track) {
+  if (!track || typeof track !== "object" || Array.isArray(track)) {
+    return null;
+  }
+  const artistName = String(
+    track.artistName ?? track.artist ?? track.artist_name ?? track["Artist Name(s)"] ?? "",
+  ).trim();
+  const trackName = String(
+    track.trackName ?? track.title ?? track.name ?? track.track ?? track["Track Name"] ?? "",
+  ).trim();
+  if (!artistName || !trackName) return null;
+  const albumName = String(track.albumName ?? track.album ?? track["Album Name"] ?? "").trim();
+  const artistMbid = String(track.artistMbid ?? track.artistId ?? "").trim();
+  const albumMbid = String(track.albumMbid ?? track.releaseGroupMbid ?? track.albumId ?? "").trim();
+  const trackMbid = String(
+    track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? track.mbid ?? "",
+  ).trim();
+  const releaseYear = String(track.releaseYear ?? track.year ?? "").trim();
+  return {
+    artistName,
+    trackName,
+    albumName,
+    artistMbid,
+    albumMbid,
+    trackMbid,
+    releaseYear,
+  };
+}
+
+function buildSharedTrackIdentity(track) {
+  const normalized = normalizeTrackForSharedIdentity(track);
+  if (!normalized) return "";
+  return [
+    normalized.artistName.toLowerCase(),
+    normalized.trackName.toLowerCase(),
+    normalized.albumName.toLowerCase(),
+    normalized.artistMbid,
+    normalized.albumMbid,
+    normalized.trackMbid,
+    normalized.releaseYear,
+  ].join("\u0001");
+}
+
+function buildCoreTrackIdentity(track) {
+  const normalized = normalizeTrackForSharedIdentity(track);
+  if (!normalized) return "";
+  return `${normalized.artistName.toLowerCase()}\u0001${normalized.trackName.toLowerCase()}`;
+}
+
+function coreIdentityFromStoredIdentity(identity) {
+  const parts = String(identity || "").split("\u0001");
+  if (parts.length < 2) return "";
+  return `${parts[0]}\u0001${parts[1]}`;
+}
+
+function trackMatchesStoredIdentity(storedIdentity, track) {
+  const normalized = normalizeTrackForSharedIdentity(track);
+  if (!normalized) return false;
+  const targetFull = buildSharedTrackIdentity(track);
+  if (targetFull && storedIdentity === targetFull) return true;
+  const targetCore = buildCoreTrackIdentity(track);
+  if (!targetCore) return false;
+  return coreIdentityFromStoredIdentity(storedIdentity) === targetCore;
+}
+
+function playlistContainsTrack(playlist, track) {
+  if (!track) return false;
+  const identities = Array.isArray(playlist?.trackIdentities) ? playlist.trackIdentities : [];
+  if (identities.length === 0) return false;
+  return identities.some((identity) => trackMatchesStoredIdentity(identity, track));
+}
 
 function useAvailablePlaylists(playlists, excludedPlaylistIds) {
   return useMemo(() => {
@@ -310,47 +380,3 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
     </div>
   );
 });
-
-TrackPlaylistPickerContent.propTypes = {
-  track: PropTypes.object,
-  playlists: PropTypes.array,
-  loading: PropTypes.bool,
-  saving: PropTypes.bool,
-  error: PropTypes.string,
-  defaultNewPlaylistName: PropTypes.string,
-  excludedPlaylistIds: PropTypes.array,
-  onSelect: PropTypes.func,
-};
-
-TrackPlaylistSubmenu.propTypes = {
-  label: PropTypes.string.isRequired,
-  icon: PropTypes.elementType,
-  track: PropTypes.object,
-  playlists: PropTypes.array,
-  loading: PropTypes.bool,
-  saving: PropTypes.bool,
-  error: PropTypes.string,
-  defaultNewPlaylistName: PropTypes.string,
-  excludedPlaylistIds: PropTypes.array,
-  onSelect: PropTypes.func,
-  onClose: PropTypes.func,
-  toggleOnClick: PropTypes.bool,
-  isOpen: PropTypes.bool,
-  onToggle: PropTypes.func,
-};
-
-TrackPlaylistMenu.propTypes = {
-  track: PropTypes.object,
-  playlists: PropTypes.array,
-  loading: PropTypes.bool,
-  saving: PropTypes.bool,
-  error: PropTypes.string,
-  defaultNewPlaylistName: PropTypes.string,
-  excludedPlaylistIds: PropTypes.array,
-  triggerLabel: PropTypes.string,
-  triggerVariant: PropTypes.oneOf(["expand", "compact", "hidden"]),
-  onLoadPlaylists: PropTypes.func,
-  onSelect: PropTypes.func,
-  onOpenChange: PropTypes.func,
-  menuVariant: PropTypes.oneOf(["preview-tracks", "search-suggestion"]),
-};

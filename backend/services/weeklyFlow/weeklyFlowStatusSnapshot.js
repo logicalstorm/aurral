@@ -16,19 +16,13 @@ function formatNextRunMessage(flows) {
   if (!nextRunAt) return null;
   const diff = nextRunAt - Date.now();
   if (diff <= 0) return "Next update soon";
+  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "always" });
   const minuteMs = 60 * 1000;
   const hourMs = 60 * minuteMs;
   const dayMs = 24 * hourMs;
-  if (diff < hourMs) {
-    const minutes = Math.ceil(diff / minuteMs);
-    return minutes === 1 ? "Next update in 1 minute" : `Next update in ${minutes} minutes`;
-  }
-  if (diff < dayMs) {
-    const hours = Math.ceil(diff / hourMs);
-    return hours === 1 ? "Next update in 1 hour" : `Next update in ${hours} hours`;
-  }
-  const days = Math.ceil(diff / dayMs);
-  return days === 1 ? "Next update in 1 day" : `Next update in ${days} days`;
+  if (diff < hourMs) return `Next update ${rtf.format(Math.ceil(diff / minuteMs), "minute")}`;
+  if (diff < dayMs) return `Next update ${rtf.format(Math.ceil(diff / hourMs), "hour")}`;
+  return `Next update ${rtf.format(Math.ceil(diff / dayMs), "day")}`;
 }
 
 function aggregateStats(statsByType, ids) {
@@ -54,14 +48,7 @@ function aggregateStats(statsByType, ids) {
 }
 
 
-function getSharedPlaylistStaticIdentityKey(playlist) {
-  return (Array.isArray(playlist?.tracks) ? playlist.tracks : [])
-    .map((track) => buildSharedTrackIdentity(track))
-    .filter(Boolean)
-    .join("\u0002");
-}
-
-function collectPlaylistTrackIdentities(playlist, stats) {
+function collectPlaylistTrackIdentities(playlist) {
   const playlistId = String(playlist?.id || "");
   if (!playlistId) return [];
   const seen = new Set();
@@ -103,9 +90,6 @@ function buildOwnerMap(flows, sharedPlaylists) {
 }
 
 export function getWeeklyFlowStatusSnapshot({
-  includeJobs = false,
-  flowId = null,
-  jobsLimit = null,
   user = null,
 } = {}) {
   const workerStatus = weeklyFlowWorker.getStatus();
@@ -118,7 +102,8 @@ export function getWeeklyFlowStatusSnapshot({
   const scopedStats = downloadTracker.getStatsByPlaylistType([
     ...flowIds,
     ...sharedPlaylistIds,
-  ]);  const sharedPlaylists = rawSharedPlaylists.map((playlist) => {
+  ]);
+  const sharedPlaylists = rawSharedPlaylists.map((playlist) => {
     const playlistStats = scopedStats?.[playlist.id];
     const jobTotal =
       Number(playlistStats?.pending || 0) +
@@ -134,7 +119,7 @@ export function getWeeklyFlowStatusSnapshot({
       importedAt: playlist.importedAt,
       createdAt: playlist.createdAt,
       trackCount: jobTotal > 0 ? jobTotal : playlist.trackCount,
-      trackIdentities: collectPlaylistTrackIdentities(playlist, playlistStats),
+      trackIdentities: collectPlaylistTrackIdentities(playlist),
       importSource: playlist.importSource
         ? {
             provider: playlist.importSource.provider,
@@ -206,18 +191,6 @@ export function getWeeklyFlowStatusSnapshot({
     ...flowIds,
     ...sharedPlaylistIds,
   ]);
-  let jobs;
-  if (includeJobs) {
-    const allowedPlaylistTypes = new Set([...flowIds, ...sharedPlaylistIds]);
-    const sourceJobs = flowId
-      ? allowedPlaylistTypes.has(flowId)
-        ? downloadTracker.getByPlaylistType(flowId)
-        : []
-      : downloadTracker
-          .getAll()
-          .filter((job) => allowedPlaylistTypes.has(String(job?.playlistType || "")));
-    jobs = jobsLimit ? sourceJobs.slice(0, jobsLimit) : sourceJobs;
-  }
   return {
     worker: {
       ...workerStatus,
@@ -228,7 +201,6 @@ export function getWeeklyFlowStatusSnapshot({
     flowStats,
     sharedStats,
     sharedPlaylistStats,
-    jobs,
     flows: flowsWithOwners,
     sharedPlaylists: sharedPlaylistsWithOwners,
     capabilities: getFlowCapabilities(),

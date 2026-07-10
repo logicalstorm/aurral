@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import PropTypes from "prop-types";
 import { Loader, Music, Star } from "lucide-react";
 import AddAlbumButton from "../../../components/AddAlbumButton";
 import { useImageGradientColors } from "../../../utils/imageColors";
-import { getReleaseGroupTracks } from "../../../utils/api";
+import { getReleaseGroupTracks } from "../../../utils/api/endpoints/artists.js";
 import { buildAurralPick, getReleaseMetric } from "../utils";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
 import { TrackPlayButton } from "./TrackPlayButton";
 import { ArtistTrackListToolbar } from "./ArtistTrackListToolbar";
 import { useAlbumTrackListToolbar } from "../../../hooks/useAlbumTrackListToolbar";
-import { useGlobalTrackPlayback } from "../../../hooks/useGlobalTrackPlayback";
+import { useAudioQueue } from "../../../contexts/audioQueueContext";
 import { normalizePreviewTrack } from "../../../utils/audioQueue";
 
 function PickCover({ pick, albumCovers, artistCoverImage }) {
@@ -23,12 +22,6 @@ function PickCover({ pick, albumCovers, artistCoverImage }) {
     </div>
   );
 }
-
-PickCover.propTypes = {
-  pick: PropTypes.object.isRequired,
-  albumCovers: PropTypes.object,
-  artistCoverImage: PropTypes.string,
-};
 
 const formatDuration = (track) => {
   const duration = Number(track?.length || track?.duration_ms || 0);
@@ -137,7 +130,36 @@ export function ArtistDetailsDownloadTargets({
     [artist?.name, artistName, missingReleasePick?.title],
   );
 
-  const { isTrackPlaying, isTrackLoading, handlePlay } = useGlobalTrackPlayback(normalizeTrack);
+  const { currentTrack, isPlaying, isLoading, playTrack, togglePlayPause, source } =
+    useAudioQueue();
+
+  const handlePlay = useCallback(
+    (track, options = {}, ...normalizeArgs) => {
+      const normalized = normalizeTrack(track, ...normalizeArgs);
+      if (!normalized?.src) return;
+      if (currentTrack?.id === normalized.id) {
+        togglePlayPause();
+        return;
+      }
+      playTrack(normalized, {
+        source: options.source ?? source,
+        queue: options.queue,
+        shuffle: options.shuffle,
+        updateShufflePreference: options.updateShufflePreference,
+      });
+    },
+    [currentTrack?.id, normalizeTrack, playTrack, source, togglePlayPause],
+  );
+
+  const isTrackPlaying = useCallback(
+    (trackId) => !!trackId && currentTrack?.id === String(trackId) && (isPlaying || isLoading),
+    [currentTrack?.id, isLoading, isPlaying],
+  );
+
+  const isTrackLoading = useCallback(
+    (trackId) => !!trackId && currentTrack?.id === String(trackId) && isLoading,
+    [currentTrack?.id, isLoading],
+  );
 
   const getQueueTracks = useCallback(
     () =>
@@ -310,27 +332,3 @@ export function ArtistDetailsDownloadTargets({
     </section>
   );
 }
-
-ArtistDetailsDownloadTargets.propTypes = {
-  releaseGroups: PropTypes.arrayOf(PropTypes.object),
-  getAlbumStatus: PropTypes.func.isRequired,
-  artist: PropTypes.object,
-  albumCovers: PropTypes.object,
-  artistCoverImage: PropTypes.string,
-  canAddAlbum: PropTypes.bool,
-  requestingAlbum: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  handleRequestAlbum: PropTypes.func.isRequired,
-  artistName: PropTypes.string,
-  playbackSource: PropTypes.shape({
-    type: PropTypes.string,
-    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    label: PropTypes.string,
-  }),
-  onAddTrackToPlaylist: PropTypes.func,
-  playlists: PropTypes.array,
-  playlistsLoading: PropTypes.bool,
-  playlistSavingKey: PropTypes.string,
-  playlistError: PropTypes.string,
-  getDefaultPlaylistName: PropTypes.func,
-  onLoadPlaylists: PropTypes.func,
-};

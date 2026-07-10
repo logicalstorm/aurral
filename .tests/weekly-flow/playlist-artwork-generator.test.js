@@ -2,17 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import sharp from "sharp";
 
-import { importFromRepo } from "../helpers/backendTestHarness.js";
-
-const {
-  buildGeneratedPlaylistArtworkBuffer,
-} = await importFromRepo("backend/services/playlistArtworkGenerator.js");
+import { buildGeneratedPlaylistArtworkBuffer } from "../../backend/services/playlistArtworkGenerator.js";
 
 test("buildGeneratedPlaylistArtworkBuffer returns aurral WebP artwork", async () => {
   const buffer = await buildGeneratedPlaylistArtworkBuffer({
     title: "Road Trip",
     kind: "Playlist",
-    signature: "playlist-1",
     style: "aurral",
   });
   const metadata = await sharp(buffer).metadata();

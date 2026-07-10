@@ -74,8 +74,6 @@ export async function generateDiscoverPlaylistArtwork(playlist, options = {}) {
     outputPath,
     title,
     kind: "Flow",
-    signature: presetId,
-    relatedArtists: playlist?.relatedArtists || [],
     style,
     paletteSeed: isFixedDiscoverPlaylistPreset(presetId) ? presetId : null,
   });

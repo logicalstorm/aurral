@@ -1,10 +1,10 @@
-import { Link } from "react-router-dom";
 import { useState } from "react";
-import { RotateCcw } from "lucide-react";
-import FlipSaveButton from "../../../components/FlipSaveButton";
-import { resetDiscoveryFeedback } from "../../../utils/api";
+import { resetDiscoveryFeedback } from "../../../utils/api/endpoints/discovery.js";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
 
+import { Link } from "react-router-dom";
+import { RotateCcw } from "lucide-react";
+import FlipSaveButton from "../../../components/FlipSaveButton";
 export function SettingsAccountTab({
   listenHistoryProvider,
   setListenHistoryProvider,

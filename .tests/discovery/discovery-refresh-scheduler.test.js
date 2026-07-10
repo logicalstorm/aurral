@@ -1,23 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
   importFromRepo,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("discovery-refresh-scheduler");
-applyIsolatedBackendEnv(isolatedState);
+const [isolatedState, honkerDbModule, refreshScheduler, discoveryIndex] =
+  await setupIsolatedBackend(
+    "discovery-refresh-scheduler",
+    "backend/services/honkerDb.js",
+    "backend/services/discovery/refreshScheduler.js",
+    "backend/services/discovery/index.js",
+  );
 
-const honkerDbModule = await importFromRepo("backend/services/honkerDb.js");
 const {
   discoveryNeedsRefresh,
   enqueueDiscoveryRefresh,
   markDiscoveryRefreshDequeued,
   scheduleNextDiscoveryRefresh,
-} = await importFromRepo("backend/services/discovery/refreshScheduler.js");
-const { getDiscoveryCache } = await importFromRepo("backend/services/discovery/index.js");
+} = refreshScheduler;
+const { getDiscoveryCache } = discoveryIndex;
 
 let heldGlobalRefreshLock = null;
 

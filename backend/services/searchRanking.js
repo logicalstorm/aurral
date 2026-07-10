@@ -4,10 +4,6 @@ export function isCatalogPopularityScore(score) {
   return Number.isFinite(score) && score > 100;
 }
 
-export function isMeilisearchRankingScore(score) {
-  return Number.isFinite(score) && score >= 0 && score <= 1;
-}
-
 export function catalogPopularityToUnit(score) {
   return Math.min(1, Math.log10(score + 1) / CATALOG_POPULARITY_LOG_BASE);
 }
@@ -18,9 +14,7 @@ export function normalizeRelevanceScore(item) {
   if (item?.source === "library") {
     return Math.min(1, raw / 100);
   }
-  if (isMeilisearchRankingScore(raw)) {
-    return raw;
-  }
+  if (raw <= 1) return raw;
   if (isCatalogPopularityScore(raw)) {
     return catalogPopularityToUnit(raw);
   }

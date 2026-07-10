@@ -2,22 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("sessions");
-applyIsolatedBackendEnv(isolatedState);
+const [isolatedState, { db }, { userOps }, sessionHelpers] =
+  await setupIsolatedBackend(
+    "sessions",
+    "backend/config/db-sqlite.js",
+    "backend/db/helpers/index.js",
+    "backend/config/session-helpers.js",
+  );
 
-const [{ db }, { userOps }, sessionHelpers, bcryptModule] = await Promise.all([
-  importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/db/helpers/index.js"),
-  importFromRepo("backend/config/session-helpers.js"),
-  import("bcrypt"),
-]);
+const bcryptModule = await import("bcrypt");
 
 const bcrypt = bcryptModule.default;
 

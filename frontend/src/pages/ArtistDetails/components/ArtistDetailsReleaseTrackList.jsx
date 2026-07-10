@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
-import PropTypes from "prop-types";
 import { Loader } from "lucide-react";
 import { TrackPlayButton } from "./TrackPlayButton";
 import { TrackPlaylistMenu } from "./TrackPlaylistMenu";
 import { ArtistTrackListToolbar } from "./ArtistTrackListToolbar";
 import { useAlbumTrackListToolbar } from "../../../hooks/useAlbumTrackListToolbar";
-import { useGlobalTrackPlayback } from "../../../hooks/useGlobalTrackPlayback";
+import { useAudioQueue } from "../../../contexts/audioQueueContext";
 import { normalizePreviewTrack } from "../../../utils/audioQueue";
 
 export function ArtistDetailsReleaseTrackList({
@@ -40,8 +39,35 @@ export function ArtistDetailsReleaseTrackList({
     [artistName, release?.title, trackKey],
   );
 
-  const { isTrackPlaying, isTrackLoading, handlePlay } = useGlobalTrackPlayback((track, index) =>
-    normalizeTrack(track, index),
+  const { currentTrack, isPlaying, isLoading, playTrack, togglePlayPause, source } =
+    useAudioQueue();
+
+  const handlePlay = useCallback(
+    (track, options = {}, ...normalizeArgs) => {
+      const normalized = normalizeTrack(track, ...normalizeArgs);
+      if (!normalized?.src) return;
+      if (currentTrack?.id === normalized.id) {
+        togglePlayPause();
+        return;
+      }
+      playTrack(normalized, {
+        source: options.source ?? source,
+        queue: options.queue,
+        shuffle: options.shuffle,
+        updateShufflePreference: options.updateShufflePreference,
+      });
+    },
+    [currentTrack?.id, normalizeTrack, playTrack, source, togglePlayPause],
+  );
+
+  const isTrackPlaying = useCallback(
+    (trackId) => !!trackId && currentTrack?.id === String(trackId) && (isPlaying || isLoading),
+    [currentTrack?.id, isLoading, isPlaying],
+  );
+
+  const isTrackLoading = useCallback(
+    (trackId) => !!trackId && currentTrack?.id === String(trackId) && isLoading,
+    [currentTrack?.id, isLoading],
   );
 
   const getQueueTracks = useCallback(
@@ -169,24 +195,3 @@ export function ArtistDetailsReleaseTrackList({
     </div>
   );
 }
-
-ArtistDetailsReleaseTrackList.propTypes = {
-  release: PropTypes.object,
-  trackKey: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  tracks: PropTypes.array,
-  loading: PropTypes.bool,
-  artistName: PropTypes.string,
-  playbackSource: PropTypes.shape({
-    type: PropTypes.string,
-    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    label: PropTypes.string,
-  }),
-  onAddTrackToPlaylist: PropTypes.func,
-  playlists: PropTypes.array,
-  playlistsLoading: PropTypes.bool,
-  playlistSavingKey: PropTypes.string,
-  playlistError: PropTypes.string,
-  getDefaultPlaylistName: PropTypes.func,
-  onLoadPlaylists: PropTypes.func,
-  highlightTrackId: PropTypes.string,
-};

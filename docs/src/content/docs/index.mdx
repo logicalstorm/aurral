@@ -5,7 +5,7 @@ description: Start here for Aurral documentation.
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
 
-Aurral is self-hosted music discovery for Lidarr-based stacks. It connects recommendations, requests, playlist downloads, and playback while keeping generated music separate from your main library.
+Aurral is the **Lidarr companion for music discovery**. It adds recommendations, requests, flows, and playlist downloads on top of your existing Lidarr stack, and keeps generated music out of your main library.
 
 Use this page as a starting point for setup, day-to-day use, integrations, and administration.
 
@@ -13,20 +13,18 @@ Use this page as a starting point for setup, day-to-day use, integrations, and a
 
 <CardGrid>
   <Card title="Install with Docker" icon="setting">
-    Run Aurral, mount storage, and complete onboarding. [Open Docker
-    setup](/getting-started/docker/)
+    Run Aurral with the same media mount as Lidarr. [Open Docker setup](/getting-started/docker/)
   </Card>
-  <Card title="Plan storage" icon="document">
-    Share paths between Aurral, Lidarr, slskd, and Navidrome. [Open shared
-    storage](/getting-started/storage/)
+  <Card title="Match Lidarr" icon="document">
+    One rule: mount what Lidarr mounts. [Open storage guide](/getting-started/storage/)
   </Card>
   <Card title="Use the app" icon="rocket">
     Learn Discover, Search, Library, Playlists, Activity, Shows, Profile, and Settings. [Open app
     overview](/using/overview/)
   </Card>
   <Card title="Build the stack" icon="open-book">
-    A discovery-first workflow for Aurral, Lidarr, slskd, Navidrome, and Tailscale. [Open
-    self-hosting guide](/guides/self-hosting/)
+    A discovery-first workflow for Aurral, Lidarr, Navidrome, and Tailscale. [Open self-hosting
+    guide](/guides/self-hosting/)
   </Card>
 </CardGrid>
 
@@ -38,8 +36,8 @@ Use this page as a starting point for setup, day-to-day use, integrations, and a
     Discover](/using/discover/)
   </Card>
   <Card title="Playlists" icon="list-format">
-    Scheduled flows, Spotify connect imports, static JSON imports, and Navidrome or Plex
-    playback. [Read Playlists](/using/playlists/)
+    Scheduled flows, Spotify connect imports, static JSON imports, and Navidrome or Plex playback.
+    [Read Playlists](/using/playlists/)
   </Card>
   <Card title="Activity" icon="document">
     Queue and history for Lidarr requests, yt-dlp / slskd / Usenet downloads, and Aurral playlist
@@ -57,18 +55,18 @@ Use this page as a starting point for setup, day-to-day use, integrations, and a
 
 ## Recommended Stack
 
-| Service               | Role                                                        | Required               |
-| --------------------- | ----------------------------------------------------------- | ---------------------- |
-| Lidarr                | Library management, artist and album requests, queue status | Yes                    |
-| Last.fm               | Personalized discovery, tags, similar artists               | Recommended            |
-| ListenBrainz          | Optional per-user listening history                         | No                     |
-| Koito                 | Self-hosted per-user listening history                      | No                     |
-| slskd                 | Soulseek-backed downloads for flows and playlists           | For Soulseek downloads |
-| yt-dlp                | YouTube/web fallback downloads for flows and playlists      | Default when installed |
-| Prowlarr + SABnzbd/NZBGet | Usenet-backed downloads for flows and playlists          | For Usenet downloads   |
-| Navidrome             | Streaming generated playlists (M3U)                         | No                     |
-| Plex                  | Flow playlists in Plexamp                                   | No                     |
-| Ticketmaster          | Local concert recommendations                               | No                     |
+| Service                   | Role                                                        | Required               |
+| ------------------------- | ----------------------------------------------------------- | ---------------------- |
+| Lidarr                    | Library management, artist and album requests, queue status | Yes                    |
+| Last.fm                   | Personalized discovery, tags, similar artists               | Recommended            |
+| ListenBrainz              | Optional per-user listening history                         | No                     |
+| Koito                     | Self-hosted per-user listening history                      | No                     |
+| slskd                     | Soulseek-backed downloads for flows and playlists           | For Soulseek downloads |
+| yt-dlp                    | YouTube/web fallback downloads for flows and playlists      | Default when installed |
+| Prowlarr + SABnzbd/NZBGet | Usenet-backed downloads for flows and playlists             | For Usenet downloads   |
+| Navidrome                 | Streaming generated playlists (M3U)                         | No                     |
+| Plex                      | Flow playlists in Plexamp                                   | No                     |
+| Ticketmaster              | Local concert recommendations                               | No                     |
 
 ## Useful Links
 

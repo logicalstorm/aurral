@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Check, Clock, Loader2, XCircle } from "lucide-react";
-import { getSettingsTasks, clearSettingsStaleTasks } from "../../../utils/api";
+import { getSettingsTasks, clearSettingsStaleTasks } from "../../../utils/api/endpoints/settings.js";
 import { SettingsArrFieldSet } from "./arr/SettingsArrLayout";
 
+import { AlertCircle, Check, Clock, Loader2, XCircle } from "lucide-react";
 const POLL_INTERVAL_MS = 5000;
 
 const relativeFormatter = new Intl.RelativeTimeFormat(undefined, {

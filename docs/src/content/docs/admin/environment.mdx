@@ -11,13 +11,13 @@ Most setup happens in the web UI. These variables matter for Docker deployments.
 | -------- | ------- |
 | `PUID` / `PGID` | Run the container as the user that owns mounted folders. |
 | `AURRAL_DATA_DIR` | Override app data directory. Default `/config`. |
-| `DOWNLOAD_FOLDER` | Where Aurral writes generated playlists. Must be an absolute path inside your shared media mount. Also set in **Settings → System**. |
+| `DOWNLOAD_FOLDER` | Optional seed for the Downloads Folder path. Prefer **Settings → Download Clients → Downloads Folder → Path**. Must be absolute and under your media mount. |
 
 ## Path mappings
 
 | Variable | Purpose |
 | -------- | ------- |
-| `PATH_MAPPINGS` | Translate paths for mixed Windows/Docker setups. Format `remote\|local`, separate multiples with `;`. Scope to a source with `source\|remote\|local`. Applied at runtime; not shown in the UI. |
+| `PATH_MAPPINGS` | Translate paths for mixed Windows/Docker setups. Format `remote\|local`, separate multiples with `;`. Scope to a source with `source\|remote\|local`. Applied at runtime; edit under **Settings → Download Clients → Remote Path Mappings**. |
 | `M3U_PATH_MODE` | `local` (default, Aurral paths in `.m3u` files) or `remote` (paths Navidrome can open). |
 | `M3U_PATH_MAPPINGS` | Navidrome playlist path translations. Format `Aurral path\|Navidrome path`, separate multiples with `;`. Applied at runtime; not shown in the UI. |
 
@@ -65,8 +65,7 @@ Optional overrides for the shared Lidarr Spotify OAuth proxy. Defaults work for 
 environment:
   - PUID=1000
   - PGID=1000
-  - DOWNLOAD_FOLDER=/data/downloads/aurral
   - TRUST_PROXY=true
 ```
 
-For mixed Windows/Docker path mappings, see [Shared storage](/getting-started/storage/).
+For mounts and path mappings, see [Match Lidarr](/getting-started/storage/).

@@ -1,6 +1,47 @@
 import { ListMusic, Sparkles, Upload } from "lucide-react";
 import { Link } from "react-router-dom";
-import { getFlowEmptyCopy } from "./flowTrackComponents";
+
+function getFlowEmptyCopy(libraryFilter, canCreate) {
+  if (libraryFilter === "playlists") {
+    return {
+      title: "No playlists yet",
+      message:
+        "Create a playlist to curate tracks, or import one from Aurral Convert or a JSON export.",
+      showPlaylistAction: true,
+      showFlowAction: false,
+      showImportAction: true,
+    };
+  }
+  if (libraryFilter === "flows") {
+    if (!canCreate) {
+      return {
+        title: "Flows need listening history",
+        message:
+          "Connect Last.fm in Settings to create flows that generate tracks from your taste.",
+        showPlaylistAction: false,
+        showFlowAction: false,
+        showImportAction: false,
+        showSettingsAction: true,
+      };
+    }
+    return {
+      title: "No flows yet",
+      message:
+        "Flows are auto-updating playlists built from recipes like Release Radar or your top artists.",
+      showPlaylistAction: false,
+      showFlowAction: true,
+      showImportAction: false,
+    };
+  }
+  return {
+    title: "Start your playlist library",
+    message:
+      "Import a playlist, build your own track list, or create a flow that updates automatically from your taste.",
+    showPlaylistAction: true,
+    showFlowAction: canCreate,
+    showImportAction: true,
+  };
+}
 
 export function FlowEmptyState({
   canCreate = true,

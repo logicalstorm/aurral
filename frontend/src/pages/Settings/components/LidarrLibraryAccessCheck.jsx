@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import { AlertCircle, CheckCircle, XCircle } from "lucide-react";
 
 const STEP_ICONS = {
@@ -40,23 +39,3 @@ export function LidarrLibraryAccessCheck({ result }) {
     </div>
   );
 }
-
-LidarrLibraryAccessCheck.propTypes = {
-  result: PropTypes.shape({
-    steps: PropTypes.arrayOf(
-      PropTypes.shape({
-        id: PropTypes.string.isRequired,
-        status: PropTypes.oneOf(["pass", "fail", "warn"]).isRequired,
-        label: PropTypes.string.isRequired,
-        detail: PropTypes.string,
-        fix: PropTypes.string,
-      }),
-    ),
-    sample: PropTypes.shape({
-      path: PropTypes.string,
-      artistName: PropTypes.string,
-      albumTitle: PropTypes.string,
-      trackTitle: PropTypes.string,
-    }),
-  }),
-};

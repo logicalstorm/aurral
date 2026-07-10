@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { testNzbgetConnection, testSabnzbdConnection, testSlskdConnection, testYtdlpConnection } from "../../../utils/api/endpoints/settings.js";
+
 import { Plus, RefreshCw, Trash2, Wrench } from "lucide-react";
 import DownloadFolderField from "../../../components/DownloadFolderField";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
@@ -12,8 +14,6 @@ import {
 import { SettingsArrFieldSet, SettingsArrFormGroup } from "./arr/SettingsArrLayout";
 import { getProviderStatus } from "../utils/integrationStatus";
 import { PATH_MAPPING_SOURCE_OPTIONS, PathMappingModal } from "./PathMappingModal";
-import { testNzbgetConnection, testSabnzbdConnection, testSlskdConnection, testYtdlpConnection } from "../../../utils/api";
-
 const PATH_MAPPING_SOURCE_VALUES = new Set(
   PATH_MAPPING_SOURCE_OPTIONS.map((option) => option.value),
 );
@@ -80,7 +80,7 @@ export function SettingsDownloadClientsSection({
   const ytdlpConfigured = health?.ytdlpConfigured === true;
   const nzbgetConfigured = Boolean(nzbget.url);
   const sabnzbdConfigured = Boolean(sabnzbd.url && sabnzbd.apiKey);
-  const slskdEnabled = slskd.enabled !== false;
+  const slskdEnabled = slskd.enabled === true;
   const ytdlpEnabled = ytdlp.enabled !== false;
   const nzbgetEnabled = nzbget.enabled === true;
   const sabnzbdEnabled = sabnzbd.enabled === true;

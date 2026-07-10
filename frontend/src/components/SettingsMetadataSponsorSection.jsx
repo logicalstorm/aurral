@@ -1,5 +1,4 @@
 import { ExternalLink, Heart } from "lucide-react";
-import { SPONSOR_URL } from "../constants/sponsor";
 
 function SettingsMetadataSponsorSection() {
   return (
@@ -14,7 +13,7 @@ function SettingsMetadataSponsorSection() {
         those services online, and funding cloud capacity when needed.
       </p>
       <a
-        href={SPONSOR_URL}
+        href="https://github.com/sponsors/lklynet/"
         target="_blank"
         rel="noopener noreferrer"
         className="btn btn-secondary btn-sm settings-page__sponsor-cta"

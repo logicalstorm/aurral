@@ -1,19 +1,19 @@
 ---
 title: Storage & backups
-description: App data, shared media mounts, and what to back up.
+description: App data, media mounts, and what to back up.
 ---
 
 Aurral keeps app state and generated music separate.
 
-For how Lidarr, slskd, Navidrome, and Aurral should share mounts, read [Shared storage](/getting-started/storage/).
+For mounts, follow [Match Lidarr](/getting-started/storage/): same media root as Lidarr, downloads path set in the UI.
 
 ## What lives where
 
-| Path              | Contains |
-| ----------------- | -------- |
-| `/config`         | Database, settings, users, sessions, cache state, and playlist jobs. Mount with `./config:/config`; not shared with other apps. |
-| `/data`           | Shared library (`/data/music`), slskd completes, and Aurral output (`DOWNLOAD_FOLDER`). |
-| `DOWNLOAD_FOLDER` | Generated flows, imported playlists, staging, and playlist files inside the shared mount. Typically `/data/downloads/aurral`. |
+| Path                             | Contains                                                                                                                                                                   |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/config`                        | Database, settings, users, sessions, cache state, and playlist jobs. Mount with `./config:/config`; not shared with other apps.                                            |
+| `/data` (or Lidarr's media root) | Shared library and downloads. Same mount Lidarr uses.                                                                                                                      |
+| Downloads Folder                 | Generated flows, imported playlists, staging, and playlist files. Set in **Settings → Download Clients → Downloads Folder → Path** (for example `/data/downloads/aurral`). |
 
 :::note
 `/config` replaces the older `/app/backend/data` path from Aurral v1. Existing databases in either location are detected automatically on startup.
@@ -22,11 +22,11 @@ For how Lidarr, slskd, Navidrome, and Aurral should share mounts, read [Shared s
 ## Back up
 
 - Your mounted `/config` folder
-- Your `DOWNLOAD_FOLDER` host folder if you want generated playlists to survive rebuilds
+- The host folder behind your Downloads Folder path if you want generated playlists to survive rebuilds
 - Your compose file and `.env`
 
 ## Library safety
 
 - Aurral does not write into your root music library.
 - Artist and album changes go through Lidarr.
-- Flows and imported playlists stay in Aurral's download area.
+- Flows and imported playlists stay under Aurral's Downloads Folder path.

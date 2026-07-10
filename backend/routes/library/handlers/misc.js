@@ -3,7 +3,6 @@ import { dbOps } from "../../../db/helpers/index.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
 import { fetchReleaseGroupCoverUrl } from "../../../services/releaseGroupCoverService.js";
 import { libraryManager, getCachedArtists } from "../../../services/libraryManager.js";
-import { getQualityProfiles } from "../../../services/qualityManager.js";
 import { normalizePercentOfTracks } from "../../../services/lidarrAlbumStats.js";
 
 export function registerMisc(router) {
@@ -19,18 +18,6 @@ export function registerMisc(router) {
     } catch (error) {
       res.status(500).json({
         error: "Failed to fetch root folder",
-        message: error.message,
-      });
-    }
-  });
-
-  router.get("/qualityprofile", async (req, res) => {
-    try {
-      const profiles = getQualityProfiles();
-      res.json(profiles);
-    } catch (error) {
-      res.status(500).json({
-        error: "Failed to fetch quality profiles",
         message: error.message,
       });
     }

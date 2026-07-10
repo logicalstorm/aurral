@@ -2,21 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("lidarr-user-preferences");
-applyIsolatedBackendEnv(isolatedState);
+const [isolatedState, { db }, { userOps }] = await setupIsolatedBackend(
+  "lidarr-user-preferences",
+  "backend/config/db-sqlite.js",
+  "backend/db/helpers/index.js",
+);
 
-const [{ db }, { userOps }, bcryptModule] = await Promise.all([
-  importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/db/helpers/index.js"),
-  import("bcrypt"),
-]);
+const bcryptModule = await import("bcrypt");
 
 const bcrypt = bcryptModule.default;
 

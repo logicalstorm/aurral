@@ -2,21 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("playlist-config");
-applyIsolatedBackendEnv(isolatedState);
-
-const [{ db }, { dbOps }, playlistConfigModule] = await Promise.all([
-  importFromRepo("backend/config/db-sqlite.js"),
-  importFromRepo("backend/db/helpers/index.js"),
-  importFromRepo("backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js"),
-]);
+const [isolatedState, { db }, { dbOps }, playlistConfigModule] =
+  await setupIsolatedBackend(
+    "playlist-config",
+    "backend/config/db-sqlite.js",
+    "backend/db/helpers/index.js",
+    "backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js",
+  );
 const { flowPlaylistConfig, tracksShareMembership } = playlistConfigModule;
 
 test.beforeEach(() => {
@@ -90,7 +87,18 @@ test("stores full shared playlists but exposes trackless summaries for hot paths
   });
 
   const stored = flowPlaylistConfig.getSharedPlaylist(playlist.id);
-  const summaries = flowPlaylistConfig.getSharedPlaylistSummaries();
+  const summaries = flowPlaylistConfig.getSharedPlaylists().map(
+    ({ id, name, ownerUserId, sourceName, sourceFlowId, importedAt, createdAt, trackCount }) => ({
+      id,
+      name,
+      ownerUserId,
+      sourceName,
+      sourceFlowId,
+      importedAt,
+      createdAt,
+      trackCount,
+    }),
+  );
 
   assert.equal(stored?.tracks?.length, 2);
   assert.equal(summaries.length, 1);
@@ -106,7 +114,19 @@ test("supports empty manual playlists", () => {
 
   const stored = flowPlaylistConfig.getSharedPlaylist(playlist.id);
   const summary = flowPlaylistConfig
-    .getSharedPlaylistSummaries()
+    .getSharedPlaylists()
+    .map(
+      ({ id, name, ownerUserId, sourceName, sourceFlowId, importedAt, createdAt, trackCount }) => ({
+        id,
+        name,
+        ownerUserId,
+        sourceName,
+        sourceFlowId,
+        importedAt,
+        createdAt,
+        trackCount,
+      }),
+    )
     .find((entry) => entry.id === playlist.id);
 
   assert.equal(stored?.tracks?.length, 0);
@@ -127,7 +147,19 @@ test("updates shared playlists and keeps summaries in sync", () => {
     tracks: [{ artistName: "C", trackName: "Three" }],
   });
   const summary = flowPlaylistConfig
-    .getSharedPlaylistSummaries()
+    .getSharedPlaylists()
+    .map(
+      ({ id, name, ownerUserId, sourceName, sourceFlowId, importedAt, createdAt, trackCount }) => ({
+        id,
+        name,
+        ownerUserId,
+        sourceName,
+        sourceFlowId,
+        importedAt,
+        createdAt,
+        trackCount,
+      }),
+    )
     .find((entry) => entry.id === playlist.id);
 
   assert.equal(updated?.name, "Gym Mix Updated");

@@ -1,65 +1,37 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { getFlowStatus } from "../../utils/api";
+import { useState, useEffect, useMemo } from "react";
 import { useWebSocketChannel } from "../../hooks/useWebSocket";
 import { hasFlowWorkerActivity, hasReviewActivity } from "./flowStats";
+import {
+  applyPlaylistStatusMessage,
+  fetchPlaylistStatus,
+  getCachedPlaylistStatus,
+  getLastPlaylistWsAt,
+  subscribePlaylistStatus,
+} from "./playlistStatusStore";
 
 const POLL_INTERVAL_MS = 4000;
 const IDLE_POLL_INTERVAL_MS = 30000;
 const WS_RECENT_MS = 3000;
 
 export function useFlowWorkerActivity({ enabled = true } = {}) {
-  const [status, setStatus] = useState(null);
-  const lastFlowWsMessageAtRef = useRef(0);
-  const fetchInFlightRef = useRef(false);
-
-  const fetchStatus = useCallback(async () => {
-    if (!enabled) return;
-    if (fetchInFlightRef.current) return;
-    fetchInFlightRef.current = true;
-    try {
-      const data = await getFlowStatus();
-      setStatus(data);
-    } catch {
-      setStatus(null);
-    } finally {
-      fetchInFlightRef.current = false;
-    }
-  }, [enabled]);
-
-  const handleFlowStatusMessage = useCallback(
-    (msg) => {
-      if (!enabled) return;
-      if (msg?.type !== "playlist_status") {
-        return;
-      }
-      if (!msg?.status || typeof msg.status !== "object") return;
-      lastFlowWsMessageAtRef.current = Date.now();
-      setStatus(msg.status);
-    },
-    [enabled],
-  );
-
-  const { isConnected: isFlowSocketConnected } = useWebSocketChannel(
-    "playlists",
-    handleFlowStatusMessage,
-    { enabled },
-  );
-  useWebSocketChannel("weekly-flow", handleFlowStatusMessage, { enabled });
+  const [status, setStatus] = useState(() => (enabled ? getCachedPlaylistStatus() : null));
 
   useEffect(() => {
     if (!enabled) {
       setStatus(null);
-      return;
+      return undefined;
     }
-    fetchStatus();
-  }, [enabled, fetchStatus]);
+    setStatus(getCachedPlaylistStatus());
+    return subscribePlaylistStatus(setStatus);
+  }, [enabled]);
+
+  useWebSocketChannel("playlists", applyPlaylistStatusMessage, { enabled });
+  useWebSocketChannel("weekly-flow", applyPlaylistStatusMessage, { enabled });
 
   useEffect(() => {
     if (!enabled) return;
-    if (isFlowSocketConnected) {
-      fetchStatus();
-    }
-  }, [enabled, isFlowSocketConnected, fetchStatus]);
+    fetchPlaylistStatus().catch(() => {});
+  }, [enabled]);
 
   const hasActivity = useMemo(() => hasFlowWorkerActivity(status), [status]);
   const hasReview = useMemo(() => hasReviewActivity(status), [status]);
@@ -67,30 +39,25 @@ export function useFlowWorkerActivity({ enabled = true } = {}) {
 
   useEffect(() => {
     if (!enabled) return;
-
     const poll = () => {
       if (document.hidden) return;
-      const hasRecentWsUpdate = Date.now() - lastFlowWsMessageAtRef.current < WS_RECENT_MS;
-      if (isFlowSocketConnected && hasRecentWsUpdate) return;
-      fetchStatus();
+      if (Date.now() - getLastPlaylistWsAt() < WS_RECENT_MS) return;
+      fetchPlaylistStatus().catch(() => {});
     };
-
     const interval = setInterval(poll, isActive ? POLL_INTERVAL_MS : IDLE_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [enabled, isFlowSocketConnected, isActive, fetchStatus]);
+  }, [enabled, isActive]);
 
   useEffect(() => {
     if (!enabled) return;
-
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        fetchStatus();
+        fetchPlaylistStatus().catch(() => {});
       }
     };
-
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [enabled, fetchStatus]);
+  }, [enabled]);
 
   return { hasActivity, hasReview, status };
 }

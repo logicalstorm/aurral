@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import PropTypes from "prop-types";
-import { Folder } from "lucide-react";
-import { browseFilesystem } from "../utils/api";
+import { browseFilesystem } from "../utils/api/endpoints/auth.js";
 import DownloadFolderPickerModal from "./DownloadFolderPickerModal";
 
+import { Folder } from "lucide-react";
 export default function DownloadFolderField({
   value = "",
   onChange,
@@ -105,13 +104,3 @@ export default function DownloadFolderField({
     </>
   );
 }
-
-DownloadFolderField.propTypes = {
-  value: PropTypes.string,
-  onChange: PropTypes.func,
-  disabled: PropTypes.bool,
-  autoApplySuggestion: PropTypes.bool,
-  createOnConfirm: PropTypes.bool,
-  id: PropTypes.string,
-  helperText: PropTypes.string,
-};

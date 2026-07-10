@@ -11,6 +11,7 @@ import {
   flowPlaylistConfig,
   normalizeSharedTrack,
   tracksShareMembership,
+  DEFAULT_SIZE,
 } from "./weeklyFlowPlaylistConfig.js";
 import {
   normalizeExistingFileMode,
@@ -34,7 +35,6 @@ import { withHonkerLock } from "../honkerDb.js";
 import { getUnavailableFlowSourceError } from "./weeklyFlowValidation.js";
 import { schedulePlaylistMbidEnrichment } from "../playlistMbidEnrichmentService.js";
 
-const DEFAULT_LIMIT = 30;
 const OPERATION_TOKENS_KEY = "weeklyFlowOperationTokens";
 
 export function createWeeklyFlowOperationToken() {
@@ -88,25 +88,6 @@ const jobToSharedTrack = (job) =>
     reason: job?.reason || null,
   });
 
-const groupJobsByMembership = (jobs) => {
-  const groups = [];
-  for (const job of Array.isArray(jobs) ? jobs : []) {
-    let target = null;
-    for (const group of groups) {
-      if (tracksShareMembership(group[0], job)) {
-        target = group;
-        break;
-      }
-    }
-    if (target) {
-      target.push(job);
-    } else {
-      groups.push([job]);
-    }
-  }
-  return groups;
-};
-
 const sharedPlaylistTracksMatchJobs = (playlist, jobs) => {
   const configTracks = dedupeSharedTracks(playlist?.tracks);
   if (configTracks.length !== jobs.length) return false;
@@ -120,56 +101,6 @@ const sharedPlaylistTracksMatchJobs = (playlist, jobs) => {
   }
   return unmatchedJobs.size === 0;
 };
-
-export async function reconcileSharedPlaylistJobs(playlistId) {
-  const safePlaylistId = String(playlistId || "").trim();
-  const playlist = flowPlaylistConfig.getSharedPlaylist(safePlaylistId);
-  if (!playlist) return { missing: true, changed: false };
-
-  const existingJobs = downloadTracker.getByPlaylistType(safePlaylistId);
-  const groups = groupJobsByMembership(existingJobs);
-  const keptJobs = [];
-  const removedJobIds = [];
-
-  for (const group of groups) {
-    const [kept, ...dupes] = sortJobsForTrackReuse(group);
-    keptJobs.push(kept);
-    for (const dupe of dupes) {
-      if (dupe.status === "done" && typeof dupe.finalPath === "string") {
-        const keptPath =
-          kept?.status === "done" && typeof kept.finalPath === "string" ? kept.finalPath : null;
-        if (!keptPath || dupe.finalPath !== keptPath) {
-          await removePlaylistFileIfUnshared(dupe.finalPath, safePlaylistId, {
-            weeklyFlowRoot: weeklyFlowWorker.weeklyFlowRoot,
-            excludeJobIds: [dupe.id, kept?.id].filter(Boolean),
-          });
-        }
-      }
-      downloadTracker.removeJob(dupe.id);
-      removedJobIds.push(dupe.id);
-    }
-  }
-
-  const tracksFromJobs = keptJobs.map((job) => jobToSharedTrack(job)).filter(Boolean);
-  const configInSync = sharedPlaylistTracksMatchJobs(playlist, keptJobs);
-  const changed = removedJobIds.length > 0 || !configInSync;
-  let updatedPlaylist = playlist;
-  if (changed) {
-    updatedPlaylist = flowPlaylistConfig.updateSharedPlaylist(safePlaylistId, {
-      tracks: tracksFromJobs,
-    });
-    playlistManager.updateConfig(false);
-    await playlistManager.refreshPlaylist(safePlaylistId);
-    playlistManager.scheduleScanLibrary();
-  }
-
-  return {
-    changed,
-    removedJobIds,
-    playlist: updatedPlaylist,
-    keptJobCount: keptJobs.length,
-  };
-}
 
 const syncSharedPlaylistConfigFromJobs = async (playlistId) => {
   const safePlaylistId = String(playlistId || "").trim();
@@ -300,7 +231,7 @@ async function runFlowSeed({
     const effectiveSize =
       Number.isFinite(Number(size)) && Number(size) > 0
         ? Number(size)
-        : latestFlow.size || DEFAULT_LIMIT;
+        : latestFlow.size || DEFAULT_SIZE;
     const seeded = await weeklyFlowWorker.seedFlowRun(safeFlowId, latestFlow, {
       size: effectiveSize,
     });

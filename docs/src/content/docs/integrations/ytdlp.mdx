@@ -3,9 +3,9 @@ title: yt-dlp
 description: YouTube and web-backed downloads for flows and playlists.
 ---
 
-yt-dlp is Aurral's built-in fallback download source. It searches YouTube for artist and title matches, extracts audio with ffmpeg, then imports into your `DOWNLOAD_FOLDER`.
+yt-dlp is Aurral's built-in fallback download source. It searches YouTube for artist and title matches, extracts audio with ffmpeg, then writes into your Downloads Folder path.
 
-No separate daemon is required. The Docker image includes `yt-dlp` and `ffmpeg`. On bare metal, install both on the host and keep `yt-dlp` on `PATH`.
+No separate daemon is required, and you do not need an extra volume beyond Aurral's media mount. The Docker image includes `yt-dlp` and `ffmpeg`. On bare metal, install both on the host and keep `yt-dlp` on `PATH`.
 
 ## Setup
 

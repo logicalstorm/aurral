@@ -1,12 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
-  cleanupIsolatedState,
-  importFromRepo,
-  resetDatabase,
-} from "../helpers/backendTestHarness.js";
+import { importFromRepo } from "../helpers/backendTestHarness.js";
 
 test("tag inheritance: candidate with >= 3 seed tags inherits tags and skips artist.getTopTags", async () => {
   const { canInheritTagsFromSeeds } = await importFromRepo(
@@ -227,20 +221,11 @@ test("tag inheritance: sparse tags (< 3) trigger direct hydration path", async (
   assert.equal(canInheritTagsFromSeeds(sparseTagsCandidate), false);
 });
 
-test("tag inheritance: tag inheritance reduces artist.getTopTags call count for qualifying candidates", async () => {
-  const {
-    getLastfmApiCallCount,
-    getLastfmApiCallCountByMethod,
-    resetLastfmApiCallCount,
-  } = await importFromRepo("backend/services/apiClients/index.js");
-
+test("tag inheritance: qualifying candidates finalize with inherited seed tags", async () => {
   const {
     addRecommendationCandidate,
     finalizeRecommendationAccumulator,
-    applyHydratedCandidateTags,
   } = await importFromRepo("backend/services/discovery/recommendationPipeline.js");
-
-  resetLastfmApiCallCount();
 
   const profileTagWeights = new Map([
     ["shoegaze", 5],
@@ -276,10 +261,6 @@ test("tag inheritance: tag inheritance reduces artist.getTopTags call count for 
   });
 
   assert.ok(final.length > 0);
-
-  resetLastfmApiCallCount();
-  assert.equal(getLastfmApiCallCount(), 0);
-  assert.deepEqual(getLastfmApiCallCountByMethod(), {});
 });
 
 test("tag inheritance: ranking scores are equivalent between inherited and direct tags with same tag data", async () => {

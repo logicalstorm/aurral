@@ -1,5 +1,4 @@
 import { useState } from "react";
-import PropTypes from "prop-types";
 import {
   ChevronDown,
   Loader,
@@ -28,25 +27,13 @@ const MONITOR_OPTIONS = [
 ];
 
 export function ArtistDetailsActionBar({
+  library,
   existsInLibrary,
   loadingLibrary,
-  showRemoveDropdown,
-  setShowRemoveDropdown,
-  showMonitorOptionMenu,
-  setShowMonitorOptionMenu,
-  updatingMonitor,
   canChangeMonitoring,
-  getCurrentMonitorOption,
-  handleUpdateMonitorOption,
   canDeleteArtist,
-  handleDeleteClick,
   canAddArtist,
-  handleAddToLibrary,
-  handleOpenAddCustomizeModal,
-  addingToLibrary,
   canRefreshArtist,
-  handleRefreshArtist,
-  refreshingArtist,
   buildingQueue = false,
   isArtistPlaybackActive,
   handlePreviewPlayAll,
@@ -56,7 +43,7 @@ export function ArtistDetailsActionBar({
   tasteActionPending = null,
 }) {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const currentMonitorOption = getCurrentMonitorOption?.();
+  const currentMonitorOption = library.getCurrentMonitorOption?.();
   const isPreviewPlaying = isArtistPlaybackActive;
 
   const renderLibraryAction = () => {
@@ -74,23 +61,23 @@ export function ArtistDetailsActionBar({
         <div className="artist-relative">
           <button
             type="button"
-            onClick={() => setShowRemoveDropdown(!showRemoveDropdown)}
+            onClick={() => library.setShowRemoveDropdown(!library.showRemoveDropdown)}
             className="btn btn-neutral-active btn--bold btn-min-h"
           >
             <SearchLibraryCheck size="sm" />
             In Library
             {(canChangeMonitoring || canDeleteArtist) && (
               <ChevronDown
-                className={`artist-icon-sm${showRemoveDropdown ? " artist-chevron--open" : ""}`}
+                className={`artist-icon-sm${library.showRemoveDropdown ? " artist-chevron--open" : ""}`}
               />
             )}
           </button>
-          {showRemoveDropdown && (canChangeMonitoring || canDeleteArtist) && (
+          {library.showRemoveDropdown && (canChangeMonitoring || canDeleteArtist) && (
             <>
               <button
                 type="button"
                 className="artist-backdrop-button"
-                onClick={() => setShowRemoveDropdown(false)}
+                onClick={() => library.setShowRemoveDropdown(false)}
                 aria-label="Close library actions"
               />
               <div className="artist-dropdown artist-dropdown--left">
@@ -99,18 +86,18 @@ export function ArtistDetailsActionBar({
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      setShowMonitorOptionMenu(!showMonitorOptionMenu);
+                      library.setShowMonitorOptionMenu(!library.showMonitorOptionMenu);
                     }}
-                    disabled={updatingMonitor}
+                    disabled={library.updatingMonitor}
                     className="artist-menu-item"
                   >
-                    <span>Monitor: {getCurrentMonitorOption()}</span>
+                    <span>Monitor: {library.getCurrentMonitorOption()}</span>
                     <ChevronDown
-                      className={`artist-icon-sm${showMonitorOptionMenu ? " artist-chevron--open" : ""}`}
+                      className={`artist-icon-sm${library.showMonitorOptionMenu ? " artist-chevron--open" : ""}`}
                     />
                   </button>
                 )}
-                {canChangeMonitoring && showMonitorOptionMenu && (
+                {canChangeMonitoring && library.showMonitorOptionMenu && (
                   <div className="artist-menu-section">
                     {MONITOR_OPTIONS.map((option) => {
                       const isActive = option.value === currentMonitorOption;
@@ -120,11 +107,11 @@ export function ArtistDetailsActionBar({
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            handleUpdateMonitorOption(option.value);
-                            setShowMonitorOptionMenu(false);
-                            setShowRemoveDropdown(false);
+                            library.handleUpdateMonitorOption(option.value);
+                            library.setShowMonitorOptionMenu(false);
+                            library.setShowRemoveDropdown(false);
                           }}
-                          disabled={updatingMonitor}
+                          disabled={library.updatingMonitor}
                           className={`artist-menu-item${isActive ? " is-active" : ""}`}
                         >
                           {option.label}
@@ -137,8 +124,8 @@ export function ArtistDetailsActionBar({
                   <button
                     type="button"
                     onClick={() => {
-                      handleDeleteClick();
-                      setShowRemoveDropdown(false);
+                      library.handleDeleteClick();
+                      library.setShowRemoveDropdown(false);
                     }}
                     className="artist-menu-item artist-menu-item--danger"
                   >
@@ -158,14 +145,14 @@ export function ArtistDetailsActionBar({
     return (
       <div className="btn-add-library-group">
         <AddToLibraryButton
-          onClick={handleAddToLibrary}
-          isLoading={addingToLibrary}
+          onClick={library.handleAddToLibrary}
+          isLoading={library.addingToLibrary}
           className="btn-add-library--split"
         />
         <button
           type="button"
-          onClick={handleOpenAddCustomizeModal}
-          disabled={addingToLibrary}
+          onClick={library.handleOpenAddCustomizeModal}
+          disabled={library.addingToLibrary}
           className="btn btn-add-library-split"
           aria-label="Customize add options"
           title="Customize add options"
@@ -203,13 +190,13 @@ export function ArtistDetailsActionBar({
           {existsInLibrary && canRefreshArtist && (
             <button
               type="button"
-              onClick={handleRefreshArtist}
-              disabled={refreshingArtist}
+              onClick={library.handleRefreshArtist}
+              disabled={library.refreshingArtist}
               className="btn btn-secondary btn--bold btn-min-h"
               aria-label="Refresh artist"
               title="Refresh artist"
             >
-              {refreshingArtist ? (
+              {library.refreshingArtist ? (
                 <Loader className="artist-icon-sm animate-spin" />
               ) : (
                 <RefreshCw className="artist-icon-sm" />
@@ -300,35 +287,3 @@ export function ArtistDetailsActionBar({
     </div>
   );
 }
-
-ArtistDetailsActionBar.propTypes = {
-  existsInLibrary: PropTypes.bool,
-  loadingLibrary: PropTypes.bool,
-  showRemoveDropdown: PropTypes.bool,
-  setShowRemoveDropdown: PropTypes.func.isRequired,
-  showMonitorOptionMenu: PropTypes.bool,
-  setShowMonitorOptionMenu: PropTypes.func.isRequired,
-  updatingMonitor: PropTypes.bool,
-  canChangeMonitoring: PropTypes.bool,
-  getCurrentMonitorOption: PropTypes.func.isRequired,
-  handleUpdateMonitorOption: PropTypes.func.isRequired,
-  canDeleteArtist: PropTypes.bool,
-  handleDeleteClick: PropTypes.func.isRequired,
-  canAddArtist: PropTypes.bool,
-  handleAddToLibrary: PropTypes.func.isRequired,
-  handleOpenAddCustomizeModal: PropTypes.func.isRequired,
-  addingToLibrary: PropTypes.bool,
-  canRefreshArtist: PropTypes.bool,
-  handleRefreshArtist: PropTypes.func.isRequired,
-  refreshingArtist: PropTypes.bool,
-  buildingQueue: PropTypes.bool,
-  isArtistPlaybackActive: PropTypes.bool,
-  handlePreviewPlayAll: PropTypes.func.isRequired,
-  onEditIds: PropTypes.func,
-  onTasteFeedback: PropTypes.func,
-  tasteFeedbackUsed: PropTypes.shape({
-    more_like_this: PropTypes.bool,
-    less_like_this: PropTypes.bool,
-  }),
-  tasteActionPending: PropTypes.string,
-};

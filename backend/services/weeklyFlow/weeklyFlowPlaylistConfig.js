@@ -4,18 +4,11 @@ import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 
 const LEGACY_TYPES = ["discover", "mix", "trending"];
 const DEFAULT_MIX = { discover: 34, mix: 33, trending: 33, focus: 0 };
-const DEFAULT_SIZE = 30;
+export const DEFAULT_SIZE = 30;
 const DEFAULT_SCHEDULE_TIME = "00:00";
 const DAY_MS = 24 * 60 * 60 * 1000;
 let cachedFlows = null;
 let cachedSharedPlaylists = null;
-
-const _titleCase = (value) =>
-  String(value || "")
-    .split(" ")
-    .filter(Boolean)
-    .map((w) => w[0]?.toUpperCase() + w.slice(1))
-    .join(" ");
 
 const clampSize = (value) => {
   const n = Number(value);
@@ -76,21 +69,6 @@ const normalizeStringArray = (value) => {
   return out;
 };
 
-const clampCount = (value, min = 1, max = 100) => {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Math.min(Math.max(Math.round(n), min), max);
-};
-
-const normalizeStringList = (value) => {
-  if (value == null) return [];
-  if (Array.isArray(value)) {
-    return value.map((item) => getFlowEntryName(item)).filter(Boolean);
-  }
-  const single = getFlowEntryName(value);
-  return single ? [single] : [];
-};
-
 const normalizeScheduleDays = (value) => {
   if (!Array.isArray(value)) return [];
   const out = new Set();
@@ -144,60 +122,6 @@ const computeNextRunAt = (
   return buildScheduledTime(fromTimeMs + 7 * DAY_MS, scheduleTime);
 };
 
-const distributeCount = (total, values) => {
-  const items = values.filter(Boolean);
-  if (!items.length || total <= 0) return {};
-  const per = Math.floor(total / items.length);
-  let remaining = total - per * items.length;
-  const result = {};
-  for (const item of items) {
-    const extra = remaining > 0 ? 1 : 0;
-    if (remaining > 0) remaining -= 1;
-    result[item] = (result[item] || 0) + per + extra;
-  }
-  return result;
-};
-
-const extractFromBlocks = (value) => {
-  if (!Array.isArray(value)) return null;
-  const recipe = { discover: 0, mix: 0, trending: 0, focus: 0 };
-  const tags = {};
-  const relatedArtists = {};
-  let deepDive = false;
-  let total = 0;
-  for (const block of value) {
-    if (!block || typeof block !== "object" || Array.isArray(block)) continue;
-    const count = clampCount(block.count);
-    if (count <= 0) continue;
-    total += count;
-    if (block.deepDive === true) deepDive = true;
-    const include = block.include ?? {};
-    const includeTags = normalizeStringList(include.tags ?? include.tag);
-    const includeRelated = normalizeStringList(include.relatedArtists ?? include.relatedArtist);
-    if (includeTags.length > 0) {
-      const distributed = distributeCount(count, includeTags);
-      for (const [tag, qty] of Object.entries(distributed)) {
-        tags[tag] = (tags[tag] || 0) + qty;
-      }
-      continue;
-    }
-    if (includeRelated.length > 0) {
-      const distributed = distributeCount(count, includeRelated);
-      for (const [artist, qty] of Object.entries(distributed)) {
-        relatedArtists[artist] = (relatedArtists[artist] || 0) + qty;
-      }
-      continue;
-    }
-    const source = String(block.source || "")
-      .trim()
-      .toLowerCase();
-    const key = source === "mix" ? "mix" : source === "trending" ? "trending" : "discover";
-    recipe[key] += count;
-  }
-  if (total <= 0) return null;
-  return { recipe, tags, relatedArtists, deepDive, size: total };
-};
-
 const normalizeMix = (mix) => {
   const raw = {
     discover: Number(mix?.discover ?? 0),
@@ -239,13 +163,8 @@ const normalizeMix = (mix) => {
 
 const normalizeFlow = (flow) => {
   const name = String(flow?.name || "").trim();
-  const blocksData = extractFromBlocks(flow?.blocks);
   const size = clampSize(flow?.size);
-  const mixSource =
-    flow?.mix ??
-    (flow?.recipe && typeof flow.recipe === "object" ? flow.recipe : null) ??
-    blocksData?.recipe;
-  const mix = normalizeMix(mixSource);
+  const mix = normalizeMix(flow?.mix);
   const normalizedTagsArray = normalizeStringArray(flow?.tags);
   const normalizedRelatedArray = normalizeStringArray(flow?.relatedArtists);
   const legacyTags = normalizeWeightMap(flow?.tags);
@@ -253,16 +172,11 @@ const normalizeFlow = (flow) => {
   const tags =
     normalizedTagsArray.length > 0
       ? normalizedTagsArray
-      : Object.keys(legacyTags).length > 0
-        ? Object.keys(legacyTags)
-        : normalizeStringArray(Object.keys(normalizeWeightMap(blocksData?.tags)));
+      : Object.keys(legacyTags);
   const relatedArtists =
     normalizedRelatedArray.length > 0
       ? normalizedRelatedArray
-      : Object.keys(legacyRelatedArtists).length > 0
-        ? Object.keys(legacyRelatedArtists)
-        : normalizeStringArray(Object.keys(normalizeWeightMap(blocksData?.relatedArtists)));
-  const baseSize = blocksData?.size > 0 ? blocksData.size : size;
+      : Object.keys(legacyRelatedArtists);
   return {
     id: flow?.id || randomUUID(),
     name: name || "Flow",
@@ -273,7 +187,7 @@ const normalizeFlow = (flow) => {
     enabled: flow?.enabled === true,
     scheduleDays: normalizeScheduleDays(flow?.scheduleDays),
     scheduleTime: normalizeScheduleTime(flow?.scheduleTime),
-    deepDive: flow?.deepDive === true || blocksData?.deepDive === true,
+    deepDive: flow?.deepDive === true,
     nextRunAt:
       flow?.nextRunAt != null && Number.isFinite(Number(flow.nextRunAt))
         ? Number(flow.nextRunAt)
@@ -282,7 +196,7 @@ const normalizeFlow = (flow) => {
       flow?.lastRunAt != null && Number.isFinite(Number(flow.lastRunAt))
         ? Number(flow.lastRunAt)
         : null,
-    size: baseSize > 0 ? baseSize : size,
+    size,
     mix,
     tags,
     relatedArtists,
@@ -307,10 +221,10 @@ export const normalizeSharedTrack = (track) => {
   ).trim();
   if (!artistName || !trackName) return null;
   const albumName = String(track.albumName ?? track.album ?? track["Album Name"] ?? "").trim();
-  const artistMbid = String(track.artistMbid ?? track.artistId ?? track.mbid ?? "").trim();
+  const artistMbid = String(track.artistMbid ?? track.artistId ?? "").trim();
   const albumMbid = String(track.albumMbid ?? track.releaseGroupMbid ?? track.albumId ?? "").trim();
   const trackMbid = String(
-    track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? "",
+    track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? track.mbid ?? "",
   ).trim();
   const releaseYear = String(track.releaseYear ?? track.year ?? "").trim();
   const durationMs =
@@ -339,7 +253,8 @@ export const buildSharedTrackIdentity = (track) =>
   [
     String(track?.artistName || "").trim().toLowerCase(),
     String(track?.trackName || "").trim().toLowerCase(),
-    String(track?.albumName || "").trim().toLowerCase(),    String(track?.artistMbid || "").trim(),
+    String(track?.albumName || "").trim().toLowerCase(),
+    String(track?.artistMbid || "").trim(),
     String(track?.albumMbid || "").trim(),
     String(track?.trackMbid || "").trim(),
     String(track?.releaseYear || "").trim(),
@@ -347,7 +262,8 @@ export const buildSharedTrackIdentity = (track) =>
 
 export const buildCoreTrackIdentity = (track) => {
   const artistName = String(track?.artistName || "").trim().toLowerCase();
-  const trackName = String(track?.trackName || "").trim().toLowerCase();  if (!artistName || !trackName) return "";
+  const trackName = String(track?.trackName || "").trim().toLowerCase();
+  if (!artistName || !trackName) return "";
   return `${artistName}\u0001${trackName}`;
 };
 
@@ -462,7 +378,6 @@ const getStoredFlows = () => {
         needsSave = true;
         return normalizeFlow({ ...flow, id: mapped });
       }
-      if (flow?.blocks) needsSave = true;
       if (!Array.isArray(flow?.scheduleDays)) needsSave = true;
       if (normalizeScheduleTime(flow?.scheduleTime) !== flow?.scheduleTime) {
         needsSave = true;
@@ -637,7 +552,6 @@ export const flowPlaylistConfig = {
     mix,
     size,
     deepDive,
-    recipe,
     tags,
     relatedArtists,
     scheduleDays,
@@ -655,7 +569,6 @@ export const flowPlaylistConfig = {
       mix,
       size,
       deepDive,
-      recipe,
       tags,
       relatedArtists,
       discoverPresetId,
@@ -687,7 +600,6 @@ export const flowPlaylistConfig = {
       name: nextName,
       size: updates?.size ?? current.size,
       mix: updates?.mix ?? current.mix,
-      recipe: updates?.recipe ?? current.recipe,
       tags: updates?.tags ?? current.tags,
       relatedArtists: updates?.relatedArtists ?? current.relatedArtists,
       scheduleDays: updates?.scheduleDays ?? current.scheduleDays,
@@ -737,18 +649,6 @@ export const flowPlaylistConfig = {
     return flow;
   },
 
-  setNextRunAt(flowId, nextRunAt) {
-    const flows = getStoredFlows();
-    const index = flows.findIndex((flow) => flow.id === flowId);
-    if (index === -1) return null;
-    const flow = { ...flows[index] };
-    flow.nextRunAt =
-      nextRunAt != null && Number.isFinite(Number(nextRunAt)) ? Number(nextRunAt) : null;
-    flows[index] = flow;
-    setFlows(flows);
-    return flow;
-  },
-
   markLastRunAt(flowId, lastRunAt = Date.now()) {
     const flows = getStoredFlows();
     const index = flows.findIndex((flow) => flow.id === flowId);
@@ -792,19 +692,6 @@ export const flowPlaylistConfig = {
     return getStoredSharedPlaylists().filter((playlist) =>
       this.canUserAccessSharedPlaylist(user, playlist),
     );
-  },
-
-  getSharedPlaylistSummaries() {
-    return getStoredSharedPlaylists().map((playlist) => ({
-      id: playlist.id,
-      name: playlist.name,
-      ownerUserId: playlist.ownerUserId,
-      sourceName: playlist.sourceName,
-      sourceFlowId: playlist.sourceFlowId,
-      importedAt: playlist.importedAt,
-      createdAt: playlist.createdAt,
-      trackCount: playlist.trackCount,
-    }));
   },
 
   getSharedPlaylist(playlistId) {

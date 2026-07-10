@@ -1,29 +1,29 @@
 ---
 title: First run
-description: Complete onboarding and configure your first integrations.
+description: Create your admin account, connect Lidarr, then finish setup in Settings.
 ---
 
-Onboarding gets Aurral usable quickly. You can skip optional services and finish them later in Settings.
+Onboarding is two steps: create your admin account, then connect Lidarr. Everything else lives in Settings.
 
 ![Aurral Lidarr connection settings](../../../assets/screenshots/settings-lidarr.webp)
 
 ## Onboarding steps
 
-1. Create your admin account.
-2. Set your download folder inside your shared media mount.
-3. Connect Lidarr, test library access, and choose default profiles.
-4. Optionally apply the community Lidarr guide for discovery-friendly defaults.
-5. Optionally connect Prowlarr (Usenet indexer), SABnzbd/NZBGet (Usenet download clients), Navidrome, Plex, Last.fm, slskd, Ticketmaster, and metadata services.
+1. Create your admin account. Optionally enable **Auto-login on local network**.
+2. Connect Lidarr (URL and API key), test the connection, then open Aurral.
 
-## Good first settings
+If Lidarr's stack already works, matching its media mount is the hard part. See [Match Lidarr](/getting-started/storage/).
 
-After onboarding, check these areas:
+## After you land in the app
 
-- **Settings → Lidarr** — quality profile, tag, monitoring option, and search-on-add behavior.
-- **Settings → Playback → Plex** — optional; connect after onboarding ([Plex setup](/integrations/plex/)).
-- **Settings → Discover** — Last.fm API key, refresh cadence, and discovery mode (Safer, Balanced, or Deeper).
-- **Settings → Download Clients** and **Settings → Indexers** — yt-dlp (default), slskd, and/or Prowlarr + SABnzbd/NZBGet for flow and playlist downloads.
-- **Profile** — your listening-history provider (Last.fm or ListenBrainz username, or Koito instance URL).
+Configure these in Settings when you need them:
+
+- **Settings → Download Clients → Downloads Folder**: path under your Lidarr media root (for example `/data/downloads/aurral`).
+- **Settings → Lidarr**: quality profile, monitoring, community guide, library access check.
+- **Settings → Download Clients** / **Indexers**: yt-dlp (default), slskd, Prowlarr + SABnzbd/NZBGet.
+- **Settings → Playback**: Navidrome or Plex.
+- **Settings → Discover**: Last.fm API key and discovery mode.
+- **Profile**: listening-history provider (ListenBrainz by default until you add Last.fm or Koito).
 
 ## Per-user setup
 

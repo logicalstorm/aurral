@@ -1,14 +1,16 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
   clearAuthStorage,
+  getStoredAuth,
+  setStoredAuth,
+} from "../utils/api/core.js";
+import {
   getBootstrapStatus,
   getMe,
-  getStoredAuth,
   invalidateBootstrapCache,
   loginApi,
   logoutApi,
-  setStoredAuth,
-} from "../utils/api";
+} from "../utils/api/endpoints/auth.js";
 import { PROXY_AUTH_KEY, isProxyAuthActive } from "../utils/authRecovery.js";
 
 const AuthContext = createContext(null);

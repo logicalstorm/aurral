@@ -23,7 +23,7 @@ function getIntegrations() {
 
 function isSlskdEnabled() {
   const slskd = getIntegrations().slskd || {};
-  return slskd.enabled !== false;
+  return slskd.enabled === true;
 }
 
 function getSlskdPriority() {

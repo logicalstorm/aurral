@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import { Loader2, Save } from "lucide-react";
 
 export function SettingsArrToolbar({
@@ -44,11 +43,3 @@ export function SettingsArrToolbar({
     </div>
   );
 }
-
-SettingsArrToolbar.propTypes = {
-  children: PropTypes.node,
-  hasPendingChanges: PropTypes.bool,
-  isSaving: PropTypes.bool,
-  onSave: PropTypes.func,
-  showSave: PropTypes.bool,
-};

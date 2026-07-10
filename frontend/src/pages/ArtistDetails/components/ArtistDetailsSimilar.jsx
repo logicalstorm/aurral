@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import PropTypes from "prop-types";
+import { lookupArtistsInLibraryBatch, readLibraryLookupCache } from "../../../utils/api/endpoints/library.js";
+import { getArtistFeedbackFlags } from "../../../utils/discoveryFeedback";
+import { getArtistRecordId } from "../../../utils/artistTaste";
+
 import { Loader, ChevronLeft, ChevronRight } from "lucide-react";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import ArtistImage from "../../../components/ArtistImage";
 import { ArtistContextMenu } from "../../../components/ArtistContextMenu";
-import { lookupArtistsInLibraryBatch, readLibraryLookupCache } from "../../../utils/api";
-import { getArtistFeedbackFlags } from "../../../utils/discoveryFeedback";
-import { getArtistRecordId } from "../../../utils/artistTaste";
-
 export function ArtistDetailsSimilar({
   loadingSimilar,
   similarArtists,
@@ -203,24 +202,3 @@ export function ArtistDetailsSimilar({
     </section>
   );
 }
-
-ArtistDetailsSimilar.propTypes = {
-  loadingSimilar: PropTypes.bool,
-  similarArtists: PropTypes.arrayOf(
-    PropTypes.shape({
-      id: PropTypes.string,
-      name: PropTypes.string,
-      image: PropTypes.string,
-      match: PropTypes.number,
-    }),
-  ),
-  similarArtistsScrollRef: PropTypes.oneOfType([
-    PropTypes.func,
-    PropTypes.shape({ current: PropTypes.instanceOf(Element) }),
-  ]),
-  onArtistClick: PropTypes.func,
-  canAddArtist: PropTypes.bool,
-  onAddToLibrary: PropTypes.func,
-  onArtistFeedback: PropTypes.func,
-  artistFeedbackLookup: PropTypes.instanceOf(Map),
-};

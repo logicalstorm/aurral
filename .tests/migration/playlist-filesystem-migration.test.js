@@ -4,18 +4,15 @@ import fs from "fs/promises";
 import path from "path";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("playlist-filesystem-migration");
-applyIsolatedBackendEnv(isolatedState);
-
-const { ensurePlaylistFilesystemLayout } = await importFromRepo(
-  "backend/services/playlistFilesystemMigration.js",
-);
+const [isolatedState, { ensurePlaylistFilesystemLayout }] =
+  await setupIsolatedBackend(
+    "playlist-filesystem-migration",
+    "backend/services/playlistFilesystemMigration.js",
+  );
 
 const root = process.env.WEEKLY_FLOW_FOLDER;
 

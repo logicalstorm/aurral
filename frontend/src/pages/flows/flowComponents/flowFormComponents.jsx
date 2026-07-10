@@ -9,8 +9,6 @@ import {
   SCHEDULE_HOUR_OPTIONS,
 } from "./MixSlider.jsx";
 
-export { MixSlider };
-
 export function FlowScheduleFields({
   draft,
   inputClassName = "flow-page__field-control",
@@ -126,70 +124,63 @@ export function FlowScheduleFields({
   );
 }
 
-export function ReleaseRadarRecipeFields({
+export function PresetRecipeFields({
   draft,
   inputClassName = "flow-page__field-control",
   errorMessage,
   onDraftChange,
   onClearError,
+  title,
+  description,
+  sizeLabel = "Tracks",
 }) {
   return (
     <div className="flow-page__form">
       <div className="flow-page__preset-recipe">
-        <p className="flow-page__preset-recipe-label">New releases</p>
-        <p className="flow-page__preset-recipe-desc">
-          Finds recent albums from artists in your library that you do not have yet, then picks a
-          standout track from each release. The track limit is a maximum; if fewer albums qualify,
-          the playlist will be shorter. It refreshes on your schedule below.
-        </p>
+        <p className="flow-page__preset-recipe-label">{title}</p>
+        <p className="flow-page__preset-recipe-desc">{description}</p>
       </div>
       <FlowScheduleFields
         draft={draft}
         inputClassName={inputClassName}
         onDraftChange={onDraftChange}
         onClearError={onClearError}
-        sizeLabel="Max tracks"
+        sizeLabel={sizeLabel}
       />
       {errorMessage ? <div className="flow-page__error-text">{errorMessage}</div> : null}
     </div>
   );
 }
 
-export function EditorialRecipeFields({
-  draft,
-  inputClassName = "flow-page__field-control",
-  errorMessage,
-  onDraftChange,
-  onClearError,
-  tag = "",
-}) {
+export function ReleaseRadarRecipeFields(props) {
+  return (
+    <PresetRecipeFields
+      {...props}
+      title="New releases"
+      description="Finds recent albums from artists in your library that you do not have yet, then picks a standout track from each release. The track limit is a maximum; if fewer albums qualify, the playlist will be shorter. It refreshes on your schedule below."
+      sizeLabel="Max tracks"
+    />
+  );
+}
+
+export function EditorialRecipeFields({ tag = "", ...props }) {
   const tagLabel = tag ? tag.charAt(0).toUpperCase() + tag.slice(1) : "";
   return (
-    <div className="flow-page__form">
-      <div className="flow-page__preset-recipe">
-        <p className="flow-page__preset-recipe-label">
-          {tagLabel ? `${tagLabel} picks` : "Curated picks"}
-        </p>
-        <p className="flow-page__preset-recipe-desc">
+    <PresetRecipeFields
+      {...props}
+      title={tagLabel ? `${tagLabel} picks` : "Curated picks"}
+      description={
+        <>
           The top tracks from Last.fm&rsquo;s {tag || "genre"} chart right now, refreshed on your
           schedule below.
-        </p>
-      </div>
-      <FlowScheduleFields
-        draft={draft}
-        inputClassName={inputClassName}
-        onDraftChange={onDraftChange}
-        onClearError={onClearError}
-        sizeLabel="Tracks"
-      />
-      {errorMessage ? <div className="flow-page__error-text">{errorMessage}</div> : null}
-    </div>
+        </>
+      }
+    />
   );
 }
 
 export function FlowFormFields({
   draft,
-  remaining,
   inputClassName = "flow-page__field-control",
   errorMessage,
   onDraftChange,
@@ -202,8 +193,7 @@ export function FlowFormFields({
     if (onClearError) onClearError();
   };
   const normalizedMix = normalizeMixPercent(draft?.mix);
-  const totalSize =
-    Number.isFinite(Number(remaining)) && Number(remaining) > 0 ? Math.round(Number(remaining)) : 0;
+  const totalSize = Math.max(0, Math.round(Number(draft?.size) || 0));
   const { focusEnabled, focusValidationError } = getFocusDraftValidation(
     draft,
     normalizeMixPercent,

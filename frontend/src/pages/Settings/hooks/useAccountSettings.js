@@ -4,7 +4,7 @@ import {
   getMyLidarrPreferences,
   updateMyListeningHistory,
   updateMyLidarrPreferences,
-} from "../../../utils/api";
+} from "../../../utils/api/endpoints/auth.js";
 
 export function useAccountSettings(authUser, showSuccess, showError) {
   const [listenHistoryProvider, setListenHistoryProvider] = useState("lastfm");

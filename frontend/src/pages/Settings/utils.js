@@ -95,7 +95,7 @@ export const normalizeSettings = (savedSettings) => {
         ...lastfm,
       },
       slskd: {
-        enabled: true,
+        enabled: false,
         url: "",
         apiKey: "",
         priority: 10,

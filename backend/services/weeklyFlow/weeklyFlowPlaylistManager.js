@@ -196,8 +196,6 @@ export class WeeklyFlowPlaylistManager {
         outputPath: artworkPath,
         title: artworkContext?.title || playlistName,
         kind: artworkContext?.kind || artworkKind,
-        signature: artworkContext?.signature || playlistType,
-        relatedArtists: artworkContext?.relatedArtists || [],
       });
     }
   }
@@ -630,23 +628,9 @@ export class WeeklyFlowPlaylistManager {
 
   getArtworkContextForPlaylistId(playlistId) {
     const flow = flowPlaylistConfig.getFlow(playlistId);
-    if (flow) {
-      return {
-        kind: "Flow",
-        title: flow.name,
-        signature: flow.discoverPresetId || flow.id || flow.name,
-        relatedArtists: Array.isArray(flow.relatedArtists) ? flow.relatedArtists : [],
-      };
-    }
+    if (flow) return { kind: "Flow", title: flow.name };
     const playlist = flowPlaylistConfig.getSharedPlaylist(playlistId);
-    if (playlist) {
-      return {
-        kind: "Playlist",
-        title: playlist.name,
-        signature: playlist.id || playlist.name,
-        relatedArtists: [],
-      };
-    }
+    if (playlist) return { kind: "Playlist", title: playlist.name };
     return null;
   }
 
@@ -756,9 +740,6 @@ export class WeeklyFlowPlaylistManager {
       outputPath: artworkPath,
       title: artworkContext?.title || resolved.playlistName,
       kind: artworkContext?.kind || this.getArtworkKindForPlaylistId(playlistId),
-      signature: artworkContext?.signature || playlistId,
-      relatedArtists: artworkContext?.relatedArtists || [],
-      rotateSourceImage: true,
     });
     await this._setArtworkGenerationSuppressed(resolved.safeRoot, resolved.baseName, false);
     return outputPath;

@@ -3,9 +3,7 @@ import createCache from "./apiClients/simpleCache.js";
 import { getTicketmasterApiKey } from "./apiClients/index.js";
 
 const ticketmasterEventCache = createCache(15 * 60);
-
 const ipLocationCache = createCache(30 * 60);
-
 const zipLocationCache = createCache(24 * 60 * 60);
 
 const DEFAULT_RADIUS_MILES = 250;
@@ -21,26 +19,14 @@ const normalizeArtistKey = (value) =>
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 
-const artistKeysForName = (value) => {
-  const normalized = normalizeArtistKey(value);
-  if (!normalized) return [];
-  const parts = normalized.split(" ").filter(Boolean);
-  const keys = new Set([normalized]);
-  if (parts.length > 1) {
-    keys.add(parts.join(" "));
-  }
-  return [...keys];
-};
-
 const findBestArtistMatch = (artistKey, artistMap) => {
-  if (!artistKey || !artistMap || artistMap.size === 0) return null;
+  if (!artistKey || !artistMap?.size) return null;
   if (artistMap.has(artistKey)) return artistMap.get(artistKey);
   const compactArtistKey = artistKey.replace(/\s+/g, "");
-  for (const [candidateKey, candidate] of artistMap.entries()) {
-    if (candidateKey === artistKey) return candidate;
+  if (compactArtistKey.length < 7) return null;
+  for (const [candidateKey, candidate] of artistMap) {
     const compactCandidateKey = candidateKey.replace(/\s+/g, "");
     if (
-      compactArtistKey.length >= 7 &&
       compactCandidateKey.length >= 7 &&
       (compactArtistKey.includes(compactCandidateKey) ||
         compactCandidateKey.includes(compactArtistKey))
@@ -78,16 +64,13 @@ const isPrivateIpAddress = (value) => {
   if (ip.includes(":")) {
     return ip === "::1" || ip.startsWith("fc") || ip.startsWith("fd");
   }
-  if (
+  return (
     ip === "127.0.0.1" ||
     ip === "0.0.0.0" ||
     ip.startsWith("10.") ||
     ip.startsWith("192.168.") ||
     /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)
-  ) {
-    return true;
-  }
-  return false;
+  );
 };
 
 const getForwardedIp = (req) => {
@@ -110,8 +93,7 @@ const buildLocationLabel = (location) =>
 
 const selectImage = (images = []) => {
   if (!Array.isArray(images) || images.length === 0) return null;
-  const preferredRatios = ["16_9", "3_2", "4_3"];
-  for (const ratio of preferredRatios) {
+  for (const ratio of ["16_9", "3_2", "4_3"]) {
     const match = images
       .filter((image) => image?.ratio === ratio && image?.url)
       .sort((a, b) => (b.width || 0) - (a.width || 0))[0];
@@ -122,12 +104,10 @@ const selectImage = (images = []) => {
 
 const parseVenueLocation = (event) => {
   const venue = event?._embedded?.venues?.[0] || {};
-  const city = venue.city?.name || venue.city || null;
-  const region = venue.state?.stateCode || venue.state?.name || venue.country?.countryCode || null;
   return {
     venueName: venue.name || null,
-    city,
-    region,
+    city: venue.city?.name || venue.city || null,
+    region: venue.state?.stateCode || venue.state?.name || venue.country?.countryCode || null,
     countryCode: venue.country?.countryCode || null,
     postalCode: venue.postalCode || null,
     latitude:
@@ -171,8 +151,8 @@ const buildDateRange = () => {
   const end = new Date(start);
   end.setDate(end.getDate() + 90);
   return {
-    startDateTime: start.toISOString().split(".")[0] + "Z",
-    endDateTime: end.toISOString().split(".")[0] + "Z",
+    startDateTime: `${start.toISOString().split(".")[0]}Z`,
+    endDateTime: `${end.toISOString().split(".")[0]}Z`,
   };
 };
 
@@ -306,9 +286,7 @@ const resolveIpLocation = async (ipAddress) => {
 
 const fetchTicketmasterEvents = async ({ location, radiusMiles }) => {
   const apiKey = getTicketmasterApiKey();
-  if (!apiKey) {
-    return [];
-  }
+  if (!apiKey) return [];
   const cacheKey = JSON.stringify({
     postalCode: location.postalCode || null,
     latitude: location.latitude || null,
@@ -317,20 +295,18 @@ const fetchTicketmasterEvents = async ({ location, radiusMiles }) => {
   });
   const cached = ticketmasterEventCache.get(cacheKey);
   if (cached) return cached;
-  const dateRange = buildDateRange();
-  const params = {
-    apikey: apiKey,
-    classificationName: "music",
-    size: MAX_EVENT_RESULTS,
-    locale: "*",
-    includeTBA: "no",
-    includeTBD: "no",
-    source: "ticketmaster",
-    ...dateRange,
-    ...getTicketmasterLocationParams(location, radiusMiles),
-  };
   const response = await axios.get(`${TICKETMASTER_BASE_URL}/events.json`, {
-    params,
+    params: {
+      apikey: apiKey,
+      classificationName: "music",
+      size: MAX_EVENT_RESULTS,
+      locale: "*",
+      includeTBA: "no",
+      includeTBD: "no",
+      source: "ticketmaster",
+      ...buildDateRange(),
+      ...getTicketmasterLocationParams(location, radiusMiles),
+    },
     timeout: 10000,
   });
   const events = response.data?._embedded?.events || [];
@@ -338,25 +314,20 @@ const fetchTicketmasterEvents = async ({ location, radiusMiles }) => {
   return events;
 };
 
-const buildShowRecord = (event, artist, matchType) => {
+const buildShowRecord = (event, artist) => {
   const venue = parseVenueLocation(event);
-  const eventImage = selectImage(event.images);
-  const localDate = event?.dates?.start?.localDate || null;
-  const localTime = event?.dates?.start?.localTime || null;
-  const dateTime = event?.dates?.start?.dateTime || null;
   return {
     id: event.id,
     artistName: artist.name,
-    matchType,
-    sourceType: artist.sourceType || matchType,
+    sourceType: artist.sourceType || "recommended",
     eventName: event.name || artist.name,
     ticketmasterAttractionId: artist.ticketmasterAttractionId || null,
     ticketmasterEventId: event.id || null,
-    image: eventImage || artist.image || null,
+    image: selectImage(event.images) || artist.image || null,
     url: event.url || artist.url || null,
-    date: localDate,
-    time: localTime,
-    dateTime,
+    date: event?.dates?.start?.localDate || null,
+    time: event?.dates?.start?.localTime || null,
+    dateTime: event?.dates?.start?.dateTime || null,
     venueName: venue.venueName,
     city: venue.city,
     region: venue.region,
@@ -366,6 +337,28 @@ const buildShowRecord = (event, artist, matchType) => {
     priceRange: Array.isArray(event.priceRanges) ? event.priceRanges[0] || null : null,
   };
 };
+
+const buildArtistMap = (artists, sourceType) => {
+  const map = new Map();
+  for (const artist of artists || []) {
+    const name = String(artist?.artistName || artist?.name || "").trim();
+    if (!name) continue;
+    const key = normalizeArtistKey(name);
+    if (!key || map.has(key)) continue;
+    map.set(key, { name, sourceType });
+  }
+  return map;
+};
+
+const sortShows = (shows) =>
+  shows.sort((a, b) => {
+    const aTime = a.dateTime || a.date || "";
+    const bTime = b.dateTime || b.date || "";
+    if (aTime !== bTime) return aTime.localeCompare(bTime);
+    const aDistance = Number.isFinite(a.distance) ? a.distance : Number.POSITIVE_INFINITY;
+    const bDistance = Number.isFinite(b.distance) ? b.distance : Number.POSITIVE_INFINITY;
+    return aDistance - bDistance;
+  });
 
 export const getNearbyShows = async ({
   req,
@@ -378,76 +371,29 @@ export const getNearbyShows = async ({
 }) => {
   const resolvedLimit = Math.max(1, Math.min(Number(limit) || DEFAULT_SHOW_LIMIT, MAX_SHOW_LIMIT));
   const sanitizedZipCode = sanitizeZipCode(zipCode);
-  const libraryArtistCount = Array.isArray(libraryArtists) ? libraryArtists.length : 0;
-  const libraryArtistMap = new Map();
-  const recommendedArtistMap = new Map();
-  const trendingArtistMap = new Map();
-
-  for (const artist of libraryArtists) {
-    const name = String(artist?.artistName || artist?.name || "").trim();
-    for (const key of artistKeysForName(name)) {
-      libraryArtistMap.set(key, {
-        name,
-        sourceType: "library",
-      });
-    }
-  }
-
-  for (const artist of recommendedArtists) {
-    const name = String(artist?.name || artist?.artistName || "").trim();
-    if (!name) continue;
-    for (const key of artistKeysForName(name)) {
-      if (!recommendedArtistMap.has(key)) {
-        recommendedArtistMap.set(key, {
-          name,
-          sourceType: "recommended",
-        });
-      }
-    }
-  }
-
-  for (const artist of trendingArtists) {
-    const name = String(artist?.name || artist?.artistName || "").trim();
-    if (!name) continue;
-    for (const key of artistKeysForName(name)) {
-      if (!trendingArtistMap.has(key)) {
-        trendingArtistMap.set(key, {
-          name,
-          sourceType: "trending",
-        });
-      }
-    }
-  }
+  const libraryArtistMap = buildArtistMap(libraryArtists, "library");
+  const recommendedArtistMap = buildArtistMap(recommendedArtists, "recommended");
+  const trendingArtistMap = buildArtistMap(trendingArtists, "trending");
 
   let location;
   if (sanitizedZipCode) {
-    const resolvedZipLocation = await resolveZipLocation(sanitizedZipCode);
-    location = resolvedZipLocation || {
-      source: "zip",
-      postalCode: sanitizedZipCode,
-      city: null,
-      region: null,
-      regionCode: null,
-      countryCode: isLikelyUsZip(sanitizedZipCode) ? "US" : null,
-      latitude: null,
-      longitude: null,
-      label: sanitizedZipCode,
-    };
+    location =
+      (await resolveZipLocation(sanitizedZipCode)) || {
+        source: "zip",
+        postalCode: sanitizedZipCode,
+        city: null,
+        region: null,
+        regionCode: null,
+        countryCode: isLikelyUsZip(sanitizedZipCode) ? "US" : null,
+        latitude: null,
+        longitude: null,
+        label: sanitizedZipCode,
+      };
   } else {
     location = await resolveIpLocation(getForwardedIp(req));
   }
 
-  let events = await fetchTicketmasterEvents({ location, radiusMiles });
-  if (events.length === 0 && sanitizedZipCode) {
-    const zipResolvedLocation = await resolveZipLocation(sanitizedZipCode);
-    if (zipResolvedLocation) {
-      location = {
-        ...zipResolvedLocation,
-        source: "zip",
-      };
-      events = await fetchTicketmasterEvents({ location, radiusMiles });
-    }
-  }
+  const events = await fetchTicketmasterEvents({ location, radiusMiles });
   const libraryShows = [];
   const recommendedShows = [];
   const seen = new Set();
@@ -457,55 +403,32 @@ export const getNearbyShows = async ({
     if (artists.length === 0) continue;
     for (const artist of artists) {
       const libraryMatch = findBestArtistMatch(artist.key, libraryArtistMap);
-      const recommendedMatch = findBestArtistMatch(artist.key, recommendedArtistMap);
-      const trendingMatch = findBestArtistMatch(artist.key, trendingArtistMap);
-      const match = libraryMatch || recommendedMatch || trendingMatch;
+      const match =
+        libraryMatch ||
+        findBestArtistMatch(artist.key, recommendedArtistMap) ||
+        findBestArtistMatch(artist.key, trendingArtistMap);
       if (!match) continue;
       const dedupeKey = `${event.id}:${artist.key}:${match.sourceType}`;
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
-      const show = buildShowRecord(
-        event,
-        {
-          ...artist,
-          name: match.name || artist.name,
-          sourceType: match.sourceType,
-        },
-        libraryMatch ? "library" : "recommended",
-      );
-      if (libraryMatch) {
-        libraryShows.push(show);
-      } else {
-        recommendedShows.push(show);
-      }
+      const show = buildShowRecord(event, {
+        ...artist,
+        name: match.name || artist.name,
+        sourceType: match.sourceType,
+      });
+      if (libraryMatch) libraryShows.push(show);
+      else recommendedShows.push(show);
     }
   }
-
-  const sortShows = (shows) =>
-    shows.sort((a, b) => {
-      const aTime = a.dateTime || a.date || "";
-      const bTime = b.dateTime || b.date || "";
-      if (aTime !== bTime) return aTime.localeCompare(bTime);
-      const aDistance = Number.isFinite(a.distance) ? a.distance : Number.POSITIVE_INFINITY;
-      const bDistance = Number.isFinite(b.distance) ? b.distance : Number.POSITIVE_INFINITY;
-      return aDistance - bDistance;
-    });
 
   sortShows(libraryShows);
   sortShows(recommendedShows);
 
-  const shows = [...libraryShows, ...recommendedShows].slice(0, resolvedLimit);
-
   return {
     location,
-    shows,
+    shows: [...libraryShows, ...recommendedShows].slice(0, resolvedLimit),
     libraryShows: libraryShows.slice(0, resolvedLimit),
     recommendedShows: recommendedShows.slice(0, resolvedLimit),
     total: libraryShows.length + recommendedShows.length,
-    counts: {
-      libraryArtists: libraryArtistCount,
-      matchedLibraryShows: libraryShows.length,
-      matchedRecommendedShows: recommendedShows.length,
-    },
   };
 };

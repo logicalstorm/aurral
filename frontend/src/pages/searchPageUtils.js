@@ -1,10 +1,6 @@
 export const PAGE_SIZE = 20;
 export const DEFAULT_ALBUM_SORT = "relevance";
-export const ALBUM_PENDING_STATUSES = new Set([
-  "searching",
-  "downloading",
-  "processing",
-]);
+export { ALBUM_PENDING_STATUSES } from "../utils/globalSearchUtils";
 export const LASTFM_TAG_BANNER_KEY = "aurral:lastfm-tag-results-banner-dismissed";
 export const ALBUM_SORT_OPTIONS = [
   { value: "relevance", label: "Relevance" },

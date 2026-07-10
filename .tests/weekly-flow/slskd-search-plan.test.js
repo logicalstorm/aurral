@@ -1,12 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { importFromRepo } from "../helpers/backendTestHarness.js";
-
-const {
+import {
   buildSlskdSearchTierGroups,
   hasSlskdSearchCandidates,
-} = await importFromRepo("backend/services/slskdOrchestrator.js");
+} from "../../backend/services/slskdOrchestrator.js";
 
 const fataTrack = {
   artistName: "From Autumn to Ashes",

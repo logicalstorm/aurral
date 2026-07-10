@@ -1,5 +1,3 @@
-import PropTypes from "prop-types";
-
 export function SettingsArrFieldSet({ legend, actions = null, children }) {
   return (
     <fieldset className="arr-fieldset">
@@ -11,12 +9,6 @@ export function SettingsArrFieldSet({ legend, actions = null, children }) {
     </fieldset>
   );
 }
-
-SettingsArrFieldSet.propTypes = {
-  actions: PropTypes.node,
-  children: PropTypes.node.isRequired,
-  legend: PropTypes.string.isRequired,
-};
 
 export function SettingsArrFormGroup({
   label,
@@ -41,22 +33,9 @@ export function SettingsArrFormGroup({
   );
 }
 
-SettingsArrFormGroup.propTypes = {
-  children: PropTypes.node.isRequired,
-  help: PropTypes.node,
-  helpWarning: PropTypes.bool,
-  label: PropTypes.string.isRequired,
-  labelFor: PropTypes.string,
-  size: PropTypes.oneOf(["small", "medium", "large"]),
-};
-
 export function SettingsArrCardGrid({ children }) {
   return <div className="arr-card-grid">{children}</div>;
 }
-
-SettingsArrCardGrid.propTypes = {
-  children: PropTypes.node.isRequired,
-};
 
 export function SettingsArrCard({ title, subtitle, meta, status, onClick }) {
   return (
@@ -72,14 +51,3 @@ export function SettingsArrCard({ title, subtitle, meta, status, onClick }) {
     </button>
   );
 }
-
-SettingsArrCard.propTypes = {
-  meta: PropTypes.string,
-  onClick: PropTypes.func.isRequired,
-  status: PropTypes.shape({
-    label: PropTypes.string.isRequired,
-    tone: PropTypes.oneOf(["ok", "muted", "warn", "danger"]).isRequired,
-  }),
-  subtitle: PropTypes.string,
-  title: PropTypes.string.isRequired,
-};

@@ -1,9 +1,9 @@
 ---
 title: Docker setup
-description: Run Aurral with Docker and complete onboarding.
+description: Run Aurral with Docker as a Lidarr companion.
 ---
 
-Aurral is Docker-first. A minimal install needs two mounts: app data at `/config` and your shared media tree at `/data`.
+Aurral is Docker-first. It needs two mounts: its own `/config`, and the **same media root Lidarr uses** (usually `/data`).
 
 ## Minimal compose file
 
@@ -22,7 +22,7 @@ services:
       - ./config:/config
 ```
 
-Change `/data:/data` to match your host media path. `./config` stores Aurral's database, settings, and encrypted integration secrets.
+Point `/data:/data` at the host path Lidarr already mounts. `./config` holds Aurral's database, settings, and encrypted secrets.
 
 ## Start Aurral
 
@@ -30,16 +30,16 @@ Change `/data:/data` to match your host media path. `./config` stores Aurral's d
 docker compose up -d
 ```
 
-Open `http://localhost:3001` and follow onboarding.
+Open `http://localhost:3001`, create your admin account, and connect Lidarr.
 
 ## What the mounts do
 
-| Mount            | Container path | Purpose                                        |
-| ---------------- | -------------- | ---------------------------------------------- |
-| Host media root  | `/data`        | Shared library, downloads, and generated flows |
-| Host config dir  | `/config`      | Aurral database, settings, users, and jobs     |
+| Mount             | Container path | Purpose                                        |
+| ----------------- | -------------- | ---------------------------------------------- |
+| Lidarr media root | `/data`        | Same path view as Lidarr (library + downloads) |
+| Host config dir   | `/config`      | Aurral database, settings, users, and jobs     |
 
-`DOWNLOAD_FOLDER` is set during onboarding or in **Settings → System**. It must live inside your shared media tree — the same mount shared across Aurral, Lidarr, and your download clients. When that mount is at `/data`, the typical path is `/data/downloads/aurral`.
+Set the downloads path in **Settings → Download Clients → Downloads Folder → Path** (for example `/data/downloads/aurral`). It must sit under the media mount.
 
 :::note
 `/config` replaces the older `/app/backend/data` path from Aurral v1. Existing databases in either location are detected automatically on startup.
@@ -47,8 +47,8 @@ Open `http://localhost:3001` and follow onboarding.
 
 ## Full stack
 
-For Lidarr, slskd, and Navidrome together, start from [`docker-compose.example.yml`](https://github.com/lklynet/aurral/blob/main/docker-compose.example.yml) in the repository.
+For Lidarr, slskd, and Navidrome together, start from [`docker-compose.example.yml`](https://github.com/lklynet/aurral/blob/main/docker-compose.example.yml).
 
-All services must share the same media mount. Read [Shared storage](/getting-started/storage/) for the recommended layout.
+Match Lidarr's media mount. Details and Servarr links: [Match Lidarr](/getting-started/storage/).
 
-Next: [Shared storage](/getting-started/storage/)
+Next: [Match Lidarr](/getting-started/storage/)

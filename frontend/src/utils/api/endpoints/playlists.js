@@ -41,25 +41,9 @@ export const generateFlowArtwork = (playlistId) =>
     `/playlists/artwork/${encodeURIComponent(playlistId)}/generate`,
   );
 
-export const getFlowStatus = async ({
-  includeJobs = false,
-  flowId,
-  jobsLimit,
-  signal,
-} = {}) => {
-  const params = {};
-  if (includeJobs) {
-    params.includeJobs = "1";
-  }
-  if (flowId) {
-    params.flowId = flowId;
-  }
-  if (jobsLimit != null) {
-    params.jobsLimit = jobsLimit;
-  }
-  const key = `flowStatus:${JSON.stringify(params)}`;
-  return fetchInflightOnce(flowStatusInflight, key, () =>
-    getData("/playlists/status", { params, signal }),
+export const getFlowStatus = async ({ signal } = {}) => {
+  return fetchInflightOnce(flowStatusInflight, "flowStatus", () =>
+    getData("/playlists/status", { signal }),
   );
 };
 

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
-import { FlowTracksPanel } from "./flows/flowComponents/flowTrackComponents.jsx";
 import {
   adoptDiscoverPlaylistAsFlow,
   adoptDiscoverPlaylistAsStatic,
+  getDiscoverArtworkUrl,
+} from "../utils/api/endpoints/discovery.js";
+import {
   addSharedPlaylistTracks,
   createSharedPlaylist,
-  getDiscoverArtworkUrl,
-} from "../utils/api";
+} from "../utils/api/endpoints/playlists.js";
 import { useSharedPlaylists } from "../hooks/useSharedPlaylists";
 import { useDiscoverData } from "./useDiscoverData";
 import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
@@ -16,6 +16,8 @@ import { extractTwoToneGradientFromImage } from "../utils/imageColors";
 import { reserveUniquePlaylistName } from "./ArtistDetails/utils";
 import { Crosshair } from "lucide-react";
 
+import { useParams } from "react-router-dom";
+import { FlowTracksPanel } from "./flows/flowComponents/flowTrackComponents.jsx";
 const getPlaylistTextColor = (hex) => {
   const raw = String(hex || "").trim();
   if (raw === "#ffffff" || raw === "#fffac8" || raw === "#ffe119" || raw === "#fabed4" || raw === "#dcbeff" || raw === "#aaffc3") return "#222";

@@ -1,20 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("discovery-flow-settings");
-applyIsolatedBackendEnv(isolatedState);
+const [isolatedState, { dbOps }, discoveryIndex] = await setupIsolatedBackend(
+  "discovery-flow-settings",
+  "backend/db/helpers/index.js",
+  "backend/services/discovery/index.js",
+);
 
-const { dbOps } = await importFromRepo("backend/db/helpers/index.js");
 const {
   getDiscoveryRecommendationsPerRefresh,
   isDiscoveryPersonalizedEnabled,
-} = await importFromRepo("backend/services/discovery/index.js");
+} = discoveryIndex;
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);

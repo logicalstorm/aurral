@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuth } from "../contexts/AuthContext";
-import { useToast } from "../contexts/ToastContext";
-import { addDiscoveryFeedback, getDiscoveryFeedback, removeDiscoveryFeedback } from "../utils/api";
+import { addDiscoveryFeedback, getDiscoveryFeedback, removeDiscoveryFeedback } from "../utils/api/endpoints/discovery.js";
 import {
   applyArtistDiscoveryFeedback,
   buildArtistFeedbackLookup,
@@ -10,6 +8,8 @@ import {
 } from "../utils/discoveryFeedback";
 import { buildArtistFeedbackPayload } from "../utils/artistTaste";
 
+import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
 export function useArtistTasteFeedback() {
   const { user } = useAuth();
   const { showSuccess, showError } = useToast();

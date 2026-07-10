@@ -1,4 +1,14 @@
 import { useEffect, useState } from "react";
+import {
+  startPlexAuth,
+  checkPlexAuth,
+  getPlexResources,
+  testPlexConnection,
+  syncPlexNow,
+} from "../../../utils/api/endpoints/settings.js";
+import { testNavidromeOnboarding } from "../../../utils/api/endpoints/auth.js";
+import { getConfiguredStatus } from "../utils/integrationStatus";
+
 import { CheckCircle, Folder, Plus, RefreshCw, Trash2, Wrench } from "lucide-react";
 import DownloadFolderPickerModal from "../../../components/DownloadFolderPickerModal";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
@@ -15,16 +25,6 @@ import {
   SettingsModalIntro,
   SettingsModalSection,
 } from "./SettingsModalLayout";
-import {
-  startPlexAuth,
-  checkPlexAuth,
-  getPlexResources,
-  testPlexConnection,
-  syncPlexNow,
-  testNavidromeOnboarding,
-} from "../../../utils/api";
-import { getConfiguredStatus } from "../utils/integrationStatus";
-
 function coerceNavidromePathMappings(value) {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => ({

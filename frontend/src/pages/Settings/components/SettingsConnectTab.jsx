@@ -1,4 +1,6 @@
 import { useState, useRef } from "react";
+import { testGotifyConnection } from "../../../utils/api/endpoints/settings.js";
+
 import { Plus, Trash2, GripVertical } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SettingsInput, SettingsTextarea } from "./SettingsField";
@@ -18,8 +20,6 @@ import {
 } from "./SettingsModalLayout";
 import PillToggle from "../../../components/PillToggle";
 import { getConfiguredStatus } from "../utils/integrationStatus";
-import { testGotifyConnection } from "../../../utils/api";
-
 export function SettingsConnectTab({
   settings,
   updateSettings,

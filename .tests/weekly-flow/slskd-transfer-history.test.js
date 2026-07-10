@@ -2,26 +2,23 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  createIsolatedStateDir,
-  applyIsolatedBackendEnv,
+  setupIsolatedBackend,
   cleanupIsolatedState,
-  importFromRepo,
   resetDatabase,
 } from "../helpers/backendTestHarness.js";
 
-const isolatedState = await createIsolatedStateDir("slskd-transfer-history");
-applyIsolatedBackendEnv(isolatedState);
-
 const [
+  isolatedState,
   {
     buildSlskdRankingHistoryOptions,
     recordSlskdTransferOutcome,
   },
   { db },
-] = await Promise.all([
-  importFromRepo("backend/services/slskdTransferHistory.js"),
-  importFromRepo("backend/config/db-sqlite.js"),
-]);
+] = await setupIsolatedBackend(
+  "slskd-transfer-history",
+  "backend/services/slskdTransferHistory.js",
+  "backend/config/db-sqlite.js",
+);
 
 test.beforeEach(() => {
   resetDatabase(db);

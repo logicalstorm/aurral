@@ -62,31 +62,6 @@ export function formatFlowLastRunShort(lastRunAt) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
-export const getNextFlowName = (flows, baseName = "Discover") => {
-  const normalizedBase = String(baseName || "").trim() || "Discover";
-  const existingNames = new Set(
-    (Array.isArray(flows) ? flows : [])
-      .map((flow) =>
-        String(flow?.name || "")
-          .trim()
-          .toLowerCase(),
-      )
-      .filter(Boolean),
-  );
-  if (!existingNames.has(normalizedBase.toLowerCase())) {
-    return normalizedBase;
-  }
-  let index = 2;
-  while (index < 10000) {
-    const candidate = `${normalizedBase} ${index}`;
-    if (!existingNames.has(candidate.toLowerCase())) {
-      return candidate;
-    }
-    index += 1;
-  }
-  return `${normalizedBase} ${Date.now()}`;
-};
-
 export const slugifyFilePart = (value, fallback = "flow") => {
   const slug = String(value || "")
     .trim()
@@ -123,6 +98,16 @@ export const reserveUniqueFlowName = (reservedNames, baseName) => {
   reservedNames.add(normalizeNameKey(fallback));
   return fallback;
 };
+
+export const getNextFlowName = (flows, baseName = "Discover") =>
+  reserveUniqueFlowName(
+    new Set(
+      (Array.isArray(flows) ? flows : [])
+        .map((flow) => normalizeNameKey(flow?.name))
+        .filter(Boolean),
+    ),
+    String(baseName || "").trim() || "Discover",
+  );
 
 export const normalizeDurationMs = (value) => {
   const numeric = Number(value);
@@ -338,22 +323,16 @@ const normalizeScheduleDraftForCompare = (draft) => ({
   scheduleTime: normalizeScheduleTime(draft?.scheduleTime),
 });
 
-export const isReleaseRadarFlowDirty = (flow, draft) => {
+export const isScheduleOnlyFlowDirty = (flow, draft) => {
   const base = normalizeScheduleDraftForCompare(flowToForm(flow));
   const next = normalizeScheduleDraftForCompare(draft);
   return JSON.stringify(base) !== JSON.stringify(next);
 };
 
-export const isEditorialFlowDirty = (flow, draft) => {
-  const base = normalizeScheduleDraftForCompare(flowToForm(flow));
-  const next = normalizeScheduleDraftForCompare(draft);
-  return JSON.stringify(base) !== JSON.stringify(next);
-};
-
-export const buildEditorialFlowFromForm = (flow, draft) => {
+export const buildScheduleOnlyFlowFromForm = (flow, draft, { sizeError, extra = {} } = {}) => {
   const sizeValue = Number(draft?.size);
   if (!Number.isFinite(sizeValue) || sizeValue <= 0) {
-    throw new Error("Tracks must be a positive number");
+    throw new Error(sizeError || "Tracks must be a positive number");
   }
   const scheduleDays = normalizeScheduleDays(draft?.scheduleDays);
   if (scheduleDays.length === 0) {
@@ -368,30 +347,20 @@ export const buildEditorialFlowFromForm = (flow, draft) => {
     deepDive: flow?.deepDive === true,
     scheduleDays,
     scheduleTime: normalizeScheduleTime(draft?.scheduleTime),
-    tag: flow?.tag || null,
+    ...extra,
   };
 };
 
-export const buildReleaseRadarFlowFromForm = (flow, draft) => {
-  const sizeValue = Number(draft?.size);
-  if (!Number.isFinite(sizeValue) || sizeValue <= 0) {
-    throw new Error("Max tracks must be a positive number");
-  }
-  const scheduleDays = normalizeScheduleDays(draft?.scheduleDays);
-  if (scheduleDays.length === 0) {
-    throw new Error("Select at least one day for this flow schedule");
-  }
-  return {
-    name: String(flow?.name ?? "").trim(),
-    size: Math.round(sizeValue),
-    mix: flow?.mix || DEFAULT_MIX,
-    tags: normalizeFlowEntryList(flow?.tags),
-    relatedArtists: normalizeFlowEntryList(flow?.relatedArtists),
-    deepDive: flow?.deepDive === true,
-    scheduleDays,
-    scheduleTime: normalizeScheduleTime(draft?.scheduleTime),
-  };
-};
+export const buildEditorialFlowFromForm = (flow, draft) =>
+  buildScheduleOnlyFlowFromForm(flow, draft, {
+    sizeError: "Tracks must be a positive number",
+    extra: { tag: flow?.tag || null },
+  });
+
+export const buildReleaseRadarFlowFromForm = (flow, draft) =>
+  buildScheduleOnlyFlowFromForm(flow, draft, {
+    sizeError: "Max tracks must be a positive number",
+  });
 
 export const normalizeSharedTrackEntry = (track) => {
   if (!track || typeof track !== "object" || Array.isArray(track)) return null;
@@ -403,10 +372,10 @@ export const normalizeSharedTrackEntry = (track) => {
   ).trim();
   if (!artistName || !trackName) return null;
   const albumName = String(track.albumName ?? track.album ?? track["Album Name"] ?? "").trim();
-  const artistMbid = String(track.artistMbid ?? track.artistId ?? track.mbid ?? "").trim();
+  const artistMbid = String(track.artistMbid ?? track.artistId ?? "").trim();
   const albumMbid = String(track.albumMbid ?? track.releaseGroupMbid ?? track.albumId ?? "").trim();
   const trackMbid = String(
-    track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? "",
+    track.trackMbid ?? track.recordingMbid ?? track.recordingId ?? track.mbid ?? "",
   ).trim();
   const releaseYear = String(track.releaseYear ?? track.year ?? "").trim();
   return {
@@ -419,15 +388,7 @@ export const normalizeSharedTrackEntry = (track) => {
     releaseYear: releaseYear || null,
     durationMs: normalizeDurationMs(track.durationMs),
     artistAliases: normalizeArtistAliases(track.artistAliases),
-  };
-};
-
-export const buildTrackForPlaylistModal = (track) => {
-  const normalized = normalizeSharedTrackEntry(track);
-  if (!normalized) return null;
-  return {
-    ...normalized,
-    reason: track?.reason ? String(track.reason).trim() : null,
+    reason: track.reason ? String(track.reason).trim() : null,
   };
 };
 

@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import { Loader, Pause, Play } from "lucide-react";
 import { getTrackPlayAccessibilityLabel, isLibraryPlaybackTrack } from "../utils";
 
@@ -25,11 +24,3 @@ export function TrackPlayButton({ track, isPlaying, isLoading, onClick, size = "
     </button>
   );
 }
-
-TrackPlayButton.propTypes = {
-  track: PropTypes.object.isRequired,
-  isPlaying: PropTypes.bool.isRequired,
-  isLoading: PropTypes.bool.isRequired,
-  onClick: PropTypes.func.isRequired,
-  size: PropTypes.oneOf(["default", "large"]),
-};

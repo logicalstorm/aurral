@@ -1,4 +1,3 @@
-import PropTypes from "prop-types";
 import ArtistImage from "./ArtistImage";
 import SearchLibraryCheck from "./SearchLibraryCheck";
 import { ArtistContextMenu } from "./ArtistContextMenu";
@@ -36,13 +35,6 @@ function TagRecommendedArtistCover({ artist, artistId, artistImages, isInLibrary
     </div>
   );
 }
-
-TagRecommendedArtistCover.propTypes = {
-  artist: PropTypes.object.isRequired,
-  artistId: PropTypes.string,
-  artistImages: PropTypes.object.isRequired,
-  isInLibrary: PropTypes.bool,
-};
 
 function SearchArtistResults({
   artists,
@@ -205,18 +197,5 @@ function SearchArtistResults({
     </div>
   );
 }
-
-SearchArtistResults.propTypes = {
-  artists: PropTypes.arrayOf(PropTypes.object).isRequired,
-  type: PropTypes.string,
-  artistImages: PropTypes.object.isRequired,
-  libraryLookup: PropTypes.object.isRequired,
-  navigate: PropTypes.func.isRequired,
-  canAddArtist: PropTypes.bool,
-  onAddArtistToLibrary: PropTypes.func,
-  onArtistFeedback: PropTypes.func,
-  artistFeedbackLookup: PropTypes.instanceOf(Map),
-  variant: PropTypes.oneOf(["square", "round"]),
-};
 
 export default SearchArtistResults;

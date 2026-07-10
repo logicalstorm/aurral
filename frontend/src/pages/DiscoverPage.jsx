@@ -1,4 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { readLibraryLookupCache, lookupArtistsInLibraryBatch } from "../utils/api/endpoints/library.js";
+import { getMyDiscoverLayout, updateMyDiscoverLayout } from "../utils/api/endpoints/auth.js";
+
 import { useDiscoverNavigation } from "../hooks/useDiscoverNavigation";
 import {
   Loader,
@@ -25,16 +28,12 @@ import {
   DEFAULT_DISCOVER_SECTIONS,
   getFallbackGenreSectionId,
   getFallbackGenreFromSectionId,
-  DISCOVER_NEARBY_MODE_KEY,
-  DISCOVER_NEARBY_ZIP_KEY,
   DISCOVER_PREVIEW_ITEM_LIMIT,
   normalizeDiscoverLayout,
   readStoredDiscoverLayout,
   writeStoredDiscoverLayout,
 } from "./discoverUtils";
 import { useDiscoverData } from "./useDiscoverData";
-import { readLibraryLookupCache, lookupArtistsInLibraryBatch, getMyDiscoverLayout, updateMyDiscoverLayout } from "../utils/api";
-
 const getArtistId = (artist) => getArtistRecordId(artist);
 
 function DiscoverPage() {
@@ -600,7 +599,9 @@ function DiscoverPage() {
             <h3 className="discover-recommended-status__heading">
               {isUpdating
                 ? "Building your recommendations"
-                : "Not enough listening data yet"}
+                : provider === "lastfm"
+                  ? "Not enough listening data yet"
+                  : "Connect Last.fm"}
             </h3>
             <p className="discover-recommended-status__message">
               {isUpdating
@@ -608,16 +609,27 @@ function DiscoverPage() {
                   "Scanning your library and Last.fm history. The first setup can take up to 10 minutes."
                 : provider === "lastfm"
                   ? "Add artists to your library or keep scrobbling on Last.fm. Recommendations improve as Aurral learns your taste."
-                  : "Add artists to your library or connect Last.fm in Settings to unlock personalized recommendations."}
-            </p>            {!isUpdating ? (
+                  : "Connect a Last.fm API key for personalized recommendations, related artists, and flows."}
+            </p>
+            {!isUpdating ? (
               <div className="discover-recommended-status__actions">
-                <button
-                  type="button"
-                  onClick={() => navigate("/search")}
-                  className="btn btn-primary btn--bold btn-min-h"
-                >
-                  Search Artists
-                </button>
+                {provider !== "lastfm" ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/settings/connect")}
+                    className="btn btn-primary btn--bold btn-min-h"
+                  >
+                    Connect Last.fm
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/search")}
+                    className="btn btn-primary btn--bold btn-min-h"
+                  >
+                    Search Artists
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => navigate("/library")}
@@ -641,26 +653,9 @@ function DiscoverPage() {
             locationMode={nearbyLocationMode}
             appliedZip={appliedNearbyZip}
             location={nearbyShowsData?.location}
-            onSelectYourLocation={() => {
-              setNearbyLocationMode("ip");
-              try {
-                localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "ip");
-              } catch {}
-            }}
-            onStartCustomLocation={() => {
-              setNearbyLocationMode("zip");
-              try {
-                localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "zip");
-              } catch {}
-            }}
-            onApplyZip={(sanitized) => {
-              setAppliedNearbyZip(sanitized);
-              setNearbyLocationMode("zip");
-              try {
-                localStorage.setItem(DISCOVER_NEARBY_MODE_KEY, "zip");
-                localStorage.setItem(DISCOVER_NEARBY_ZIP_KEY, sanitized);
-              } catch {}
-            }}
+            onSelectYourLocation={() => setNearbyLocationMode("ip")}
+            onStartCustomLocation={() => setNearbyLocationMode("zip")}
+            onApplyZip={setAppliedNearbyZip}
           />
         ) : null;
       if (nearbyShowsData?.configured === false) {
@@ -735,7 +730,7 @@ function DiscoverPage() {
             <>
               {nearbyShows.slice(0, DISCOVER_PREVIEW_ITEM_LIMIT).map((show) => (
                 <div
-                  key={`${show.id}-${show.artistName}-${show.sourceType || show.matchType || "show"}`}
+                  key={`${show.id}-${show.artistName}-${show.sourceType || "show"}`}
                   className="artist-discover-show-rail-card"
                 >
                   <ShowCard show={show} />
@@ -903,8 +898,8 @@ function DiscoverPage() {
             <span>Configure Last.fm (API key and username) in Settings</span>
           </li>
         </ul>
-        <button onClick={() => navigate("/settings")} className="btn btn-primary">
-          Go to Settings
+        <button onClick={() => navigate("/settings/connect")} className="btn btn-primary">
+          Connect Last.fm
         </button>
       </div>
     );
@@ -921,8 +916,10 @@ function DiscoverPage() {
                 <h1 className="page-title">Discover</h1>
                 <DiscoveryStatusPill
                   isUpdating={isUpdating}
+                  playlistsUpdating={playlistsUpdating}
                   lastUpdated={lastUpdated}
                   updateProgressMessage={updateProgressMessage}
+                  playlistsUpdateMessage={playlistsUpdateMessage}
                 />
               </div>
               <p className="artist-discover-hero__description">
