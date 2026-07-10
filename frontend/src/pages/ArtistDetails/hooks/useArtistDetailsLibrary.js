@@ -14,10 +14,7 @@ import {
   lookupArtistInLibrary,
   getMyLidarrPreferences,
 } from "../../../utils/api";
-import {
-  deduplicateAlbums,
-  isVisibleLibraryAlbum,
-} from "../utils";
+import { deduplicateAlbums } from "../utils";
 import { useWebSocketChannel } from "../../../hooks/useWebSocket";
 
 const DELETE_FILES_PREFERENCE_KEY = "aurral:library-delete-files";
