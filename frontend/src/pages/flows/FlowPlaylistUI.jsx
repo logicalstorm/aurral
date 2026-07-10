@@ -1,5 +1,3 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   ArrowRight,
   Clock,
@@ -9,20 +7,14 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
+import { useState } from "react";
 import PillToggle from "../../components/PillToggle";
-import { PlaylistArtworkThumb } from "./flowComponents/flowRemainingComponents.jsx";
+import { PlaylistArtworkThumb } from "./flowComponents/PlaylistArtworkThumb.jsx";
 import {
   formatTrackCountLabel,
   getFlowDisplayTrackCount,
   getSharedPlaylistTrackCount,
 } from "./flowStats";
-
-const MAIN_CONTENT_PORTAL_SELECTOR = ".app-main-wrap";
-const LIBRARY_CREATE_MENU_WIDTH = 296;
-const LIBRARY_CREATE_MENU_GAP = 10;
-
-const getMainContentPortalRoot = () =>
-  typeof document === "undefined" ? null : document.querySelector(MAIN_CONTENT_PORTAL_SELECTOR);
 
 export function LibrarySidebarToggleIcon({ collapsed = false }) {
   return (
@@ -71,171 +63,13 @@ export function FlowLibraryCreateMenu({
   compact = false,
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [menuPosition, setMenuPosition] = useState(null);
-  const buttonRef = useRef(null);
-  const menuRef = useRef(null);
-
-  const updateMenuPosition = useCallback(() => {
-    const button = buttonRef.current;
-    const portalRoot = getMainContentPortalRoot();
-    if (!button || !portalRoot) return;
-    const wrapRect = portalRoot.getBoundingClientRect();
-    const rect = button.getBoundingClientRect();
-    const menuWidth = menuRef.current?.offsetWidth || LIBRARY_CREATE_MENU_WIDTH;
-    const inset = 12;
-    const maxLeft = Math.max(wrapRect.width - menuWidth - inset, inset);
-    const left = Math.min(Math.max(rect.right - wrapRect.left - menuWidth, inset), maxLeft);
-    const top = rect.bottom - wrapRect.top + LIBRARY_CREATE_MENU_GAP;
-    setMenuPosition((prev) => {
-      if (prev && prev.top === top && prev.left === left) {
-        return prev;
-      }
-      return { top, left };
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen || typeof document === "undefined") return undefined;
-    const handleClickOutside = (event) => {
-      if (buttonRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) {
-        return;
-      }
-      setIsOpen(false);
-    };
-    const handleEscape = (event) => {
-      if (event.key === "Escape") {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("pointerdown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setMenuPosition(null);
-      return;
-    }
-    updateMenuPosition();
-    const scrollRoot = document.querySelector(".app-main");
-    window.addEventListener("resize", updateMenuPosition);
-    scrollRoot?.addEventListener("scroll", updateMenuPosition, { passive: true });
-    window.addEventListener("scroll", updateMenuPosition, true);
-    return () => {
-      window.removeEventListener("resize", updateMenuPosition);
-      scrollRoot?.removeEventListener("scroll", updateMenuPosition);
-      window.removeEventListener("scroll", updateMenuPosition, true);
-    };
-  }, [isOpen, updateMenuPosition]);
-
-  useLayoutEffect(() => {
-    if (!isOpen) return;
-    updateMenuPosition();
-  }, [isOpen, updateMenuPosition]);
-
   const close = () => setIsOpen(false);
-  const portalRoot = isOpen ? getMainContentPortalRoot() : null;
-
-  const menu = (
-    <div
-      ref={menuRef}
-      className="flow-page__library-create-menu flow-page__library-create-menu--portaled"
-      style={menuPosition ? { top: menuPosition.top, left: menuPosition.left } : undefined}
-      role="menu"
-      aria-label="Create and import"
-    >
-      <p className="flow-page__library-create-menu-label">Create</p>
-      <div className="flow-page__library-create-primary">
-        <button
-          type="button"
-          role="menuitem"
-          className="flow-page__library-create-action flow-page__library-create-action--playlist"
-          disabled={creatingPlaylist}
-          onClick={() => {
-            onNewPlaylist?.();
-            close();
-          }}
-        >
-          <span className="flow-page__library-create-action-icon" aria-hidden="true">
-            <ListMusic className="flow-page__library-create-action-glyph" />
-          </span>
-          <span className="flow-page__library-create-action-copy">
-            <span className="flow-page__library-create-action-title">
-              {creatingPlaylist ? "Creating playlist..." : "New playlist"}
-            </span>
-            <span className="flow-page__library-create-action-desc">
-              Curate and play your own track list
-            </span>
-          </span>
-        </button>
-        {canCreateFlow ? (
-          <button
-            type="button"
-            role="menuitem"
-            className="flow-page__library-create-action flow-page__library-create-action--flow"
-            disabled={creatingFlow}
-            onClick={() => {
-              onNewFlow?.();
-              close();
-            }}
-          >
-            <span
-              className="flow-page__library-create-action-icon flow-page__library-create-action-icon--flow"
-              aria-hidden="true"
-            >
-              <Sparkles className="flow-page__library-create-action-glyph" />
-            </span>
-            <span className="flow-page__library-create-action-copy">
-              <span className="flow-page__library-create-action-title">
-                {creatingFlow ? "Creating flow..." : "New flow"}
-              </span>
-              <span className="flow-page__library-create-action-desc">
-                Auto-updating playlist from your recipe
-              </span>
-            </span>
-          </button>
-        ) : null}
-      </div>
-      <p className="flow-page__library-create-menu-label flow-page__library-create-menu-label--import">
-        Import
-      </p>
-      <div className="flow-page__library-create-primary">
-        <button
-          type="button"
-          role="menuitem"
-          className="flow-page__library-create-action flow-page__library-create-action--import"
-          onClick={() => {
-            onImport?.();
-            close();
-          }}
-        >
-          <span
-            className="flow-page__library-create-action-icon flow-page__library-create-action-icon--import"
-            aria-hidden="true"
-          >
-            <Upload className="flow-page__library-create-action-glyph" />
-          </span>
-          <span className="flow-page__library-create-action-copy">
-            <span className="flow-page__library-create-action-title">Import playlist</span>
-            <span className="flow-page__library-create-action-desc">
-              From Spotify or a JSON export
-            </span>
-          </span>
-        </button>
-      </div>
-    </div>
-  );
 
   return (
     <div
       className={`flow-page__library-create${compact ? " is-compact" : ""}${isOpen ? " is-open" : ""}`}
     >
       <button
-        ref={buttonRef}
         type="button"
         className="flow-page__library-create-btn"
         onClick={() => setIsOpen((prev) => !prev)}
@@ -253,7 +87,87 @@ export function FlowLibraryCreateMenu({
             onClick={close}
             aria-label="Close menu"
           />
-          {portalRoot && menuPosition ? createPortal(menu, portalRoot) : null}
+          <div className="flow-page__library-create-menu" role="menu" aria-label="Create and import">
+            <p className="flow-page__library-create-menu-label">Create</p>
+            <div className="flow-page__library-create-primary">
+              <button
+                type="button"
+                role="menuitem"
+                className="flow-page__library-create-action flow-page__library-create-action--playlist"
+                disabled={creatingPlaylist}
+                onClick={() => {
+                  onNewPlaylist?.();
+                  close();
+                }}
+              >
+                <span className="flow-page__library-create-action-icon" aria-hidden="true">
+                  <ListMusic className="flow-page__library-create-action-glyph" />
+                </span>
+                <span className="flow-page__library-create-action-copy">
+                  <span className="flow-page__library-create-action-title">
+                    {creatingPlaylist ? "Creating playlist..." : "New playlist"}
+                  </span>
+                  <span className="flow-page__library-create-action-desc">
+                    Curate and play your own track list
+                  </span>
+                </span>
+              </button>
+              {canCreateFlow ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flow-page__library-create-action flow-page__library-create-action--flow"
+                  disabled={creatingFlow}
+                  onClick={() => {
+                    onNewFlow?.();
+                    close();
+                  }}
+                >
+                  <span
+                    className="flow-page__library-create-action-icon flow-page__library-create-action-icon--flow"
+                    aria-hidden="true"
+                  >
+                    <Sparkles className="flow-page__library-create-action-glyph" />
+                  </span>
+                  <span className="flow-page__library-create-action-copy">
+                    <span className="flow-page__library-create-action-title">
+                      {creatingFlow ? "Creating flow..." : "New flow"}
+                    </span>
+                    <span className="flow-page__library-create-action-desc">
+                      Auto-updating playlist from your recipe
+                    </span>
+                  </span>
+                </button>
+              ) : null}
+            </div>
+            <p className="flow-page__library-create-menu-label flow-page__library-create-menu-label--import">
+              Import
+            </p>
+            <div className="flow-page__library-create-primary">
+              <button
+                type="button"
+                role="menuitem"
+                className="flow-page__library-create-action flow-page__library-create-action--import"
+                onClick={() => {
+                  onImport?.();
+                  close();
+                }}
+              >
+                <span
+                  className="flow-page__library-create-action-icon flow-page__library-create-action-icon--import"
+                  aria-hidden="true"
+                >
+                  <Upload className="flow-page__library-create-action-glyph" />
+                </span>
+                <span className="flow-page__library-create-action-copy">
+                  <span className="flow-page__library-create-action-title">Import playlist</span>
+                  <span className="flow-page__library-create-action-desc">
+                    From Spotify or a JSON export
+                  </span>
+                </span>
+              </button>
+            </div>
+          </div>
         </>
       ) : null}
     </div>
@@ -398,7 +312,6 @@ export function PlaylistDetailHero({
   onToggleEnabled,
   onRenameTitle,
   onArtworkClick,
-  primaryActions,
   moreMenu,
 }) {
   const isFlow = entry.kind === "flow";
@@ -440,7 +353,6 @@ export function PlaylistDetailHero({
           </div>
         </div>
         <div className="flow-page__detail-hero-actions">
-          {primaryActions}
           {isFlow ? (
             <div className="flow-page__toggle-wrap" data-no-card-toggle="true">
               <PillToggle

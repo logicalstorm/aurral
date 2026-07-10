@@ -2,6 +2,7 @@ import { downloadTracker } from "../../../services/weeklyFlow/weeklyFlowDownload
 import { weeklyFlowWorker } from "../../../services/weeklyFlow/weeklyFlowWorker.js";
 import { playlistManager } from "../../../services/weeklyFlow/weeklyFlowPlaylistManager.js";
 import {
+  DEFAULT_SIZE,
   flowPlaylistConfig,
 } from "../../../services/weeklyFlow/weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "../../../services/weeklyFlow/weeklyFlowOperationQueue.js";
@@ -10,7 +11,7 @@ import {
   markLatestWeeklyFlowOperationToken,
 } from "../../../services/weeklyFlow/weeklyFlowOperations.js";
 import {
-  restartWorkerIfPending as restartWorkerIfPendingWithLocks,
+  restartWorkerIfPending,
   withPlaylistMutation,
 } from "../../../services/weeklyFlow/weeklyFlowMutationGuards.js";
 import {
@@ -28,10 +29,7 @@ export const AUDIO_CONTENT_TYPES = {
   ".ogg": "audio/ogg",
   ".wav": "audio/wav",
 };
-export const DEFAULT_LIMIT = 30;
-export const QUEUE_LIMIT = 50;
-export const SLSKD_NOT_CONFIGURED_MESSAGE =
-  "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";
+export const DEFAULT_LIMIT = DEFAULT_SIZE;
 
 const getFlowEntryName = (value) => {
   if (typeof value === "string" || typeof value === "number") {
@@ -80,7 +78,6 @@ export const normalizeFlowStringArray = (value) => {
 export const validateFlowPayload = ({
   name,
   mix,
-  recipe,
   size,
   tags,
   relatedArtists,
@@ -93,7 +90,7 @@ export const validateFlowPayload = ({
   if (!Number.isFinite(parsedSize) || parsedSize <= 0) {
     return "size must be a positive number";
   }
-  const normalizedMix = normalizeFlowMixForValidation(mix, recipe);
+  const normalizedMix = normalizeFlowMixForValidation(mix);
   const totalWeight = Object.values(normalizedMix).reduce((sum, value) => sum + value, 0);
   if (totalWeight <= 0) {
     return "at least one source must be enabled";
@@ -117,8 +114,6 @@ export const markFlowMutationToken = (flowId) => {
   markLatestWeeklyFlowOperationToken(tokenScope, token);
   return { token, tokenScope };
 };
-
-export const restartWorkerIfPending = restartWorkerIfPendingWithLocks;
 
 export const pauseSharedPlaylistRetryCycle = async (playlistId) => {
   weeklyFlowWorker.setRetryCyclePaused(playlistId, true);
@@ -162,38 +157,49 @@ export const filterJobsForUser = (user, jobs) =>
     canAccessPlaylistType(user, job?.playlistType),
   );
 
-export const queueFlowEnableRefresh = (flowId) => {
+export const queueFlowSideEffect = (kind, labelPrefix, flowId) => {
   const { token, tokenScope } = markFlowMutationToken(flowId);
   weeklyFlowOperationQueue
-    .enqueuePayload(
-      {
-        kind: "enable-flow-refresh",
-        label: `enable:${flowId}`,
-        flowId,
-        tokenScope,
-        token,
-      },
-      { waitForCompletion: false },
-    )
+    .enqueuePayload({
+      kind,
+      label: `${labelPrefix}:${flowId}`,
+      flowId,
+      tokenScope,
+      token,
+    })
     .catch((error) => {
-      logger.error("weeklyFlow", `Failed to generate tracks for ${flowId}:`, { message: error.message });
+      logger.error("weeklyFlow", `Failed to ${labelPrefix} flow ${flowId}:`, { message: error.message });
     });
 };
 
-export const queueFlowDisableCleanup = (flowId) => {
-  const { token, tokenScope } = markFlowMutationToken(flowId);
-  weeklyFlowOperationQueue
-    .enqueuePayload(
-      {
-        kind: "disable-flow-cleanup",
-        label: `disable:${flowId}`,
-        flowId,
-        tokenScope,
-        token,
-      },
-      { waitForCompletion: false },
-    )
-    .catch((error) => {
-      logger.error("weeklyFlow", `Failed to disable flow cleanup for ${flowId}:`, { message: error.message });
+export const enqueueResearchTrack = async (req, res, playlistId, jobId, labelPrefix) => {
+  if (!canAccessPlaylistType(req.user, playlistId)) {
+    return res.status(404).json({ error: "Playlist not found" });
+  }
+
+  const job = downloadTracker.getJob(jobId);
+  if (!job || job.playlistType !== playlistId) {
+    return res.status(404).json({ error: "Track not found" });
+  }
+
+  if (job.status === "pending" || job.status === "downloading") {
+    return res.status(409).json({
+      error: "Track is already being processed",
     });
+  }
+
+  const result = await weeklyFlowOperationQueue.enqueuePayload({
+    kind: "shared-playlist-research-track",
+    label: `${labelPrefix}:${playlistId}:track:${jobId}:research`,
+    playlistId,
+    jobId,
+  });
+
+  return res.json({
+    success: true,
+    jobId,
+    playlistId,
+    queued: true,
+    operationId: result.operationId,
+  });
 };

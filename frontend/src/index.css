@@ -7569,14 +7569,6 @@ textarea {
   border-radius: var(--aurral-radius-sm);
 }
 
-.flow-page__library-create-menu--portaled {
-  top: 0;
-  right: auto;
-  z-index: 50;
-  width: min(18.5rem, calc(100vw - 1.5rem));
-  max-width: calc(100% - 1.5rem);
-}
-
 .flow-page__library-create-menu-label {
   margin: 0 0 0.5rem;
   padding-inline: 0.25rem;

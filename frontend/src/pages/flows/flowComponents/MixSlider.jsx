@@ -29,17 +29,8 @@ export const WEEKDAY_OPTIONS = [
   { id: 6, short: "S", full: "Saturday" },
 ];
 
-export const FLOW_WORKER_CONCURRENCY_OPTIONS = [1, 2, 3];
 const FLOW_FOCUS_SUGGESTION_DEBOUNCE_MS = 250;
 const FLOW_FOCUS_SUGGESTION_LIMIT = 8;
-export const FLOW_WORKER_RETRY_CYCLE_OPTIONS = [
-  { minutes: 15, label: "15 min" },
-  { minutes: 30, label: "30 min" },
-  { minutes: 60, label: "1 hour" },
-  { minutes: 360, label: "6 hours" },
-  { minutes: 720, label: "12 hours" },
-  { minutes: 1440, label: "1 day" },
-];
 export const SCHEDULE_HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => {
   const normalized = `${String(hour).padStart(2, "0")}:00`;
   const suffix = hour >= 12 ? "PM" : "AM";
@@ -378,7 +369,6 @@ export function getFocusDraftValidation(draft, normalizeMixPercent) {
     getCommaTokenInputState(draft?.includeRelatedArtists, { commitAll: true }).committed.length > 0;
   return {
     focusEnabled,
-    hasFocusFilters,
     focusValidationError:
       focusEnabled && !hasFocusFilters
         ? "Focus needs at least one genre tag or related artist."

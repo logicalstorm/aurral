@@ -19,16 +19,13 @@ export async function runScheduledRefresh() {
       const token = createWeeklyFlowOperationToken();
       const tokenScope = `flow:${flow.id}:scheduled`;
       markLatestWeeklyFlowOperationToken(tokenScope, token);
-      await weeklyFlowOperationQueue.enqueuePayload(
-        {
-          kind: "scheduled-flow-refresh",
-          label: `scheduled:${flow.id}`,
-          flowId: flow.id,
-          tokenScope,
-          token,
-        },
-        { waitForCompletion: false },
-      );
+      await weeklyFlowOperationQueue.enqueuePayload({
+        kind: "scheduled-flow-refresh",
+        label: `scheduled:${flow.id}`,
+        flowId: flow.id,
+        tokenScope,
+        token,
+      });
     } catch (error) {
       console.error(`[WeeklyFlowScheduler] Failed to refresh ${flow.id}:`, error.message);
     }

@@ -18,7 +18,25 @@ import { Link } from "react-router-dom";
 import { useAudioQueue } from "../../../hooks/useAudioQueue";
 import { normalizeFlowTrack } from "../../../utils/audioQueue";
 import { TrackPlaylistMenu, TrackPlaylistSubmenu } from "../../ArtistDetails/components/TrackPlaylistMenu";
-import { getTrackStatusMeta } from "./MoreMenu";
+
+function getTrackStatusMeta(status) {
+  switch (String(status || "").toLowerCase()) {
+    case "done":
+      return { label: "Downloaded", className: "flow-page__track-status-dot--done" };
+    case "downloading":
+      return {
+        label: "Downloading",
+        className: "flow-page__track-status-dot--downloading",
+      };
+    case "failed":
+      return { label: "Failed", className: "flow-page__track-status-dot--failed" };
+    case "blocked":
+      return { label: "Review", className: "flow-page__track-status-dot--blocked" };
+    case "pending":
+    default:
+      return { label: "Queued", className: "flow-page__track-status-dot--pending" };
+  }
+}
 
 function BulkPlaylistAction({
   icon: Icon,
@@ -391,7 +409,6 @@ export function FlowTracksPanel({
   error,
   activityHint = null,
   emptyMessage = "No tracks generated for this flow yet.",
-  headerActions = null,
   deletingTrackId = null,
   reSearchingTrackIds = {},
   useTrackContextMenu = false,
@@ -546,7 +563,7 @@ export function FlowTracksPanel({
 
   return (
     <div className="flow-page__tracks">
-      {showPlaybackControls || headerActions || allowBulkEdit ? (
+      {showPlaybackControls || allowBulkEdit ? (
         <div className="flow-page__tracks-toolbar">
           {showPlaybackControls ? (
             <div className="flow-page__tracks-toolbar-start">
@@ -574,10 +591,6 @@ export function FlowTracksPanel({
               >
                 <Shuffle className="artist-icon-md" />
               </button>
-            </div>
-          ) : headerActions && !editMode ? (
-            <div className="flow-page__tracks-toolbar-start flow-page__tracks-toolbar-start--full">
-              {headerActions}
             </div>
           ) : null}
           <div className="flow-page__tracks-toolbar-actions">
@@ -956,47 +969,4 @@ export function FlowTracksPanel({
     </div>
   );
 }
-
-export const getFlowEmptyCopy = (libraryFilter, canCreate) => {
-  if (libraryFilter === "playlists") {
-    return {
-      title: "No playlists yet",
-      message:
-        "Create a playlist to curate tracks, or import one from Aurral Convert or a JSON export.",
-      showPlaylistAction: true,
-      showFlowAction: false,
-      showImportAction: true,
-    };
-  }
-  if (libraryFilter === "flows") {
-    if (!canCreate) {
-      return {
-        title: "Flows need listening history",
-        message:
-          "Connect Last.fm in Settings to create flows that generate tracks from your taste.",
-        showPlaylistAction: false,
-        showFlowAction: false,
-        showImportAction: false,
-        showSettingsAction: true,
-      };
-    }
-    return {
-      title: "No flows yet",
-      message:
-        "Flows are auto-updating playlists built from recipes like Release Radar or your top artists.",
-      showPlaylistAction: false,
-      showFlowAction: true,
-      showImportAction: false,
-    };
-  }
-  return {
-    title: "Start your playlist library",
-    message:
-      "Import a playlist, build your own track list, or create a flow that updates automatically from your taste.",
-    showPlaylistAction: true,
-    showFlowAction: canCreate,
-    showImportAction: true,
-  };
-};
-
 

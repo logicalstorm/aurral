@@ -111,10 +111,3 @@ export function getPlaylistRunActivity({
 
   return null;
 }
-
-export function getFlowRunActivity(options = {}) {
-  return getPlaylistRunActivity({
-    ...options,
-    playlistId: options.flowId || options.playlistId,
-  });
-}

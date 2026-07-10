@@ -6,56 +6,64 @@ import {
 } from "../../../services/weeklyFlow/weeklyFlowPlaylistConfig.js";
 import { weeklyFlowOperationQueue } from "../../../services/weeklyFlow/weeklyFlowOperationQueue.js";
 import {
+  enqueueResearchTrack,
   getAccessibleSharedPlaylist,
 } from "./utils.js";
 import { normalizeImportSource } from "../../../services/weeklyFlow/weeklyFlowPlaylistConfig.js";
 
-const normalizeImportedTrackList = (value) => {
-  if (!Array.isArray(value)) return [];
-  return dedupeSharedTracks(value);
-};
+async function createOrImportSharedPlaylist(req, res, { requireTracks, label }) {
+  const {
+    name,
+    sourceName = null,
+    sourceFlowId = null,
+    tracks,
+  } = req.body || {};
+  const safeName = String(name || "").trim();
+  const normalizedTracks = Array.isArray(tracks) ? dedupeSharedTracks(tracks) : [];
+  const rawTracksProvided = Array.isArray(tracks);
+
+  if (!safeName) {
+    return res.status(400).json({ error: "name is required" });
+  }
+  if (requireTracks && normalizedTracks.length === 0) {
+    return res.status(400).json({
+      error: "tracks are required",
+      message: "Import file must include at least one track",
+    });
+  }
+  if (rawTracksProvided && tracks.length > 0 && normalizedTracks.length === 0) {
+    return res.status(400).json({
+      error: "tracks are invalid",
+      message: "Add at least one valid track",
+    });
+  }
+
+  const playlistId = randomUUID();
+  const result = await weeklyFlowOperationQueue.enqueuePayload({
+    kind: "shared-playlist-create",
+    label,
+    playlistId,
+    name: safeName,
+    sourceName,
+    sourceFlowId,
+    tracks: normalizedTracks,
+    ownerUserId: req.user.id,
+  });
+
+  return res.json({
+    success: true,
+    playlistId,
+    queued: true,
+    operationId: result.operationId,
+  });
+}
 
 export function registerSharedPlaylists(router) {
   router.post("/shared-playlists", async (req, res) => {
     try {
-      const {
-        name,
-        sourceName = null,
-        sourceFlowId = null,
-        tracks,
-      } = req.body || {};
-      const safeName = String(name || "").trim();
-      const normalizedTracks = normalizeImportedTrackList(tracks);
-      const rawTracksProvided = Array.isArray(tracks);
-
-      if (!safeName) {
-        return res.status(400).json({ error: "name is required" });
-      }
-      if (rawTracksProvided && tracks.length > 0 && normalizedTracks.length === 0) {
-        return res.status(400).json({
-          error: "tracks are invalid",
-          message: "Add at least one valid track",
-        });
-      }
-
-      const result = await weeklyFlowOperationQueue.enqueuePayload({
-        kind: "shared-playlist-create",
+      return await createOrImportSharedPlaylist(req, res, {
+        requireTracks: false,
         label: "shared-playlist:create",
-        playlistId: randomUUID(),
-        name: safeName,
-        sourceName,
-        sourceFlowId,
-        tracks: normalizedTracks,
-        ownerUserId: req.user.id,
-      });
-
-      res.json({
-        success: true,
-        playlist: result?.playlist || null,
-        tracksQueued: Number(result?.tracksQueued || 0),
-        tracksReused: Number(result?.tracksReused || 0),
-        jobIds: result?.jobIds || [],
-        queued: result?.queued === true,
       });
     } catch (error) {
       if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
@@ -73,42 +81,9 @@ export function registerSharedPlaylists(router) {
 
   router.post("/shared-playlists/import", async (req, res) => {
     try {
-      const {
-        name,
-        sourceName = null,
-        sourceFlowId = null,
-        tracks,
-      } = req.body || {};
-      const safeName = String(name || "").trim();
-      const normalizedTracks = normalizeImportedTrackList(tracks);
-
-      if (!safeName) {
-        return res.status(400).json({ error: "name is required" });
-      }
-      if (normalizedTracks.length === 0) {
-        return res.status(400).json({
-          error: "tracks are required",
-          message: "Import file must include at least one track",
-        });
-      }
-      const result = await weeklyFlowOperationQueue.enqueuePayload({
-        kind: "shared-playlist-create",
+      return await createOrImportSharedPlaylist(req, res, {
+        requireTracks: true,
         label: "shared-playlist:import",
-        playlistId: randomUUID(),
-        name: safeName,
-        sourceName,
-        sourceFlowId,
-        tracks: normalizedTracks,
-        ownerUserId: req.user.id,
-      });
-
-      res.json({
-        success: true,
-        playlist: result?.playlist || null,
-        tracksQueued: Number(result?.tracksQueued || 0),
-        tracksReused: Number(result?.tracksReused || 0),
-        jobIds: result?.jobIds || [],
-        queued: result?.queued === true,
       });
     } catch (error) {
       if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
@@ -132,7 +107,7 @@ export function registerSharedPlaylists(router) {
         return res.status(404).json({ error: "Shared playlist not found" });
       }
       const rawTracks = req.body?.tracks;
-      const normalizedTracks = normalizeImportedTrackList(rawTracks);
+      const normalizedTracks = Array.isArray(rawTracks) ? dedupeSharedTracks(rawTracks) : [];
       if (Array.isArray(rawTracks) && rawTracks.length > 0 && normalizedTracks.length === 0) {
         return res.status(400).json({
           error: "tracks are invalid",
@@ -152,17 +127,12 @@ export function registerSharedPlaylists(router) {
         playlistId,
         tracks: normalizedTracks,
       });
-      if (result?.missing) {
-        return res.status(404).json({ error: "Shared playlist not found" });
-      }
 
-      res.json({
+      return res.json({
         success: true,
-        playlist: result?.playlist || playlist,
-        tracksQueued: Number(result?.tracksQueued || 0),
-        tracksReused: Number(result?.tracksReused || 0),
-        jobIds: result?.jobIds || [],
-        queued: result?.queued === true,
+        playlistId,
+        queued: true,
+        operationId: result.operationId,
       });
     } catch (error) {
       res.status(500).json({
@@ -176,18 +146,10 @@ export function registerSharedPlaylists(router) {
     try {
       const { playlistId } = req.params;
       const { name, tracks } = req.body || {};
-      const hasNameUpdate = Object.prototype.hasOwnProperty.call(
-        req.body || {},
-        "name",
-      );
-      const hasTracksUpdate = Object.prototype.hasOwnProperty.call(
-        req.body || {},
-        "tracks",
-      );
-      const hasImportSourceUpdate = Object.prototype.hasOwnProperty.call(
-        req.body || {},
-        "importSource",
-      );
+      const body = req.body || {};
+      const hasNameUpdate = Object.hasOwn(body, "name");
+      const hasTracksUpdate = Object.hasOwn(body, "tracks");
+      const hasImportSourceUpdate = Object.hasOwn(body, "importSource");
       if (!hasNameUpdate && !hasTracksUpdate && !hasImportSourceUpdate) {
         return res.status(400).json({
           error: "At least one playlist field is required",
@@ -204,7 +166,7 @@ export function registerSharedPlaylists(router) {
         return res.status(400).json({ error: "name is required" });
       }
       const normalizedTracks = hasTracksUpdate
-        ? normalizeImportedTrackList(tracks)
+        ? Array.isArray(tracks) ? dedupeSharedTracks(tracks) : []
         : currentPlaylist.tracks;
       if (
         hasTracksUpdate &&
@@ -246,14 +208,11 @@ export function registerSharedPlaylists(router) {
         hasImportSourceUpdate,
         importSource,
       });
-      if (result?.missing) {
-        return res.status(404).json({ error: "Shared playlist not found" });
-      }
-      res.json({
+      return res.json({
         success: true,
-        playlist: result?.playlist || currentPlaylist,
-        tracksQueued: Number(result?.tracksQueued || 0),
-        queued: result?.queued === true,
+        playlistId,
+        queued: true,
+        operationId: result.operationId,
       });
     } catch (error) {
       if (error?.code === "SHARED_PLAYLIST_NAME_CONFLICT") {
@@ -288,18 +247,13 @@ export function registerSharedPlaylists(router) {
           playlistId,
           jobId,
         });
-        if (result?.missingPlaylist) {
-          return res.status(404).json({ error: "Shared playlist not found" });
-        }
-        if (result?.missingJob) {
-          return res.status(404).json({ error: "Track not found" });
-        }
 
-        res.json({
+        return res.json({
           success: true,
-          playlist: result?.playlist || playlist,
-          removedJobId: result?.removedJobId || jobId,
-          queued: result?.queued === true,
+          playlistId,
+          removedJobId: jobId,
+          queued: true,
+          operationId: result.operationId,
         });
       } catch (error) {
         res.status(500).json({
@@ -315,47 +269,13 @@ export function registerSharedPlaylists(router) {
     async (req, res) => {
       try {
         const { playlistId, jobId } = req.params;
-        const playlist = getAccessibleSharedPlaylist(req.user, playlistId);
-        if (!playlist) {
-          return res.status(404).json({ error: "Shared playlist not found" });
-        }
-
-        const job = downloadTracker.getJob(jobId);
-        if (!job || job.playlistType !== playlistId) {
-          return res.status(404).json({ error: "Track not found" });
-        }
-
-        if (job.status === "pending" || job.status === "downloading") {
-          return res.status(409).json({
-            error: "Track is already being processed",
-          });
-        }
-
-        const result = await weeklyFlowOperationQueue.enqueuePayload({
-          kind: "shared-playlist-research-track",
-          label: `shared-playlist:${playlistId}:track:${jobId}:research`,
+        return await enqueueResearchTrack(
+          req,
+          res,
           playlistId,
           jobId,
-        });
-        if (result?.missingPlaylist) {
-          return res.status(404).json({ error: "Shared playlist not found" });
-        }
-        if (result?.missingJob) {
-          return res.status(404).json({ error: "Track not found" });
-        }
-        if (result?.alreadyProcessing) {
-          return res.status(409).json({
-            error: "Track is already being processed",
-          });
-        }
-
-        res.json({
-          success: true,
-          jobId,
-          playlistId,
-          reused: result?.reused === true,
-          queued: result?.queued === true,
-        });
+          "shared-playlist",
+        );
       } catch (error) {
         res.status(500).json({
           error: "Failed to re-search shared playlist track",
@@ -398,14 +318,12 @@ export function registerSharedPlaylists(router) {
         label: `shared-playlist:${playlistId}:delete`,
         playlistId,
       });
-      if (deleted?.queued) {
-        return res.json({ success: true, playlistId, queued: true });
-      }
-      if (!deleted) {
-        return res.status(404).json({ error: "Shared playlist not found" });
-      }
-
-      res.json({ success: true, playlistId });
+      return res.json({
+        success: true,
+        playlistId,
+        queued: true,
+        operationId: deleted.operationId,
+      });
     } catch (error) {
       res.status(500).json({
         error: "Failed to delete shared playlist",

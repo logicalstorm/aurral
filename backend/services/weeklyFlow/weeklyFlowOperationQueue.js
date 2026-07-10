@@ -2,24 +2,21 @@ import { enqueueWeeklyFlowOperationJob, getHonkerQueueDepth } from "../honkerDb.
 
 let workerCurrentLabel = null;
 
-class WeeklyFlowOperationQueue {
-  async enqueuePayload(payload = {}, options = {}) {
-    const jobId = enqueueWeeklyFlowOperationJob(payload, options);
-    return { queued: true, operationId: jobId };
-  }
+async function enqueuePayload(payload = {}, options = {}) {
+  const jobId = enqueueWeeklyFlowOperationJob(payload, options);
+  return { queued: true, operationId: jobId };
+}
 
-  getStatus() {
-    let pending = 0;
-    try {
-      pending = getHonkerQueueDepth("weekly-flow-operation");
-    } catch {}
-    return {
-      processing: Boolean(workerCurrentLabel) || pending > 0,
-      pending,
-      durablePending: 0,
-      currentLabel: workerCurrentLabel,
-    };
-  }
+function getStatus() {
+  let pending = 0;
+  try {
+    pending = getHonkerQueueDepth("weekly-flow-operation");
+  } catch {}
+  return {
+    processing: Boolean(workerCurrentLabel) || pending > 0,
+    pending,
+    currentLabel: workerCurrentLabel,
+  };
 }
 
 export function setWeeklyFlowOperationWorkerState({
@@ -29,4 +26,7 @@ export function setWeeklyFlowOperationWorkerState({
     currentLabel == null ? null : String(currentLabel).trim() || null;
 }
 
-export const weeklyFlowOperationQueue = new WeeklyFlowOperationQueue();
+export const weeklyFlowOperationQueue = {
+  enqueuePayload,
+  getStatus,
+};

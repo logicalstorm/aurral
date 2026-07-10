@@ -47,22 +47,3 @@ export function MoreMenu({ children, activeButtonClass = "btn-primary" }) {
     </div>
   );
 }
-
-export function getTrackStatusMeta(status) {
-  switch (String(status || "").toLowerCase()) {
-    case "done":
-      return { label: "Downloaded", className: "flow-page__track-status-dot--done" };
-    case "downloading":
-      return {
-        label: "Downloading",
-        className: "flow-page__track-status-dot--downloading",
-      };
-    case "failed":
-      return { label: "Failed", className: "flow-page__track-status-dot--failed" };
-    case "blocked":
-      return { label: "Review", className: "flow-page__track-status-dot--blocked" };
-    case "pending":
-    default:
-      return { label: "Queued", className: "flow-page__track-status-dot--pending" };
-  }
-}

@@ -31,11 +31,6 @@ export const EMPTY_FLOW_STATS = {
   failed: 0,
 };
 
-export const getDownloadedTrackCount = (stats) => {
-  const done = flowNumber(stats?.done);
-  return Number.isFinite(done) && done >= 0 ? done : 0;
-};
-
 export const getPlaylistDownloadProgressPct = (stats, trackCount = 0) => {
   const done = flowNumber(stats?.done);
   const total = Math.max(
@@ -71,17 +66,6 @@ export const formatFlowLastRun = (lastRunAt) => {
   });
 };
 
-export const buildFlowStatsFromJobs = (jobs) => {
-  const stats = { ...EMPTY_FLOW_STATS };
-  if (!Array.isArray(jobs)) return stats;
-  for (const job of jobs) {
-    if (!job?.status) continue;
-    stats[job.status] = (stats[job.status] || 0) + 1;
-  }
-  stats.total = stats.pending + stats.downloading + stats.blocked + stats.done + stats.failed;
-  return stats;
-};
-
 export const sanitizeFlowStats = (stats) => {
   const pending = flowNumber(stats?.pending);
   const downloading = flowNumber(stats?.downloading);
@@ -96,12 +80,6 @@ export const sanitizeFlowStats = (stats) => {
     done,
     failed,
   };
-};
-
-export const playlistStats = (jobs) => {
-  const raw = buildFlowStatsFromJobs(jobs);
-  const stats = sanitizeFlowStats(raw);
-  return { ...stats, state: getPlaylistStateFromStats(stats) };
 };
 
 export const getPlaylistStateFromStats = (stats) => {
