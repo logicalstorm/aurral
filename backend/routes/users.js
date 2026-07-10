@@ -245,7 +245,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
           return res.status(400).json({ error: "currentPassword required to change password" });
         }
         if (!(await bcrypt.compare(currentPassword, existing.passwordHash))) {
-          return res.status(401).json({ error: "Current password is incorrect" });
+          return res.status(400).json({ error: "Current password is incorrect" });
         }
         const passwordValidation = requirePasswordStrength(password);
         if (!passwordValidation.valid) {
@@ -508,7 +508,7 @@ router.post("/me/password", requireAuth, async (req, res) => {
     }
     const u = userOps.getUserById(req.user.id);
     if (!u || !(await bcrypt.compare(currentPassword || "", u.passwordHash))) {
-      return res.status(401).json({ error: "Current password is incorrect" });
+      return res.status(400).json({ error: "Current password is incorrect" });
     }
     const hash = await bcrypt.hash(newPassword, 10);
     userOps.updateUser(req.user.id, { passwordHash: hash });
