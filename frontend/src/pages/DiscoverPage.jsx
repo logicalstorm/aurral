@@ -934,8 +934,10 @@ function DiscoverPage() {
                 <h1 className="page-title">Discover</h1>
                 <DiscoveryStatusPill
                   isUpdating={isUpdating}
+                  playlistsUpdating={playlistsUpdating}
                   lastUpdated={lastUpdated}
                   updateProgressMessage={updateProgressMessage}
+                  playlistsUpdateMessage={playlistsUpdateMessage}
                 />
               </div>
               <p className="artist-discover-hero__description">

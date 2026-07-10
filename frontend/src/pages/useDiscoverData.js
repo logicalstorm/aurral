@@ -24,7 +24,7 @@ import {
   readStoredDiscoveryData,
   writeStoredDiscoveryData,
   normalizeDiscoveryData,
-  isStoredDiscoveryFresh,
+  mergeDiscoveryHttp,
   isStoredRecentlyAddedFresh,
   isStoredRecentReleasesFresh,
   DISCOVER_NEARBY_MODE_KEY,
@@ -79,23 +79,31 @@ export function useDiscoverData() {
   const canAddAlbum = hasPermission("addAlbum");
 
   const applyDiscoveryData = useCallback(
-    (nextValue) => {
-      const normalizedData = normalizeDiscoveryData(nextValue);
-      if (!normalizedData) return;
-      setData(normalizedData);
-      writeStoredDiscoveryData(normalizedData, authUser?.id);
+    (nextValue, { allowClearStatus = true } = {}) => {
+      setData((prev) => {
+        const normalizedData = mergeDiscoveryHttp(prev, nextValue, {
+          allowClearStatus,
+        });
+        if (!normalizedData) return prev;
+        writeStoredDiscoveryData(normalizedData, authUser?.id);
+        return normalizedData;
+      });
     },
     [authUser?.id],
   );
 
   const fetchAndApplyDiscovery = useCallback(
-    (cacheBust = false) =>
-      getDiscovery(cacheBust)
+    (cacheBust = false, { allowClearStatus } = {}) => {
+      const clearStatus =
+        allowClearStatus ??
+        Date.now() - lastDiscoveryWsMessageAtRef.current >= 20000;
+      return getDiscovery(cacheBust)
         .then((discoveryData) => {
-          applyDiscoveryData(discoveryData);
+          applyDiscoveryData(discoveryData, { allowClearStatus: clearStatus });
           setError(null);
         })
-        .catch(console.warn),
+        .catch(console.warn);
+    },
     [applyDiscoveryData],
   );
 
@@ -288,32 +296,16 @@ export function useDiscoverData() {
   );
 
   useEffect(() => {
-    if (!isDiscoverySocketConnected) return;
-    if (!data?.isUpdating && !data?.isEnriching && !data?.stale) return;
-    fetchAndApplyDiscovery();
-  }, [
-    authUser?.id,
-    isDiscoverySocketConnected,
-    data?.isUpdating,
-    data?.isEnriching,
-    data?.stale,
-    fetchAndApplyDiscovery,
-  ]);
-
-  useEffect(() => {
-    if (!data?.playlistsUpdating) return;
-    fetchAndApplyDiscovery(true);
-  }, [authUser?.id, data?.playlistsUpdating, fetchAndApplyDiscovery]);
-
-  useEffect(() => {
-    if (!data?.isUpdating && !data?.isEnriching) return;
+    if (!data?.isUpdating && !data?.isEnriching && !data?.playlistsUpdating) {
+      return;
+    }
     const pollDiscovery = () => {
       if (discoveryPollInFlightRef.current) return;
       const hasRecentWsUpdate =
         Date.now() - lastDiscoveryWsMessageAtRef.current < 20000;
       if (isDiscoverySocketConnected && hasRecentWsUpdate) return;
       discoveryPollInFlightRef.current = true;
-      fetchAndApplyDiscovery(true)
+      fetchAndApplyDiscovery(true, { allowClearStatus: true })
         .finally(() => {
           discoveryPollInFlightRef.current = false;
         });
@@ -325,6 +317,7 @@ export function useDiscoverData() {
     authUser?.id,
     data?.isUpdating,
     data?.isEnriching,
+    data?.playlistsUpdating,
     isDiscoverySocketConnected,
     fetchAndApplyDiscovery,
   ]);
@@ -333,7 +326,7 @@ export function useDiscoverData() {
     if (!data?.stale || data?.isUpdating || data?.isEnriching) return;
     if (isDiscoverySocketConnected) return;
     const id = setTimeout(() => {
-      fetchAndApplyDiscovery(true);
+      fetchAndApplyDiscovery(true, { allowClearStatus: true });
     }, 15000);
     return () => clearTimeout(id);
   }, [
@@ -346,54 +339,37 @@ export function useDiscoverData() {
   ]);
 
   useEffect(() => {
-    if (!data) return;
-    if (data.isUpdating && !data.stale) {
-      lastDiscoveryWsMessageAtRef.current = 0;
-    }
-  }, [data, data?.isUpdating, data?.stale]);
-
-  useEffect(() => {
     const cachedDiscovery = readStoredDiscoveryData(authUser?.id);
-    const discoveryIsFresh =
-      cachedDiscovery &&
-      isStoredDiscoveryFresh(authUser?.id) &&
-      !cachedDiscovery.isUpdating &&
-      !cachedDiscovery.isEnriching &&
-      !cachedDiscovery.playlistsUpdating &&
-      !cachedDiscovery.stale;
-
-    if (discoveryIsFresh) {
+    if (cachedDiscovery) {
       setData(cachedDiscovery);
       setError(null);
-    } else {
-      getDiscovery()
-        .then((discoveryData) => {
-          const normalizedData = normalizeDiscoveryData(discoveryData);
-          setData(normalizedData);
-          writeStoredDiscoveryData(normalizedData, authUser?.id);
-          setError(null);
-        })
-        .catch((err) => {
-          setError(
-            err.response?.data?.message || "Failed to load discovery data",
-          );
-          setData({
-            recommendations: [],
-            globalTop: [],
-            basedOn: [],
-            topTags: [],
-            topGenres: [],
-            fallbackGenres: [],
-            provider: "lastfm",
-            capabilities: null,
-            lastUpdated: null,
-            isUpdating: false,
-            stale: false,
-            discoveryMode: "balanced",
-            configured: false,
-          });
-        });
     }
+    getDiscovery()
+      .then((discoveryData) => {
+        applyDiscoveryData(discoveryData, { allowClearStatus: true });
+        setError(null);
+      })
+      .catch((err) => {
+        if (cachedDiscovery) return;
+        setError(
+          err.response?.data?.message || "Failed to load discovery data",
+        );
+        setData({
+          recommendations: [],
+          globalTop: [],
+          basedOn: [],
+          topTags: [],
+          topGenres: [],
+          fallbackGenres: [],
+          provider: "lastfm",
+          capabilities: null,
+          lastUpdated: null,
+          isUpdating: false,
+          stale: false,
+          discoveryMode: "balanced",
+          configured: false,
+        });
+      });
 
     const cachedRecentlyAdded = readStoredRecentlyAdded(authUser?.id);
     if (cachedRecentlyAdded && isStoredRecentlyAddedFresh(authUser?.id)) {
@@ -422,7 +398,7 @@ export function useDiscoverData() {
           showError(err?.message || "Failed to load recent releases");
         });
     }
-  }, [authUser?.id, showError]);
+  }, [authUser?.id, showError, applyDiscoveryData]);
 
   useEffect(() => {
     if (bootstrap) {

@@ -159,7 +159,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   const [showCommunityGuideModal, setShowCommunityGuideModal] = useState(false);
   const comparisonEnabledRef = useRef(false);
 
-  const applyHealthUpdate = useCallback((healthData) => {
+  const applyHealthUpdate = useCallback((healthData, { allowClearRefreshing = true } = {}) => {
     setHealth(healthData);
     if (healthData?.discovery?.isUpdating) {
       setRefreshingDiscovery(true);
@@ -169,26 +169,29 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       if (typeof healthData.discovery.updateProgress === "number") {
         setDiscoveryProgress(healthData.discovery.updateProgress);
       }
-    } else {
+    } else if (allowClearRefreshing) {
       setRefreshingDiscovery(false);
       setDiscoveryProgress(null);
     }
   }, []);
 
-  const refreshHealth = useCallback(async () => {
+  const refreshHealth = useCallback(async (options) => {
     try {
       const healthData = await checkHealth();
-      applyHealthUpdate(healthData);
+      applyHealthUpdate(healthData, options);
       return healthData;
     } catch {
       return null;
     }
   }, [applyHealthUpdate]);
 
+  const lastDiscoveryWsMessageAtRef = useRef(0);
+
   useWebSocketChannel("discovery", (msg) => {
     if (msg.type !== "discovery_update") return;
 
     if (msg.phase === "error") {
+      lastDiscoveryWsMessageAtRef.current = Date.now();
       setRefreshingDiscovery(false);
       setDiscoveryProgress(null);
       setDiscoveryProgressMessage(msg.progressMessage || "Discovery refresh failed");
@@ -196,6 +199,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     }
 
     if (msg.isUpdating) {
+      lastDiscoveryWsMessageAtRef.current = Date.now();
       setRefreshingDiscovery(true);
       if (msg.progressMessage) {
         setDiscoveryProgressMessage(msg.progressMessage);
@@ -207,10 +211,11 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     }
 
     if (msg.phase === "completed" || Array.isArray(msg.recommendations)) {
+      lastDiscoveryWsMessageAtRef.current = Date.now();
       setRefreshingDiscovery(false);
       setDiscoveryProgress(100);
       setDiscoveryProgressMessage(msg.progressMessage || "Discovery refresh completed");
-      refreshHealth();
+      refreshHealth({ allowClearRefreshing: true });
       return;
     }
   });
@@ -264,12 +269,14 @@ export function useSettingsData(showSuccess, showError, showInfo) {
 
     let stopped = false;
     let timeoutId = null;
-    const startedAt = Date.now();
+    let startedAt = Date.now();
 
     const pollHealth = async () => {
       try {
-        const healthData = await refreshHealth();
-        if (!healthData?.discovery?.isUpdating) {
+        const allowClearRefreshing =
+          Date.now() - lastDiscoveryWsMessageAtRef.current >= 20000;
+        const healthData = await refreshHealth({ allowClearRefreshing });
+        if (!healthData?.discovery?.isUpdating && allowClearRefreshing) {
           setDiscoveryProgressMessage((current) => current || "Discovery refresh completed");
         }
       } catch {}
@@ -322,13 +329,14 @@ export function useSettingsData(showSuccess, showError, showInfo) {
     if (refreshingDiscovery) return;
     setRefreshingDiscovery(true);
     setDiscoveryProgressMessage("Submitting discovery refresh request");
+    lastDiscoveryWsMessageAtRef.current = Date.now();
     try {
       await api.post("/discover/refresh");
       localStorage.setItem(DISCOVERY_MANUAL_REFRESH_KEY, "1");
       showInfo(
         "Discovery refresh started in background. This may take a few minutes to fully hydrate images.",
       );
-      await refreshHealth();
+      await refreshHealth({ allowClearRefreshing: false });
     } catch (err) {
       setRefreshingDiscovery(false);
       setDiscoveryProgress(null);

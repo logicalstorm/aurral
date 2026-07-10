@@ -270,9 +270,51 @@ export const normalizeDiscoveryData = (value) => {
   };
 };
 
+export const stripDiscoveryStatusForStorage = (value) => {
+  const normalized = normalizeDiscoveryData(value);
+  if (!normalized) return null;
+  return {
+    ...normalized,
+    isUpdating: false,
+    updatePhase: null,
+    updateProgress: null,
+    updateProgressMessage: null,
+    playlistsUpdating: false,
+    playlistsUpdateMessage: null,
+    isEnriching: false,
+    enrichmentProgressMessage: null,
+    stale: false,
+  };
+};
+
+export const mergeDiscoveryHttp = (
+  prev,
+  http,
+  { allowClearStatus = true } = {},
+) => {
+  const next = normalizeDiscoveryData(http);
+  if (!next) return prev || null;
+  if (allowClearStatus || !prev) return next;
+  if (prev.isUpdating && !next.isUpdating) {
+    next.isUpdating = true;
+    next.updatePhase = prev.updatePhase;
+    next.updateProgress = prev.updateProgress;
+    next.updateProgressMessage = prev.updateProgressMessage;
+  }
+  if (prev.playlistsUpdating && !next.playlistsUpdating) {
+    next.playlistsUpdating = true;
+    next.playlistsUpdateMessage = prev.playlistsUpdateMessage;
+  }
+  if (prev.isEnriching && !next.isEnriching) {
+    next.isEnriching = true;
+    next.enrichmentProgressMessage = prev.enrichmentProgressMessage;
+  }
+  return next;
+};
+
 export const readStoredDiscoveryData = (userId) => {
   const fromStorage = (raw) => {
-    const normalized = normalizeDiscoveryData(raw);
+    const normalized = stripDiscoveryStatusForStorage(raw);
     if (!normalized) return null;
     return {
       ...normalized,
@@ -297,7 +339,7 @@ export const readStoredDiscoveryData = (userId) => {
 };
 
 export const writeStoredDiscoveryData = (value, userId) => {
-  const normalized = normalizeDiscoveryData(value);
+  const normalized = stripDiscoveryStatusForStorage(value);
   if (!normalized) return;
   try {
     localStorage.setItem(
