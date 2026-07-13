@@ -23,6 +23,7 @@ const buildRequestChangeSignature = (request) =>
     title: request?.title || null,
     subtitle: request?.subtitle || null,
     name: request?.name || null,
+    trackName: request?.trackName || null,
     albumName: request?.albumName || null,
     artistName: request?.artistName || null,
     status: request?.status || null,
@@ -63,6 +64,38 @@ export const formatTimelineTime = (value) => {
     hour: "numeric",
     minute: "2-digit",
   });
+};
+
+const formatReviewDuration = (ms) => {
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const totalSeconds = Math.round(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+};
+
+export const formatReviewReasonSummary = (subtitle) => {
+  const raw = String(subtitle || "").trim();
+  if (!raw) return null;
+  const colon = raw.indexOf(":");
+  const code = (colon === -1 ? raw : raw.slice(0, colon)).trim();
+  const fields = Object.create(null);
+  for (const part of (colon === -1 ? "" : raw.slice(colon + 1)).split(",")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    const key = part.slice(0, eq).trim();
+    const value = Number(part.slice(eq + 1).trim());
+    if (key && Number.isFinite(value)) fields[key] = value;
+  }
+  const parts = [code.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase())];
+  if (Number.isFinite(fields.title)) parts.push(`title ${fields.title}`);
+  if (Number.isFinite(fields.artist)) parts.push(`artist ${fields.artist}`);
+  if (Number.isFinite(fields.album)) parts.push(`album ${fields.album}`);
+  const actual = formatReviewDuration(fields.actualDurationMs);
+  const expected = formatReviewDuration(fields.expectedDurationMs);
+  if (actual && expected) parts.push(`${actual} vs ${expected}`);
+  else if (actual) parts.push(actual);
+  return parts.join(" · ");
 };
 
 const formatDateGroupLabel = (value) => {

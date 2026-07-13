@@ -710,6 +710,7 @@ export const recordTrackJobActivity = ({
   jobId,
   trackName,
   artistName,
+  albumName = null,
   playlistId,
   status = "processing",
   statusLabel = "Searching",
@@ -724,6 +725,7 @@ export const recordTrackJobActivity = ({
   const playlistName = resolvePlaylistName(playlistId);
   const track = String(trackName || "Track").trim();
   const artist = String(artistName || "Artist").trim();
+  const album = String(albumName || "").trim() || null;
   const clientLabel = resolveDownloadClientLabel(downloadSource, downloadClient);
   const filename = String(sourceFilename || "").trim() || null;
   return upsertAurralHistory({
@@ -738,6 +740,7 @@ export const recordTrackJobActivity = ({
       jobId: id,
       trackName: track,
       artistName: artist,
+      ...(album ? { albumName: album } : {}),
       playlistId,
       downloadSource: downloadSource || "slskd",
       downloadClient: downloadClient || null,
@@ -750,6 +753,7 @@ const trackJobFields = (job) => ({
   jobId: job?.id,
   trackName: job?.trackName,
   artistName: job?.artistName,
+  albumName: job?.albumName,
   playlistId: job?.playlistId || job?.playlistType,
   downloadSource: job?.downloadSource,
   downloadClient: job?.downloadClient,
@@ -809,6 +813,10 @@ export const toHistoryRequestItem = (entry, options = {}) => {
   const source = resolveHistorySource(kind, entry.metadata);
   const sourceFilename =
     String(options.sourceFilename || entry.metadata?.sourceFilename || "").trim() || null;
+  const trackName =
+    String(options.trackName || entry.metadata?.trackName || "").trim() || null;
+  const albumName =
+    String(options.albumName || entry.metadata?.albumName || "").trim() || null;
   const requester = requesterFromMetadata(entry.metadata);
   return {
     id: entry.id,
@@ -823,7 +831,9 @@ export const toHistoryRequestItem = (entry, options = {}) => {
     kind,
     playlistId: entry.metadata?.playlistId || null,
     jobId: entry.metadata?.jobId || null,
+    trackName,
     artistName: entry.metadata?.artistName || null,
+    albumName,
     albumId: entry.metadata?.albumId ? String(entry.metadata.albumId) : null,
     requestedBy: requester
       ? { id: requester.userId, username: requester.username || null }
@@ -877,6 +887,12 @@ export const getAurralHistoryRequests = async (lidarrClient = null) => {
         (entry.status === "blocked" && job
           ? resolveBlockedJobSourceFilename(job)
           : null);
-      return toHistoryRequestItem(entry, { sourceFilename });
+      const albumName =
+        entry.metadata?.albumName ||
+        (entry.status === "blocked" && job?.albumName ? job.albumName : null);
+      const trackName =
+        entry.metadata?.trackName ||
+        (entry.status === "blocked" && job?.trackName ? job.trackName : null);
+      return toHistoryRequestItem(entry, { sourceFilename, albumName, trackName });
     });
 };

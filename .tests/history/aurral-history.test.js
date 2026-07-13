@@ -233,6 +233,7 @@ test("blocked track download history exposes source filename", async () => {
     {
       artistName: "Artist",
       trackName: "Song",
+      albumName: "Album",
     },
     "playlist-1",
   );
@@ -247,6 +248,7 @@ test("blocked track download history exposes source filename", async () => {
 
   assert.equal(entry?.status, "blocked");
   assert.equal(entry?.sourceFilename, "Artist - Song (2024).flac");
+  assert.equal(entry?.albumName, "Album");
 });
 
 test("blocked track download history falls back to staging basename", async () => {

@@ -9,7 +9,7 @@ import {
   Pause,
   Eye,
 } from "lucide-react";
-import { formatTimelineTime } from "./activityListUtils";
+import { formatReviewReasonSummary, formatTimelineTime } from "./activityListUtils";
 
 function RequestStatusBadge({ request }) {
   if (request.status === "completed" || request.status === "available") {
@@ -80,23 +80,32 @@ export default function ActivityRequestRow({
   const isActivity = request.type === "activity";
   const isAlbum = request.type === "album";
   const usesTitleSubtitle = isTrackDownload || isAurral || isActivity;
-  const displayName = usesTitleSubtitle
-    ? request.title
-    : isAlbum
-      ? request.albumName
-      : request.name;
-  const rowArtistName = request.artistName || null;
-  const requesterName = String(request.requestedBy?.username || "").trim() || null;
-  const metaLine = usesTitleSubtitle ? request.subtitle || null : rowArtistName;
   const isBlockedTrack =
     request.kind === "track_download" && request.status === "blocked" && !!request.jobId;
-  const displayMetaLine = [
-    isBlockedTrack && request.sourceFilename ? request.sourceFilename : null,
-    metaLine,
-    requesterName,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const trackName =
+    String(request.trackName || "").trim() ||
+    request.title?.replace(/^Review needed for /, "") ||
+    "track";
+  const displayName = isBlockedTrack
+    ? trackName
+    : usesTitleSubtitle
+      ? request.title
+      : isAlbum
+        ? request.albumName
+        : request.name;
+  const rowArtistName = request.artistName || null;
+  const rowAlbumName = String(request.albumName || "").trim() || null;
+  const requesterName = String(request.requestedBy?.username || "").trim() || null;
+  const metaLine = usesTitleSubtitle ? request.subtitle || null : rowArtistName;
+  const reviewReasonSummary = isBlockedTrack
+    ? formatReviewReasonSummary(request.subtitle)
+    : null;
+  const displayMetaLine = isBlockedTrack
+    ? null
+    : [metaLine, requesterName].filter(Boolean).join(" · ");
+  const reviewIdentityLine = isBlockedTrack
+    ? [rowArtistName, rowAlbumName, requesterName].filter(Boolean).join(" · ")
+    : null;
   const artistMbid = isAlbum ? request.artistMbid : request.mbid;
   const canNavigate =
     ((isSlskd || isUsenet || isYtdlp) && request.playlistId) ||
@@ -109,7 +118,6 @@ export default function ActivityRequestRow({
   const isApproving = approvingJobId === request.jobId;
   const isDenying = denyingJobId === request.jobId;
   const isThisPlaying = currentTrack?.id === String(request.jobId) && isPlaying;
-  const trackName = request.title?.replace(/^Review needed for /, "") || "track";
   const jobError = jobErrors[request.jobId];
   const displayRequest =
     isReSearching && request.status === "failed"
@@ -122,7 +130,7 @@ export default function ActivityRequestRow({
 
   return (
     <article
-      className={`requests-page__row${rowIndex % 2 === 1 ? " requests-page__row--alt" : ""}${canNavigate ? " is-clickable" : ""}`}
+      className={`requests-page__row${rowIndex % 2 === 1 ? " requests-page__row--alt" : ""}${canNavigate ? " is-clickable" : ""}${isBlockedTrack ? " requests-page__row--review" : ""}`}
       onClick={() => {
         if (!canNavigate) return;
         onNavigate(request, {
@@ -140,24 +148,58 @@ export default function ActivityRequestRow({
         <h3 className="requests-page__item-title" title={displayName}>
           {displayName}
         </h3>
-        {(timelineTime || displayMetaLine) && (
-          <div className="requests-page__meta">
-            {timelineTime && (
-              <time className="requests-page__meta-time" dateTime={request.requestedAt}>
-                {timelineTime}
-              </time>
+        {isBlockedTrack ? (
+          <div className="requests-page__review-lines">
+            {(timelineTime || reviewIdentityLine) && (
+              <div className="requests-page__meta">
+                {timelineTime && (
+                  <time className="requests-page__meta-time" dateTime={request.requestedAt}>
+                    {timelineTime}
+                  </time>
+                )}
+                {timelineTime && reviewIdentityLine && (
+                  <span className="requests-page__meta-separator" aria-hidden="true">
+                    ·
+                  </span>
+                )}
+                {reviewIdentityLine && (
+                  <span className="artist-truncate" title={reviewIdentityLine}>
+                    {reviewIdentityLine}
+                  </span>
+                )}
+              </div>
             )}
-            {timelineTime && displayMetaLine && (
-              <span className="requests-page__meta-separator" aria-hidden="true">
-                ·
-              </span>
+            {request.sourceFilename && (
+              <div className="requests-page__review-path" title={request.sourceFilename}>
+                {request.sourceFilename}
+              </div>
             )}
-            {displayMetaLine && (
-              <span className="artist-truncate" title={displayMetaLine}>
-                {displayMetaLine}
-              </span>
+            {reviewReasonSummary && (
+              <div className="requests-page__review-reason" title={request.subtitle || reviewReasonSummary}>
+                {reviewReasonSummary}
+              </div>
             )}
           </div>
+        ) : (
+          (timelineTime || displayMetaLine) && (
+            <div className="requests-page__meta">
+              {timelineTime && (
+                <time className="requests-page__meta-time" dateTime={request.requestedAt}>
+                  {timelineTime}
+                </time>
+              )}
+              {timelineTime && displayMetaLine && (
+                <span className="requests-page__meta-separator" aria-hidden="true">
+                  ·
+                </span>
+              )}
+              {displayMetaLine && (
+                <span className="artist-truncate" title={displayMetaLine}>
+                  {displayMetaLine}
+                </span>
+              )}
+            </div>
+          )
         )}
       </div>
 

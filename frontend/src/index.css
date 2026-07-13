@@ -6554,6 +6554,13 @@ textarea {
   flex: 1;
 }
 
+.requests-page__row--review {
+  align-items: flex-start;
+  min-height: 0;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+}
+
 .requests-page__item-title {
   margin: 0;
   min-width: 0;
@@ -6575,6 +6582,32 @@ textarea {
   color: var(--aurral-gray-light);
   font-size: 0.6875rem;
   line-height: 1.2;
+}
+
+.requests-page__review-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+  margin-top: 0.1875rem;
+  min-width: 0;
+}
+
+.requests-page__review-lines .requests-page__meta {
+  margin-top: 0;
+}
+
+.requests-page__review-path,
+.requests-page__review-reason {
+  min-width: 0;
+  color: var(--aurral-gray);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.requests-page__review-reason {
+  color: var(--aurral-gray-light);
 }
 
 .requests-page__meta-time {
@@ -6687,6 +6720,15 @@ textarea {
   .requests-page__meta {
     margin-top: 0.125rem;
     font-size: 0.625rem;
+  }
+
+  .requests-page__review-path,
+  .requests-page__review-reason {
+    font-size: 0.625rem;
+  }
+
+  .requests-page__row--review .requests-page__status {
+    padding-top: 0;
   }
 
   .requests-page__meta .artist-truncate {
