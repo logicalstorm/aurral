@@ -288,10 +288,11 @@ export const recordAlbumSearchFailed = ({
   artistMbid,
   statusLabel = "Not found",
   user = null,
+  referenceId = null,
 } = {}) => {
   const name = String(albumName || "").trim() || "Album";
   const artist = String(artistName || "").trim();
-  const ref = String(albumId || artistMbid || name).trim();
+  const ref = String(referenceId || albumId || artistMbid || name).trim();
   if (!ref) return null;
   const existing = dbOps.getAurralHistoryById(stableId("album_requested", ref));
   const requester =
@@ -313,6 +314,55 @@ export const recordAlbumSearchFailed = ({
     },
   });
 };
+
+export const recordAlbumSearchCompleted = ({
+  albumId,
+  albumName,
+  artistName,
+  artistMbid,
+  user = null,
+  referenceId = null,
+} = {}) => {
+  const name = String(albumName || "").trim() || "Album";
+  const artist = String(artistName || "").trim();
+  const ref = String(referenceId || albumId || artistMbid || name).trim();
+  if (!ref) return null;
+  const existing = dbOps.getAurralHistoryById(stableId("album_requested", ref));
+  const requester =
+    requesterFromUser(user) || requesterFromMetadata(existing?.metadata);
+  return upsertAurralHistory({
+    referenceId: ref,
+    kind: "album_requested",
+    title: `Downloaded ${name}`,
+    subtitle: artist || null,
+    status: "completed",
+    statusLabel: "Downloaded",
+    href: buildArtistHref(artistMbid),
+    metadata: {
+      albumId,
+      albumName: name,
+      artistName: artist,
+      artistMbid,
+      ...requester,
+    },
+  });
+};
+
+const albumRequestReferenceId = (entry) => {
+  const prefix = "aurral-album_requested-";
+  if (typeof entry?.id === "string" && entry.id.startsWith(prefix)) {
+    return entry.id.slice(prefix.length);
+  }
+  return String(entry?.metadata?.albumId || entry?.metadata?.artistMbid || "").trim();
+};
+
+const normalizeAlbumMatchText = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 
 const parseHonkerPayload = (value) => {
   if (value && typeof value === "object") return value;
@@ -477,12 +527,14 @@ const syncFlowGenerationHistory = async (historyEntries = null) => {
 export const syncAlbumSearchHistory = async (lidarrClient, historyEntries = null) => {
   if (!lidarrClient?.isConfigured()) return;
 
-  const pendingEntries = (historyEntries || loadRecentHistory()).filter(
-    (entry) => entry.kind === "album_requested" && entry.status === "processing",
+  const openEntries = (historyEntries || loadRecentHistory()).filter(
+    (entry) =>
+      entry.kind === "album_requested" &&
+      (entry.status === "processing" || entry.status === "failed"),
   );
-  if (!pendingEntries.length) return;
+  if (!openEntries.length) return;
 
-  const { parseLidarrSearchContext, resolveAlbumSearchOutcome } =
+  const { parseLidarrSearchContext, resolveAlbumSearchOutcome, albumHasTrackFiles } =
     await import("./albumSearchState.js");
   const [queue, history, commands] = await Promise.all([
     lidarrClient.getQueue().catch(() => []),
@@ -491,20 +543,59 @@ export const syncAlbumSearchHistory = async (lidarrClient, historyEntries = null
   ]);
   const context = parseLidarrSearchContext({ queue, history, commands });
 
-  for (const entry of pendingEntries) {
-    const albumId = entry.metadata?.albumId;
+  let lidarrAlbums = null;
+  const loadLidarrAlbums = async () => {
+    if (lidarrAlbums) return lidarrAlbums;
+    lidarrAlbums = await lidarrClient.request("/album").catch(() => []);
+    if (!Array.isArray(lidarrAlbums)) lidarrAlbums = [];
+    return lidarrAlbums;
+  };
+
+  const resolveMissingAlbumId = async (entry) => {
+    const albumName = normalizeAlbumMatchText(entry.metadata?.albumName);
+    const artistName = normalizeAlbumMatchText(entry.metadata?.artistName);
+    if (!albumName || !artistName) return null;
+    const albums = await loadLidarrAlbums();
+    const match = albums.find((album) => {
+      const title = normalizeAlbumMatchText(album?.title);
+      const artist = normalizeAlbumMatchText(album?.artist?.artistName);
+      return title === albumName && artist === artistName;
+    });
+    return match?.id != null ? String(match.id) : null;
+  };
+
+  for (const entry of openEntries) {
+    let albumId = entry.metadata?.albumId ? String(entry.metadata.albumId) : null;
+    if (!albumId) {
+      albumId = await resolveMissingAlbumId(entry);
+    }
     if (!albumId) continue;
+
+    const album = await lidarrClient.getAlbum(albumId).catch(() => null);
+    const albumHasFiles = albumHasTrackFiles(album);
     const outcome = resolveAlbumSearchOutcome(albumId, context, {
       searchStartedAt: entry.createdAt,
+      albumHasFiles,
     });
-    if (!outcome || outcome.status !== "failed") continue;
-    recordAlbumSearchFailed({
+    const referenceId = albumRequestReferenceId(entry);
+    const patch = {
       albumId,
-      albumName: entry.metadata?.albumName,
-      artistName: entry.metadata?.artistName,
-      artistMbid: entry.metadata?.artistMbid,
-      statusLabel: outcome.statusLabel,
-    });
+      albumName: entry.metadata?.albumName || album?.title,
+      artistName: entry.metadata?.artistName || album?.artist?.artistName,
+      artistMbid: entry.metadata?.artistMbid || album?.artist?.foreignArtistId,
+      referenceId,
+    };
+
+    if (outcome?.status === "completed" || albumHasFiles) {
+      recordAlbumSearchCompleted(patch);
+      continue;
+    }
+    if (entry.status === "processing" && outcome?.status === "failed") {
+      recordAlbumSearchFailed({
+        ...patch,
+        statusLabel: outcome.statusLabel,
+      });
+    }
   }
 };
 

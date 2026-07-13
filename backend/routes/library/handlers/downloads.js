@@ -5,6 +5,7 @@ import { requireAuth, requirePermission } from "../../../middleware/requirePermi
 import {
   parseLidarrSearchContext,
   resolveAlbumSearchOutcome,
+  albumHasTrackFiles,
 } from "../../../services/albumSearchState.js";
 import { logger } from "../../../services/logger.js";
 
@@ -168,14 +169,23 @@ export const getDownloadStatusesForAlbumIds = async (albumIdArrayInput) => {
             !isFailedImport &&
             eventType !== "albumimportincomplete";
           const isStaleGrabbed = isGrabbed && Date.now() - historyTime > STALE_GRABBED_MS;
-          statuses[albumId] = {
-            status: isComplete
-              ? "added"
-              : isFailedImport || isFailedDownload || isStaleGrabbed
-                ? "failed"
-                : "processing",
-            updatedAt: new Date().toISOString(),
-          };
+          if (isComplete) {
+            statuses[albumId] = {
+              status: "added",
+              updatedAt: new Date().toISOString(),
+            };
+          } else if (isFailedImport || isFailedDownload || isStaleGrabbed) {
+            const album = await lidarrClient.getAlbum(lidarrAlbumId).catch(() => null);
+            statuses[albumId] = {
+              status: albumHasTrackFiles(album) ? "added" : "failed",
+              updatedAt: new Date().toISOString(),
+            };
+          } else {
+            statuses[albumId] = {
+              status: "processing",
+              updatedAt: new Date().toISOString(),
+            };
+          }
           continue;
         }
 

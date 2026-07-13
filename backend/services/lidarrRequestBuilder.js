@@ -1,3 +1,5 @@
+import { albumHasTrackFiles } from "./albumSearchState.js";
+
 const STALE_GRABBED_MS = 15 * 60 * 1000;
 
 const toIso = (value) => {
@@ -135,6 +137,9 @@ export const buildLidarrRequests = async (lidarrClient) => {
 
     if (isActive || isSuccessfulImport) continue;
     if (!(isFailedImport || isFailedDownload || isStaleGrabbed)) continue;
+
+    const album = await lidarrClient.getAlbum(albumId).catch(() => null);
+    if (albumHasTrackFiles(album)) continue;
 
     requestsByAlbumId.set(String(albumId), {
       id: `lidarr-history-${record.id || albumId}`,

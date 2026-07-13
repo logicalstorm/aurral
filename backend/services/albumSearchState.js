@@ -5,10 +5,24 @@ const RECENT_HISTORY_MS = 60 * 60 * 1000;
 
 const normalizeItems = (value) => (Array.isArray(value) ? value : value?.records || []);
 
+export const albumHasTrackFiles = (album) =>
+  Number(album?.statistics?.trackFileCount || 0) > 0;
+
 const getCommandAlbumIds = (command) => {
   if (Array.isArray(command?.body?.albumIds)) return command.body.albumIds;
   if (Array.isArray(command?.albumIds)) return command.albumIds;
   return [];
+};
+
+const isFailedImportEvent = (eventType) => {
+  const type = String(eventType || "").toLowerCase();
+  return type === "albumimportincomplete" || type.includes("incomplete");
+};
+
+const isSuccessfulImportEvent = (eventType) => {
+  const type = String(eventType || "").toLowerCase();
+  if (!type.includes("import")) return false;
+  return !isFailedImportEvent(type);
 };
 
 export const parseLidarrSearchContext = ({ queue, history, commands } = {}) => {
@@ -19,6 +33,8 @@ export const parseLidarrSearchContext = ({ queue, history, commands } = {}) => {
   const searchingAlbumIds = new Set();
   const recentlyCompletedSearchAlbumIds = new Set();
   const queueAlbumIds = new Set();
+  const importedAlbumIds = new Set();
+  const grabbedAlbumIds = new Set();
   const activeHistoryAlbumIds = new Set();
 
   for (const command of commandItems) {
@@ -71,8 +87,13 @@ export const parseLidarrSearchContext = ({ queue, history, commands } = {}) => {
       eventType.includes("grabbed") ||
       sourceTitle.includes("grabbed") ||
       dataString.includes("grabbed");
-    const isImport = eventType.includes("import");
-    if (isGrabbed || isImport) {
+    if (isSuccessfulImportEvent(eventType)) {
+      importedAlbumIds.add(albumId);
+      activeHistoryAlbumIds.add(albumId);
+      continue;
+    }
+    if (isGrabbed) {
+      grabbedAlbumIds.add(albumId);
       activeHistoryAlbumIds.add(albumId);
     }
   }
@@ -81,11 +102,17 @@ export const parseLidarrSearchContext = ({ queue, history, commands } = {}) => {
     searchingAlbumIds,
     recentlyCompletedSearchAlbumIds,
     queueAlbumIds,
+    importedAlbumIds,
+    grabbedAlbumIds,
     activeHistoryAlbumIds,
   };
 };
 
-export const resolveAlbumSearchOutcome = (albumId, context, { searchStartedAt = 0 } = {}) => {
+export const resolveAlbumSearchOutcome = (
+  albumId,
+  context,
+  { searchStartedAt = 0, albumHasFiles = false } = {},
+) => {
   const lidarrAlbumId = parseInt(albumId, 10);
   if (isNaN(lidarrAlbumId) || !context) return null;
 
@@ -93,16 +120,21 @@ export const resolveAlbumSearchOutcome = (albumId, context, { searchStartedAt = 
     searchingAlbumIds,
     recentlyCompletedSearchAlbumIds,
     queueAlbumIds,
+    importedAlbumIds,
+    grabbedAlbumIds,
     activeHistoryAlbumIds,
   } = context;
 
+  if (albumHasFiles || importedAlbumIds?.has(lidarrAlbumId)) {
+    return { status: "completed" };
+  }
   if (searchingAlbumIds.has(lidarrAlbumId)) {
     return { status: "searching" };
   }
   if (queueAlbumIds.has(lidarrAlbumId)) {
     return { status: "downloading" };
   }
-  if (activeHistoryAlbumIds.has(lidarrAlbumId)) {
+  if (grabbedAlbumIds?.has(lidarrAlbumId) || activeHistoryAlbumIds.has(lidarrAlbumId)) {
     return { status: "processing" };
   }
 
