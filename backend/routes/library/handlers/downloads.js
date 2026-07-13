@@ -331,6 +331,7 @@ export function registerDownloads(router) {
         artistName: artist?.artistName || album.artistName,
         artistMbid: artist?.mbid || artist?.foreignArtistId,
         searching: searchOnAdd,
+        user: req.user,
       });
 
       res.json({
@@ -394,6 +395,7 @@ export function registerDownloads(router) {
           albumName: album.albumName,
           artistName: artist?.artistName || album.artistName,
           artistMbid: artist?.mbid || artist?.foreignArtistId,
+          user: req.user,
         });
 
         res.json({

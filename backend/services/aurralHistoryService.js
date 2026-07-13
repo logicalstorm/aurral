@@ -217,17 +217,36 @@ export const recordArtistAdded = ({ artistName, artistMbid } = {}) => {
   });
 };
 
+const requesterFromUser = (user) => {
+  if (user?.id == null) return null;
+  const username = String(user.username || "").trim();
+  return { userId: user.id, ...(username ? { username } : {}) };
+};
+
+const requesterFromMetadata = (metadata) => {
+  if (metadata?.userId == null) return null;
+  const username = String(metadata.username || "").trim();
+  return {
+    userId: metadata.userId,
+    ...(username ? { username } : {}),
+  };
+};
+
 export const recordAlbumRequested = ({
   albumId,
   albumName,
   artistName,
   artistMbid,
   searching = false,
+  user = null,
 } = {}) => {
   const name = String(albumName || "").trim() || "Album";
   const artist = String(artistName || "").trim();
   const ref = String(albumId || artistMbid || name).trim();
   if (!ref) return null;
+  const existing = dbOps.getAurralHistoryById(stableId("album_requested", ref));
+  const requester =
+    requesterFromUser(user) || requesterFromMetadata(existing?.metadata);
   return upsertAurralHistory({
     referenceId: ref,
     kind: "album_requested",
@@ -236,17 +255,30 @@ export const recordAlbumRequested = ({
     status: searching ? "processing" : "completed",
     statusLabel: searching ? "Searching" : "Requested",
     href: buildArtistHref(artistMbid),
-    metadata: { albumId, albumName: name, artistName: artist, artistMbid },
+    metadata: {
+      albumId,
+      albumName: name,
+      artistName: artist,
+      artistMbid,
+      ...requester,
+    },
   });
 };
 
-export const recordAlbumSearchStarted = ({ albumId, albumName, artistName, artistMbid } = {}) =>
+export const recordAlbumSearchStarted = ({
+  albumId,
+  albumName,
+  artistName,
+  artistMbid,
+  user = null,
+} = {}) =>
   recordAlbumRequested({
     albumId,
     albumName,
     artistName,
     artistMbid,
     searching: true,
+    user,
   });
 
 export const recordAlbumSearchFailed = ({
@@ -255,11 +287,15 @@ export const recordAlbumSearchFailed = ({
   artistName,
   artistMbid,
   statusLabel = "Not found",
+  user = null,
 } = {}) => {
   const name = String(albumName || "").trim() || "Album";
   const artist = String(artistName || "").trim();
   const ref = String(albumId || artistMbid || name).trim();
   if (!ref) return null;
+  const existing = dbOps.getAurralHistoryById(stableId("album_requested", ref));
+  const requester =
+    requesterFromUser(user) || requesterFromMetadata(existing?.metadata);
   return upsertAurralHistory({
     referenceId: ref,
     kind: "album_requested",
@@ -268,7 +304,13 @@ export const recordAlbumSearchFailed = ({
     status: "failed",
     statusLabel,
     href: buildArtistHref(artistMbid),
-    metadata: { albumId, albumName: name, artistName: artist, artistMbid },
+    metadata: {
+      albumId,
+      albumName: name,
+      artistName: artist,
+      artistMbid,
+      ...requester,
+    },
   });
 };
 
@@ -676,6 +718,7 @@ export const toHistoryRequestItem = (entry, options = {}) => {
   const source = resolveHistorySource(kind, entry.metadata);
   const sourceFilename =
     String(options.sourceFilename || entry.metadata?.sourceFilename || "").trim() || null;
+  const requester = requesterFromMetadata(entry.metadata);
   return {
     id: entry.id,
     source,
@@ -691,6 +734,9 @@ export const toHistoryRequestItem = (entry, options = {}) => {
     jobId: entry.metadata?.jobId || null,
     artistName: entry.metadata?.artistName || null,
     albumId: entry.metadata?.albumId ? String(entry.metadata.albumId) : null,
+    requestedBy: requester
+      ? { id: requester.userId, username: requester.username || null }
+      : null,
     sourceFilename,
     inQueue:
       entry.status === "processing" ||

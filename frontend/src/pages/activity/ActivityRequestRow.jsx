@@ -86,13 +86,17 @@ export default function ActivityRequestRow({
       ? request.albumName
       : request.name;
   const rowArtistName = request.artistName || null;
+  const requesterName = String(request.requestedBy?.username || "").trim() || null;
   const metaLine = usesTitleSubtitle ? request.subtitle || null : rowArtistName;
   const isBlockedTrack =
     request.kind === "track_download" && request.status === "blocked" && !!request.jobId;
-  const displayMetaLine =
-    isBlockedTrack && request.sourceFilename
-      ? [request.sourceFilename, metaLine].filter(Boolean).join(" · ")
-      : metaLine;
+  const displayMetaLine = [
+    isBlockedTrack && request.sourceFilename ? request.sourceFilename : null,
+    metaLine,
+    requesterName,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const artistMbid = isAlbum ? request.artistMbid : request.mbid;
   const canNavigate =
     ((isSlskd || isUsenet || isYtdlp) && request.playlistId) ||

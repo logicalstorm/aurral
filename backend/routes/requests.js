@@ -51,6 +51,18 @@ const filterRedundantAurralRequests = (aurralRequests, lidarrRequests) => {
       .map((albumId) => String(albumId)),
   );
   if (!lidarrAlbumIds.size) return aurralRequests;
+  for (const request of aurralRequests) {
+    if (request.kind !== "album_requested" || !request.albumId || !request.requestedBy) {
+      continue;
+    }
+    const albumId = String(request.albumId);
+    if (!lidarrAlbumIds.has(albumId)) continue;
+    for (const lidarrRequest of lidarrRequests) {
+      if (String(lidarrRequest.albumId) === albumId) {
+        lidarrRequest.requestedBy = request.requestedBy;
+      }
+    }
+  }
   return aurralRequests.filter((request) => {
     if (request.kind !== "album_requested") return true;
     if (!request.albumId) return true;

@@ -104,6 +104,7 @@ export function registerAlbums(router) {
             artistName: album.artistName,
             artistMbid: album.mbid || album.foreignAlbumId,
             searching: searchOnAdd,
+            user: req.user,
           });
         })();
       } catch (error) {
@@ -168,6 +169,7 @@ export function registerAlbums(router) {
               artistName: result?.artistName || artistName,
               artistMbid: result?.mbid || artistMbid,
               searching,
+              user: req.user,
             });
           } catch (error) {
             logger.error("library", `Failed to request album ${albumName}:`, {
