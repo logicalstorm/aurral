@@ -13,6 +13,7 @@ const FOCUSABLE_SELECTOR = [
 let bodyScrollLockCount = 0;
 let previousBodyOverflow = "";
 const openDialogStack = [];
+const isolatedElementState = new WeakMap();
 
 function getFocusableElements(container) {
   if (!container) return [];
@@ -36,6 +37,70 @@ function unlockBodyScroll() {
   }
 }
 
+function isolateElement(element) {
+  const current = isolatedElementState.get(element);
+  if (current) {
+    current.count += 1;
+    return;
+  }
+
+  isolatedElementState.set(element, {
+    count: 1,
+    hadInertAttribute: element.hasAttribute("inert"),
+    inert: element.inert,
+    ariaHidden: element.getAttribute("aria-hidden"),
+  });
+  element.inert = true;
+  element.setAttribute("aria-hidden", "true");
+}
+
+function restoreElement(element) {
+  const state = isolatedElementState.get(element);
+  if (!state) return;
+  state.count -= 1;
+  if (state.count > 0) return;
+
+  if (state.hadInertAttribute) {
+    element.setAttribute("inert", "");
+  } else {
+    element.removeAttribute("inert");
+  }
+  element.inert = state.inert;
+  if (state.ariaHidden === null) {
+    element.removeAttribute("aria-hidden");
+  } else {
+    element.setAttribute("aria-hidden", state.ariaHidden);
+  }
+  isolatedElementState.delete(element);
+}
+
+function isolateDialogBackground(dialog) {
+  const isolated = [];
+  let branch = dialog;
+
+  while (branch?.parentElement && branch.parentElement !== document.body) {
+    const parent = branch.parentElement;
+    for (const sibling of parent.children) {
+      if (sibling === branch || sibling.contains(dialog)) continue;
+      isolateElement(sibling);
+      isolated.push(sibling);
+    }
+    branch = parent;
+  }
+
+  if (branch?.parentElement === document.body) {
+    for (const sibling of document.body.children) {
+      if (sibling === branch || sibling.contains(dialog)) continue;
+      isolateElement(sibling);
+      isolated.push(sibling);
+    }
+  }
+
+  return () => {
+    for (const element of isolated.reverse()) restoreElement(element);
+  };
+}
+
 export function useModalDialog({ open, onClose, closeDisabled = false, initialFocusRef }) {
   const dialogRef = useRef(null);
   const dialogIdRef = useRef(Symbol("modal-dialog"));
@@ -53,12 +118,14 @@ export function useModalDialog({ open, onClose, closeDisabled = false, initialFo
     openDialogStack.push(dialogId);
     lockBodyScroll();
 
+    let restoreBackground = null;
     const focusTimer = window.setTimeout(() => {
       const dialog = dialogRef.current;
       if (!dialog || openDialogStack[openDialogStack.length - 1] !== dialogId) return;
       const preferredFocus = initialFocusRef?.current || dialog.querySelector("[autofocus]");
       const nextFocus = preferredFocus || getFocusableElements(dialog)[0] || dialog;
       nextFocus.focus({ preventScroll: true });
+      restoreBackground = isolateDialogBackground(dialog);
     }, 0);
 
     const handleKeyDown = (event) => {
@@ -99,6 +166,7 @@ export function useModalDialog({ open, onClose, closeDisabled = false, initialFo
       const stackIndex = openDialogStack.lastIndexOf(dialogId);
       if (stackIndex >= 0) openDialogStack.splice(stackIndex, 1);
       unlockBodyScroll();
+      restoreBackground?.();
       if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
         previouslyFocused.focus({ preventScroll: true });
       }

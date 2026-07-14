@@ -19,10 +19,12 @@ import UserProfileMenu from "./UserProfileMenu";
 import { useAuth } from "../contexts/AuthContext";
 import { useAudioQueue } from "../contexts/audioQueueContext";
 import { DEFAULT_SETTINGS_TAB } from "../pages/Settings/settingsTabsConfig";
+import { useModalDialog } from "../hooks/useModalDialog.js";
 
 const SIDEBAR_THRESHOLD = 100;
 const SIDEBAR_MIN = 56;
 const SIDEBAR_MAX = 400;
+const MOBILE_SHEET_EXIT_MS = 180;
 
 function Layout({ children }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -33,7 +35,12 @@ function Layout({ children }) {
     height: 0,
   });
   const mainScrollRef = useRef(null);
+  const scrollbarTrackRef = useRef(null);
+  const scrollbarDragRef = useRef(null);
   const scrollbarFadeTimeoutRef = useRef(null);
+  const sidebarResizeSessionRef = useRef(null);
+  const mobileMenuInitialFocusRef = useRef(null);
+  const [mobileMenuPresence, setMobileMenuPresence] = useState("closed");
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     try {
       const w = parseInt(localStorage.getItem("sidebarWidth"), 10);
@@ -42,6 +49,8 @@ function Layout({ children }) {
       return 208;
     }
   });
+  const sidebarWidthRef = useRef(sidebarWidth);
+  sidebarWidthRef.current = sidebarWidth;
   const [lastFullWidth, setLastFullWidth] = useState(() => {
     try {
       const w = parseInt(localStorage.getItem("sidebarFullWidth"), 10);
@@ -58,6 +67,12 @@ function Layout({ children }) {
     location.pathname,
   );
   const isSettingsRoute = location.pathname.startsWith("/settings");
+  const closeMobileMenu = useCallback(() => setIsMobileMenuOpen(false), []);
+  const mobileMenuDialog = useModalDialog({
+    open: mobileMenuPresence !== "closed",
+    onClose: closeMobileMenu,
+    initialFocusRef: mobileMenuInitialFocusRef,
+  });
 
   const sidebarMode = sidebarWidth < SIDEBAR_THRESHOLD ? "icons" : "full";
 
@@ -150,37 +165,126 @@ function Layout({ children }) {
     );
   }, [user]);
 
-  const handleResizeStart = useCallback((event) => {
-    event.preventDefault();
-    setIsResizing(true);
-    const sidebar = document.querySelector(".sidebar-shell");
-    const leftOffset = sidebar ? sidebar.getBoundingClientRect().left : 4;
-
-    const handleMouseMove = (e) => {
-      const newWidth = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, e.clientX - leftOffset));
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      setSidebarWidth((current) => {
-        if (current >= SIDEBAR_THRESHOLD) {
-          try {
-            localStorage.setItem("sidebarFullWidth", String(current));
-          } catch {}
-        }
-        try {
-          localStorage.setItem("sidebarWidth", String(current));
-        } catch {}
-        return current;
-      });
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+  const persistSidebarWidth = useCallback((width) => {
+    const nextWidth = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, Math.round(width)));
+    sidebarWidthRef.current = nextWidth;
+    setSidebarWidth(nextWidth);
+    if (nextWidth >= SIDEBAR_THRESHOLD) {
+      setLastFullWidth(nextWidth);
+      try {
+        localStorage.setItem("sidebarFullWidth", String(nextWidth));
+      } catch {}
+    }
+    try {
+      localStorage.setItem("sidebarWidth", String(nextWidth));
+    } catch {}
+    return nextWidth;
   }, []);
+
+  const handleResizeStart = useCallback((event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    event.preventDefault();
+    const sidebar = document.querySelector(".sidebar-shell");
+    const rect = sidebar?.getBoundingClientRect();
+    sidebarResizeSessionRef.current = {
+      pointerId: event.pointerId,
+      left: rect?.left ?? 4,
+      grabOffset: event.clientX - (rect?.right ?? event.clientX),
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setIsResizing(true);
+  }, []);
+
+  const handleResizeMove = useCallback((event) => {
+    const session = sidebarResizeSessionRef.current;
+    if (!session || session.pointerId !== event.pointerId) return;
+    const nextWidth = Math.max(
+      SIDEBAR_MIN,
+      Math.min(SIDEBAR_MAX, event.clientX - session.left - session.grabOffset),
+    );
+    sidebarWidthRef.current = nextWidth;
+    setSidebarWidth(nextWidth);
+  }, []);
+
+  const handleResizeEnd = useCallback(
+    (event) => {
+      const session = sidebarResizeSessionRef.current;
+      if (!session || session.pointerId !== event.pointerId) return;
+      sidebarResizeSessionRef.current = null;
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      setIsResizing(false);
+      persistSidebarWidth(sidebarWidthRef.current);
+    },
+    [persistSidebarWidth],
+  );
+
+  const handleResizeKeyDown = useCallback(
+    (event) => {
+      const step = event.shiftKey ? 24 : 8;
+      let nextWidth = sidebarWidth;
+      if (event.key === "ArrowLeft") nextWidth -= step;
+      else if (event.key === "ArrowRight") nextWidth += step;
+      else if (event.key === "Home") nextWidth = SIDEBAR_MIN;
+      else if (event.key === "End") nextWidth = SIDEBAR_MAX;
+      else return;
+      event.preventDefault();
+      persistSidebarWidth(nextWidth);
+    },
+    [persistSidebarWidth, sidebarWidth],
+  );
+
+  const updateScrollFromPointer = useCallback((clientY) => {
+    const node = mainScrollRef.current;
+    const track = scrollbarTrackRef.current;
+    const session = scrollbarDragRef.current;
+    if (!node || !track || !session) return;
+    const rect = track.getBoundingClientRect();
+    const maxThumbTop = Math.max(rect.height - scrollbar.height, 0);
+    const thumbTop = Math.min(
+      Math.max(clientY - rect.top - session.grabOffset, 0),
+      maxThumbTop,
+    );
+    const scrollRange = Math.max(node.scrollHeight - node.clientHeight, 0);
+    node.scrollTop = maxThumbTop > 0 ? (thumbTop / maxThumbTop) * scrollRange : 0;
+  }, [scrollbar.height]);
+
+  const handleScrollbarPointerDown = useCallback(
+    (event) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      event.preventDefault();
+      if (scrollbarFadeTimeoutRef.current) clearTimeout(scrollbarFadeTimeoutRef.current);
+      const thumbRect = event.currentTarget.getBoundingClientRect();
+      scrollbarDragRef.current = {
+        pointerId: event.pointerId,
+        grabOffset: event.clientY - thumbRect.top,
+      };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      setScrollbar((current) => ({ ...current, active: true }));
+    },
+    [],
+  );
+
+  const handleScrollbarPointerMove = useCallback(
+    (event) => {
+      if (scrollbarDragRef.current?.pointerId !== event.pointerId) return;
+      updateScrollFromPointer(event.clientY);
+    },
+    [updateScrollFromPointer],
+  );
+
+  const handleScrollbarPointerEnd = useCallback(
+    (event) => {
+      if (scrollbarDragRef.current?.pointerId !== event.pointerId) return;
+      scrollbarDragRef.current = null;
+      if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      showScrollbarTemporarily();
+    },
+    [showScrollbarTemporarily],
+  );
 
   const toggleSidebarPin = useCallback(() => {
     if (sidebarWidth < SIDEBAR_THRESHOLD) {
@@ -204,6 +308,25 @@ function Layout({ children }) {
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    let frameId;
+    let timeoutId;
+    if (isMobileMenuOpen) {
+      setMobileMenuPresence("opening");
+      frameId = window.requestAnimationFrame(() => setMobileMenuPresence("open"));
+    } else {
+      setMobileMenuPresence((current) => (current === "closed" ? current : "closing"));
+      timeoutId = window.setTimeout(
+        () => setMobileMenuPresence("closed"),
+        MOBILE_SHEET_EXIT_MS,
+      );
+    }
+    return () => {
+      if (frameId) window.cancelAnimationFrame(frameId);
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [isMobileMenuOpen]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -249,7 +372,19 @@ function Layout({ children }) {
 
       <div
         className={`sidebar-resize-handle${isResizing ? " is-active" : ""}`}
-        onMouseDown={handleResizeStart}
+        role="separator"
+        aria-label="Resize sidebar"
+        aria-orientation="vertical"
+        aria-valuemin={SIDEBAR_MIN}
+        aria-valuemax={SIDEBAR_MAX}
+        aria-valuenow={Math.round(sidebarWidth)}
+        tabIndex={0}
+        onPointerDown={handleResizeStart}
+        onPointerMove={handleResizeMove}
+        onPointerUp={handleResizeEnd}
+        onPointerCancel={handleResizeEnd}
+        onLostPointerCapture={handleResizeEnd}
+        onKeyDown={handleResizeKeyDown}
       />
 
       <div
@@ -295,6 +430,7 @@ function Layout({ children }) {
             <div className="app-main__content">{children}</div>
           </main>
           <div
+            ref={scrollbarTrackRef}
             className={`app-main-scrollbar${scrollbar.visible ? " is-visible" : ""}${
               scrollbar.active ? " is-active" : ""
             }`}
@@ -302,6 +438,11 @@ function Layout({ children }) {
           >
             <div
               className="app-main-scrollbar__thumb"
+              onPointerDown={handleScrollbarPointerDown}
+              onPointerMove={handleScrollbarPointerMove}
+              onPointerUp={handleScrollbarPointerEnd}
+              onPointerCancel={handleScrollbarPointerEnd}
+              onLostPointerCapture={handleScrollbarPointerEnd}
               style={{
                 height: `${scrollbar.height}px`,
                 transform: `translateY(${scrollbar.top}px)`,
@@ -312,22 +453,28 @@ function Layout({ children }) {
 
         <GlobalPlayerBar />
 
-        {isMobileMenuOpen && (
-          <>
-            <button
-              type="button"
-              className="app-mobile-backdrop app-mobile-only"
-              onClick={() => setIsMobileMenuOpen(false)}
-              aria-label="Close navigation menu"
-            />
-            <div className="app-mobile-menu app-mobile-only">
+        {mobileMenuPresence !== "closed" && (
+          <div
+            className={`app-mobile-backdrop app-mobile-only is-${mobileMenuPresence}`}
+            onClick={mobileMenuDialog.handleBackdropClick}
+          >
+            <div
+              id="mobile-navigation-menu"
+              ref={mobileMenuDialog.dialogRef}
+              className="app-mobile-menu"
+              role="dialog"
+              aria-modal="true"
+              aria-label="More navigation options"
+              tabIndex={-1}
+            >
               <nav className="app-mobile-menu__nav">
-                {mobileOverflowItems.map((item) => {
+                {mobileOverflowItems.map((item, index) => {
                   const Icon = item.icon;
                   const active = isActive(item.path);
                   return (
                     <Link
                       key={item.path}
+                      ref={index === 0 ? mobileMenuInitialFocusRef : undefined}
                       to={item.path}
                       className={`app-mobile-menu__item${active ? " is-active" : ""}`}
                     >
@@ -351,7 +498,7 @@ function Layout({ children }) {
                 )}
               </nav>
             </div>
-          </>
+          </div>
         )}
 
         <nav className="app-mobile-nav app-mobile-only" aria-label="Mobile navigation">
@@ -380,6 +527,7 @@ function Layout({ children }) {
               }`}
               aria-label="More navigation options"
               aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-navigation-menu"
             >
               <Ellipsis aria-hidden="true" />
               <span>More</span>

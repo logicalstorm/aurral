@@ -105,12 +105,8 @@ export function MixSlider({
   const barRef = useRef(null);
   const dragRef = useRef(null);
 
-  const updateFromClientX = useCallback(
-    (clientX, handleIndex) => {
-      const rect = barRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const clampedX = Math.min(Math.max(clientX - rect.left, 0), rect.width);
-      const percent = rect.width > 0 ? (clampedX / rect.width) * 100 : 0;
+  const updateBoundaryValue = useCallback(
+    (handleIndex, percent) => {
       if (activeKeys.length < 2) return;
       const leftKey = activeKeys[handleIndex];
       const rightKey = activeKeys[handleIndex + 1];
@@ -120,9 +116,10 @@ export function MixSlider({
         .reduce((sum, key) => sum + Number(normalized[key] || 0), 0);
       const pairTotal =
         Number(normalized[leftKey] || 0) + Number(normalized[rightKey] || 0);
+      const minimumShare = Math.min(1, pairTotal / 2);
       const nextLeft = Math.min(
-        Math.max(percent - prefixStart, 0),
-        pairTotal,
+        Math.max(percent - prefixStart, minimumShare),
+        pairTotal - minimumShare,
       );
       const next = {
         discover: normalized.discover,
@@ -137,28 +134,69 @@ export function MixSlider({
     [activeKeys, normalized, onChange, normalizeMixPercent]
   );
 
+  const updateFromClientX = useCallback(
+    (clientX, handleIndex) => {
+      const rect = barRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const clampedX = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+      const percent = rect.width > 0 ? (clampedX / rect.width) * 100 : 0;
+      updateBoundaryValue(handleIndex, percent);
+    },
+    [updateBoundaryValue],
+  );
+
   const startDrag = (event, handle) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
     event.preventDefault();
-    dragRef.current = { handle };
+    const handleRect = event.currentTarget.getBoundingClientRect();
+    const grabOffset = event.clientX - (handleRect.left + handleRect.width / 2);
+    dragRef.current = {
+      handle,
+      pointerId: event.pointerId,
+      target: event.currentTarget,
+      grabOffset,
+    };
     event.currentTarget?.setPointerCapture?.(event.pointerId);
-    updateFromClientX(event.clientX, handle);
+    updateFromClientX(event.clientX - grabOffset, handle);
   };
 
   useEffect(() => {
     const handleMove = (event) => {
-      if (!dragRef.current) return;
-      updateFromClientX(event.clientX, dragRef.current.handle);
+      if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) return;
+      updateFromClientX(
+        event.clientX - dragRef.current.grabOffset,
+        dragRef.current.handle,
+      );
     };
-    const handleUp = () => {
+    const handleUp = (event) => {
+      if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) return;
+      const { target, pointerId } = dragRef.current;
       dragRef.current = null;
+      if (target?.hasPointerCapture?.(pointerId)) target.releasePointerCapture(pointerId);
     };
     window.addEventListener("pointermove", handleMove);
     window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
     return () => {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
     };
   }, [updateFromClientX]);
+
+  const handleHandleKeyDown = (event, handle) => {
+    const step = event.shiftKey ? 5 : 1;
+    let nextPosition = handle.position;
+    if (event.key === "ArrowLeft" || event.key === "ArrowDown") nextPosition -= step;
+    else if (event.key === "ArrowRight" || event.key === "ArrowUp") nextPosition += step;
+    else if (event.key === "PageDown") nextPosition -= 10;
+    else if (event.key === "PageUp") nextPosition += 10;
+    else if (event.key === "Home") nextPosition = handle.minimum;
+    else if (event.key === "End") nextPosition = handle.maximum;
+    else return;
+    event.preventDefault();
+    updateBoundaryValue(handle.handleIndex, nextPosition);
+  };
 
   const labelMinPercent = 6;
   const cumulativePositions = [];
@@ -169,12 +207,27 @@ export function MixSlider({
   }
   const handles = cumulativePositions
     .slice(0, -1)
-    .map((position, index) => ({
-      key: `boundary-${index}`,
-      position: Math.min(Math.max(position, 1.5), 98.5),
-      handleIndex: index,
-      ariaLabel: `Adjust ${SOURCE_MIX_OPTIONS.find((option) => option.key === activeKeys[index])?.label || "source"} and ${SOURCE_MIX_OPTIONS.find((option) => option.key === activeKeys[index + 1])?.label || "source"} mix`,
-    }));
+    .map((position, index) => {
+      const leftKey = activeKeys[index];
+      const rightKey = activeKeys[index + 1];
+      const leftLabel = SOURCE_MIX_OPTIONS.find((option) => option.key === leftKey)?.label || "source";
+      const rightLabel = SOURCE_MIX_OPTIONS.find((option) => option.key === rightKey)?.label || "source";
+      const prefixStart = activeKeys
+        .slice(0, index)
+        .reduce((sum, key) => sum + Number(normalized[key] || 0), 0);
+      const pairTotal = Number(normalized[leftKey] || 0) + Number(normalized[rightKey] || 0);
+      const minimumShare = Math.min(1, pairTotal / 2);
+      return {
+        key: `boundary-${index}`,
+        position,
+        visualPosition: Math.min(Math.max(position, 1.5), 98.5),
+        minimum: prefixStart + minimumShare,
+        maximum: prefixStart + pairTotal - minimumShare,
+        handleIndex: index,
+        ariaLabel: `Adjust ${leftLabel} and ${rightLabel} mix`,
+        ariaValueText: `${leftLabel} ${Math.round(Number(normalized[leftKey] || 0))}%, ${rightLabel} ${Math.round(Number(normalized[rightKey] || 0))}%`,
+      };
+    });
 
   return (
     <div className="flow-page__mix">
@@ -245,16 +298,23 @@ export function MixSlider({
           })}
         </div>
         {handles.map((handle) => (
-          <button
+          <div
             key={handle.key}
-            type="button"
             onPointerDown={(event) => startDrag(event, handle.handleIndex)}
+            onKeyDown={(event) => handleHandleKeyDown(event, handle)}
             className="flow-page__mix-handle"
-            style={{ left: `${handle.position}%` }}
+            style={{ left: `${handle.visualPosition}%` }}
+            role="slider"
+            tabIndex={0}
+            aria-orientation="horizontal"
+            aria-valuemin={Math.round(handle.minimum)}
+            aria-valuemax={Math.round(handle.maximum)}
+            aria-valuenow={Math.round(handle.position)}
+            aria-valuetext={handle.ariaValueText}
             aria-label={handle.ariaLabel}
           >
             <span className="flow-page__mix-handle-thumb" />
-          </button>
+          </div>
         ))}
       </div>
     </div>
@@ -580,4 +640,3 @@ export function CommaTokenInput({
     </div>
   );
 }
-
