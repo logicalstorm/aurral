@@ -114,6 +114,8 @@ export async function buildArtistPlaybackQueue({
             src: track.preview_url,
             streamFormat: track.streamFormat,
             quality: track.quality,
+            artistMbid,
+            albumMbid: album.mbid || album.foreignAlbumId || "",
           }),
           track,
         );
@@ -127,7 +129,7 @@ export async function buildArtistPlaybackQueue({
 
   for (const track of previewTracks) {
     if (!track?.preview_url) continue;
-    pushTrack(normalizePreviewTrack(track, artistName), track);
+    pushTrack(normalizePreviewTrack(track, artistName, { artistMbid }), track);
   }
 
   const sortedReleaseGroups = [...releaseGroups]
@@ -170,7 +172,11 @@ export async function buildArtistPlaybackQueue({
             preview_url: track.preview_url,
           },
           artistName,
-          { album: albumTitle },
+          {
+            album: albumTitle,
+            artistMbid,
+            albumMbid: releaseGroup.id,
+          },
         ),
         track,
       );

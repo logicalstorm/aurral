@@ -125,9 +125,13 @@ export function ArtistDetailsDownloadTargets({
           preview_url: track?.preview_url,
         },
         artistName || artist?.name || "",
-        { album: missingReleasePick?.title || "" },
+        {
+          album: missingReleasePick?.title || "",
+          artistMbid: artist?.id || "",
+          albumMbid: missingReleasePick?.releaseGroupId || "",
+        },
       ),
-    [artist?.name, artistName, missingReleasePick?.title],
+    [artist?.id, artist?.name, artistName, missingReleasePick?.releaseGroupId, missingReleasePick?.title],
   );
 
   const { currentTrack, isPlaying, isLoading, playTrack, togglePlayPause, source } =

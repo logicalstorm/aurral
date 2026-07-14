@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Pause,
   Play,
@@ -68,7 +69,14 @@ function GlobalPlayerBar() {
 
   const volumePercent = Math.round(volume * 100);
   const progress = duration > 0 ? Math.min((position / duration) * 100, 100) : 0;
-  const subtitle = [currentTrack.artist, currentTrack.album].filter(Boolean).join(" · ");
+  const artistMbid = String(currentTrack.artistMbid || "").trim();
+  const albumMbid = String(currentTrack.albumMbid || "").trim();
+  const artistLabel = currentTrack.artist || "";
+  const albumLabel = currentTrack.album || "";
+  const artistPath = artistMbid ? `/artist/${artistMbid}` : "";
+  const albumPath = artistMbid && albumMbid ? `/artist/${artistMbid}/release/${albumMbid}` : "";
+  const metaLink = (label, path) =>
+    label ? path ? <Link to={path} className="global-player__link">{label}</Link> : label : null;
 
   const handleVolumeChange = (event) => {
     const nextVolume = Math.min(Math.max(Number(event.target.value) || 0, 0), 100);
@@ -116,7 +124,13 @@ function GlobalPlayerBar() {
             <div className="global-player__title-row">
               <span className="global-player__title">{currentTrack.title}</span>
             </div>
-            {subtitle ? <span className="global-player__subtitle">{subtitle}</span> : null}
+            {artistLabel || albumLabel ? (
+              <span className="global-player__subtitle">
+                {metaLink(artistLabel, artistPath)}
+                {artistLabel && albumLabel ? " · " : null}
+                {metaLink(albumLabel, albumPath)}
+              </span>
+            ) : null}
           </div>
         </div>
 

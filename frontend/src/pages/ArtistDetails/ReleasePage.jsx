@@ -586,6 +586,7 @@ function ReleasePage() {
           tracks={tracks}
           loading={loadingTracks}
           artistName={artistName}
+          artistMbid={artistMbid}
           playbackSource={{
             type: "release",
             id: releaseMbid,

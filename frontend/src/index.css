@@ -10714,6 +10714,15 @@ textarea {
   white-space: nowrap;
 }
 
+.global-player__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.global-player__link:hover {
+  text-decoration: underline;
+}
+
 .global-player__controls {
   display: flex;
   align-items: center;

@@ -13,6 +13,7 @@ export function ArtistDetailsReleaseTrackList({
   tracks,
   loading,
   artistName = "",
+  artistMbid = "",
   playbackSource = null,
   onAddTrackToPlaylist,
   resolveMembershipTrack,
@@ -34,9 +35,13 @@ export function ArtistDetailsReleaseTrackList({
           preview_url: track?.preview_url,
         },
         artistName,
-        { album: release?.title || "" },
+        {
+          album: release?.title || "",
+          artistMbid,
+          albumMbid: release?.id || trackKey,
+        },
       ),
-    [artistName, release?.title, trackKey],
+    [artistMbid, artistName, release?.id, release?.title, trackKey],
   );
 
   const { currentTrack, isPlaying, isLoading, playTrack, togglePlayPause, source } =

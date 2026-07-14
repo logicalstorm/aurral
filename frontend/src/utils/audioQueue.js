@@ -57,7 +57,7 @@ export function getHowlerFormat(formatKey) {
 export function normalizeQueueTrack(track, overrides = {}) {
   const id = String(track?.id ?? track?.trackId ?? track?.mbid ?? overrides.id ?? "");
   const src = track?.src ?? track?.streamUrl ?? track?.preview_url ?? "";
-  return {
+  const merged = {
     id: id || `track-${crypto.randomUUID()}`,
     title: track?.title ?? track?.trackName ?? track?.name ?? "Unknown Track",
     artist: track?.artist ?? track?.artistName ?? overrides.artist ?? "",
@@ -68,6 +68,15 @@ export function normalizeQueueTrack(track, overrides = {}) {
     quality: track?.quality ?? overrides.quality ?? null,
     finalPath: track?.finalPath ?? overrides.finalPath ?? null,
     ...overrides,
+  };
+  return {
+    ...merged,
+    artistMbid:
+      String(merged.artistMbid ?? track?.artistMbid ?? track?.artistId ?? "").trim() || null,
+    albumMbid:
+      String(
+        merged.albumMbid ?? track?.albumMbid ?? track?.releaseGroupMbid ?? track?.albumId ?? "",
+      ).trim() || null,
   };
 }
 
@@ -80,6 +89,8 @@ export function normalizeFlowTrack(track) {
     src: track.streamUrl,
     finalPath: track.finalPath,
     streamFormat: track.streamFormat,
+    artistMbid: track.artistMbid,
+    albumMbid: track.albumMbid,
   });
 }
 
@@ -91,6 +102,8 @@ export function normalizePreviewTrack(track, artistName, overrides = {}) {
       artist: artistName,
       src: track?.preview_url,
       quality: track?.quality,
+      artistMbid: track?.artistMbid ?? track?.artistId,
+      albumMbid: track?.albumMbid ?? track?.releaseGroupMbid,
     },
     overrides,
   );

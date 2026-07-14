@@ -61,6 +61,8 @@ export function useArtistPreviewPlayback({ mbid, artistName, enabled = true, isI
                     src: track.preview_url,
                     streamFormat: track.streamFormat,
                     quality: track.quality,
+                    artistMbid: mbid,
+                    albumMbid: album.mbid || album.foreignAlbumId || "",
                   }),
                 );
               }
@@ -79,7 +81,7 @@ export function useArtistPreviewPlayback({ mbid, artistName, enabled = true, isI
       const data = await getArtistPreview(mbid, artistName);
       const tracks = (Array.isArray(data?.tracks) ? data.tracks : [])
         .filter((track) => track?.preview_url)
-        .map((track) => normalizePreviewTrack(track, artistName));
+        .map((track) => normalizePreviewTrack(track, artistName, { artistMbid: mbid }));
       if (tracks.length === 0) return false;
       return playQueue(tracks, {
         source,

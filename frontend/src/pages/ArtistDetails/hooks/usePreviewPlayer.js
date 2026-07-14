@@ -58,7 +58,7 @@ export function usePreviewPlayer(
   const handlePreviewPlay = (track) => {
     if (!track?.preview_url) return;
 
-    const normalized = normalizePreviewTrack(track, artistName);
+    const normalized = normalizePreviewTrack(track, artistName, { artistMbid: mbid });
     if (String(playingPreviewId) === String(normalized.id)) {
       togglePlayPause();
       return;
@@ -66,7 +66,9 @@ export function usePreviewPlayer(
 
     playTrack(normalized, {
       source: artistSource,
-      queue: getPlayableTracks().map((entry) => normalizePreviewTrack(entry, artistName)),
+      queue: getPlayableTracks().map((entry) =>
+        normalizePreviewTrack(entry, artistName, { artistMbid: mbid }),
+      ),
     });
   };
 
