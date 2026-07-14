@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 import {
   getArtistCover,
   getArtistDetails,
@@ -26,6 +26,7 @@ import { Loader, Music, X } from "lucide-react";
 import { useToast } from "../../contexts/ToastContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import { useModalDialog } from "../../hooks/useModalDialog.js";
 import { useArtistDetailsStream } from "./hooks/useArtistDetailsStream";
 import { usePreviewPlayer } from "./hooks/usePreviewPlayer";
 import { useArtistDetailsLibrary } from "./hooks/useArtistDetailsLibrary";
@@ -675,12 +676,28 @@ function EditArtistIdsModal({
   onClose,
   onSave,
 }) {
+  const titleId = useId();
+  const { dialogRef, handleBackdropClick } = useModalDialog({
+    open: show,
+    onClose,
+    closeDisabled: saving,
+  });
+
   if (!show) return null;
   return (
-    <div className="artist-modal-backdrop" onClick={onClose}>
-      <div className="artist-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="artist-modal-backdrop" onClick={handleBackdropClick}>
+      <div
+        ref={dialogRef}
+        className="artist-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
         <div className="artist-modal__header">
-          <h3 className="artist-modal__title">Edit Artist IDs</h3>
+          <h3 id={titleId} className="artist-modal__title">
+            Edit Artist IDs
+          </h3>
           <button
             type="button"
             className="btn btn-surface btn-icon-square"

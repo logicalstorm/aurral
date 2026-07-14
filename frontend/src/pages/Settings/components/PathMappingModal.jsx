@@ -4,6 +4,7 @@ import { Folder, X } from "lucide-react";
 import DownloadFolderPickerModal from "../../../components/DownloadFolderPickerModal";
 import { SettingsInput, SettingsSelect } from "./SettingsField";
 import { SettingsArrFormGroup } from "./arr/SettingsArrLayout";
+import { useModalDialog } from "../../../hooks/useModalDialog.js";
 
 const PATH_MAPPING_SOURCE_OPTIONS = [
   { value: "all", label: "All sources" },
@@ -21,6 +22,10 @@ export function PathMappingModal({ title, initialValue, onClose, onSave }) {
     ...initialValue,
   }));
   const [showPicker, setShowPicker] = useState(false);
+  const { dialogRef, handleBackdropClick } = useModalDialog({
+    open: true,
+    onClose,
+  });
 
   useEffect(() => {
     setDraft({ ...EMPTY_MAPPING, ...initialValue });
@@ -43,13 +48,14 @@ export function PathMappingModal({ title, initialValue, onClose, onSave }) {
 
   return createPortal(
     <div className="arr-portal">
-      <div className="arr-modal-backdrop" onClick={onClose}>
+      <div className="arr-modal-backdrop" onClick={handleBackdropClick}>
         <div
+          ref={dialogRef}
           className="arr-modal"
           role="dialog"
           aria-modal="true"
           aria-labelledby="path-mapping-modal-title"
-          onClick={(event) => event.stopPropagation()}
+          tabIndex={-1}
         >
           <div className="arr-modal__header">
             <h3 id="path-mapping-modal-title" className="arr-modal__title">

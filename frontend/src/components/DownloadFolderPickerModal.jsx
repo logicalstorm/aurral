@@ -3,6 +3,7 @@ import { browseFilesystem, ensureFilesystemPath } from "../utils/api/endpoints/a
 
 import { createPortal } from "react-dom";
 import { ArrowUp, Folder, X } from "lucide-react";
+import { useModalDialog } from "../hooks/useModalDialog.js";
 function normalizeConfirmedPath(pathValue, browsePath) {
   const raw = String(pathValue ?? "").trim() || browsePath || "/";
   if (raw === "/") return "/";
@@ -23,6 +24,11 @@ export default function DownloadFolderPickerModal({
   const [error, setError] = useState("");
   const requestIdRef = useRef(0);
   const openingPathRef = useRef(initialPath);
+  const { dialogRef, handleBackdropClick } = useModalDialog({
+    open: true,
+    onClose: onCancel,
+    closeDisabled: loading,
+  });
 
   const applyBrowseResult = useCallback((result) => {
     setBrowsePath(result.path);
@@ -130,12 +136,14 @@ export default function DownloadFolderPickerModal({
   };
 
   return createPortal(
-    <div className="artist-modal-backdrop file-browser-modal-backdrop" onClick={onCancel}>
+    <div className="artist-modal-backdrop file-browser-modal-backdrop" onClick={handleBackdropClick}>
       <div
+        ref={dialogRef}
         className="file-browser-modal"
-        onClick={(e) => e.stopPropagation()}
         role="dialog"
+        aria-modal="true"
         aria-labelledby="file-browser-title"
+        tabIndex={-1}
       >
         <div className="file-browser-modal__header">
           <h3 id="file-browser-title" className="file-browser-modal__title">

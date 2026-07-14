@@ -4,6 +4,7 @@ import { Folder, X } from "lucide-react";
 import DownloadFolderPickerModal from "../../../components/DownloadFolderPickerModal";
 import { SettingsInput } from "./SettingsField";
 import { SettingsArrFormGroup } from "./arr/SettingsArrLayout";
+import { useModalDialog } from "../../../hooks/useModalDialog.js";
 
 const EMPTY_MAPPING = { local: "", remote: "" };
 
@@ -13,6 +14,10 @@ export function NavidromePathMappingModal({ title, initialValue, onClose, onSave
     ...initialValue,
   }));
   const [showPicker, setShowPicker] = useState(false);
+  const { dialogRef, handleBackdropClick } = useModalDialog({
+    open: true,
+    onClose,
+  });
 
   useEffect(() => {
     setDraft({ ...EMPTY_MAPPING, ...initialValue });
@@ -32,13 +37,14 @@ export function NavidromePathMappingModal({ title, initialValue, onClose, onSave
 
   return createPortal(
     <div className="arr-portal">
-      <div className="arr-modal-backdrop" onClick={onClose}>
+      <div className="arr-modal-backdrop" onClick={handleBackdropClick}>
         <div
+          ref={dialogRef}
           className="arr-modal"
           role="dialog"
           aria-modal="true"
           aria-labelledby="navidrome-path-mapping-modal-title"
-          onClick={(event) => event.stopPropagation()}
+          tabIndex={-1}
         >
           <div className="arr-modal__header">
             <h3 id="navidrome-path-mapping-modal-title" className="arr-modal__title">

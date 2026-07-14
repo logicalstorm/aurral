@@ -98,9 +98,7 @@ function GlobalPlayerBar() {
 
   const handleSeek = (event) => {
     if (!duration) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
-    const nextPosition = ratio * duration;
+    const nextPosition = Math.min(Math.max(Number(event.currentTarget.value) || 0, 0), duration);
     seek(nextPosition);
     setPosition(nextPosition);
   };
@@ -108,14 +106,21 @@ function GlobalPlayerBar() {
   return (
     <div className="global-player" role="region" aria-label="Global audio player">
       <div className="global-player__progress-wrap">
-        <button
-          type="button"
-          className="global-player__progress"
-          onClick={handleSeek}
-          aria-label="Seek"
-        >
+        <span className="global-player__progress-track" aria-hidden="true">
           <span className="global-player__progress-fill" style={{ width: `${progress}%` }} />
-        </button>
+        </span>
+        <input
+          type="range"
+          className="global-player__progress"
+          min="0"
+          max={duration || 0}
+          step="0.1"
+          value={Math.min(position, duration || 0)}
+          onChange={handleSeek}
+          aria-label="Playback position"
+          aria-valuetext={`${formatTime(position)} of ${formatTime(duration)}`}
+          disabled={!duration}
+        />
       </div>
 
       <div className="global-player__inner">

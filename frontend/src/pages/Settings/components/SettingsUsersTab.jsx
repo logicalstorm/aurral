@@ -6,6 +6,7 @@ import { SettingsArrFieldSet, SettingsArrFormGroup } from "./arr/SettingsArrLayo
 import { createPortal } from "react-dom";
 import { Lock, Trash2, UserPlus, X } from "lucide-react";
 import { GRANULAR_PERMISSIONS, granularPerms } from "../constants";
+import { useModalDialog } from "../../../hooks/useModalDialog.js";
 function getLocalBypassStatus(status) {
   if (!status) {
     return {
@@ -159,6 +160,21 @@ export function SettingsUsersTab({
   const isSelfEdit = editUser && editUser.id === authUser?.id;
   const localBypassStatus = getLocalBypassStatus(health?.localNetworkBypass);
   const localBypassEnabled = settings?.security?.localNetworkBypass?.enabled === true;
+  const deleteDialog = useModalDialog({
+    open: Boolean(deleteUserTarget),
+    onClose: () => setDeleteUserTarget(null),
+    closeDisabled: deletingUser,
+  });
+  const addDialog = useModalDialog({
+    open: showAddUserModal,
+    onClose: () => setShowAddUserModal(false),
+    closeDisabled: creatingUser,
+  });
+  const editDialog = useModalDialog({
+    open: Boolean(editUser),
+    onClose: () => setEditUser(null),
+    closeDisabled: savingEdit,
+  });
 
   const openAddUserModal = () => {
     setNewUserUsername("");
@@ -372,14 +388,15 @@ export function SettingsUsersTab({
                 <div className="arr-portal">
                   <div
                     className="arr-modal-backdrop"
-                    onClick={() => !deletingUser && setDeleteUserTarget(null)}
+                    onClick={deleteDialog.handleBackdropClick}
                   >
                     <div
+                      ref={deleteDialog.dialogRef}
                       className="arr-modal"
-                      role="dialog"
+                      role="alertdialog"
                       aria-modal="true"
                       aria-labelledby="delete-user-modal-title"
-                      onClick={(event) => event.stopPropagation()}
+                      tabIndex={-1}
                     >
                       <div className="arr-modal__header">
                         <h3 id="delete-user-modal-title" className="arr-modal__title">
@@ -442,13 +459,14 @@ export function SettingsUsersTab({
           {showAddUserModal
             ? createPortal(
                 <div className="arr-portal">
-                  <div className="arr-modal-backdrop" onClick={() => setShowAddUserModal(false)}>
+                  <div className="arr-modal-backdrop" onClick={addDialog.handleBackdropClick}>
                     <div
+                      ref={addDialog.dialogRef}
                       className="arr-modal"
                       role="dialog"
                       aria-modal="true"
                       aria-labelledby="add-user-modal-title"
-                      onClick={(event) => event.stopPropagation()}
+                      tabIndex={-1}
                     >
                       <div className="arr-modal__header">
                         <h3 id="add-user-modal-title" className="arr-modal__title">
@@ -556,13 +574,14 @@ export function SettingsUsersTab({
           {editUser
             ? createPortal(
                 <div className="arr-portal">
-                  <div className="arr-modal-backdrop" onClick={() => setEditUser(null)}>
+                  <div className="arr-modal-backdrop" onClick={editDialog.handleBackdropClick}>
                     <div
+                      ref={editDialog.dialogRef}
                       className="arr-modal"
                       role="dialog"
                       aria-modal="true"
                       aria-labelledby="edit-user-modal-title"
-                      onClick={(event) => event.stopPropagation()}
+                      tabIndex={-1}
                     >
                       <div className="arr-modal__header">
                         <h3 id="edit-user-modal-title" className="arr-modal__title">

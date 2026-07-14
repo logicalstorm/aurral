@@ -1,4 +1,6 @@
+import { useId } from "react";
 import { Loader } from "lucide-react";
+import { useModalDialog } from "../../../hooks/useModalDialog.js";
 
 export function DeleteArtistModal({
   show,
@@ -10,11 +12,27 @@ export function DeleteArtistModal({
   onConfirm,
   deleting,
 }) {
+  const titleId = useId();
+  const { dialogRef } = useModalDialog({
+    open: show,
+    onClose: onCancel,
+    closeDisabled: deleting,
+  });
+
   if (!show) return null;
   return (
     <div className="artist-modal-backdrop">
-      <div className="artist-modal">
-        <h3 className="artist-modal__title">Remove Artist from Library</h3>
+      <div
+        ref={dialogRef}
+        className="artist-modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
+        <h3 id={titleId} className="artist-modal__title">
+          Remove Artist from Library
+        </h3>
         <p className="artist-modal__copy">
           Are you sure you want to remove <strong>{artistName || libraryArtistName}</strong> from
           library?

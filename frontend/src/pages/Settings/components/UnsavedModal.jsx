@@ -1,19 +1,29 @@
+import { useId } from "react";
 import { AlertTriangle } from "lucide-react";
+import { useModalDialog } from "../../../hooks/useModalDialog.js";
 
 export function UnsavedModal({ show, onCancel, onConfirm }) {
+  const titleId = useId();
+  const { dialogRef, handleBackdropClick } = useModalDialog({
+    open: show,
+    onClose: onCancel,
+  });
+
   if (!show) return null;
   return (
-    <div className="artist-modal-backdrop" onClick={onCancel}>
+    <div className="artist-modal-backdrop" onClick={handleBackdropClick}>
       <div
+        ref={dialogRef}
         className="settings-page__modal"
-        role="dialog"
-        aria-labelledby="unsaved-modal-title"
-        onClick={(e) => e.stopPropagation()}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
       >
         <div className="settings-page__modal-alert">
           <AlertTriangle className="settings-page__modal-alert-icon" />
           <div>
-            <h3 id="unsaved-modal-title" className="settings-page__modal-title">
+            <h3 id={titleId} className="settings-page__modal-title">
               Unsaved Changes
             </h3>
             <p className="settings-page__modal-copy">

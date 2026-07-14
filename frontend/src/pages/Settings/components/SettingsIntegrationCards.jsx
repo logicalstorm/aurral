@@ -1,4 +1,6 @@
+import { useId } from "react";
 import { Pencil, X } from "lucide-react";
+import { useModalDialog } from "../../../hooks/useModalDialog.js";
 
 function statusTone(className) {
   if (className === "is-enabled") return "ok";
@@ -33,19 +35,26 @@ export function SettingsIntegrationModal({
   wide = true,
   footerActions = null,
 }) {
+  const titleId = useId();
+  const { dialogRef, handleBackdropClick } = useModalDialog({
+    open: true,
+    onClose,
+  });
+
   return (
-    <div className="artist-modal-backdrop" onClick={onClose}>
+    <div className="artist-modal-backdrop" onClick={handleBackdropClick}>
       <div
+        ref={dialogRef}
         className={`settings-arr__modal settings-page__modal settings-page__modal--integration${
           wide ? " settings-page__modal--wide" : ""
         }`}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="integration-settings-modal-title"
-        onClick={(event) => event.stopPropagation()}
+        aria-labelledby={titleId}
+        tabIndex={-1}
       >
         <div className="settings-page__modal-header">
-          <h3 id="integration-settings-modal-title" className="settings-page__modal-title">
+          <h3 id={titleId} className="settings-page__modal-title">
             {title}
           </h3>
           <button

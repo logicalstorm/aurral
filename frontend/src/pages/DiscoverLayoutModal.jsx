@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { GripVertical, X } from "lucide-react";
+import { useModalDialog } from "../hooks/useModalDialog.js";
 
 const FALLBACK_GENRE_SECTION_PREFIX = "fallbackGenre:";
 
@@ -104,26 +105,11 @@ export function DiscoverLayoutModal({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
-
-  useEffect(() => {
-    if (!open) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape" && !isSaving) {
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, isSaving, onClose]);
+  const { dialogRef, handleBackdropClick } = useModalDialog({
+    open,
+    onClose,
+    closeDisabled: isSaving,
+  });
 
   const handleDragEnd = (event) => {
     const { active, over } = event;
@@ -141,15 +127,16 @@ export function DiscoverLayoutModal({
   return createPortal(
     <div
       className="artist-modal-backdrop"
-      onClick={isSaving ? undefined : onClose}
+      onClick={handleBackdropClick}
       role="presentation"
     >
       <div
+        ref={dialogRef}
         className="artist-customize-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="discover-layout-modal-title"
-        onClick={(event) => event.stopPropagation()}
+        tabIndex={-1}
       >
         <div className="artist-customize-modal__header">
           <div>
@@ -234,4 +221,3 @@ export function DiscoverLayoutModal({
     document.body,
   );
 }
-

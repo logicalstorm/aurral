@@ -1,4 +1,6 @@
+import { useId } from "react";
 import { Loader } from "lucide-react";
+import { useModalDialog } from "../../../hooks/useModalDialog.js";
 
 export function AddArtistCustomizeModal({
   show,
@@ -15,6 +17,13 @@ export function AddArtistCustomizeModal({
   onConfirm,
   confirming,
 }) {
+  const titleId = useId();
+  const { dialogRef, handleBackdropClick } = useModalDialog({
+    open: show,
+    onClose,
+    closeDisabled: confirming,
+  });
+
   if (!show) return null;
 
   const rootFolders = Array.isArray(preferences?.rootFolders) ? preferences.rootFolders : [];
@@ -25,10 +34,19 @@ export function AddArtistCustomizeModal({
   const configured = preferences?.configured === true;
 
   return (
-    <div className="artist-modal-backdrop" onClick={confirming ? undefined : onClose}>
-      <div className="artist-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="artist-modal-backdrop" onClick={handleBackdropClick}>
+      <div
+        ref={dialogRef}
+        className="artist-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
         <div className="artist-modal__header">
-          <h3 className="artist-modal__title">Customize Add</h3>
+          <h3 id={titleId} className="artist-modal__title">
+            Customize Add
+          </h3>
         </div>
         <p className="artist-modal__subcopy">
           Choose where <strong>{artistName}</strong> should go for this add only.

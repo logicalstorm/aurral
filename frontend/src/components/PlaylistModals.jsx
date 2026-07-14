@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Check, Loader2, MoreVertical, Plus, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { useModalDialog } from "../hooks/useModalDialog.js";
 
 export function ModalShell({
   open,
@@ -10,14 +11,36 @@ export function ModalShell({
   footer,
   disableClose = false,
 }) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const { dialogRef, handleBackdropClick } = useModalDialog({
+    open,
+    onClose,
+    closeDisabled: disableClose,
+  });
+
   if (!open) return null;
   return (
-    <div className="playlist-modal-backdrop" onClick={disableClose ? undefined : onClose}>
-      <div className="playlist-modal" onClick={(event) => event.stopPropagation()}>
+    <div className="playlist-modal-backdrop" onClick={handleBackdropClick}>
+      <div
+        ref={dialogRef}
+        className="playlist-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={description ? descriptionId : undefined}
+        tabIndex={-1}
+      >
         <div className="playlist-modal__header">
           <div className="playlist-modal__heading">
-            <h3 className="playlist-modal__title">{title}</h3>
-            {description ? <p className="playlist-modal__description">{description}</p> : null}
+            <h3 id={titleId} className="playlist-modal__title">
+              {title}
+            </h3>
+            {description ? (
+              <p id={descriptionId} className="playlist-modal__description">
+                {description}
+              </p>
+            ) : null}
           </div>
           <button
             type="button"

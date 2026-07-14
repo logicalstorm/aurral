@@ -1,14 +1,25 @@
+import { useId } from "react";
+import { useModalDialog } from "../../../hooks/useModalDialog.js";
+
 export function CommunityGuideModal({ show, onClose, onApply }) {
+  const titleId = useId();
+  const { dialogRef, handleBackdropClick } = useModalDialog({
+    open: show,
+    onClose,
+  });
+
   if (!show) return null;
   return (
-    <div className="artist-modal-backdrop" onClick={onClose}>
+    <div className="artist-modal-backdrop" onClick={handleBackdropClick}>
       <div
+        ref={dialogRef}
         className="settings-page__modal"
         role="dialog"
-        aria-labelledby="community-guide-modal-title"
-        onClick={(e) => e.stopPropagation()}
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
       >
-        <h3 id="community-guide-modal-title" className="settings-page__modal-title">
+        <h3 id={titleId} className="settings-page__modal-title">
           Apply Davo&apos;s Recommended Settings
         </h3>
         <p className="settings-page__modal-copy">

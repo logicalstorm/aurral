@@ -203,6 +203,11 @@ textarea {
     transform 0.2s ease;
 }
 
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+  transition-duration: 0.1s;
+}
+
 .btn:focus {
   outline: none;
 }
@@ -242,10 +247,6 @@ textarea {
   opacity: 0.9;
 }
 
-.btn-primary:active:not(:disabled) {
-  transform: scale(0.95);
-}
-
 .btn-secondary {
   background-color: var(--aurral-gray);
   color: var(--aurral-white);
@@ -265,10 +266,6 @@ textarea {
   opacity: 0.9;
 }
 
-.btn-neutral-active:active:not(:disabled) {
-  transform: scale(0.95);
-}
-
 .btn-danger {
   background-color: var(--aurral-gray);
   color: var(--aurral-danger);
@@ -277,10 +274,6 @@ textarea {
 .btn-danger:hover:not(:disabled) {
   background-color: var(--aurral-gray-light);
   color: var(--aurral-danger);
-}
-
-.btn-danger:active:not(:disabled) {
-  transform: scale(0.95);
 }
 
 .btn-ghost {
@@ -431,7 +424,10 @@ textarea {
   color: var(--aurral-white);
   line-height: 2.5rem;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.31, -0.105, 0.43, 1.4);
+  transition:
+    background-color 0.18s ease-out,
+    color 0.18s ease-out,
+    transform 0.1s ease-out;
 }
 
 .btn-add-library--split {
@@ -449,7 +445,9 @@ textarea {
   font-weight: 600;
   line-height: inherit;
   text-align: center;
-  transition: all 0.25s cubic-bezier(0.31, -0.105, 0.43, 1.4);
+  transition:
+    transform 0.22s ease-out,
+    opacity 0.18s ease-out;
 }
 
 .btn-add-library span::after {
@@ -467,17 +465,18 @@ textarea {
   top: 0;
   right: 0;
   display: flex;
-  width: 28%;
+  width: 100%;
   height: 100%;
   align-items: center;
   justify-content: center;
-  transition: all 0.25s cubic-bezier(0.31, -0.105, 0.43, 1.4);
+  transform: translateX(36%);
+  transition: transform 0.22s ease-out;
 }
 
 .btn-add-library__icon svg {
   width: 1.25rem;
   height: 1.25rem;
-  transition: all 0.25s cubic-bezier(0.31, -0.105, 0.43, 1.4);
+  transition: transform 0.22s ease-out;
 }
 
 .btn-add-library__icon .check-icon {
@@ -492,19 +491,18 @@ textarea {
 
 .btn-add-library.is-success span,
 .btn-add-library:hover:not(:disabled) span {
-  left: -72%;
   opacity: 0;
+  transform: translateX(-100%);
 }
 
 .btn-add-library.is-success .btn-add-library__icon,
 .btn-add-library:hover:not(:disabled) .btn-add-library__icon {
-  width: 100%;
+  transform: translateX(0);
 }
 
 .btn-add-library.is-success .btn-add-library__icon svg,
 .btn-add-library:hover:not(:disabled) .btn-add-library__icon svg {
-  width: 1.75rem;
-  height: 1.75rem;
+  transform: scale(1.4);
 }
 
 .btn-add-library.is-success {
@@ -993,7 +991,8 @@ textarea {
   color: var(--aurral-gray-light);
   transition:
     background-color 0.18s ease,
-    color 0.18s ease;
+    color 0.18s ease,
+    transform 0.1s ease-out;
 }
 
 .app-header-link {
@@ -1006,13 +1005,19 @@ textarea {
   color: var(--aurral-gray-light);
   transition:
     background-color 0.18s ease,
-    color 0.18s ease;
+    color 0.18s ease,
+    transform 0.1s ease-out;
 }
 
 .app-nav-toggle:hover,
 .app-header-link:hover {
   background: var(--aurral-surface-mid);
   color: var(--aurral-white);
+}
+
+.app-nav-toggle:active,
+.app-header-link:active {
+  transform: scale(0.97);
 }
 
 .app-header-actions {
@@ -1052,6 +1057,10 @@ textarea {
   color: var(--aurral-gray-light);
   font-size: 0.875rem;
   font-weight: 700;
+  transition:
+    background-color 0.15s ease-out,
+    color 0.15s ease-out,
+    transform 0.1s ease-out;
 }
 
 .app-mobile-menu__item.is-active,
@@ -1087,10 +1096,18 @@ textarea {
   color: var(--aurral-gray-light);
   font-size: 0.75rem;
   font-weight: 600;
+  transition:
+    color 0.15s ease-out,
+    transform 0.1s ease-out;
 }
 
 .app-mobile-nav__item.is-active {
   color: var(--aurral-white);
+}
+
+.app-mobile-menu__item:active,
+.app-mobile-nav__item:active {
+  transform: scale(0.97);
 }
 
 @media (max-width: 767px) {
@@ -1243,7 +1260,8 @@ textarea {
   line-height: 1.25;
   transition:
     color 0.15s ease,
-    background-color 0.15s ease;
+    background-color 0.15s ease,
+    transform 0.1s ease-out;
 }
 
 .sidebar-link--full {
@@ -1274,6 +1292,10 @@ textarea {
 .sidebar-link.is-active:hover {
   color: var(--aurral-green);
   background: transparent;
+}
+
+.sidebar-link:active {
+  transform: scale(0.98);
 }
 
 .sidebar-nav-group.is-expanded > .sidebar-link.is-active,
@@ -1380,7 +1402,8 @@ textarea {
   line-height: 1.3;
   transition:
     color 0.15s ease,
-    background-color 0.15s ease;
+    background-color 0.15s ease,
+    transform 0.1s ease-out;
 }
 
 .sidebar-subnav-link__alert {
@@ -1404,6 +1427,10 @@ textarea {
 
 .sidebar-subnav-link.is-active:hover {
   color: var(--aurral-green);
+}
+
+.sidebar-subnav-link:active {
+  transform: scale(0.98);
 }
 
 .sidebar-subnav-link--recent {
@@ -5780,6 +5807,64 @@ textarea {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  .sidebar-link__activity,
+  .sidebar-subnav-link__alert,
+  .artist-image-shimmer,
+  .onboarding-card-shell,
+  .onboarding-card-shell::after {
+    animation: none !important;
+  }
+
+  .artist-image-shimmer {
+    background-position: 50% 0;
+  }
+
+  .app-toast,
+  .reload-prompt {
+    animation: fade-in 0.12s linear;
+  }
+
+  .app-content,
+  .sidebar-shell,
+  .onboarding-brand-mark--animate,
+  .onboarding-step-shell--animate,
+  .global-player__progress-track {
+    transition: none !important;
+  }
+
+  .btn:active:not(:disabled),
+  .app-nav-toggle:active,
+  .app-header-link:active,
+  .app-mobile-menu__item:active,
+  .app-mobile-nav__item:active,
+  .sidebar-link:active,
+  .sidebar-subnav-link:active,
+  .artist-segmented-button:active:not(:disabled),
+  .flow-page__mix-toggle:active:not(:disabled),
+  .flow-page__library-create-btn:active:not(:disabled),
+  .pill-toggle input:active + label::before {
+    transform: none;
+  }
+
+  .pill-toggle input:checked:active + label::before {
+    transform: translateX(var(--thumb-travel));
+  }
+
+  .btn:active:not(:disabled),
+  .app-mobile-menu__item:active,
+  .app-mobile-nav__item:active,
+  .sidebar-link:active,
+  .sidebar-subnav-link:active,
+  .flow-page__mix-toggle:active:not(:disabled) {
+    opacity: 0.82;
+  }
+}
+
 .search-mixed-results {
   display: flex;
   flex-direction: column;
@@ -8380,6 +8465,10 @@ textarea {
   color: var(--aurral-white);
 }
 
+.flow-page__mix-toggle:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
 .flow-page__mix-toggle.is-active {
   color: var(--aurral-black);
 }
@@ -10482,20 +10571,55 @@ textarea {
 
 .global-player__progress-wrap {
   position: absolute;
-  top: 0;
+  top: -1.375rem;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 2.75rem;
+}
+
+.global-player__progress-track {
+  position: absolute;
+  top: calc(50% - 1.5px);
   right: 0;
   left: 0;
   height: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  transition:
+    height 0.12s ease-out,
+    top 0.12s ease-out,
+    box-shadow 0.12s ease-out;
 }
 
 .global-player__progress {
-  display: block;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  margin: 0;
   padding: 0;
   border: 0;
-  background: rgba(255, 255, 255, 0.08);
+  appearance: none;
+  background: transparent;
   cursor: pointer;
+  opacity: 0;
+  touch-action: none;
+}
+
+.global-player__progress:disabled {
+  cursor: default;
+}
+
+.global-player__progress-wrap:hover .global-player__progress-track,
+.global-player__progress-wrap:focus-within .global-player__progress-track {
+  top: calc(50% - 2.5px);
+  height: 5px;
+}
+
+.global-player__progress-wrap:focus-within .global-player__progress-track {
+  box-shadow: 0 0 0 3px var(--aurral-focus);
 }
 
 .global-player__progress-fill {

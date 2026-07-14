@@ -412,12 +412,22 @@
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
+  transition:
+    background-color 0.15s ease-out,
+    border-color 0.15s ease-out,
+    color 0.15s ease-out,
+    transform 0.1s ease-out;
 }
 
 .settings-arr .arr-btn:hover:not(:disabled),
 .arr-portal .arr-btn:hover:not(:disabled) {
   background: var(--arr-control-hover);
   color: var(--aurral-white);
+}
+
+.settings-arr .arr-btn:active:not(:disabled),
+.arr-portal .arr-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .settings-arr .arr-btn:disabled,
@@ -1483,5 +1493,13 @@
   .app-shell[data-sidebar-mode="full"] .settings-arr__mobile-nav,
   .app-shell[data-sidebar-mode="icons"] .settings-arr__mobile-nav {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-arr .arr-btn:active:not(:disabled),
+  .arr-portal .arr-btn:active:not(:disabled) {
+    transform: none;
+    opacity: 0.82;
   }
 }
