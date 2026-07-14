@@ -110,6 +110,35 @@ export function scoreTextMatch(left, right, options) {
   return Math.round(ratio * 100);
 }
 
+function positiveMs(value) {
+  return value != null && Number.isFinite(Number(value)) && Number(value) > 0
+    ? Math.round(Number(value))
+    : null;
+}
+
+export function pickResolvedDurationMs({
+  playlistDurationMs = null,
+  lastfmDurationMs = null,
+  lastfmAlbumName = "",
+  albumName = "",
+  matchedTrackDurationMs = null,
+} = {}) {
+  let duration = positiveMs(playlistDurationMs);
+  const lastfm = positiveMs(lastfmDurationMs);
+  if (lastfm) {
+    if (!duration) {
+      duration = lastfm;
+    } else if (
+      albumName &&
+      lastfmAlbumName &&
+      scoreTextMatch(lastfmAlbumName, albumName, { extended: true }) >= 85
+    ) {
+      duration = lastfm;
+    }
+  }
+  return duration || positiveMs(matchedTrackDurationMs);
+}
+
 export function getYear(value) {
   const match = String(value || "").match(/\b(19\d{2}|20\d{2})\b/);
   return match ? match[1] : null;

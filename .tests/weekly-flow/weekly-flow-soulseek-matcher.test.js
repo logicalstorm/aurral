@@ -666,3 +666,31 @@ test("validateDownloadedTrack scores accepted candidates and rejects live mismat
   assert.equal(accepted.scores.preDownloadValid, true);
   assert.ok(accepted.scores.title >= 82);
 });
+
+test("validateDownloadedTrack scores path segments without weak-word inflation", async () => {
+  const good = await validateDownloadedTrack(
+    "/tmp/does-not-exist.mp3",
+    { raw: { file: "Ryan Montbleau\\Stages_ Volume III\\02 Ghosts.mp3" } },
+    {
+      artistName: "Ryan Montbleau",
+      trackName: "Ghosts",
+      albumName: "Stages: Volume III",
+      durationMs: 207000,
+    },
+  );
+  assert.equal(good.scores.artist, 100);
+  assert.equal(good.scores.title, 100);
+  assert.equal(good.scores.album, 100);
+
+  const weak = await validateDownloadedTrack(
+    "/tmp/does-not-exist.mp3",
+    { raw: { file: "The\\Random Dump\\01 Something Else.mp3" } },
+    {
+      artistName: "The Weeknd",
+      trackName: "Something Else",
+      albumName: "Random Dump",
+      durationMs: 200000,
+    },
+  );
+  assert.ok(weak.scores.artist < 92);
+});

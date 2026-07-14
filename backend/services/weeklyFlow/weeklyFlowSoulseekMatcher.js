@@ -757,6 +757,12 @@ function extractTrackNumber(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function stripLeadingTrackNumber(value) {
+  return String(value || "")
+    .replace(/^\s*\d{1,3}(?:\s*[-._)\]]|\s+)/, "")
+    .trim();
+}
+
 function scoreTrackNumberMatch(expectedTrackNumber, actualTrackNumber) {
   const expected = Number(expectedTrackNumber);
   const actual = Number(actualTrackNumber);
@@ -846,12 +852,30 @@ function isStrongEnoughCandidate({
   return { valid: true, reason: null };
 }
 
+function scoreAgainstPath(text, target) {
+  const fullText = String(text || "");
+  let best = scoreTextMatch(fullText, target);
+  for (const segment of getPathParts(text)) {
+    const score = scoreTextMatch(segment, target);
+    if (score >= 92) best = Math.max(best, score);
+  }
+  return best;
+}
+
 function pickBestArtistScore(context, text) {
   const candidates = [
     context?.artistName,
     ...(Array.isArray(context?.artistAliases) ? context.artistAliases : []),
   ];
-  return candidates.reduce((best, entry) => Math.max(best, scoreTextMatch(text, entry)), 0);
+  return candidates.reduce((best, entry) => Math.max(best, scoreAgainstPath(text, entry)), 0);
+}
+
+function collectArtistTags(common) {
+  return [
+    common?.artist,
+    ...(Array.isArray(common?.artists) ? common.artists : []),
+    common?.albumartist,
+  ].filter(Boolean);
 }
 
 function isSelfTitledAlbumContext(context) {
@@ -878,16 +902,9 @@ function scoreReleaseFolder(group, context, options = {}) {
     return { blacklisted: true };
   }
   const rawDirectoryText = String(group.directoryPath || "");
-  const _directoryText = normalizeText(rawDirectoryText);
   const albumDir = group.parts.at(-2) || "";
-  const artistDir = group.parts.at(-3) || "";
-  const artistScore = Math.max(
-    pickBestArtistScore(context, group.directoryPath),
-    pickBestArtistScore(context, artistDir),
-  );
-  const albumScore = albumName
-    ? Math.max(scoreTextMatch(group.directoryPath, albumName), scoreTextMatch(albumDir, albumName))
-    : 0;
+  const artistScore = pickBestArtistScore(context, group.directoryPath);
+  const albumScore = albumName ? scoreAgainstPath(group.directoryPath, albumName) : 0;
   const yearScore = scoreYearMatch(rawDirectoryText, context?.releaseYear);
   const audioFiles = group.audioFiles || [];
   const trackCountScore = scoreTrackCount(context?.albumTrackCount, audioFiles.length);
@@ -1219,14 +1236,6 @@ function getRemoteFilename(candidate) {
   return String(candidate?.raw?.file || candidate?.file || "");
 }
 
-function bestArtistTag(common) {
-  const values = [];
-  if (common?.artist) values.push(common.artist);
-  if (Array.isArray(common?.artists)) values.push(...common.artists);
-  if (common?.albumartist) values.push(common.albumartist);
-  return values.filter(Boolean).join(" ");
-}
-
 function readDownloadDurationValidation(parsed, expectedDuration, titleScore = 0, artistScore = 0) {
   const durationSeconds = Number(parsed?.format?.duration || 0);
   const actualDurationMs = durationSeconds > 0 ? Math.round(durationSeconds * 1000) : null;
@@ -1260,19 +1269,20 @@ export async function validateDownloadedTrack(filePath, candidate, context) {
   } catch {}
 
   const titleFromTags = metadata?.title || "";
-  const artistFromTags = bestArtistTag(metadata);
   const albumFromTags = metadata?.album || "";
   const albumName = readComparableAlbumName(context);
   const titleScore = Math.max(
     scoreTextMatch(titleFromTags, context?.trackName),
     scoreTextMatch(remoteBaseName, context?.trackName),
+    scoreTextMatch(stripLeadingTrackNumber(remoteBaseName), context?.trackName),
   );
   const artistScore = Math.max(
-    pickBestArtistScore(context, artistFromTags),
+    0,
+    ...collectArtistTags(metadata).map((tag) => pickBestArtistScore(context, tag)),
     pickBestArtistScore(context, remoteFilename),
   );
   const albumScore = albumName
-    ? Math.max(scoreTextMatch(albumFromTags, albumName), scoreTextMatch(remoteFilename, albumName))
+    ? Math.max(scoreAgainstPath(albumFromTags, albumName), scoreAgainstPath(remoteFilename, albumName))
     : 0;
   const yearScore = scoreYearMatch(remoteFilename, context?.releaseYear);
   const yearMismatch = hasConflictingYear(remoteFilename, context?.releaseYear);
