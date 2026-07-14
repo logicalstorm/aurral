@@ -1,4 +1,46 @@
 document.addEventListener("DOMContentLoaded", async () => {
+  const nav = document.querySelector("nav");
+  const navToggle = nav?.querySelector(".nav-toggle");
+  const navLinks = nav?.querySelector(".nav-links");
+  const mobileNavQuery = window.matchMedia("(max-width: 820px)");
+
+  const setNavOpen = (open, { restoreFocus = false } = {}) => {
+    if (!navToggle || !navLinks) return;
+
+    const isOpen = mobileNavQuery.matches && open;
+    navLinks.classList.toggle("is-open", isOpen);
+    navLinks.toggleAttribute("inert", mobileNavQuery.matches && !isOpen);
+    navToggle.setAttribute("aria-expanded", String(isOpen));
+    navToggle.setAttribute("aria-label", isOpen ? "Close navigation" : "Open navigation");
+
+    if (restoreFocus) navToggle.focus();
+  };
+
+  if (nav && navToggle && navLinks) {
+    document.documentElement.classList.add("has-nav-menu");
+
+    navToggle.addEventListener("click", () => {
+      setNavOpen(navToggle.getAttribute("aria-expanded") !== "true");
+    });
+
+    navLinks.addEventListener("click", (event) => {
+      if (event.target.closest("a")) setNavOpen(false);
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!nav.contains(event.target)) setNavOpen(false);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && navToggle.getAttribute("aria-expanded") === "true") {
+        setNavOpen(false, { restoreFocus: true });
+      }
+    });
+
+    mobileNavQuery.addEventListener("change", () => setNavOpen(false));
+    setNavOpen(false);
+  }
+
   const syncScrolledState = () => {
     document.body.classList.toggle("is-scrolled", window.scrollY > 12);
   };
