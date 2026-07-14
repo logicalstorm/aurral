@@ -19,10 +19,6 @@ const sanitizePresetId = (presetId) =>
     .replace(/[^a-zA-Z0-9_-]+/g, "_")
     .replace(/^_+|_+$/g, "") || "playlist";
 
-export function getDiscoverArtworkDirectory() {
-  return DISCOVER_ARTWORK_DIR;
-}
-
 export function getDiscoverArtworkFilePath(presetId, style = null) {
   const resolvedStyle = style || getPlaylistArtworkStyle();
   const extension = getArtworkExtensionForStyle(resolvedStyle);

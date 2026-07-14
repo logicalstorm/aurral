@@ -2,7 +2,6 @@ import createCache from "./apiClients/simpleCache.js";
 import { getDiscoveryCache } from "./discovery/index.js";
 import { getLastfmApiKey, lastfmRequest } from "./apiClients/index.js";
 import { buildImageProxyUrl } from "./imageProxyService.js";
-import { selectBestArtistImage } from "./imageService.js";
 import { lidarrClient } from "./lidarrClient.js";
 import {
   searchAlbums as providerSearchAlbums,
@@ -24,11 +23,9 @@ export function parsePositiveInt(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-const PRIMARY_RELEASE_TYPES = new Set(PRIMARY_RELEASE_TYPE_LIST);
-const SECONDARY_RELEASE_TYPES = new Set(SECONDARY_RELEASE_TYPE_LIST);
 const ALL_RELEASE_TYPES = new Set([
-  ...PRIMARY_RELEASE_TYPES,
-  ...SECONDARY_RELEASE_TYPES,
+  ...PRIMARY_RELEASE_TYPE_LIST,
+  ...SECONDARY_RELEASE_TYPE_LIST,
 ]);
 const albumLibraryLookupCache = createCache(60);
 
@@ -88,46 +85,6 @@ export function normalizeAlbumSearchSort(value) {
     : "relevance";
 }
 
-function normalizeArtistItem(item) {
-  const image = selectBestArtistImage(item.images);
-  return {
-    type: "artist",
-    id: item.id,
-    name: item.name,
-    sortName: item.sortName || item.name,
-    image: image?.url || null,
-    imageUrl: image?.url || null,
-    artistType: item.type || null,
-    country: null,
-    area: null,
-    begin: null,
-    end: null,
-    disambiguation: item.disambiguation || null,
-    tags: Array.isArray(item.genres) ? item.genres : [],
-    genres: Array.isArray(item.genres) ? item.genres : [],
-    inLibrary: false,
-    score: item.score || 0,
-  };
-}
-
-export function normalizeArtistSearchItem(item, imageCache = {}) {
-  const normalized = normalizeArtistItem({
-    id: item?.id,
-    name: item?.name,
-    sortName: item?.sortName || item?.["sort-name"] || item?.name,
-    type: item?.type || null,
-    disambiguation: item?.disambiguation || null,
-    genres: item?.genres || item?.tags || [],
-    images: imageCache?.[item?.id]?.imageUrl
-      ? [{ url: imageCache[item.id].imageUrl }]
-      : item?.imageUrl || item?.image
-        ? [{ url: item.imageUrl || item.image }]
-        : [],
-    score: item?.score || 0,
-  });
-  return normalized;
-}
-
 function normalizeAlbumItem(item, lookup = null) {
   return {
     type: "album",
@@ -146,55 +103,6 @@ function normalizeAlbumItem(item, lookup = null) {
     ...(lookup ? { monitored: Boolean(lookup.monitored) } : {}),
     score: item.score || 0,
   };
-}
-
-export function normalizeAlbumSearchItem(item, lookup = {}) {
-  const artistCredit = Array.isArray(item?.["artist-credit"]) ? item["artist-credit"] : [];
-  const primaryCredit = artistCredit[0] || {};
-  const artist = primaryCredit.artist || {};
-  const normalized = normalizeAlbumItem(
-    {
-      id: item?.id,
-      title: item?.title,
-      artistName: primaryCredit.name || artist.name || item?.artistName,
-      artistId: artist.id || item?.artistMbid || item?.artistId || null,
-      type: item?.type || item?.["primary-type"] || null,
-      secondaryTypes: item?.secondaryTypes || item?.["secondary-types"] || [],
-      releaseDate: item?.releaseDate || item?.["first-release-date"] || null,
-      coverUrl: item?.coverUrl || null,
-      score: item?.score || 0,
-    },
-    lookup?.inLibrary || lookup?.libraryAlbumId || lookup?.libraryArtistId ? lookup : null,
-  );
-  delete normalized.score;
-  return normalized;
-}
-
-export function matchesAlbumReleaseTypeFilter(item, selectedReleaseTypes = []) {
-  const selected = normalizeAlbumReleaseTypesFilter(selectedReleaseTypes);
-  if (selected.length === 0) return true;
-
-  const primaryType = String(item?.primaryType || item?.["primary-type"] || "").trim();
-  const secondaryTypes = Array.isArray(item?.secondaryTypes || item?.["secondary-types"])
-    ? item.secondaryTypes || item["secondary-types"]
-    : [];
-
-  const primaryMatches = selected.filter((value) => PRIMARY_RELEASE_TYPES.has(value));
-  const secondaryMatches = selected.filter((value) => SECONDARY_RELEASE_TYPES.has(value));
-
-  if (primaryMatches.length > 0 && !primaryMatches.includes(primaryType)) {
-    return false;
-  }
-
-  if (!secondaryMatches.every((value) => secondaryTypes.includes(value))) {
-    return false;
-  }
-
-  if (secondaryMatches.length > 0 && secondaryTypes.length !== secondaryMatches.length) {
-    return false;
-  }
-
-  return true;
 }
 
 export async function searchArtists(query, limit = 24, offset = 0) {

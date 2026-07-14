@@ -86,9 +86,6 @@ const isStoredFresh = (key) => {
   }
 };
 
-export const isStoredDiscoveryFresh = (userId) =>
-  isStoredFresh(getDiscoveryCacheStorageKey(userId));
-
 export const isStoredRecentlyAddedFresh = (userId) =>
   isStoredFresh(getDiscoverRecentlyAddedStorageKey(userId));
 

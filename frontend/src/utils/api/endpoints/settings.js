@@ -17,11 +17,6 @@ export const testPlexConnection = (url, token) =>
 
 export const syncPlexNow = () => postData("/settings/plex/sync");
 
-export const browsePaths = (path) =>
-  getData("/settings/browse", {
-    params: path ? { path } : {},
-  });
-
 export const getAppSettings = () => getData("/settings");
 
 export const updateAppSettings = (settings) => postData("/settings", settings);

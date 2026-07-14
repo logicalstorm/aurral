@@ -30,7 +30,6 @@ const { flowPlaylistConfig } = playlistConfigModule;
 const {
   pathsShareDevice,
   reuseTrackForPlaylist,
-  repairCompletedTrackLink,
   repairJobsUnderRemovedPlaylistDir,
   repairOrphanedPlaylistTrackPaths,
   repairReusableTrackLinks,
@@ -113,90 +112,6 @@ test("reuseTrackForPlaylist does not inspect sources when reuse is disabled", as
 
   assert.equal(result.reused, false);
   assert.equal(downloadTracker.getAll().length, 0);
-});
-
-test("repairCompletedTrackLink updates missing playlist paths to a reusable source", async () => {
-  const track = {
-    artistName: "Radiohead",
-    trackName: "Creep",
-    albumName: "Pablo Honey",
-  };
-  const lidarrPath = path.join(weeklyFlowRoot, "lidarr-library", "Creep.flac");
-  const playlistPath = path.join(
-    weeklyFlowRoot,
-    "aurral-weekly-flow",
-    "flow-playlist",
-    "Radiohead",
-    "Pablo Honey",
-    "Creep.flac",
-  );
-  await fs.mkdir(path.dirname(lidarrPath), { recursive: true });
-  await fs.writeFile(lidarrPath, "lidarr-audio");
-  const jobId = downloadTracker.addJob(track, "flow-playlist");
-  downloadTracker.setDone(jobId, playlistPath, track.albumName);
-
-  const result = await repairCompletedTrackLink(
-    downloadTracker.getJob(jobId),
-    {
-      existingFileMode: "reuse",
-      weeklyFlowRoot,
-      resolveSource: async () => ({
-        source: {
-          sourceType: "lidarr",
-          sourcePath: lidarrPath,
-          albumName: track.albumName,
-        },
-        reason: null,
-      }),
-    },
-  );
-
-  assert.equal(result.repaired, true);
-  assert.equal(result.sourceType, "lidarr");
-  assert.equal(result.finalPath, lidarrPath);
-  assert.equal(downloadTracker.getJob(jobId)?.finalPath, lidarrPath);
-});
-
-test("repairCompletedTrackLink skips tracks whose playlist file still exists", async () => {
-  const track = {
-    artistName: "Bjork",
-    trackName: "Hyperballad",
-    albumName: "Post",
-  };
-  const sourcePath = path.join(weeklyFlowRoot, "library", "Hyperballad.flac");
-  const playlistPath = path.join(
-    weeklyFlowRoot,
-    "aurral-weekly-flow",
-    "flow-playlist",
-    "Bjork",
-    "Post",
-    "Hyperballad.flac",
-  );
-  await fs.mkdir(path.dirname(sourcePath), { recursive: true });
-  await fs.mkdir(path.dirname(playlistPath), { recursive: true });
-  await fs.writeFile(sourcePath, "shared-audio");
-  await fs.writeFile(playlistPath, "playlist-audio");
-  const jobId = downloadTracker.addJob(track, "flow-playlist");
-  downloadTracker.setDone(jobId, playlistPath, track.albumName);
-
-  const result = await repairCompletedTrackLink(
-    downloadTracker.getJob(jobId),
-    {
-      existingFileMode: "reuse",
-      weeklyFlowRoot,
-      resolveSource: async () => ({
-        source: {
-          sourceType: "lidarr",
-          sourcePath,
-          albumName: track.albumName,
-        },
-        reason: null,
-      }),
-    },
-  );
-
-  assert.equal(result.repaired, false);
-  assert.equal(result.reason, "Playlist file exists");
 });
 
 test("repairReusableTrackLinks does nothing when reuse is disabled", async () => {

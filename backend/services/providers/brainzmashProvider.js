@@ -9,7 +9,6 @@ import {
 } from "../../config/constants.js";
 import { rankAlbumCandidates, rankArtistCandidates } from "./brainzmashRanking.js";
 import {
-  matchesGenreQuery,
   toLegacyArtist,
   toLegacyRelease,
   toLegacyReleaseGroupSummary,
@@ -63,10 +62,6 @@ export function getMetadataBaseUrl() {
   } catch {
     return DEFAULT_METADATA_BASE_URL;
   }
-}
-
-export function getMetadataProvider() {
-  return "brainzmash";
 }
 
 function getUserAgent() {
@@ -474,15 +469,4 @@ export async function legacyMusicbrainzRequest(endpoint, params = {}) {
   }
 
   throw new Error(`Unsupported legacy metadata endpoint: ${normalizedEndpoint}`);
-}
-
-export async function findArtistsByGenre(query, { limit = 24, offset = 0 } = {}) {
-  const result = await searchArtists(query, { limit: Math.max(limit * 3, 60), offset: 0 });
-  const filtered = result.items.filter((artist) => matchesGenreQuery(artist, query));
-  return {
-    query,
-    count: filtered.length,
-    offset,
-    items: filtered.slice(offset, offset + limit),
-  };
 }

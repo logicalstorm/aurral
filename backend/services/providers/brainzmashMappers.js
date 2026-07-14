@@ -1,5 +1,3 @@
-import { getNormalizedText } from "./brainzmashRanking.js";
-
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -305,12 +303,4 @@ export function toLegacySearchAlbumResult(item) {
         ]
       : [],
   };
-}
-
-export function matchesGenreQuery(artist, query) {
-  const normalizedQuery = getNormalizedText(query);
-  if (!normalizedQuery) return false;
-  return normalizeArray(artist?.genres).some((genre) =>
-    getNormalizedText(genre).includes(normalizedQuery),
-  );
 }

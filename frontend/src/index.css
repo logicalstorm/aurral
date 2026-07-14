@@ -5082,11 +5082,6 @@ textarea {
   height: 1.5rem;
 }
 
-.flow-page__tracks-toolbar-start--full {
-  flex: 1;
-  min-width: 0;
-}
-
 .artist-discover-shelf-card {
   width: 148px;
   flex-shrink: 0;
@@ -7106,10 +7101,6 @@ textarea {
   padding: 0.25rem 0 0.125rem;
 }
 
-.settings-modal .settings-page__access-check {
-  margin-top: 0;
-}
-
 .settings-page__field {
   display: grid;
   gap: 0.25rem;
@@ -7135,118 +7126,10 @@ textarea {
   height: 1rem;
 }
 
-.settings-page__access-check {
-  margin-top: 0.75rem;
-  padding: 1rem;
-  background: var(--aurral-surface);
-  border-radius: var(--aurral-radius-sm);
-}
-
 .storage-health {
   display: grid;
   gap: 0.75rem;
   margin-top: 0.75rem;
-}
-
-.settings-page__access-check-title {
-  margin: 0 0 0.75rem;
-  color: var(--aurral-white);
-  font-size: 0.875rem;
-  font-weight: 700;
-}
-
-.settings-page__access-check-list {
-  display: grid;
-  gap: 0.75rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.settings-page__access-step {
-  display: flex;
-  gap: 0.625rem;
-  align-items: flex-start;
-}
-
-.settings-page__access-step-icon {
-  width: 1rem;
-  height: 1rem;
-  flex-shrink: 0;
-  margin-top: 0.125rem;
-}
-
-.settings-page__access-step-body {
-  display: grid;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.settings-page__access-step-label {
-  color: var(--aurral-white);
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.settings-page__access-step-detail {
-  color: var(--aurral-gray-light);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.settings-page__access-step-fix {
-  margin: 0;
-  color: var(--aurral-gray-light);
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
-
-.settings-page__access-sample {
-  display: grid;
-  gap: 0.35rem;
-  margin: 0.75rem 0 0;
-  color: var(--aurral-gray-light);
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
-
-.settings-page__access-sample-label {
-  color: var(--aurral-white);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.settings-page__access-sample-path {
-  display: block;
-  padding: 0.5rem 0.625rem;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: var(--aurral-radius-sm);
-  color: var(--aurral-white);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.6875rem;
-  line-height: 1.45;
-  word-break: break-all;
-}
-
-.settings-page__integration-card-grid {
-  display: grid;
-  gap: 0.5rem;
-  grid-template-columns: 1fr;
-}
-
-.settings-page__integration-card-grid {
-  display: grid;
-  gap: 0.5rem;
-  grid-template-columns: 1fr;
-}
-
-@media (min-width: 760px) {
-  .settings-page__integration-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 .settings-page__banner {
@@ -8110,11 +7993,6 @@ textarea {
   font-size: 0.6875rem;
   font-weight: 600;
   color: var(--aurral-gray-light);
-}
-
-.flow-page__badge--type {
-  padding: 0.25rem 0.625rem;
-  background: var(--aurral-black);
 }
 
 .flow-page__badge--count {
@@ -10161,11 +10039,6 @@ textarea {
   text-align: center;
 }
 
-.onboarding-step__body {
-  display: grid;
-  gap: 0.75rem;
-}
-
 .onboarding-title {
   margin: 0;
   color: var(--aurral-white);
@@ -10185,18 +10058,9 @@ textarea {
   line-height: 1.5;
 }
 
-.onboarding-copy--center {
-  text-align: center;
-}
-
 .onboarding-fields {
   display: grid;
   gap: 0.75rem;
-}
-
-.onboarding-field-group {
-  display: grid;
-  gap: 0.5rem;
 }
 
 .onboarding-hint {
@@ -10208,14 +10072,6 @@ textarea {
 
 .onboarding-hint--center {
   text-align: center;
-}
-
-.onboarding-label {
-  display: block;
-  margin: 0;
-  color: var(--aurral-white);
-  font-size: 0.8125rem;
-  font-weight: 600;
 }
 
 .onboarding-fields > .btn {
@@ -10231,27 +10087,6 @@ textarea {
 .onboarding-checkbox-row span {
   color: var(--aurral-white);
   font-size: 0.875rem;
-}
-
-.onboarding-callout {
-  padding: 0.875rem 1rem;
-  background: var(--aurral-surface);
-  border-radius: var(--aurral-radius-round);
-}
-
-.onboarding-callout p {
-  margin: 0;
-  color: var(--aurral-gray-light);
-  font-size: 0.8125rem;
-  line-height: 1.45;
-}
-
-.onboarding-success-icon {
-  display: block;
-  width: 3rem;
-  height: 3rem;
-  margin: 0 auto 1rem;
-  color: var(--aurral-green);
 }
 
 .onboarding-error {

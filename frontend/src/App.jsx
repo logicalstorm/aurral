@@ -224,13 +224,7 @@ function AppContent() {
   }, [basePath, healthIssue, isHealthy, isAuthenticated, bootstrap]);
 
   return (
-    <Router
-      basename={basePath}
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true,
-      }}
-    >
+    <Router basename={basePath}>
       <DiscoverRecentProvider>
         <ProtectedRoute>
           <Layout>

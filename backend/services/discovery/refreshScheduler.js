@@ -87,10 +87,6 @@ export function pruneDuplicateScheduledDiscoveryRefreshes() {
   }
 }
 
-export function isDiscoveryRefreshPending() {
-  return discoveryRefreshQueued;
-}
-
 export function markDiscoveryRefreshDequeued() {
   discoveryRefreshQueued = false;
 }
@@ -254,4 +250,3 @@ export async function bootstrapDiscoveryRefresh() {
     console.log("Discovery cache needs update. Queued refresh.");
   }
 }
-

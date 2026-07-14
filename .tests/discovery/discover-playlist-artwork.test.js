@@ -13,17 +13,14 @@ const [isolatedState, playlistArtworkBuilder] = await setupIsolatedBackend(
   "backend/services/discovery/playlistArtworkBuilder.js",
 );
 
-const {
-  getDiscoverArtworkDirectory,
-  pruneObsoleteDiscoverArtwork,
-} = playlistArtworkBuilder;
+const { pruneObsoleteDiscoverArtwork } = playlistArtworkBuilder;
 
 test.after(async () => {
   await cleanupIsolatedState(isolatedState);
 });
 
 test("prunes obsolete discover playlist artwork files", async () => {
-  const artworkDir = getDiscoverArtworkDirectory();
+  const artworkDir = path.join(isolatedState.dataDir, "discover-artwork");
   await fs.mkdir(artworkDir, { recursive: true });
 
   await fs.writeFile(path.join(artworkDir, "current.jpg"), "current");

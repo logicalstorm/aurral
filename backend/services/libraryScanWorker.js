@@ -5,7 +5,6 @@ import { isHonkerDatabaseClosedError } from "./honkerWorkerRuntime.js";
 
 const WORKER_NAME = "library-scan";
 const LIBRARY_SCAN_REGISTRY_KEY = "pendingLibraryScanJob";
-const SCAN_DEBOUNCE_SECONDS = 30;
 
 function getScanRegistry() {
   const raw = dbOps.getJSONSetting(LIBRARY_SCAN_REGISTRY_KEY);
@@ -38,20 +37,6 @@ export function scheduleLibraryScan({ force = false } = {}) {
   const jobId = enqueueLibraryScanJob({ force: force === true });
   setScanRegistry({ jobId });
   return jobId;
-}
-
-export function scheduleLibraryScanDebounced({ force = false } = {}) {
-  const registry = getScanRegistry();
-  const debounceUntil = Number(registry.debounceUntil || 0);
-  const now = Math.floor(Date.now() / 1000);
-  if (!force && debounceUntil > now) {
-    return getScheduledLibraryScanJobId();
-  }
-  setScanRegistry({
-    ...registry,
-    debounceUntil: now + SCAN_DEBOUNCE_SECONDS,
-  });
-  return scheduleLibraryScan({ force });
 }
 
 let databaseClosed = false;

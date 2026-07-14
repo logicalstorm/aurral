@@ -63,61 +63,6 @@ function buildClient() {
   return buildClientFromCredentials(url, apiKey);
 }
 
-export async function testSlskdWithCredentials(url, apiKey) {
-  const trimmedUrl = String(url || "")
-    .trim()
-    .replace(/\/+$/, "");
-  const trimmedKey = String(apiKey || "").trim();
-  if (!trimmedUrl || !trimmedKey) {
-    return {
-      ok: false,
-      configured: false,
-      connected: false,
-      message: "slskd URL and API key are required",
-    };
-  }
-  const client = buildClientFromCredentials(trimmedUrl, trimmedKey);
-  try {
-    const [appRes, optionsRes] = await Promise.all([
-      client.get("/api/v0/application"),
-      client.get("/api/v0/options"),
-    ]);
-    if (appRes.status !== 200) {
-      return {
-        ok: false,
-        configured: true,
-        connected: false,
-        message: `slskd returned HTTP ${appRes.status}`,
-      };
-    }
-    const server = appRes.data?.server || {};
-    const serverState = String(server.state || "");
-    const soulseekConnected = server.isConnected === true || serverState.includes("Connected");
-    const rawDownloadPath =
-      optionsRes.data?.directories?.downloads || optionsRes.data?.directories?.download;
-    const downloadPath = Array.isArray(rawDownloadPath) ? String(rawDownloadPath[0] || "").trim() || null : String(rawDownloadPath || "").trim() || null;
-    return {
-      ok: true,
-      configured: true,
-      connected: soulseekConnected,
-      soulseekConnected,
-      warning: !soulseekConnected,
-      serverState,
-      downloadPath,
-      message: soulseekConnected
-        ? "slskd is connected"
-        : `Aurral reached slskd, but Soulseek is ${serverState || "disconnected"}. Open slskd, log in, and connect to the Soulseek server.`,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      configured: true,
-      connected: false,
-      message: error?.message || "Failed to reach slskd",
-    };
-  }
-}
-
 function calculateQuadraticDelay(progress) {
   const delay = 16 * progress ** 2 - 16 * progress + 5;
   return Math.min(5, Math.max(0.5, delay));

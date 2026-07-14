@@ -5,8 +5,6 @@ import {
   normalizeTitle as normalizeTitleBase,
   scoreTextMatch as scoreTextMatchBase,
   getYear,
-  splitWords as splitWordsBase,
-  TITLE_STOP_WORDS,
 } from "../providers/brainzmashRanking.js";
 
 const MATCHER_OPTIONS = { extended: true };
@@ -17,10 +15,6 @@ function normalizeText(value) {
 
 function normalizeTitle(value) {
   return normalizeTitleBase(value, MATCHER_OPTIONS);
-}
-
-function splitWords(value) {
-  return splitWordsBase(value, MATCHER_OPTIONS);
 }
 
 function scoreTextMatch(left, right) {
@@ -78,22 +72,6 @@ function getYears(value) {
   return [...String(value || "").matchAll(/\b(19\d{2}|20\d{2})\b/g)].map((match) => match[1]);
 }
 
-function getDistinctiveAlbumPhrase(albumName) {
-  const words = splitWords(albumName).filter(
-    (word) => word.length > 2 && !TITLE_STOP_WORDS.has(word),
-  );
-  if (words.length <= 2) return words.join(" ");
-  return words
-    .sort((left, right) => right.length - left.length)
-    .slice(0, 3)
-    .sort(
-      (left, right) =>
-        String(albumName).toLowerCase().indexOf(left) -
-        String(albumName).toLowerCase().indexOf(right),
-    )
-    .join(" ");
-}
-
 function uniqueQueries(values, limit = 12) {
   const seen = new Set();
   const queries = [];
@@ -122,20 +100,6 @@ export function bypassBannedArtistTerm(name) {
       return `*${word.slice(1)}`;
     })
     .join(" ");
-}
-
-function uniqueArtistTerms(values) {
-  const seen = new Set();
-  const terms = [];
-  for (const value of values) {
-    const term = String(value || "").trim();
-    if (!term) continue;
-    const key = term.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    terms.push(term);
-  }
-  return terms;
 }
 
 function stripParenthetical(value) {
@@ -202,182 +166,14 @@ function readFlowSearchContext(context) {
   const trackName = String(context?.trackName || "").trim();
   const albumName = readComparableAlbumName(context);
   const releaseYear = getYear(context?.releaseYear);
-  const aliases = Array.isArray(context?.artistAliases)
-    ? context.artistAliases
-        .map((entry) => String(entry || "").trim())
-        .filter(Boolean)
-        .slice(0, 2)
-    : [];
-  const normalizedAlbum = normalizeTitle(albumName);
-  const distinctiveAlbum = getDistinctiveAlbumPhrase(albumName);
   const trackVariants = buildTrackQueryVariants(trackName);
-  const isSelfTitled =
-    artistName && albumName ? scoreTextMatch(artistName, albumName) >= 92 : false;
   return {
     artistName,
     trackName,
     albumName,
     releaseYear,
-    aliases,
-    normalizedAlbum,
-    distinctiveAlbum,
     trackVariants,
-    isSelfTitled,
   };
-}
-
-function buildFlowAlbumSearchQueriesForArtistTerms(context, artistTerms) {
-  const { albumName, releaseYear, normalizedAlbum, distinctiveAlbum, isSelfTitled } =
-    readFlowSearchContext(context);
-  const queries = [];
-  for (const artist of artistTerms) {
-    if (!artist || !albumName) continue;
-    if (isSelfTitled && releaseYear) {
-      queries.push(`${artist} ${releaseYear}`);
-    }
-    queries.push(`${artist} ${albumName}`);
-    if (releaseYear) {
-      queries.push(`${artist} ${albumName} ${releaseYear}`);
-    }
-    if (normalizedAlbum && normalizedAlbum !== normalizeTitle(albumName)) {
-      queries.push(`${artist} ${normalizedAlbum}`);
-    }
-    if (distinctiveAlbum && normalizeText(distinctiveAlbum) !== normalizeText(albumName)) {
-      queries.push(`${artist} ${distinctiveAlbum}`);
-    }
-  }
-  return uniqueQueries(queries);
-}
-
-function buildFlowTrackFallbackSearchQueriesForArtistTerms(context, artistTerms) {
-  const { albumName, releaseYear, aliases, normalizedAlbum, trackVariants } =
-    readFlowSearchContext(context);
-  const queries = [];
-  for (const artist of artistTerms) {
-    if (!artist) continue;
-    for (const trackVariant of trackVariants) {
-      queries.push(`${artist} ${trackVariant}`);
-    }
-  }
-  if (albumName && trackVariants.length > 0) {
-    for (const trackVariant of trackVariants.slice(0, 2)) {
-      queries.push(`${trackVariant} ${albumName}`);
-      if (releaseYear) {
-        queries.push(`${trackVariant} ${albumName} ${releaseYear}`);
-      }
-      if (normalizedAlbum && normalizedAlbum !== normalizeTitle(albumName)) {
-        queries.push(`${trackVariant} ${normalizedAlbum}`);
-      }
-    }
-  }
-  for (const alias of aliases) {
-    if (artistTerms.some((term) => term.toLowerCase() === alias.toLowerCase())) {
-      continue;
-    }
-    for (const trackVariant of trackVariants) {
-      queries.push(`${alias} ${trackVariant}`);
-    }
-  }
-  return uniqueQueries(queries);
-}
-
-function readFlowArtistTerms(context, wildcard = false) {
-  const { artistName, aliases } = readFlowSearchContext(context);
-  const terms = wildcard
-    ? [artistName, ...aliases].map(bypassBannedArtistTerm)
-    : [artistName, ...aliases];
-  return uniqueArtistTerms(terms);
-}
-
-export function buildFlowAlbumSearchQueries(context) {
-  return buildFlowAlbumSearchQueriesForArtistTerms(context, readFlowArtistTerms(context, false));
-}
-
-export function buildFlowWildcardAlbumSearchQueries(context) {
-  return buildFlowAlbumSearchQueriesForArtistTerms(context, readFlowArtistTerms(context, true));
-}
-
-export function buildFlowTrackFallbackSearchQueries(context) {
-  return buildFlowTrackFallbackSearchQueriesForArtistTerms(
-    context,
-    readFlowArtistTerms(context, false),
-  );
-}
-
-export function buildFlowWildcardTrackFallbackSearchQueries(context) {
-  return buildFlowTrackFallbackSearchQueriesForArtistTerms(
-    context,
-    readFlowArtistTerms(context, true),
-  );
-}
-
-export function buildFlowArtistOnlySearchQueries(context) {
-  return uniqueQueries(readFlowArtistTerms(context, true), 6);
-}
-
-export function buildFlowSearchQueries(context) {
-  return uniqueQueries(
-    buildFlowSearchTiers(context).flatMap((tier) => tier.queries),
-    32,
-  );
-}
-
-export function removeSearchAccents(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "");
-}
-
-export function stripSearchPunctuation(value) {
-  return String(value || "")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-export function buildTrimmedBypassText(value) {
-  return String(value || "")
-    .trim()
-    .split(/\s+/)
-    .map((word) => (word.length >= 4 ? word.slice(0, -1) : word))
-    .join(" ");
-}
-
-function toVolumeDigit(token) {
-  const raw = String(token || "").trim();
-  if (/^\d+$/.test(raw)) return raw;
-  const romanMap = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10 };
-  const mapped = romanMap[raw.toLowerCase()];
-  return mapped != null ? String(mapped) : raw;
-}
-
-export function buildVolumeVariationTexts(value) {
-  const text = String(value || "").trim();
-  if (!text) return [];
-  const match = text.match(/\b(?:vol\.?|volume)\s*([ivx\d]+)\b/i);
-  if (!match) return [];
-  const digit = toVolumeDigit(match[1]);
-  const prefix = text.slice(0, match.index).trim();
-  const suffix = text.slice(match.index + match[0].length).trim();
-  const forms = [
-    `Vol. ${digit}`,
-    `Vol ${digit}`,
-    `Volume ${digit}`,
-    `Volume ${match[1].toUpperCase()}`,
-  ];
-  return uniqueQueries(
-    forms.map((form) => [prefix, form, suffix].filter(Boolean).join(" ")),
-    6,
-  );
-}
-
-export function buildHalfAlbumTitle(albumName) {
-  const words = String(albumName || "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (words.length < 5) return "";
-  return words.slice(0, Math.ceil(words.length / 2)).join(" ");
 }
 
 function joinSearchParts(...parts) {
@@ -434,131 +230,6 @@ function buildAlbumTrackTierQueries(ctx) {
     }
   }
   return uniqueQueries(queries, 3);
-}
-
-function _buildVariationTierQueries(ctx) {
-  const queries = [];
-  const primaryTrack = ctx.trackVariants[0] || ctx.trackName;
-  const artistForms = uniqueQueries(
-    [
-      ctx.artistName,
-      removeSearchAccents(ctx.artistName),
-      stripSearchPunctuation(ctx.artistName),
-    ].filter(Boolean),
-    3,
-  );
-  const trackForms = uniqueQueries(
-    [
-      primaryTrack,
-      removeSearchAccents(primaryTrack),
-      stripSearchPunctuation(primaryTrack),
-      ...ctx.trackVariants.slice(1, 2),
-    ].filter(Boolean),
-    4,
-  );
-  const albumForms = uniqueQueries(
-    [
-      ctx.albumName,
-      removeSearchAccents(ctx.albumName),
-      stripSearchPunctuation(ctx.albumName),
-      ctx.normalizedAlbum,
-    ].filter(Boolean),
-    4,
-  );
-  for (const artist of artistForms) {
-    for (const track of trackForms) {
-      queries.push(joinSearchParts(artist, track));
-    }
-    for (const album of albumForms) {
-      queries.push(joinSearchParts(artist, album));
-      for (const volumeText of buildVolumeVariationTexts(album)) {
-        queries.push(joinSearchParts(artist, volumeText));
-      }
-      if (ctx.releaseYear) {
-        queries.push(joinSearchParts(artist, album, ctx.releaseYear));
-      }
-    }
-  }
-  return uniqueQueries(queries, 10);
-}
-
-function _buildTrimmedTierQueries(ctx) {
-  const queries = [];
-  const primaryTrack = ctx.trackVariants[0] || ctx.trackName;
-  const trimmedArtist = buildTrimmedBypassText(ctx.artistName);
-  const trimmedTrack = buildTrimmedBypassText(primaryTrack);
-  const trimmedAlbum = buildTrimmedBypassText(ctx.albumName);
-  if (trimmedArtist && trimmedTrack) {
-    queries.push(joinSearchParts(trimmedArtist, trimmedTrack));
-  }
-  if (trimmedArtist && trimmedAlbum) {
-    queries.push(joinSearchParts(trimmedArtist, trimmedAlbum));
-    if (ctx.releaseYear) {
-      queries.push(joinSearchParts(trimmedArtist, trimmedAlbum, ctx.releaseYear));
-    }
-  }
-  if (ctx.artistName && primaryTrack) {
-    queries.push(joinSearchParts(bypassBannedArtistTerm(ctx.artistName), primaryTrack));
-  }
-  if (ctx.artistName && ctx.albumName) {
-    queries.push(joinSearchParts(bypassBannedArtistTerm(ctx.artistName), ctx.albumName));
-  }
-  return uniqueQueries(queries, 6);
-}
-
-function _buildSpecialCaseTierQueries(ctx) {
-  const queries = [];
-  const primaryTrack = ctx.trackVariants[0] || ctx.trackName;
-  for (const alias of ctx.aliases) {
-    if (!alias) continue;
-    if (primaryTrack) {
-      queries.push(joinSearchParts(alias, primaryTrack));
-    }
-    if (ctx.albumName) {
-      queries.push(joinSearchParts(alias, ctx.albumName));
-      if (ctx.releaseYear) {
-        queries.push(joinSearchParts(alias, ctx.albumName, ctx.releaseYear));
-      }
-    }
-    queries.push(bypassBannedArtistTerm(alias));
-  }
-  const halfAlbum = buildHalfAlbumTitle(ctx.albumName);
-  if (ctx.artistName && halfAlbum) {
-    queries.push(joinSearchParts(ctx.artistName, halfAlbum));
-  }
-  if (ctx.artistName) {
-    queries.push(bypassBannedArtistTerm(ctx.artistName));
-  }
-  if (ctx.albumName) {
-    queries.push(ctx.albumName);
-    if (ctx.distinctiveAlbum && ctx.distinctiveAlbum !== ctx.albumName) {
-      queries.push(ctx.distinctiveAlbum);
-    }
-  }
-  return uniqueQueries(queries, 10);
-}
-
-function _buildTrackFallbackTierQueries(ctx) {
-  const queries = [];
-  const trackVariants = uniqueQueries(ctx.trackVariants, 6);
-  for (const trackVariant of trackVariants) {
-    if (ctx.artistName) {
-      queries.push(joinSearchParts(ctx.artistName, trackVariant));
-      queries.push(joinSearchParts(bypassBannedArtistTerm(ctx.artistName), trackVariant));
-    }
-    if (ctx.albumName) {
-      queries.push(joinSearchParts(trackVariant, ctx.albumName));
-      if (ctx.releaseYear) {
-        queries.push(joinSearchParts(trackVariant, ctx.albumName, ctx.releaseYear));
-      }
-    }
-  }
-  for (const alias of ctx.aliases) {
-    for (const trackVariant of trackVariants.slice(0, 2)) {
-      queries.push(joinSearchParts(alias, trackVariant));
-    }
-  }
-  return uniqueQueries(queries, 8);
 }
 
 export function buildFlowSearchTiers(context) {

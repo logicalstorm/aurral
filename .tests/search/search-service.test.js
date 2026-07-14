@@ -1,110 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  matchesAlbumReleaseTypeFilter,
-  normalizeAlbumSearchItem,
-  normalizeAlbumReleaseTypesFilter,
-  normalizeArtistSearchItem,
-} from "../../backend/services/searchService.js";
+import { normalizeAlbumReleaseTypesFilter } from "../../backend/services/searchService.js";
 import { libraryManager } from "../../backend/services/libraryManager.js";
 import { lidarrClient } from "../../backend/services/lidarrClient.js";
-
-test("normalizeArtistSearchItem preserves sort name and cached image", () => {
-  const item = normalizeArtistSearchItem(
-    {
-      id: "artist-mbid",
-      name: "Boards of Canada",
-      "sort-name": "Canada, Boards of",
-    },
-    {
-      "artist-mbid": { imageUrl: "https://images.example/artist.jpg" },
-    },
-  );
-
-  assert.equal(item.type, "artist");
-  assert.equal(item.id, "artist-mbid");
-  assert.equal(item.name, "Boards of Canada");
-  assert.equal(item.sortName, "Canada, Boards of");
-  assert.equal(item.image, "https://images.example/artist.jpg");
-  assert.equal(item.imageUrl, item.image);
-  assert.equal(item.artistType, null);
-  assert.equal(item.country, null);
-  assert.equal(item.area, null);
-  assert.equal(item.begin, null);
-  assert.equal(item.end, null);
-  assert.equal(item.disambiguation, null);
-  assert.equal(item.inLibrary, false);
-});
-
-test("normalizeAlbumSearchItem preserves compilation metadata and library state", () => {
-  const item = normalizeAlbumSearchItem(
-    {
-      id: "release-group-mbid",
-      title: "Chrono Trigger Original Sound Version",
-      "artist-credit": [
-        {
-          name: "Various Artists",
-          artist: { id: "various-artists-mbid", name: "Various Artists" },
-        },
-      ],
-      "first-release-date": "1995-03-11",
-      "primary-type": "Album",
-      "secondary-types": ["Soundtrack", "Compilation"],
-    },
-    {
-      libraryAlbumId: "42",
-      libraryArtistId: "7",
-      status: "monitored",
-      monitored: true,
-    },
-  );
-
-  assert.deepEqual(item, {
-    type: "album",
-    id: "release-group-mbid",
-    title: "Chrono Trigger Original Sound Version",
-    artistName: "Various Artists",
-    artistMbid: "various-artists-mbid",
-    releaseDate: "1995-03-11",
-    primaryType: "Album",
-    secondaryTypes: ["Soundtrack", "Compilation"],
-    coverUrl: null,
-    inLibrary: true,
-    libraryAlbumId: "42",
-    libraryArtistId: "7",
-    status: "monitored",
-    monitored: true,
-  });
-});
 
 test("normalizeAlbumReleaseTypesFilter removes invalid and duplicate release types", () => {
   assert.deepEqual(
     normalizeAlbumReleaseTypesFilter("Album,Live,Album,Invalid"),
     ["Album", "Live"],
-  );
-});
-
-test("matchesAlbumReleaseTypeFilter requires selected primary and secondary types", () => {
-  assert.equal(
-    matchesAlbumReleaseTypeFilter(
-      {
-        "primary-type": "Album",
-        "secondary-types": ["Live", "Soundtrack"],
-      },
-      ["Album", "Live", "Soundtrack"],
-    ),
-    true,
-  );
-  assert.equal(
-    matchesAlbumReleaseTypeFilter(
-      {
-        "primary-type": "Album",
-        "secondary-types": ["Live", "Soundtrack"],
-      },
-      ["Album", "Live"],
-    ),
-    false,
   );
 });
 

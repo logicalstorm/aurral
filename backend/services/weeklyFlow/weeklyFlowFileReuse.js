@@ -452,25 +452,6 @@ export async function restoreCompletedTrack(job, options = {}) {
   };
 }
 
-export async function repairCompletedTrackLink(job, options = {}) {
-  const result = await restoreCompletedTrack(job, {
-    ...options,
-    requeueOnMissing: false,
-  });
-  if (result.action === "repaired") {
-    return {
-      repaired: true,
-      sourceType: result.sourceType,
-      sourcePath: result.sourcePath,
-      finalPath: result.finalPath,
-    };
-  }
-  return {
-    repaired: false,
-    reason: result.reason || "No reusable source found",
-  };
-}
-
 export async function repairJobsUnderRemovedPlaylistDir(playlistType, options = {}) {
   const weeklyFlowRoot = path.resolve(options.weeklyFlowRoot || resolveWeeklyFlowRoot());
   const safePlaylistType = String(playlistType || "").trim();

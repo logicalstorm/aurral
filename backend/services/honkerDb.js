@@ -223,7 +223,6 @@ const playlistReserveBuild = registerQueue({
 });
 
 export const getPlaylistReserveBuildQueue = playlistReserveBuild.getQueue;
-export const enqueuePlaylistReserveBuildJob = playlistReserveBuild.enqueueJob;
 
 const playlistMbidEnrichment = registerQueue({
   name: "playlist-mbid-enrichment",
@@ -267,7 +266,6 @@ const imagePrefetch = registerQueue({
 });
 
 export const getImagePrefetchQueue = imagePrefetch.getQueue;
-export const enqueueImagePrefetchJob = imagePrefetch.enqueueJob;
 
 export function getNotificationOutbox() {
   if (!notificationOutbox) {
@@ -361,12 +359,6 @@ export function stopHonkerScheduler() {
 
 export function closeHonkerDb() {
   stopHonkerScheduler();
-  if (discoveryRefreshQueueLock) {
-    try {
-      discoveryRefreshQueueLock.release();
-    } catch {}
-    discoveryRefreshQueueLock = null;
-  }
   if (honkerDb) {
     try {
       honkerDb.close();
@@ -381,10 +373,6 @@ export function closeHonkerDb() {
   notificationOutbox = null;
 }
 
-const DISCOVERY_REFRESH_QUEUE_LOCK = "discovery-refresh-queue";
-
-let discoveryRefreshQueueLock = null;
-
 export function isHonkerLockHeld(name) {
   const probeOwner = `probe-${WORKER_ID}-${Date.now()}`;
   const lock = getHonkerDb().tryLock(String(name || "").trim(), probeOwner, 1);
@@ -395,26 +383,6 @@ export function isHonkerLockHeld(name) {
     return false;
   }
   return true;
-}
-
-export function tryAcquireDiscoveryRefreshQueueLock() {
-  if (discoveryRefreshQueueLock) return true;
-  const lock = getHonkerDb().tryLock(DISCOVERY_REFRESH_QUEUE_LOCK, WORKER_ID, 3600);
-  if (!lock) return false;
-  discoveryRefreshQueueLock = lock;
-  return true;
-}
-
-export function releaseDiscoveryRefreshQueueLock() {
-  if (!discoveryRefreshQueueLock) return;
-  try {
-    discoveryRefreshQueueLock.release();
-  } catch {}
-  discoveryRefreshQueueLock = null;
-}
-
-export function isDiscoveryRefreshQueueLocked() {
-  return discoveryRefreshQueueLock != null || isHonkerLockHeld(DISCOVERY_REFRESH_QUEUE_LOCK);
 }
 
 const inProcessLockTails = new Map();

@@ -109,14 +109,6 @@ export function normalizePreviewTrack(track, artistName, overrides = {}) {
   );
 }
 
-export function getAudioLoadOptions(src, formatHint) {
-  const hint = formatHint || extensionFromPath(src);
-  if (hint && FORMAT_BY_EXTENSION[hint]) {
-    return { format: FORMAT_BY_EXTENSION[hint] };
-  }
-  return { format: ["mp3"] };
-}
-
 export function isDownloadedLibraryAlbum(album, downloadStatuses = {}) {
   if (String(album?.id ?? "").startsWith("pending-")) return false;
   return (

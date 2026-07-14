@@ -156,13 +156,3 @@ export function resolveRemotePath(localPath, mappings = getPathMappings()) {
 
   return resolved;
 }
-
-export async function verifyMappedPath(externalPath, mappings = getPathMappings()) {
-  const localPath = resolveLocalPath(externalPath, mappings);
-  try {
-    await fs.promises.access(localPath, fs.constants.R_OK);
-    return { ok: true, localPath };
-  } catch {
-    return { ok: false, localPath };
-  }
-}

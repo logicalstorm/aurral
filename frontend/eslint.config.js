@@ -2,7 +2,6 @@ import js from "@eslint/js";
 import globals from "globals";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
-import eslintConfigPrettier from "eslint-config-prettier";
 
 export default [
   {
@@ -36,11 +35,11 @@ export default [
       "react-hooks/refs": "off",
       "react-hooks/set-state-in-effect": "off",
       "no-empty": ["error", { allowEmptyCatch: true }],
+      "no-unexpected-multiline": "off",
       "no-unused-vars": [
         "error",
         { caughtErrors: "none", argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
     },
   },
-  eslintConfigPrettier,
 ];

@@ -104,8 +104,4 @@ export const listenbrainzRequest = listenbrainzLimiter.wrap(
   },
 );
 
-export const clearListenbrainzCache = () => {
-  listenbrainzCache.flushAll();
-};
-
 export { listenbrainzCache };

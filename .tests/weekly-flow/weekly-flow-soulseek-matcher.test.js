@@ -2,17 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   bypassBannedArtistTerm,
-  buildFlowSearchQueries,
   buildFlowSearchTiers,
-  buildFlowAlbumSearchQueries,
-  buildFlowArtistOnlySearchQueries,
-  buildFlowTrackFallbackSearchQueries,
-  buildFlowWildcardAlbumSearchQueries,
-  buildFlowWildcardTrackFallbackSearchQueries,
-  buildHalfAlbumTitle,
-  buildTrimmedBypassText,
-  buildVolumeVariationTexts,
-  removeSearchAccents,
   rankFlowSearchResults,
   selectRankedMatchAttempts,
   stripReleaseTypeSuffix,
@@ -36,33 +26,6 @@ test("bypassBannedArtistTerm replaces the first character of each artist word", 
   assert.equal(bypassBannedArtistTerm(""), "");
 });
 
-test("wildcard search query builders prefix artist terms", () => {
-  const track = {
-    artistName: "Franz Ferdinand",
-    trackName: "Take Me Out",
-    albumName: "Franz Ferdinand",
-    releaseYear: "2004",
-    artistAliases: ["Franz F."],
-  };
-
-  const albumQueries = buildFlowWildcardAlbumSearchQueries(track);
-  assert.ok(albumQueries.includes("*ranz *erdinand Franz Ferdinand"));
-  assert.ok(albumQueries.includes("*ranz *erdinand Franz Ferdinand 2004"));
-  assert.ok(!albumQueries.includes("Franz Ferdinand Franz Ferdinand"));
-
-  assert.deepEqual(buildFlowArtistOnlySearchQueries(track), [
-    "*ranz *erdinand",
-    "*ranz *.",
-  ]);
-
-  const fallbackQueries = buildFlowWildcardTrackFallbackSearchQueries({
-    ...track,
-    artistAliases: [],
-  });
-  assert.ok(fallbackQueries.includes("*ranz *erdinand Take Me Out"));
-  assert.ok(fallbackQueries.includes("Take Me Out Franz Ferdinand"));
-});
-
 test("stripReleaseTypeSuffix removes terminal release metadata only", () => {
   assert.equal(
     stripReleaseTypeSuffix("Object Permanence - Single"),
@@ -71,47 +34,6 @@ test("stripReleaseTypeSuffix removes terminal release metadata only", () => {
   assert.equal(stripReleaseTypeSuffix("Some Release (EP)"), "Some Release");
   assert.equal(stripReleaseTypeSuffix("Single"), "Single");
   assert.equal(stripReleaseTypeSuffix("Single Mothers"), "Single Mothers");
-});
-
-test("buildFlowSearchQueries strips release-type suffixes from album searches", () => {
-  const queries = buildFlowSearchQueries({
-    artistName: "Arm's Length",
-    trackName: "Object Permanence",
-    albumName: "Object Permanence - Single",
-    releaseYear: "2019",
-    artistAliases: [],
-  });
-
-  assert.ok(queries.includes("Arm's Length Object Permanence"));
-  assert.ok(queries.includes("Arm's Length Object Permanence 2019"));
-  assert.ok(queries.includes("*rm's *ength Object Permanence"));
-  assert.ok(!queries.some((query) => /Object Permanence - Single/i.test(query)));
-});
-
-test("buildFlowAlbumSearchQueries keeps album-only searches separate from track fallbacks", () => {
-  const albumQueries = buildFlowAlbumSearchQueries({
-    artistName: "Massive Attack",
-    trackName: "Teardrop",
-    albumName: "Mezzanine",
-    releaseYear: "1998",
-    artistAliases: ["Massive Attk"],
-  });
-  const fallbackQueries = buildFlowTrackFallbackSearchQueries({
-    artistName: "Massive Attack",
-    trackName: "Teardrop",
-    albumName: "Mezzanine",
-    releaseYear: "1998",
-    artistAliases: ["Massive Attk"],
-  });
-
-  assert.deepEqual(albumQueries.slice(0, 2), [
-    "Massive Attack Mezzanine",
-    "Massive Attack Mezzanine 1998",
-  ]);
-  assert.ok(albumQueries.includes("Massive Attk Mezzanine"));
-  assert.ok(!albumQueries.includes("Massive Attack Teardrop"));
-  assert.ok(fallbackQueries.includes("Massive Attack Teardrop"));
-  assert.ok(fallbackQueries.includes("Massive Attk Teardrop"));
 });
 
 test("buildFlowSearchTiers uses a short album-first plan", () => {
@@ -140,72 +62,6 @@ test("buildFlowSearchTiers uses a short album-first plan", () => {
         tier.name === "album_track" &&
         tier.queries.includes("Mezzanine Teardrop"),
     ),
-  );
-});
-
-test("search variation helpers normalize and trim bypass text", () => {
-  assert.equal(removeSearchAccents("Björk"), "Bjork");
-  assert.equal(buildTrimmedBypassText("Bob Dylan"), "Bob Dyla");
-  assert.equal(
-    buildVolumeVariationTexts("Artist Album Vol. 2")[0],
-    "Artist Album Vol. 2",
-  );
-  assert.ok(
-    buildVolumeVariationTexts("Artist Album Vol. 2").includes(
-      "Artist Album Volume 2",
-    ),
-  );
-  assert.equal(
-    buildHalfAlbumTitle("The Fiction We Live On Forever"),
-    "The Fiction We",
-  );
-});
-
-test("buildFlowSearchQueries and fallbacks keep album-first searches separate from track fallbacks", () => {
-  const gorillazQueries = buildFlowSearchQueries({
-    artistName: "Gorillaz",
-    trackName: "Feel Good Inc.",
-    albumName: "Demon Days",
-    releaseYear: "2005",
-    artistAliases: [],
-  });
-  assert.ok(gorillazQueries.includes("Demon Days Feel Good Inc."));
-  assert.ok(gorillazQueries.includes("Gorillaz Demon Days 2005"));
-  assert.ok(gorillazQueries.includes("Gorillaz Demon Days"));
-  assert.ok(!gorillazQueries.includes("Gorillaz Feel Good Inc."));
-
-  const queries = buildFlowSearchQueries({
-    artistName: "Bully",
-    trackName: "Lose You (feat. Soccer Mommy)",
-    albumName: "Lucky For You",
-    artistAliases: [],
-  });
-
-  assert.ok(queries.includes("Lucky For You Lose You (feat. Soccer Mommy)"));
-  assert.ok(!queries.includes("Bully Lose You"));
-
-  const fallbackQueries = buildFlowTrackFallbackSearchQueries({
-    artistName: "Bully",
-    trackName: "Lose You (feat. Soccer Mommy)",
-    albumName: "Lucky For You",
-    artistAliases: [],
-  });
-  assert.ok(fallbackQueries.includes("Bully Lose You"));
-
-  const slashQueries = buildFlowSearchQueries({
-    artistName: "LOVING",
-    trackName: "A long slow little wave / citizen, an activity",
-    albumName: "Any Light",
-    artistAliases: [],
-  });
-
-  assert.ok(
-    slashQueries.includes(
-      "Any Light A long slow little wave / citizen, an activity",
-    ),
-  );
-  assert.ok(
-    !slashQueries.includes("LOVING A long slow little wave"),
   );
 });
 

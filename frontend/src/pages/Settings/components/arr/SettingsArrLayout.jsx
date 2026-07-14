@@ -36,18 +36,3 @@ export function SettingsArrFormGroup({
 export function SettingsArrCardGrid({ children }) {
   return <div className="arr-card-grid">{children}</div>;
 }
-
-export function SettingsArrCard({ title, subtitle, meta, status, onClick }) {
-  return (
-    <button type="button" className="arr-card" onClick={onClick}>
-      <span className="arr-card__main">
-        <span className="arr-card__title">{title}</span>
-        {subtitle ? <span className="arr-card__subtitle">{subtitle}</span> : null}
-        {meta ? <span className="arr-card__meta">{meta}</span> : null}
-      </span>
-      {status ? (
-        <span className={`arr-card__status arr-card__status--${status.tone}`}>{status.label}</span>
-      ) : null}
-    </button>
-  );
-}
