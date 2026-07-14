@@ -228,7 +228,6 @@ const computeAllDownloadStatuses = async () => {
     ]);
     const queueItems = Array.isArray(queue) ? queue : queue.records || [];
     const historyItems = Array.isArray(history) ? history : history.records || [];
-    const commandItems = Array.isArray(commands) ? commands : commands?.records || [];
     const oneHourAgo = Date.now() - 60 * 60 * 1000;
     const albumIds = new Set();
     const searchContext = parseLidarrSearchContext({

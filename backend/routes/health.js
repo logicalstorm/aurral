@@ -334,7 +334,7 @@ router.get("/", noCache, async (req, res) => {
         recommendationsCount: discoveryCache?.recommendations?.length || 0,
         globalTopCount: discoveryCache?.globalTop?.length || 0,
         cachedImagesCount: dbOps.countImages(),
-        cachedImagesSizeBytes: getImageProxyCacheSizeBytes(),
+        cachedImagesSizeBytes: await getImageProxyCacheSizeBytes(),
       };
       payload.websocket = {
         clients: wsStats.totalClients,

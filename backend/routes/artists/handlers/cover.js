@@ -23,9 +23,6 @@ export function registerCover(router) {
         return res.json({ images: result.images || [] });
       }
 
-      const override = dbOps.getArtistOverride(mbid);
-      const _resolvedMbid = override?.musicbrainzId || mbid;
-
       const cachedImage = dbOps.getImage(mbid);
       if (
         !refresh &&

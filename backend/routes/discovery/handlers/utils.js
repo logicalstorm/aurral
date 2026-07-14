@@ -1,4 +1,4 @@
-import { getLastfmApiKey, lastfmRequest } from "../../../services/apiClients/index.js";
+import { lastfmRequest } from "../../../services/apiClients/index.js";
 
 export const SLSKD_NOT_CONFIGURED_MESSAGE =
   "slskd is not configured. Add your slskd URL and API key in Settings > Integrations to enable Soulseek downloads for flows and playlists.";

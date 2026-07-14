@@ -1,5 +1,4 @@
 import {
-  getDiscoveryRecommendationsPerRefresh,
   getDiscoveryCandidateLimit,
   getDiscoveryNetworkConcurrency,
   getLastfmFailureRatio,

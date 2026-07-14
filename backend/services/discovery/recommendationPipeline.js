@@ -586,64 +586,6 @@ const feedbackBoostForCandidate = (candidate, feedbackList = []) => {
   return { adjustment, hidden };
 };
 
-const _rerankSingleRecommendation = (recommendation, selected, options = {}) => {
-  const mode = normalizeDiscoveryMode(options.discoveryMode);
-  const multipliers = DISCOVERY_MODE_MULTIPLIERS[mode];
-  const candidateTags = new Set(
-    (Array.isArray(recommendation.matchedTags)
-      ? recommendation.matchedTags
-      : recommendation.tags || []
-    )
-      .map(normalizeText)
-      .filter(Boolean),
-  );
-  const candidateSeeds = new Set(
-    (Array.isArray(recommendation.supportingSeeds) ? recommendation.supportingSeeds : [])
-      .map((entry) => normalizeText(entry?.artistName))
-      .filter(Boolean),
-  );
-
-  let diversityPenalty = 0;
-  for (const previous of selected) {
-    const previousTags = new Set(
-      (Array.isArray(previous.matchedTags) ? previous.matchedTags : previous.tags || [])
-        .map(normalizeText)
-        .filter(Boolean),
-    );
-    const previousSeeds = new Set(
-      (Array.isArray(previous.supportingSeeds) ? previous.supportingSeeds : [])
-        .map((entry) => normalizeText(entry?.artistName))
-        .filter(Boolean),
-    );
-    const tagOverlap = [...candidateTags].filter((tag) => previousTags.has(tag)).length;
-    const seedOverlap = [...candidateSeeds].filter((seed) => previousSeeds.has(seed)).length;
-    diversityPenalty += tagOverlap * 1.8 + seedOverlap * 2.6;
-  }
-
-  const { adjustment, hidden } = feedbackBoostForCandidate(recommendation, options.feedback || []);
-
-  const baseScore =
-    Number(recommendation.scoreSimilarity || 0) * multipliers.similarity +
-    Number(recommendation.scoreTagAffinity || 0) * multipliers.tagAffinity +
-    Number(recommendation.scoreSeedCoverage || 0) * multipliers.seedCoverage +
-    Number(recommendation.scoreNovelty || 0) * multipliers.novelty -
-    Number(recommendation.scorePopularityPenalty || 0) * multipliers.popularityPenalty +
-    Number(recommendation.scoreFreshnessBoost || 0) -
-    Number(recommendation.scoreAgingPenalty || 0);
-
-  const scoreTotal = Math.round(
-    baseScore - diversityPenalty * multipliers.diversityPenalty + adjustment,
-  );
-
-  return {
-    ...recommendation,
-    scoreDiversityPenalty: Math.round(diversityPenalty),
-    scoreTotal,
-    score: scoreTotal,
-    hiddenByFeedback: hidden,
-  };
-};
-
 export const rerankRecommendations = (recommendations = [], limit = 100, options = {}) => {
   const mode = normalizeDiscoveryMode(options.discoveryMode);
   const multipliers = DISCOVERY_MODE_MULTIPLIERS[mode];

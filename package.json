@@ -11,6 +11,8 @@
   "scripts": {
     "build": "npm run build --workspace frontend",
     "start": "node --env-file=backend/.env backend/server.js",
+    "lint": "npm run lint:backend && npm run lint --workspace frontend",
+    "lint:backend": "eslint backend lib --no-config-lookup --rule 'no-unused-vars:[error,{\"argsIgnorePattern\":\"^_\",\"caughtErrors\":\"none\",\"varsIgnorePattern\":\"^_\"}]'",
     "test": "node --test --test-concurrency=4 $(find .tests -name '*.test.js' -not -name '*.int.test.js' -print)",
     "test:integration": "node --test --test-concurrency=1 $(find .tests -name '*.int.test.js' -print)",
     "test:coverage": "node --experimental-test-coverage --test --test-concurrency=4 --test-coverage-include='backend/**' --test-coverage-lines=30 $(find .tests -name '*.test.js' -not -name '*.int.test.js' -print)",

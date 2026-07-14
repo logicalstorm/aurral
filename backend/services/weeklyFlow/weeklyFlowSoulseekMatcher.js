@@ -1,17 +1,12 @@
 import path from "path";
 import { parseFile } from "music-metadata";
 import {
-  normalizeReleaseText,
   normalizeTitle as normalizeTitleBase,
   scoreTextMatch as scoreTextMatchBase,
   getYear,
 } from "../providers/brainzmashRanking.js";
 
 const MATCHER_OPTIONS = { extended: true };
-
-function normalizeText(value) {
-  return normalizeReleaseText(value, MATCHER_OPTIONS);
-}
 
 function normalizeTitle(value) {
   return normalizeTitleBase(value, MATCHER_OPTIONS);
@@ -573,7 +568,6 @@ function scoreReleaseFolder(group, context, options = {}) {
     return { blacklisted: true };
   }
   const rawDirectoryText = String(group.directoryPath || "");
-  const albumDir = group.parts.at(-2) || "";
   const artistScore = pickBestArtistScore(context, group.directoryPath);
   const albumScore = albumName ? scoreAgainstPath(group.directoryPath, albumName) : 0;
   const yearScore = scoreYearMatch(rawDirectoryText, context?.releaseYear);

@@ -5,7 +5,6 @@ import { flowPlaylistConfig } from "../weeklyFlow/weeklyFlowPlaylistConfig.js";
 import {
   DISCOVER_PLAYLIST_PRESETS,
   RELEASE_RADAR_PRESET,
-  getDiscoverPlaylistPreset,
   FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS,
 } from "../../config/discoverPlaylistPresets.js";
 import { generateEditorialPlaylists, enrichTracksWithAlbums } from "./editorialPlaylistBuilder.js";

@@ -19,7 +19,6 @@ import {
 } from "../../../services/releaseGroupCoverService.js";
 import { getArtistByMbid } from "../../../services/providers/brainzmashProvider.js";
 import {
-  toLegacyRelations,
   getArtistTagPayload,
   buildArtistBase,
   extractLastfmImageUrl,

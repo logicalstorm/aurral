@@ -19,7 +19,6 @@ export function registerPreview(router) {
 
     const artistNameParam = (req.query.artistName || "").trim();
     const override = dbOps.getArtistOverride(mbid);
-    const resolvedMbid = override?.musicbrainzId || mbid;
     const deezerArtistId = override?.deezerArtistId || null;
 
     if (deezerArtistId) {

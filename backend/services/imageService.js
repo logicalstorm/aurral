@@ -417,12 +417,12 @@ export const getArtistImage = async (
       return { url: null, images: [], transientError: true };
     }
 
-    const artistName = metadataArtist?.name;
-    if (artistName) {
+    const fallbackArtistName = metadataArtist?.name;
+    if (fallbackArtistName) {
       try {
-        const searchResults = await searchArtists(artistName, { limit: 20 });
+        const searchResults = await searchArtists(fallbackArtistName, { limit: 20 });
         const siblings = searchResults.items.filter(
-          (a) => a.id !== resolvedMbid && a.images?.length > 0 && a.name === artistName,
+          (a) => a.id !== resolvedMbid && a.images?.length > 0 && a.name === fallbackArtistName,
         );
         if (siblings.length > 0) {
           siblings.sort((a, b) => b.images.length - a.images.length);

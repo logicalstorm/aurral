@@ -22,8 +22,7 @@ fn normalize_server_url(raw: &str) -> Result<Url, String> {
         format!("https://{trimmed}")
     };
 
-    let parsed =
-        Url::parse(&with_scheme).map_err(|_| "Enter a valid server URL.".to_string())?;
+    let parsed = Url::parse(&with_scheme).map_err(|_| "Enter a valid server URL.".to_string())?;
 
     if parsed.scheme() != "http" && parsed.scheme() != "https" {
         return Err("Server URL must use http or https.".into());
@@ -74,10 +73,7 @@ fn same_origin(request_url: &Url, server_url: &Url) -> bool {
         && request_url.port_or_known_default() == server_url.port_or_known_default()
 }
 
-fn should_allow_navigation(
-    request_url: &Url,
-    app: &AppHandle,
-) -> bool {
+fn should_allow_navigation(request_url: &Url, app: &AppHandle) -> bool {
     let scheme = request_url.scheme();
     if scheme != "http" && scheme != "https" {
         return true;
@@ -91,9 +87,7 @@ fn should_allow_navigation(
         return true;
     }
 
-    let _ = app
-        .opener()
-        .open_url(request_url.as_str(), None::<&str>);
+    let _ = app.opener().open_url(request_url.as_str(), None::<&str>);
     false
 }
 
@@ -102,8 +96,7 @@ fn navigate_to_server(window: &tauri::WebviewWindow, url: &Url) -> Result<(), St
 }
 
 fn navigate_to_setup(window: &tauri::WebviewWindow) -> Result<(), String> {
-    let setup_url = Url::parse("tauri://localhost")
-        .map_err(|e| e.to_string())?;
+    let setup_url = Url::parse("tauri://localhost").map_err(|e| e.to_string())?;
     window.navigate(setup_url).map_err(|e| e.to_string())
 }
 
@@ -198,7 +191,9 @@ pub fn run() {
                 .inner_size(1280.0, 840.0)
                 .min_inner_size(900.0, 600.0)
                 .center()
-                .on_navigation(move |request_url| should_allow_navigation(&request_url, &navigation_app))
+                .on_navigation(move |request_url| {
+                    should_allow_navigation(&request_url, &navigation_app)
+                })
                 .build()?;
 
             app.set_menu(build_menu(app.handle())?)?;

@@ -33,7 +33,7 @@ export function registerAdmin(router) {
   router.post("/clear", requireAuth, requireAdmin, async (req, res) => {
     try {
       dbOps.clearImages();
-      clearImageProxyCache();
+      await clearImageProxyCache();
       clearApiCaches();
       res.json({ message: "Image cache cleared" });
     } catch (err) {

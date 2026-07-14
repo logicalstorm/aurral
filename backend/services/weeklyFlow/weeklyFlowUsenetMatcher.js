@@ -4,7 +4,6 @@ import {
   normalizeTitle,
   scoreTextMatch,
   getYear,
-  splitWords,
 } from "../providers/brainzmashRanking.js";
 
 const AUDIO_CATEGORY_MIN = 3000;

@@ -1,6 +1,5 @@
 import { downloadTracker } from "../../../services/weeklyFlow/weeklyFlowDownloadTracker.js";
 import { weeklyFlowWorker } from "../../../services/weeklyFlow/weeklyFlowWorker.js";
-import { playlistManager } from "../../../services/weeklyFlow/weeklyFlowPlaylistManager.js";
 import {
   DEFAULT_SIZE,
   flowPlaylistConfig,

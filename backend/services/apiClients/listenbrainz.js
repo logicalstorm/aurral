@@ -14,14 +14,6 @@ const LISTENBRAINZ_MAX_RETRIES = 2;
 const listenbrainzInflightRequests = new Map();
 const listenbrainzErrorLogAt = new Map();
 
-const shouldEmitThrottledLog = (logMap, key, throttleMs = 15000) => {
-  const now = Date.now();
-  const last = logMap.get(key) || 0;
-  if (now - last < throttleMs) return false;
-  logMap.set(key, now);
-  return true;
-};
-
 export const listenbrainzRequest = listenbrainzLimiter.wrap(
   async (path, params = {}) => {
     const cacheKey = `lb:${path}:${JSON.stringify(params)}`;

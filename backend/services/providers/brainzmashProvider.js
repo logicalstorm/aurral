@@ -24,6 +24,12 @@ const providerCache = createCache(300);
 const releaseCache = createCache(300);
 const providerInflightRequests = new Map();
 
+export function clearMetadataProviderCaches() {
+  providerCache.flushAll();
+  releaseCache.flushAll();
+  providerInflightRequests.clear();
+}
+
 const healthState = {
   configuredProvider: "brainzmash",
   activeBaseUrl: null,

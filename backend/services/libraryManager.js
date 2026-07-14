@@ -1,6 +1,5 @@
 import path from "path";
 import { dbOps, userOps } from "../db/helpers/index.js";
-import { dbHelpers } from "../config/db-sqlite.js";
 import { hasPermission } from "../middleware/auth.js";
 const normalizeTypeName = (value) =>
   String(value || "")

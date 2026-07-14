@@ -1,4 +1,4 @@
-import { db, dbHelpers } from "../../config/db-sqlite.js";
+import { db } from "../../config/db-sqlite.js";
 
 const getImageStmt = db.prepare("SELECT * FROM images_cache WHERE mbid = ?");
 const upsertImageStmt = db.prepare(

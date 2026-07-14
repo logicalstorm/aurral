@@ -27,7 +27,6 @@ export default function createHonkerWorker({
 }) {
   let running = false;
   let stopRequested = false;
-  let loopPromise = null;
   let idleController = null;
 
   async function handleJobFailure(error, job) {
@@ -103,7 +102,6 @@ export default function createHonkerWorker({
       idleController?.dispose();
       idleController = null;
       running = false;
-      loopPromise = null;
       const intentional = stopRequested || idleStopped;
       stopRequested = false;
       const restartAllowed = typeof shouldRestart === "function" ? shouldRestart() : true;
@@ -119,7 +117,7 @@ export default function createHonkerWorker({
     if (typeof onStart === "function" && onStart() === false) return;
     running = true;
     stopRequested = false;
-    loopPromise = runLoop();
+    void runLoop();
   }
 
   function stop() {

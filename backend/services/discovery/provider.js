@@ -48,22 +48,17 @@ import {
   selectDiscoverySeedSample,
   buildTrendingArtistEntry,
   normalizePlaylistBuildStringList,
-  pickLastfmImage,
   mapWithConcurrency,
   DISCOVERY_QUALITY_ENRICHED,
 } from "./helpers.js";
 import { getDiscoveryFeedback } from "./feedback.js";
 import {
   discoveryCache,
-  resetDiscoveryModuleCache,
   getDiscoveryCache,
-  getUserDiscoveryCacheStaleness,
   recordDiscoveryUpdateProgress,
   clearDiscoveryUpdateProgress,
-  getDiscoveryUpdateStatus,
   recordDiscoverPlaylistBuildProgress,
   clearDiscoverPlaylistBuildProgress,
-  getDiscoveryPlaylistBuildStatus,
   setDiscoveryPlaylistBuildToken,
   getDiscoveryPlaylistBuildKey,
   isGlobalDiscoveryRefreshInProgress,
@@ -991,7 +986,6 @@ export const updateUserDiscoveryCache = async (
 
     const globalCache = getDiscoveryCache();
     const globalPool = globalCache.recommendations || [];
-    const globalTop = globalCache.globalTop || [];
     const globalTopTags = globalCache.topTags || [];
     const globalTopGenres = globalCache.topGenres || [];
 

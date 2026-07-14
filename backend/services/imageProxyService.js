@@ -41,61 +41,62 @@ const MIME_EXTENSION_MAP = {
 };
 const OPTIMIZABLE_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 
-const ensureCacheDir = () => {
-  fs.mkdirSync(IMAGE_PROXY_DIR, { recursive: true });
-};
+const ensureCacheDir = () => fs.promises.mkdir(IMAGE_PROXY_DIR, { recursive: true });
 
 const initializeCacheIndex = () => {
   if (cacheIndexInitialized) return;
-  if (indexBuildPromise) return;
   cacheIndexInitialized = true;
-  indexBuildPromise = new Promise((resolve) => {
-    setImmediate(() => {
-      try {
-        ensureCacheDir();
-        const files = fs.readdirSync(IMAGE_PROXY_DIR);
-        for (const file of files) {
-          const match = file.match(/^([a-f0-9]{64})\.json$/i);
-          if (!match) continue;
-          const cacheKey = match[1].toLowerCase();
-          const metaPath = path.join(IMAGE_PROXY_DIR, file);
-          let meta = null;
-          try {
-            meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
-          } catch {
-            continue;
-          }
-          if (!meta?.extension) continue;
-          const imagePath = path.join(IMAGE_PROXY_DIR, `${cacheKey}.${meta.extension}`);
-          if (!fs.existsSync(imagePath)) continue;
-          const sourceUrl = normalizeKnownImageUrl(meta.sourceUrl);
-          cacheEntriesByKey.set(cacheKey, {
-            cacheKey,
-            meta,
-            imagePath,
-            localUrl: buildLocalImageUrl(cacheKey, meta.extension),
-            isFresh:
-              Number(meta.fetchedAt || 0) > 0 &&
-              Date.now() - Number(meta.fetchedAt || 0) < CACHE_TTL_MS,
-          });
-          if (sourceUrl) {
-            cacheKeysBySourceUrl.set(sourceUrl, cacheKey);
-          }
-        }
-      } catch {}
-      resolve();
-    });
-  });
+  indexBuildPromise = (async () => {
+    try {
+      await ensureCacheDir();
+      const files = (await fs.promises.readdir(IMAGE_PROXY_DIR)).filter((file) =>
+        /^[a-f0-9]{64}\.json$/i.test(file),
+      );
+      for (let offset = 0; offset < files.length; offset += 64) {
+        await Promise.all(
+          files.slice(offset, offset + 64).map(async (file) => {
+            const match = file.match(/^([a-f0-9]{64})\.json$/i);
+            if (!match) return;
+            const cacheKey = match[1].toLowerCase();
+            const metaPath = path.join(IMAGE_PROXY_DIR, file);
+            let meta = null;
+            try {
+              meta = JSON.parse(await fs.promises.readFile(metaPath, "utf8"));
+            } catch {
+              return;
+            }
+            if (!meta?.extension) return;
+            const imagePath = path.join(IMAGE_PROXY_DIR, `${cacheKey}.${meta.extension}`);
+            try {
+              await fs.promises.access(imagePath);
+            } catch {
+              return;
+            }
+            const sourceUrl = normalizeKnownImageUrl(meta.sourceUrl);
+            cacheEntriesByKey.set(cacheKey, {
+              cacheKey,
+              meta,
+              imagePath,
+              localUrl: buildLocalImageUrl(cacheKey, meta.extension),
+              isFresh:
+                Number(meta.fetchedAt || 0) > 0 &&
+                Date.now() - Number(meta.fetchedAt || 0) < CACHE_TTL_MS,
+            });
+            if (sourceUrl) {
+              cacheKeysBySourceUrl.set(sourceUrl, cacheKey);
+            }
+          }),
+        );
+      }
+    } catch {}
+  })();
 };
 
-export const clearImageProxyCache = () => {
-  ensureCacheDir();
-
-  for (const file of fs.readdirSync(IMAGE_PROXY_DIR)) {
-    try {
-      fs.unlinkSync(path.join(IMAGE_PROXY_DIR, file));
-    } catch {}
-  }
+export const clearImageProxyCache = async () => {
+  if (indexBuildPromise) await indexBuildPromise;
+  await Promise.allSettled([...inflightRequests.values()]);
+  await fs.promises.rm(IMAGE_PROXY_DIR, { recursive: true, force: true });
+  await ensureCacheDir();
 
   cacheEntriesByKey.clear();
   cacheKeysBySourceUrl.clear();
@@ -104,18 +105,17 @@ export const clearImageProxyCache = () => {
   indexBuildPromise = null;
 };
 
-export const getImageProxyCacheSizeBytes = () => {
-  ensureCacheDir();
-
+export const getImageProxyCacheSizeBytes = async () => {
   let total = 0;
-  for (const file of fs.readdirSync(IMAGE_PROXY_DIR)) {
-    try {
-      const stat = fs.statSync(path.join(IMAGE_PROXY_DIR, file));
-      if (stat.isFile()) {
-        total += stat.size;
+  try {
+    await ensureCacheDir();
+    const dir = await fs.promises.opendir(IMAGE_PROXY_DIR);
+    for await (const entry of dir) {
+      if (entry.isFile()) {
+        total += (await fs.promises.stat(path.join(IMAGE_PROXY_DIR, entry.name))).size;
       }
-    } catch {}
-  }
+    }
+  } catch {}
   return total;
 };
 
@@ -155,17 +155,14 @@ const getCachePaths = (cacheKey) => ({
   baseImagePath: path.join(IMAGE_PROXY_DIR, `${cacheKey}`),
 });
 
-const removeStaleCachedFiles = (cacheKey, keepExtension) => {
-  ensureCacheDir();
-  const prefix = `${cacheKey}.`;
-  for (const file of fs.readdirSync(IMAGE_PROXY_DIR)) {
-    if (!file.startsWith(prefix) || file.endsWith(".json")) continue;
-    if (keepExtension && file === `${cacheKey}.${keepExtension}`) continue;
-    try {
-      fs.unlinkSync(path.join(IMAGE_PROXY_DIR, file));
-    } catch {}
-  }
-};
+const removeStaleCachedFiles = (cacheKey, keepExtension) =>
+  Promise.allSettled(
+    [...new Set([...Object.values(MIME_EXTENSION_MAP), "img"])]
+      .filter((extension) => extension !== keepExtension)
+      .map((extension) =>
+        fs.promises.unlink(path.join(IMAGE_PROXY_DIR, `${cacheKey}.${extension}`)),
+      ),
+  );
 
 const buildLocalImageUrl = (cacheKey, extension) => `${IMAGE_PROXY_ROUTE}/${cacheKey}.${extension}`;
 
@@ -252,7 +249,7 @@ const getCachedEntry = (sourceUrl) => {
 };
 
 const writeCacheEntry = async (cacheKey, buffer, contentType, sourceUrl) => {
-  ensureCacheDir();
+  await ensureCacheDir();
   const extension = MIME_EXTENSION_MAP[contentType] || "img";
   const { metaPath, baseImagePath } = getCachePaths(cacheKey);
   const imagePath = `${baseImagePath}.${extension}`;
@@ -265,7 +262,7 @@ const writeCacheEntry = async (cacheKey, buffer, contentType, sourceUrl) => {
     size: buffer.length,
   };
 
-  removeStaleCachedFiles(cacheKey, extension);
+  await removeStaleCachedFiles(cacheKey, extension);
   await fs.promises.writeFile(imagePath, buffer);
   await fs.promises.writeFile(metaPath, JSON.stringify(meta));
   const entry = {

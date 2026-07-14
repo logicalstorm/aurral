@@ -1,5 +1,5 @@
 import { lastfmRequest, getLastfmApiKey } from "../apiClients/index.js";
-import { EDITORIAL_PLAYLIST_POOL, selectEditorialPresets } from "../../config/editorialPlaylistPresets.js";
+import { selectEditorialPresets } from "../../config/editorialPlaylistPresets.js";
 import { FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS } from "../../config/discoverPlaylistPresets.js";
 import { logger } from "../logger.js";
 

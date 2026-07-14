@@ -748,7 +748,7 @@ async function checkNzbgetSection() {
           connection.directories?.completedPath ||
           "",
       ).trim(),
-    pathFix: (completedPath) =>
+    pathFix: () =>
       "Mount the same host folder into Aurral and NZBGet, or add an NZBGet mapping under Settings → Download Clients → Remote Path Mappings.",
   });
 }
@@ -762,7 +762,7 @@ async function checkSabnzbdSection() {
     skipReason: "SABnzbd is not enabled.",
     resolveCompletedPath: (_config, connection) =>
       String(connection.downloadPath || connection.directories?.destDir || "").trim(),
-    pathFix: (completedPath) =>
+    pathFix: () =>
       "Mount the same host folder into Aurral and SABnzbd, or add a SABnzbd mapping under Settings → Download Clients → Remote Path Mappings.",
   });
 }

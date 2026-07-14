@@ -49,6 +49,13 @@ test("v2 migration creates playlist_download_jobs table and stores schema versio
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('weekly_flow_jobs', 'playlist_download_jobs')",
   ).all().map((row) => row.name);
   assert.ok(tables.includes("playlist_download_jobs"));
+  assert.ok(
+    db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_slskd_transfer_history_created_at'",
+      )
+      .get(),
+  );
 
   const version = db.prepare("SELECT value FROM settings WHERE key = 'schemaVersion'").get()?.value;
   assert.equal(version, "2");

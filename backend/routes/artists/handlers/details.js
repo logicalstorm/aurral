@@ -10,7 +10,7 @@ import { cacheMiddleware } from "../../../middleware/cache.js";
 import { requireAuth } from "../../../middleware/requirePermission.js";
 import { buildArtistRequestKey, pendingArtistRequests } from "../utils.js";
 import { getArtistByMbid } from "../../../services/providers/brainzmashProvider.js";
-import { toLegacyRelations, getArtistTagPayload, buildArtistBase } from "../shared/transform.js";
+import { getArtistTagPayload, buildArtistBase } from "../shared/transform.js";
 
 export function registerDetails(router) {
   const parseSelectedReleaseTypes = (value) =>
@@ -148,28 +148,17 @@ export function registerDetails(router) {
 
       const { lidarrClient } =
         await import("../../../services/lidarrClient.js");
-      const { libraryManager } =
-        await import("../../../services/libraryManager.js");
-
       let data = null;
       const override = dbOps.getArtistOverride(mbid);
       const resolvedMbid = override?.musicbrainzId || mbid;
 
       let lidarrArtist = null;
-      let lidarrAlbums = [];
 
       if (lidarrClient.isConfigured()) {
         try {
           lidarrArtist = await lidarrClient.getArtistByMbid(mbid);
           if (lidarrArtist) {
             logger.info("api", "Found artist in Lidarr", { artistName: lidarrArtist.artistName });
-            const libraryArtist = await libraryManager.getArtist(mbid);
-            if (libraryArtist) {
-              lidarrAlbums = await libraryManager.getAlbums(
-                libraryArtist.id,
-                lidarrArtist,
-              );
-            }
           }
         } catch (error) {
           logger.warn("api", "Failed to fetch from Lidarr", { mbid, error: error.message });

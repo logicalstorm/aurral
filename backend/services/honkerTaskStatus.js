@@ -168,7 +168,7 @@ const PAYLOAD_DETAIL_KEY = {
     p?.playlistType
       ? `Builds reserve tracks for ${formatPayloadLabel(p.playlistType)}.`
       : desc,
-  "playlist-mbid-enrichment": (p, desc) =>
+  "playlist-mbid-enrichment": (p, _desc) =>
     p?.playlistId
       ? `Finds missing MusicBrainz IDs for ${formatPayloadLabel(p.playlistId)}.`
       : "Scans playlists for tracks missing MusicBrainz IDs and queues enrichment jobs.",
