@@ -96,8 +96,12 @@ async function request(config) {
       error.response = response;
       const urlPath = String(config.url || "");
       const isAuthEndpoint = urlPath.includes("/auth/login") || urlPath.includes("/auth/logout");
-      if (res.status === 401 && data?.code === "SESSION_INVALID" && !isAuthEndpoint) {
-        forceReloadForLogin();
+      if (res.status === 401 && !isAuthEndpoint) {
+        if (isProxyAuthActive()) {
+          forceProxyReauthNavigation();
+        } else if (data?.code === "SESSION_INVALID") {
+          forceReloadForLogin();
+        }
       }
       throw error;
     }

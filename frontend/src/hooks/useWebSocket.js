@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { getRequestToken } from "../utils/api/core.js";
+import { forceProxyReauthNavigation, getRequestToken } from "../utils/api/core.js";
+import { isProxyAuthActive } from "../utils/authRecovery.js";
 
 function getWsUrl() {
   const token = getRequestToken();
@@ -40,6 +41,12 @@ const notifyConnectionState = (isConnected) => {
   for (const listener of statusListeners) {
     listener(isConnected);
   }
+};
+
+export const recoverProxyAuthFromWebSocketClose = (event) => {
+  if (Number(event?.code) !== 4401 || !isProxyAuthActive()) return false;
+  forceProxyReauthNavigation();
+  return true;
 };
 
 const hasActiveListeners = () =>
@@ -131,10 +138,11 @@ function connectSocket() {
     notifyConnectionState(false);
   };
 
-  socket.onclose = () => {
+  socket.onclose = (event) => {
     notifyConnectionState(false);
     socket = null;
-    if (shouldReconnect && hasActiveListeners()) {
+    const isRecoveringProxyAuth = recoverProxyAuthFromWebSocketClose(event);
+    if (!isRecoveringProxyAuth && shouldReconnect && hasActiveListeners()) {
       scheduleReconnect();
     }
   };
