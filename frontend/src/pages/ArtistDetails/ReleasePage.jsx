@@ -592,6 +592,7 @@ function ReleasePage() {
             label: releaseTitle,
           }}
           onAddTrackToPlaylist={handleReleaseTrackAdd}
+          resolveMembershipTrack={buildReleaseTrackPayload}
           playlists={sharedPlaylists}
           playlistsLoading={playlistModalLoading}
           playlistSavingKey={playlistMenuSavingKey}
