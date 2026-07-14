@@ -1,7 +1,9 @@
 import crypto from "crypto";
+import dns from "node:dns";
 import fs from "fs";
+import net from "node:net";
 import path from "path";
-import axios from "../../lib/axiosFetch.js";
+import { Agent } from "undici";
 import sharp from "./sharpConfig.js";
 import { resolveAurralDataDir } from "../config/data-dir.js";
 
@@ -10,6 +12,9 @@ const DATA_DIR = resolveAurralDataDir();
 const IMAGE_PROXY_DIR = path.join(DATA_DIR, "image-proxy");
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 25000;
+const MAX_REDIRECTS = 5;
+const MAX_SOURCE_IMAGE_BYTES = 25 * 1024 * 1024;
+const MAX_SOURCE_IMAGE_PIXELS = 40_000_000;
 const OPTIMIZED_IMAGE_MAX_BYTES = 1024 * 1024;
 const DEFAULT_WEBP_QUALITY = 70;
 const FALLBACK_WEBP_QUALITIES = [70, 60, 50, 40];
@@ -20,26 +25,100 @@ const cacheKeysBySourceUrl = new Map();
 let cacheIndexInitialized = false;
 let indexBuildPromise = null;
 
-const PRIVATE_HOST_PATTERNS = [
-  /^localhost$/i,
-  /^127\./,
-  /^10\./,
-  /^192\.168\./,
-  /^169\.254\./,
-  /^::1$/i,
-  /^0:0:0:0:0:0:0:1$/i,
-];
+const blockedAddresses = new net.BlockList();
+for (const [address, prefix] of [
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24],
+  ["192.0.2.0", 24],
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15],
+  ["198.51.100.0", 24],
+  ["203.0.113.0", 24],
+  ["224.0.0.0", 4],
+  ["240.0.0.0", 4],
+]) {
+  blockedAddresses.addSubnet(address, prefix, "ipv4");
+}
+for (const [address, prefix] of [
+  ["::", 128],
+  ["::1", 128],
+  ["64:ff9b:1::", 48],
+  ["100::", 64],
+  ["2001::", 32],
+  ["2001:db8::", 32],
+  ["2002::", 16],
+  ["fc00::", 7],
+  ["fe80::", 10],
+  ["fec0::", 10],
+  ["ff00::", 8],
+]) {
+  blockedAddresses.addSubnet(address, prefix, "ipv6");
+}
 
-const PRIVATE_172_RANGE = /^172\.(1[6-9]|2\d|3[0-1])\./;
 const MIME_EXTENSION_MAP = {
   "image/jpeg": "jpg",
   "image/png": "png",
+  "image/apng": "png",
   "image/webp": "webp",
   "image/gif": "gif",
   "image/avif": "avif",
   "image/svg+xml": "svg",
 };
-const OPTIMIZABLE_CONTENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
+const IMAGE_FORMATS_BY_CONTENT_TYPE = {
+  "image/jpeg": new Set(["jpeg"]),
+  "image/png": new Set(["png"]),
+  "image/apng": new Set(["png"]),
+  "image/webp": new Set(["webp"]),
+  "image/gif": new Set(["gif"]),
+  "image/avif": new Set(["heif"]),
+  "image/svg+xml": new Set(["svg"]),
+};
+const OPTIMIZABLE_CONTENT_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+  "image/svg+xml",
+]);
+
+export const isPrivateAddress = (address) => {
+  const normalized = String(address || "").split("%")[0];
+  const family = net.isIP(normalized);
+  if (family === 0) return true;
+  if (family === 6) {
+    const canonical = net.SocketAddress.parse(`[${normalized}]:0`)?.address;
+    if (!canonical || canonical.startsWith("::ffff:")) return true;
+  }
+  return blockedAddresses.check(normalized, family === 4 ? "ipv4" : "ipv6");
+};
+
+const safeLookup = (hostname, options, callback) => {
+  dns.lookup(hostname, { ...options, all: true }, (error, addresses) => {
+    if (error) return callback(error);
+    const publicAddresses = addresses.filter(({ address }) => !isPrivateAddress(address));
+    if (publicAddresses.length === 0) {
+      const lookupError = new Error("Refusing to connect to a private host");
+      lookupError.code = "EHOSTUNREACH";
+      return callback(lookupError);
+    }
+    if (options?.all) return callback(null, publicAddresses);
+    return callback(null, publicAddresses[0].address, publicAddresses[0].family);
+  });
+};
+
+const imageProxyDispatcher = new Agent({
+  connections: 8,
+  autoSelectFamily: true,
+  keepAliveTimeout: 30_000,
+  keepAliveMaxTimeout: 60_000,
+  maxResponseSize: MAX_SOURCE_IMAGE_BYTES,
+  connect: { lookup: safeLookup },
+});
 
 const ensureCacheDir = () => fs.promises.mkdir(IMAGE_PROXY_DIR, { recursive: true });
 
@@ -127,9 +206,15 @@ export const isPrivateHostname = (hostname) => {
     normalized = normalized.slice(1, -1);
   }
   if (!normalized) return true;
-  if (normalized.endsWith(".local")) return true;
-  if (PRIVATE_172_RANGE.test(normalized)) return true;
-  return PRIVATE_HOST_PATTERNS.some((pattern) => pattern.test(normalized));
+  if (
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized.endsWith(".local") ||
+    normalized.endsWith(".home.arpa")
+  ) {
+    return true;
+  }
+  return net.isIP(normalized) ? isPrivateAddress(normalized) : false;
 };
 
 const hashValue = (value) => crypto.createHash("sha256").update(String(value)).digest("hex");
@@ -288,7 +373,28 @@ const shouldNormalizeCachedEntry = (entry) => {
   );
 };
 
-const optimizeImageBuffer = async (buffer, contentType) => {
+const inspectImageBuffer = async (buffer, contentType) => {
+  const expectedFormats = IMAGE_FORMATS_BY_CONTENT_TYPE[contentType];
+  if (!expectedFormats) {
+    throw new Error("Unsupported image content type");
+  }
+
+  let metadata;
+  try {
+    metadata = await sharp(buffer, {
+      animated: false,
+      limitInputPixels: MAX_SOURCE_IMAGE_PIXELS,
+    }).metadata();
+  } catch {
+    throw new Error("Invalid or oversized image data");
+  }
+  if (!metadata.width || !metadata.height || !expectedFormats.has(metadata.format)) {
+    throw new Error("Image data does not match its content type");
+  }
+  return metadata;
+};
+
+const optimizeImageBuffer = async (buffer, contentType, inspectedMetadata = null) => {
   if (!OPTIMIZABLE_CONTENT_TYPES.has(contentType)) {
     return {
       buffer,
@@ -296,15 +402,12 @@ const optimizeImageBuffer = async (buffer, contentType) => {
     };
   }
 
-  let metadata = null;
-  try {
-    metadata = await sharp(buffer, { animated: false }).metadata();
-  } catch {
-    return {
-      buffer,
-      contentType,
-    };
-  }
+  const metadata =
+    inspectedMetadata ||
+    (await sharp(buffer, {
+      animated: false,
+      limitInputPixels: MAX_SOURCE_IMAGE_PIXELS,
+    }).metadata());
 
   const largestDimension = Math.max(metadata?.width || 0, metadata?.height || 0);
   const dimensionSteps = FALLBACK_MAX_DIMENSIONS.filter(
@@ -318,7 +421,10 @@ const optimizeImageBuffer = async (buffer, contentType) => {
 
   for (const maxDimension of dimensionSteps) {
     for (const quality of FALLBACK_WEBP_QUALITIES) {
-      let candidate = sharp(buffer, { animated: false }).rotate();
+      let candidate = sharp(buffer, {
+        animated: false,
+        limitInputPixels: MAX_SOURCE_IMAGE_PIXELS,
+      }).rotate();
       if (maxDimension) {
         candidate = candidate.resize({
           width: maxDimension,
@@ -389,39 +495,101 @@ const normalizeCachedEntryIfNeeded = async (entry) => {
   );
 };
 
+const parseSafeRemoteUrl = (value, baseUrl) => {
+  const parsed = new URL(value, baseUrl);
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error("Unsupported image protocol");
+  }
+  if (parsed.username || parsed.password || isPrivateHostname(parsed.hostname)) {
+    throw new Error("Refusing to cache private host");
+  }
+  return parsed;
+};
+
+const readBoundedResponse = async (response) => {
+  const contentLength = response.headers.get("content-length");
+  if (contentLength && Number(contentLength) > MAX_SOURCE_IMAGE_BYTES) {
+    await response.body?.cancel();
+    throw new Error("Upstream image exceeds the size limit");
+  }
+
+  const chunks = [];
+  let totalBytes = 0;
+  for await (const chunk of response.body || []) {
+    const buffer = Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > MAX_SOURCE_IMAGE_BYTES) {
+      throw new Error("Upstream image exceeds the size limit");
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks, totalBytes);
+};
+
+const fetchRemoteImage = async (sourceUrl) => {
+  let currentUrl = parseSafeRemoteUrl(sourceUrl);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+      const response = await fetch(currentUrl, {
+        redirect: "manual",
+        signal: controller.signal,
+        dispatcher: imageProxyDispatcher,
+        headers: {
+          Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/png,image/jpeg,image/gif",
+          "Accept-Encoding": "identity",
+          "User-Agent": "Aurral Local Image Cache",
+        },
+      });
+
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get("location");
+        await response.body?.cancel();
+        if (!location || redirectCount === MAX_REDIRECTS) {
+          throw new Error("Too many upstream image redirects");
+        }
+        currentUrl = parseSafeRemoteUrl(location, currentUrl);
+        continue;
+      }
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error(`Upstream image request failed with status ${response.status}`);
+      }
+
+      const contentType = String(response.headers.get("content-type") || "")
+        .split(";")[0]
+        .trim()
+        .toLowerCase();
+      if (!IMAGE_FORMATS_BY_CONTENT_TYPE[contentType]) {
+        await response.body?.cancel();
+        throw new Error("Upstream response is not a supported image");
+      }
+
+      const buffer = await readBoundedResponse(response);
+      const metadata = await inspectImageBuffer(buffer, contentType);
+      return { buffer, contentType, metadata };
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+
+  throw new Error("Too many upstream image redirects");
+};
+
 const fetchAndCacheImage = async (sourceUrl) => {
   const normalizedSourceUrl = normalizeKnownImageUrl(sourceUrl);
   if (!normalizedSourceUrl) {
     throw new Error("Missing source image URL");
   }
 
-  const parsed = new URL(normalizedSourceUrl);
-  if (!["http:", "https:"].includes(parsed.protocol)) {
-    throw new Error("Unsupported image protocol");
-  }
-  if (isPrivateHostname(parsed.hostname)) {
-    throw new Error("Refusing to cache private host");
-  }
-
-  const response = await axios.get(normalizedSourceUrl, {
-    responseType: "arraybuffer",
-    timeout: FETCH_TIMEOUT_MS,
-    maxRedirects: 10,
-    headers: {
-      Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-      "User-Agent": "Aurral Local Image Cache",
-    },
-  });
-
-  const contentType = String(response.headers["content-type"] || "")
-    .split(";")[0]
-    .trim()
-    .toLowerCase();
-  if (!contentType.startsWith("image/")) {
-    throw new Error("Upstream response is not an image");
-  }
-
-  const optimized = await optimizeImageBuffer(Buffer.from(response.data), contentType);
+  const sourceImage = await fetchRemoteImage(normalizedSourceUrl);
+  const optimized = await optimizeImageBuffer(
+    sourceImage.buffer,
+    sourceImage.contentType,
+    sourceImage.metadata,
+  );
 
   return writeCacheEntry(
     hashValue(normalizedSourceUrl),
@@ -526,6 +694,11 @@ export const handleImageProxyRequest = async (req, res) => {
     }
   }
   if (!cached?.imagePath || !fs.existsSync(cached.imagePath)) {
+    return res.status(404).json({ error: "Image not found" });
+  }
+  try {
+    cached = await normalizeCachedEntryIfNeeded(cached);
+  } catch {
     return res.status(404).json({ error: "Image not found" });
   }
 
