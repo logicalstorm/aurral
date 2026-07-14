@@ -90,18 +90,6 @@ Open `http://localhost:3001`, create your admin account, and connect Lidarr.
 
 For a full stack with Lidarr, slskd, and Navidrome or Plex, see [`docker-compose.example.yml`](docker-compose.example.yml). Plex setup: [docs](https://docs.aurral.org/integrations/plex/).
 
-## macOS app
-
-A native thin client for Apple Silicon Macs is available on [GitHub Releases](https://github.com/lklynet/aurral/releases). It connects to your self-hosted server. It does not replace Docker or another backend.
-
-macOS may block the first launch because the app is not notarized yet. Control-click **Aurral → Open** in Applications, or run:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Aurral.app
-```
-
-See [macOS app](https://docs.aurral.org/getting-started/macos-app/) in the docs for install steps and details.
-
 ## Documentation
 
 Full setup and usage guides live at [docs.aurral.org](https://docs.aurral.org/).
