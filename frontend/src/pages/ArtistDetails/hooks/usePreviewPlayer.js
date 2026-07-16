@@ -38,17 +38,26 @@ export function usePreviewPlayer(
   const isArtistPlaybackActive = isArtistQueue && (isPlaying || isLoading);
 
   useEffect(() => {
-    const name = artistNameFromNav || artist?.name;
-    if (!mbid || !name) {
-      if (!artistNameFromNav && !artist) setPreviewTracks([]);
+    const name = artistName;
+    if (!mbid || !name || name === "Loading artist" || name === "Unknown Artist") {
+      setPreviewTracks([]);
+      setLoadingPreview(false);
       return;
     }
+    const controller = new AbortController();
     setLoadingPreview(true);
-    getArtistPreview(mbid, name)
-      .then((data) => setPreviewTracks(data.tracks || []))
-      .catch(() => setPreviewTracks([]))
-      .finally(() => setLoadingPreview(false));
-  }, [mbid, artistNameFromNav, artist]);
+    getArtistPreview(mbid, name, { signal: controller.signal })
+      .then((data) => {
+        if (!controller.signal.aborted) setPreviewTracks(data.tracks || []);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setPreviewTracks([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingPreview(false);
+      });
+    return () => controller.abort();
+  }, [mbid, artistName]);
 
   const getPlayableTracks = useCallback(
     () => previewTracks.filter((track) => track?.preview_url),

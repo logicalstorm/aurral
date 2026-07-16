@@ -5,13 +5,9 @@ import {
   applyPlaylistStatusMessage,
   fetchPlaylistStatus,
   getCachedPlaylistStatus,
-  getLastPlaylistWsAt,
   subscribePlaylistStatus,
+  subscribePlaylistStatusPolling,
 } from "./playlistStatusStore";
-
-const POLL_INTERVAL_MS = 4000;
-const IDLE_POLL_INTERVAL_MS = 30000;
-const WS_RECENT_MS = 3000;
 
 export function useFlowWorkerActivity({ enabled = true } = {}) {
   const [status, setStatus] = useState(() => (enabled ? getCachedPlaylistStatus() : null));
@@ -25,8 +21,16 @@ export function useFlowWorkerActivity({ enabled = true } = {}) {
     return subscribePlaylistStatus(setStatus);
   }, [enabled]);
 
-  useWebSocketChannel("playlists", applyPlaylistStatusMessage, { enabled });
-  useWebSocketChannel("weekly-flow", applyPlaylistStatusMessage, { enabled });
+  const { isConnected: playlistsSocketConnected } = useWebSocketChannel(
+    "playlists",
+    applyPlaylistStatusMessage,
+    { enabled },
+  );
+  const { isConnected: weeklyFlowSocketConnected } = useWebSocketChannel(
+    "weekly-flow",
+    applyPlaylistStatusMessage,
+    { enabled },
+  );
 
   useEffect(() => {
     if (!enabled) return;
@@ -39,25 +43,11 @@ export function useFlowWorkerActivity({ enabled = true } = {}) {
 
   useEffect(() => {
     if (!enabled) return;
-    const poll = () => {
-      if (document.hidden) return;
-      if (Date.now() - getLastPlaylistWsAt() < WS_RECENT_MS) return;
-      fetchPlaylistStatus().catch(() => {});
-    };
-    const interval = setInterval(poll, isActive ? POLL_INTERVAL_MS : IDLE_POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [enabled, isActive]);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        fetchPlaylistStatus().catch(() => {});
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [enabled]);
+    return subscribePlaylistStatusPolling({
+      active: isActive,
+      isSocketConnected: playlistsSocketConnected || weeklyFlowSocketConnected,
+    });
+  }, [enabled, isActive, playlistsSocketConnected, weeklyFlowSocketConnected]);
 
   return { hasActivity, hasReview, status };
 }

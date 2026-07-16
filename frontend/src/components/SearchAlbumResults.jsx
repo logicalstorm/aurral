@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { Music } from "lucide-react";
 import SearchLibraryCheck from "./SearchLibraryCheck";
-import AddAlbumButton from "./AddAlbumButton";
+import AddActionButton from "./AddActionButton";
 import { getAlbumAddButtonLabel, isAlbumCompleteInLibrary } from "../utils/albumAddAction";
 import { getReleaseNavigationTarget } from "../utils/searchNavigation";
 
@@ -60,7 +60,7 @@ function AlbumAction({ album, isPending, canAddAlbum, onAlbumAction }) {
   if (!canAddAlbum) return null;
 
   return (
-    <AddAlbumButton
+    <AddActionButton
       onClick={(event) => {
         event.stopPropagation();
         onAlbumAction(album);

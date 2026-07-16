@@ -12,7 +12,7 @@ import {
   SlidersHorizontal,
   Star,
 } from "lucide-react";
-import AddAlbumButton from "../../components/AddAlbumButton";
+import AddActionButton from "../../components/AddActionButton";
 import SearchLibraryCheck from "../../components/SearchLibraryCheck";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
@@ -281,7 +281,7 @@ function ArtistReleaseListPage({ mode = "releases" }) {
               </span>
             ) : canAddAlbum ? (
               <div onClick={(event) => event.stopPropagation()}>
-                <AddAlbumButton
+                <AddActionButton
                   onClick={(event) => {
                     event.stopPropagation();
                     library.handleRequestAlbum(releaseGroup.id, releaseGroup.title);
@@ -319,7 +319,7 @@ function ArtistReleaseListPage({ mode = "releases" }) {
               </span>
             ) : canAddAlbum ? (
               <div onClick={(event) => event.stopPropagation()}>
-                <AddAlbumButton
+                <AddActionButton
                   onClick={(event) => {
                     event.stopPropagation();
                     library.handleRequestAlbum(releaseGroup.id, releaseGroup.title);

@@ -396,25 +396,6 @@ export function useArtistDetailsStream(
         coverReceived = true;
         if (coverData.images && coverData.images.length > 0) {
           setCoverImages(coverData.images);
-          setLoadingCover(false);
-          return;
-        }
-        const nameForCover = artistNameRef.current || artistNameFromNav || "";
-        if (nameForCover) {
-          getArtistCover(mbid, nameForCover, true)
-            .then((refreshedCover) => {
-              if (!isCurrentRequest()) return;
-              if (refreshedCover?.images?.length) {
-                setCoverImages(refreshedCover.images);
-              }
-            })
-            .catch(() => {})
-            .finally(() => {
-              if (isCurrentRequest()) {
-                setLoadingCover(false);
-              }
-            });
-          return;
         }
         setLoadingCover(false);
       } catch (err) {

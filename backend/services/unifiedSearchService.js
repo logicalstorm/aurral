@@ -11,6 +11,8 @@ import { compareSearchResults, getLocalMatchThreshold } from "./searchRanking.js
 import { parsePositiveInt } from "./searchService.js";
 
 const unifiedSearchCache = createCache(60);
+const catalogSearchCache = createCache(60);
+const catalogSearchInflight = new Map();
 
 const SUGGEST_LIMIT = 5;
 const FULL_LIMIT = 20;
@@ -462,10 +464,29 @@ async function searchBrainzmashCatalog(query, limit) {
 }
 
 async function searchCatalog(query, limit) {
-  const catalog = await searchBrainzmashCatalog(query, limit);
+  const cacheKey = String(query || "").trim().toLowerCase();
+  let catalog = catalogSearchCache.get(cacheKey);
+  if (!catalog) {
+    let pending = catalogSearchInflight.get(cacheKey);
+    if (!pending) {
+      pending = searchBrainzmashCatalog(query, 30)
+        .then((result) => {
+          catalogSearchCache.set(cacheKey, result);
+          return result;
+        })
+        .finally(() => catalogSearchInflight.delete(cacheKey));
+      catalogSearchInflight.set(cacheKey, pending);
+    }
+    catalog = await pending;
+  }
+  const sliced = {
+    artists: sliceCatalogItems(catalog.artists, limit),
+    albums: sliceCatalogItems(catalog.albums, limit),
+    tracks: sliceCatalogItems(catalog.tracks, limit),
+  };
   return {
-    ...catalog,
-    top: pickCatalogTopFallback(catalog),
+    ...sliced,
+    top: pickCatalogTopFallback(sliced),
   };
 }
 

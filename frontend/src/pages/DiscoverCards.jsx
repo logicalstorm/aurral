@@ -3,7 +3,7 @@ import { getReleaseGroupCover, getArtistCover } from "../utils/api/endpoints/art
 
 import { Music } from "lucide-react";
 import ArtistImage from "../components/ArtistImage";
-import AddAlbumButton from "../components/AddAlbumButton";
+import AddActionButton from "../components/AddActionButton";
 import { ArtistContextMenu } from "../components/ArtistContextMenu";
 import SearchLibraryCheck from "../components/SearchLibraryCheck";
 import { getReleaseNavigationTarget } from "../utils/searchNavigation";
@@ -282,13 +282,14 @@ export const AlbumCard = memo(
               className="artist-discover-card__action"
               onClick={(event) => event.stopPropagation()}
             >
-              <AddAlbumButton
+              <AddActionButton
                 onClick={(event) => {
                   event.stopPropagation();
                   onAlbumAction(album);
                 }}
                 isLoading={isPending}
                 disabled={isPending}
+                label="Add to Lidarr"
               />
             </div>
           ) : null}

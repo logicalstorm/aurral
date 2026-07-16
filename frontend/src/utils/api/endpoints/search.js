@@ -2,7 +2,7 @@ import { getData, fetchInflightOnce, searchInflightRequests } from "../core.js";
 
 export const searchUnified = async (
   query,
-  { mode = "suggest", limit } = {},
+  { mode = "suggest", limit, signal } = {},
 ) => {
   const params = { q: query, mode };
   if (limit != null) {
@@ -14,6 +14,7 @@ export const searchUnified = async (
     getData("/search/unified", {
       params,
       timeout: timeoutMs,
+      signal,
     }),
   );
 };

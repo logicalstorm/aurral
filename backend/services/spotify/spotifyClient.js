@@ -3,8 +3,14 @@ import {
   SPOTIFY_RENEW_URI,
 } from "./spotifyConfig.js";
 import { spotifyConnectionStore } from "./spotifyConnectionStore.js";
+import createCache from "../apiClients/simpleCache.js";
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+const playlistTrackCache = createCache(2 * 60, 200);
+const playlistTrackInflight = new Map();
+
+const playlistTrackCacheKey = (userId, playlistId) =>
+  `${String(userId)}:${String(playlistId)}`;
 
 async function renewAccessToken(refreshToken) {
   const url = new URL(SPOTIFY_RENEW_URI);
@@ -101,12 +107,12 @@ export const spotifyClient = {
   },
 
   async listPlaylists(userId) {
-    const profile = await this.getProfile(userId);
-    const playlists = await fetchAllPages(userId, `/users/${encodeURIComponent(profile.id)}/playlists`, {
+    const playlists = await fetchAllPages(userId, "/me/playlists", {
       searchParams: { limit: 50 },
     });
+    const connection = spotifyConnectionStore.getPublicStatus(userId);
     return {
-      user: profile.display_name || profile.id,
+      user: connection.displayName || "Spotify",
       playlists: playlists
         .map((playlist) => ({
           id: String(playlist?.id || "").trim(),
@@ -118,8 +124,16 @@ export const spotifyClient = {
     };
   },
 
-  listPlaylistTracks(userId, playlistId) {
-    return fetchAllPages(
+  async listPlaylistTracks(userId, playlistId, { forceRefresh = false } = {}) {
+    const cacheKey = playlistTrackCacheKey(userId, playlistId);
+    if (!forceRefresh) {
+      const cached = playlistTrackCache.get(cacheKey);
+      if (cached !== undefined) return cached;
+      const inflight = playlistTrackInflight.get(cacheKey);
+      if (inflight) return inflight;
+    }
+
+    const request = fetchAllPages(
       userId,
       `/playlists/${encodeURIComponent(playlistId)}/tracks`,
       {
@@ -129,6 +143,22 @@ export const spotifyClient = {
             "items(track(name,artists(name),album(name))),next",
         },
       },
-    );
+    ).then((items) => {
+      playlistTrackCache.set(cacheKey, items);
+      return items;
+    });
+    playlistTrackInflight.set(cacheKey, request);
+    try {
+      return await request;
+    } finally {
+      if (playlistTrackInflight.get(cacheKey) === request) {
+        playlistTrackInflight.delete(cacheKey);
+      }
+    }
+  },
+
+  clearPlaylistTrackCache() {
+    playlistTrackCache.flushAll();
+    playlistTrackInflight.clear();
   },
 };

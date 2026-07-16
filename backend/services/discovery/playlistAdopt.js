@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { getLastfmApiKey } from "../apiClients/index.js";
 import {
   buildFlowPayloadFromPreset,
+  enrichDiscoverPlaylistForAdoption,
   getCachedDiscoverPlaylist,
   serializeTrack,
 } from "./playlistBuilder.js";
@@ -53,8 +54,9 @@ export async function adoptDiscoverPresetAsFlow(user, presetId) {
     });
   }
 
+  const enrichedPlaylist = await enrichDiscoverPlaylistForAdoption(cachedPlaylist);
   const flow = flowPlaylistConfig.createFlow({
-    ...buildFlowPayloadFromPreset(cachedPlaylist, safePresetId),
+    ...buildFlowPayloadFromPreset(enrichedPlaylist, safePresetId),
     ownerUserId: user.id,
   });
   await playlistManager.ensureSmartPlaylists();
@@ -63,7 +65,7 @@ export async function adoptDiscoverPresetAsFlow(user, presetId) {
 
   import("../../services/unifiedSearchService.js").then(({ clearSearchContextCache }) => clearSearchContextCache()).catch(() => {});
 
-  const tracks = (cachedPlaylist.tracks || []).map(serializeTrack);
+  const tracks = (enrichedPlaylist.tracks || []).map(serializeTrack);
   const result = await weeklyFlowOperationQueue.enqueuePayload({
     kind: "adopt-flow-seed",
     label: `adopt:${flow.id}`,
@@ -107,7 +109,8 @@ export async function adoptDiscoverPresetAsPlaylist(user, presetId) {
     });
   }
 
-  const tracks = (cachedPlaylist.tracks || []).map(serializeTrack);
+  const enrichedPlaylist = await enrichDiscoverPlaylistForAdoption(cachedPlaylist);
+  const tracks = (enrichedPlaylist.tracks || []).map(serializeTrack);
   const playlistId = randomUUID();
   const result = await weeklyFlowOperationQueue.enqueuePayload({
     kind: "shared-playlist-create",

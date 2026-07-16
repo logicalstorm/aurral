@@ -59,6 +59,13 @@ async function request(config) {
   const method = String(config.method || "GET").toUpperCase();
   let url = appendParams(joinUrl(API_BASE_URL, config.url || ""), config.params);
   const controller = new AbortController();
+  const callerSignal = config.signal;
+  const abortFromCaller = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) {
+    abortFromCaller();
+  } else {
+    callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
+  }
   const timeoutMs = Number(config.timeout ?? 30000);
   const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
   const headers = { "Content-Type": "application/json", ...config.headers };
@@ -108,6 +115,7 @@ async function request(config) {
     return response;
   } finally {
     if (timer) clearTimeout(timer);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
   }
 }
 

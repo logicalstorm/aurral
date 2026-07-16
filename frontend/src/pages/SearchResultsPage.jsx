@@ -14,8 +14,7 @@ import { getArtistCover, getReleaseGroupCover } from "../utils/api/endpoints/art
 import { searchCatalog, searchUnified } from "../utils/api/endpoints/search.js";
 import SearchAlbumResults from "../components/SearchAlbumResults";
 import SearchArtistResults from "../components/SearchArtistResults";
-import AddAlbumButton from "../components/AddAlbumButton";
-import AddToLibraryButton from "../components/AddToLibraryButton";
+import AddActionButton from "../components/AddActionButton";
 import SearchLibraryCheck from "../components/SearchLibraryCheck";
 import SearchMixedResultList from "../components/SearchMixedResultList";
 import SearchTopResultCard from "../components/SearchTopArtistCard";
@@ -1079,11 +1078,14 @@ function SearchResultsPage() {
         const artistId = getArtistRecordId(item);
         if (!canAddArtist || !artistId) return null;
         return (
-          <AddToLibraryButton
-            className="btn-add-library--suggestion"
+          <AddActionButton
             disabled={!!pendingArtistIds[artistId]}
             isLoading={!!pendingArtistIds[artistId]}
-            onClick={() => handleArtistAction(item)}
+            label="Add to Lidarr"
+            onClick={(event) => {
+              event.stopPropagation();
+              handleArtistAction(item);
+            }}
           />
         );
       }
@@ -1092,7 +1094,7 @@ function SearchResultsPage() {
         if (!canAddAlbum || !item.id) return null;
         const pending = !!pendingAlbumIds[item.id];
         return (
-          <AddAlbumButton
+          <AddActionButton
             onClick={(event) => {
               event.stopPropagation();
               handleAlbumAction(item);

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDiscoverNavigation } from "../../../hooks/useDiscoverNavigation";
 import { ArrowRight, Loader, Music, Star } from "lucide-react";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
-import AddAlbumButton from "../../../components/AddAlbumButton";
+import AddActionButton from "../../../components/AddActionButton";
 import { navigateToReleaseGroup } from "../../../utils/searchNavigation";
 import { getPopularReleaseGroups, getReleaseMetric, getReleaseYear } from "../utils";
 import { getAlbumAddButtonLabel } from "../../../utils/albumAddAction";
@@ -141,7 +141,7 @@ export function ArtistDetailsReleaseGroups({
                     </span>
                   ) : canAddAlbum ? (
                     <div onClick={(event) => event.stopPropagation()}>
-                      <AddAlbumButton
+                      <AddActionButton
                         onClick={(event) => {
                           event.stopPropagation();
                           handleRequestAlbum(releaseGroup.id, releaseGroup.title);

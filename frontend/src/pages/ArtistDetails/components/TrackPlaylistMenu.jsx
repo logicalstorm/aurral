@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { ChevronRight, Loader, Plus } from "lucide-react";
+import AddActionButton from "../../../components/AddActionButton";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 
 function normalizeTrackForSharedIdentity(track) {
@@ -310,10 +311,7 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
   };
 
   const showTrigger = triggerVariant !== "hidden";
-  const triggerClassName =
-    triggerVariant === "compact"
-      ? `btn btn-secondary btn-icon btn-xs${open ? " btn-neutral-active" : ""}`
-      : `artist-playlist-trigger${open ? " is-open" : ""}`;
+  const triggerClassName = `btn btn-secondary btn-icon btn-xs${open ? " btn-neutral-active" : ""}`;
   const menuClassName = [
     "artist-playlist-menu",
     menuVariant === "preview-tracks" ? "artist-playlist-menu--preview-tracks" : "",
@@ -325,35 +323,37 @@ export const TrackPlaylistMenu = forwardRef(function TrackPlaylistMenu(
   return (
     <div className="artist-relative" ref={menuRef}>
       {showTrigger ? (
-        <button
-          ref={buttonRef}
-          type="button"
-          className={triggerClassName}
-          onClick={handleOpen}
-          title={triggerVariant === "compact" ? triggerLabel : undefined}
-          aria-label={triggerLabel}
-          aria-expanded={open}
-          disabled={saving || disabled}
-        >
-          {triggerVariant === "compact" ? (
-            saving ? (
+        triggerVariant === "compact" ? (
+          <button
+            ref={buttonRef}
+            type="button"
+            className={triggerClassName}
+            onClick={handleOpen}
+            title={triggerLabel}
+            aria-label={triggerLabel}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            disabled={saving || disabled}
+          >
+            {saving ? (
               <Loader className="artist-icon-xs animate-spin" />
             ) : (
               <TriggerIcon className="artist-icon-xs" />
-            )
-          ) : (
-            <>
-              <span className="artist-playlist-trigger__icon">
-                {saving ? (
-                  <Loader className="artist-icon-xs animate-spin" />
-                ) : (
-                  <TriggerIcon className="artist-icon-xs" />
-                )}
-              </span>
-              <span className="artist-playlist-trigger__label">{triggerLabel}</span>
-            </>
-          )}
-        </button>
+            )}
+          </button>
+        ) : (
+          <AddActionButton
+            ref={buttonRef}
+            label={triggerLabel}
+            icon={TriggerIcon}
+            isLoading={saving}
+            isExpanded={open}
+            disabled={disabled}
+            onClick={handleOpen}
+            aria-haspopup="menu"
+            aria-expanded={open}
+          />
+        )
       ) : null}
 
       {open ? (

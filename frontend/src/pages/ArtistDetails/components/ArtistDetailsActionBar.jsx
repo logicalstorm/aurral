@@ -12,7 +12,7 @@ import {
   ThumbsUp,
   Trash2,
 } from "lucide-react";
-import AddToLibraryButton from "../../../components/AddToLibraryButton";
+import AddActionButton from "../../../components/AddActionButton";
 import SearchLibraryCheck from "../../../components/SearchLibraryCheck";
 import { getDiscoveryFeedbackLabel } from "../../../utils/discoveryFeedback";
 
@@ -143,17 +143,19 @@ export function ArtistDetailsActionBar({
     if (!canAddArtist) return null;
 
     return (
-      <div className="btn-add-library-group">
-        <AddToLibraryButton
+      <div className="btn-add-action-group">
+        <AddActionButton
           onClick={library.handleAddToLibrary}
           isLoading={library.addingToLibrary}
-          className="btn-add-library--split"
+          isExpanded
+          label="Add to Lidarr"
+          className="btn-add-action--split"
         />
         <button
           type="button"
           onClick={library.handleOpenAddCustomizeModal}
           disabled={library.addingToLibrary}
-          className="btn btn-add-library-split"
+          className="btn btn-add-action-options"
           aria-label="Customize add options"
           title="Customize add options"
         >

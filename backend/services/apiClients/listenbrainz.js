@@ -14,86 +14,86 @@ const LISTENBRAINZ_MAX_RETRIES = 2;
 const listenbrainzInflightRequests = new Map();
 const listenbrainzErrorLogAt = new Map();
 
-export const listenbrainzRequest = listenbrainzLimiter.wrap(
-  async (path, params = {}) => {
-    const cacheKey = `lb:${path}:${JSON.stringify(params)}`;
-    const cached = listenbrainzCache.get(cacheKey);
-    if (cached) return cached;
-    const inflight = listenbrainzInflightRequests.get(cacheKey);
-    if (inflight) return inflight;
+export async function listenbrainzRequest(path, params = {}) {
+  const cacheKey = `lb:${path}:${JSON.stringify(params)}`;
+  const cached = listenbrainzCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  const inflight = listenbrainzInflightRequests.get(cacheKey);
+  if (inflight) return inflight;
 
-    const requestPromise = (async () => {
-      const isRetryable = (error) => {
-        const status = error.response?.status;
-        const code = error.code;
-        return (
-          code === "ECONNABORTED" ||
-          code === "ETIMEDOUT" ||
-          code === "ECONNRESET" ||
-          code === "ENOTFOUND" ||
-          code === "EAI_AGAIN" ||
-          [408, 425, 429, 500, 502, 503, 504].includes(status)
-        );
-      };
-      const getLogKey = (details) =>
-        `${details.path}:${details.status || "none"}:${details.code || "none"}`;
-      const logError = (message, details) => {
-        const key = getLogKey(details);
-        const now = Date.now();
-        const last = listenbrainzErrorLogAt.get(key) || 0;
-        if (now - last < 15000) return;
-        listenbrainzErrorLogAt.set(key, now);
-        logger.error("api", message, details);
-      };
+  const requestPromise = (async () => {
+    const isRetryable = (error) => {
+      const status = error.response?.status;
+      const code = error.code;
+      return (
+        code === "ECONNABORTED" ||
+        code === "ETIMEDOUT" ||
+        code === "ECONNRESET" ||
+        code === "ENOTFOUND" ||
+        code === "EAI_AGAIN" ||
+        [408, 425, 500, 502, 503, 504].includes(status)
+      );
+    };
+    const getLogKey = (details) =>
+      `${details.path}:${details.status || "none"}:${details.code || "none"}`;
+    const logError = (message, details) => {
+      const key = getLogKey(details);
+      const now = Date.now();
+      const last = listenbrainzErrorLogAt.get(key) || 0;
+      if (now - last < 15000) return;
+      listenbrainzErrorLogAt.set(key, now);
+      logger.error("api", message, details);
+    };
 
-      let lastError = null;
-      for (
-        let retryCount = 0;
-        retryCount <= LISTENBRAINZ_MAX_RETRIES;
-        retryCount++
-      ) {
-        try {
-          const response = await axios.get(`${LISTENBRAINZ_API}${path}`, {
+    let lastError = null;
+    for (
+      let retryCount = 0;
+      retryCount <= LISTENBRAINZ_MAX_RETRIES;
+      retryCount++
+    ) {
+      try {
+        const response = await listenbrainzLimiter.schedule(() =>
+          axios.get(`${LISTENBRAINZ_API}${path}`, {
             params,
             timeout: LISTENBRAINZ_TIMEOUT_MS,
             validateStatus: (status) =>
               (status >= 200 && status < 300) || status === 204,
-          });
-          const payload = response.status === 204 ? null : response.data;
-          listenbrainzCache.set(cacheKey, payload);
-          return payload;
-        } catch (error) {
-          lastError = error;
-          if (retryCount < LISTENBRAINZ_MAX_RETRIES && isRetryable(error)) {
-            const backoffMs = 300 * Math.pow(2, retryCount) + retryCount * 200;
-            await new Promise((resolve) => setTimeout(resolve, backoffMs));
-            continue;
-          }
-          break;
+          }),
+        );
+        const payload = response.status === 204 ? null : response.data;
+        listenbrainzCache.set(cacheKey, payload);
+        return payload;
+      } catch (error) {
+        lastError = error;
+        if (retryCount < LISTENBRAINZ_MAX_RETRIES && isRetryable(error)) {
+          const backoffMs = 300 * Math.pow(2, retryCount) + retryCount * 200;
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          continue;
         }
+        break;
       }
-
-      const details = {
-        path,
-        status: lastError?.response?.status || null,
-        code: lastError?.code || null,
-        message: lastError?.message || "Unknown ListenBrainz error",
-        error:
-          lastError?.response?.data?.error ||
-          lastError?.response?.data?.message ||
-          null,
-      };
-      logError("ListenBrainz API error:", details);
-      throw lastError;
-    })();
-
-    listenbrainzInflightRequests.set(cacheKey, requestPromise);
-    try {
-      return await requestPromise;
-    } finally {
-      listenbrainzInflightRequests.delete(cacheKey);
     }
-  },
-);
+
+    const details = {
+      path,
+      status: lastError?.response?.status || null,
+      code: lastError?.code || null,
+      message: lastError?.message || "Unknown ListenBrainz error",
+      error:
+        lastError?.response?.data?.error ||
+        lastError?.response?.data?.message ||
+        null,
+    };
+    logError("ListenBrainz API error:", details);
+    throw lastError;
+  })();
+
+  listenbrainzInflightRequests.set(cacheKey, requestPromise);
+  try {
+    return await requestPromise;
+  } finally {
+    listenbrainzInflightRequests.delete(cacheKey);
+  }
+}
 
 export { listenbrainzCache };

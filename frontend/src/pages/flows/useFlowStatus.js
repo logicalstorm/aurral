@@ -5,8 +5,8 @@ import {
   applyPlaylistStatusMessage,
   fetchPlaylistStatus,
   getCachedPlaylistStatus,
-  getLastPlaylistWsAt,
   subscribePlaylistStatus,
+  subscribePlaylistStatusPolling,
 } from "./playlistStatusStore";
 
 export function useFlowStatus() {
@@ -31,25 +31,32 @@ export function useFlowStatus() {
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchStatus({ signal: controller.signal });
-    return () => controller.abort();
+    fetchStatus();
   }, [fetchStatus]);
 
-  useWebSocketChannel("playlists", applyPlaylistStatusMessage);
-  useWebSocketChannel("weekly-flow", applyPlaylistStatusMessage);
+  const { isConnected: playlistsSocketConnected } = useWebSocketChannel(
+    "playlists",
+    applyPlaylistStatusMessage,
+  );
+  const { isConnected: weeklyFlowSocketConnected } = useWebSocketChannel(
+    "weekly-flow",
+    applyPlaylistStatusMessage,
+  );
 
   useEffect(() => {
     const workerRunning = status?.worker?.running === true;
     const hintPhase = status?.hint?.phase;
     const inTransition = hintPhase === "preparing" || hintPhase === "downloading";
-    if (!workerRunning && !inTransition) return;
-    const interval = setInterval(() => {
-      if (Date.now() - getLastPlaylistWsAt() < 20000) return;
-      fetchStatus();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [status?.worker?.running, status?.hint?.phase, fetchStatus]);
+    return subscribePlaylistStatusPolling({
+      active: workerRunning || inTransition,
+      isSocketConnected: playlistsSocketConnected || weeklyFlowSocketConnected,
+    });
+  }, [
+    playlistsSocketConnected,
+    status?.hint?.phase,
+    status?.worker?.running,
+    weeklyFlowSocketConnected,
+  ]);
 
   useEffect(() => {
     const interval = setInterval(() => setCountdownNow(Date.now()), 30000);

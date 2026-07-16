@@ -34,7 +34,11 @@ export async function syncSharedPlaylistImport({
   const ownerUserId = playlist.ownerUserId ?? user?.id;
   try {
     const externalPlaylistId = String(playlist.importSource?.externalId || "").trim();
-    const items = await spotifyClient.listPlaylistTracks(ownerUserId, externalPlaylistId);
+    const items = await spotifyClient.listPlaylistTracks(
+      ownerUserId,
+      externalPlaylistId,
+      { forceRefresh: true },
+    );
     const tracks = parseSpotifyPlaylistItems(items).tracks;
     const result = await appendSharedPlaylistTracks({ playlistId: playlist.id, tracks });
     const nextImportSource = {

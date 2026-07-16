@@ -326,10 +326,13 @@ export class LidarrClient {
   }
 
   async request(endpoint, method = "GET", data = null, skipConfigUpdate = false, options = {}) {
-    const dedupeKey =
-      method === "GET" && (endpoint === "/artist" || endpoint.startsWith("/album"))
-        ? endpoint
-        : null;
+    const shouldDedupeGet =
+      endpoint === "/artist" ||
+      endpoint.startsWith("/album") ||
+      endpoint === "/queue" ||
+      endpoint.startsWith("/history?") ||
+      endpoint === "/command";
+    const dedupeKey = method === "GET" && shouldDedupeGet ? endpoint : null;
     if (!dedupeKey) {
       return this._request(endpoint, method, data, skipConfigUpdate, options);
     }

@@ -17,18 +17,23 @@ let allDownloadStatusesCache = {
   pending: null,
 };
 
-export const getDownloadStatusesForAlbumIds = async (albumIdArrayInput) => {
+export const getDownloadStatusesForAlbumIds = async (
+  albumIdArrayInput,
+  snapshot = null,
+) => {
   const albumIdArray = Array.isArray(albumIdArrayInput) ? albumIdArrayInput : [];
   const statuses = {};
   const { lidarrClient } = await import("../../../services/lidarrClient.js");
 
   if (lidarrClient.isConfigured()) {
     try {
-      const [queue, history, commands] = await Promise.all([
-        lidarrClient.getQueue(),
-        lidarrClient.getHistory(1, 200),
-        lidarrClient.request("/command").catch(() => []),
-      ]);
+      const { queue, history, commands } =
+        snapshot ||
+        (await Promise.all([
+          lidarrClient.getQueue(),
+          lidarrClient.getHistory(1, 200),
+          lidarrClient.request("/command").catch(() => []),
+        ]).then(([queue, history, commands]) => ({ queue, history, commands })));
       const queueItems = Array.isArray(queue) ? queue : queue.records || [];
       const historyItems = Array.isArray(history) ? history : history.records || [];
       const searchContext = parseLidarrSearchContext({
@@ -249,7 +254,11 @@ const computeAllDownloadStatuses = async () => {
       albumIds.add(String(albumId));
     }
 
-    return getDownloadStatusesForAlbumIds([...albumIds]);
+    return getDownloadStatusesForAlbumIds([...albumIds], {
+      queue,
+      history,
+      commands,
+    });
   } catch (error) {
     logger.warn("downloads", "Failed to fetch Lidarr status:", { message: error.message });
     return allDownloadStatusesCache.statuses || {};

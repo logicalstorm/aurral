@@ -5,6 +5,8 @@ import { pendingCoverRequests, fetchCoverInBackground } from "../utils.js";
 import { getArtistImage } from "../../../services/imageService.js";
 import { warmImageProxy } from "../../../services/imageProxyService.js";
 
+const NEGATIVE_COVER_CACHE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function registerCover(router) {
   router.get("/:mbid/cover", async (req, res) => {
     const { mbid } = req.params;
@@ -60,25 +62,20 @@ export function registerCover(router) {
         });
       }
 
-      if (
-        !refresh &&
-        cachedImage &&
-        cachedImage.imageUrl === "NOT_FOUND" &&
-        !artistNameFromQuery
-      ) {
-        logger.info("api", "NOT_FOUND cache", { mbid });        res.set("Cache-Control", "public, max-age=3600");
-
-        setTimeout(() => {
-          fetchCoverInBackground(mbid, artistNameFromQuery).catch(() => {});
-        }, 60000);
-
+      const negativeCacheIsFresh =
+        cachedImage?.imageUrl === "NOT_FOUND" &&
+        cachedImage.cacheAge &&
+        Date.now() - cachedImage.cacheAge < NEGATIVE_COVER_CACHE_MS;
+      if (!refresh && negativeCacheIsFresh) {
+        logger.info("api", "NOT_FOUND cache", { mbid });
+        res.set("Cache-Control", "public, max-age=3600");
         return res.json({ images: [] });
       }
 
       logger.info("api", "Fetching cover", { mbid });
 
       const shouldForceRefresh =
-        !!refresh || (cachedImage?.imageUrl === "NOT_FOUND" && !!artistNameFromQuery);
+        !!refresh || cachedImage?.imageUrl === "NOT_FOUND";
 
       const fetchPromise = (async () => {
         try {

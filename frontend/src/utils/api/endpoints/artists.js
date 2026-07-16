@@ -155,9 +155,10 @@ export const getSimilarArtistsForArtist = (
     },
   });
 
-export const getArtistPreview = (mbid, artistName) =>
+export const getArtistPreview = (mbid, artistName, options = {}) =>
   getData(`/artists/${mbid}/preview`, {
     params: artistName ? { artistName } : {},
+    signal: options.signal,
   });
 
 export const getArtistTopSongVideo = (

@@ -75,6 +75,7 @@ export function useArtistDetailsLibrary({
   const viewedArtistIdRef = useRef(artist?.id || null);
   const currentLibraryArtistIdRef = useRef(libraryArtist?.id || null);
   const libraryRefreshTimeoutsRef = useRef(new Set());
+  const lastDownloadWebSocketAtRef = useRef(0);
 
   useEffect(() => {
     viewedArtistIdRef.current = artist?.id || null;
@@ -100,6 +101,7 @@ export function useArtistDetailsLibrary({
 
   useWebSocketChannel("downloads", (msg) => {
     if (msg?.type !== "download_statuses") return;
+    lastDownloadWebSocketAtRef.current = Date.now();
     const albumIds = libraryAlbumIdsRef.current;
     if (!albumIds.length) return;
     const incoming = msg.statuses || {};
@@ -843,7 +845,13 @@ export function useArtistDetailsLibrary({
     const viewedArtistId = artist?.id || null;
     const libraryArtistId = libraryArtist.id;
     const refreshTimeouts = libraryRefreshTimeoutsRef.current;
-    const pollDownloadStatus = async () => {
+    const pollDownloadStatus = async ({ force = false } = {}) => {
+      if (
+        !force &&
+        Date.now() - lastDownloadWebSocketAtRef.current < 30000
+      ) {
+        return;
+      }
       try {
         const albumIds = libraryAlbumIdsRef.current;
         if (albumIds.length > 0) {
@@ -946,7 +954,7 @@ export function useArtistDetailsLibrary({
         console.error("Failed to fetch download status:", error);
       }
     };
-    pollDownloadStatus();
+    pollDownloadStatus({ force: true });
     const interval = setInterval(pollDownloadStatus, 15000);
     return () => {
       clearInterval(interval);

@@ -108,17 +108,6 @@ export async function generateEditorialPlaylists() {
     playlists.push(...results.filter(Boolean));
   }
 
-  const mappings = playlists.flatMap((p) =>
-    p.tracks.map((t, trackIdx) => ({ playlist: p, trackIdx })),
-  );
-  const allTracks = mappings.map((m) => m.playlist.tracks[m.trackIdx]);
-  const enriched = await enrichTracksWithAlbums(allTracks);
-
-  for (let i = 0; i < mappings.length; i += 1) {
-    mappings[i].playlist.tracks[mappings[i].trackIdx].albumName =
-      enriched[i]?.albumName || null;
-  }
-
   logger.info("discovery", `[EditorialPlaylists] Built ${playlists.length}/${presets.length} playlists`);
   return playlists;
 }

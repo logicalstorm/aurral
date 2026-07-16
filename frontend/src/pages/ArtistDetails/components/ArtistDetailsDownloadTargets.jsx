@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader, Music, Star } from "lucide-react";
-import AddAlbumButton from "../../../components/AddAlbumButton";
+import AddActionButton from "../../../components/AddActionButton";
 import { useImageGradientColors } from "../../../utils/imageColors";
 import { getReleaseGroupTracks } from "../../../utils/api/endpoints/artists.js";
 import { buildAurralPick, getReleaseMetric } from "../utils";
@@ -241,14 +241,15 @@ export function ArtistDetailsDownloadTargets({
             </div>
             {canAddAlbum && missingReleasePick.releaseGroupId && (
               <div>
-                <AddAlbumButton
-                  className="btn-add-album is-expanded"
+                <AddActionButton
+                  isExpanded
                   onClick={(event) => {
                     event.stopPropagation();
                     handleRequestAlbum(missingReleasePick.releaseGroupId, missingReleasePick.title);
                   }}
                   isLoading={requestingAlbum === missingReleasePick.releaseGroupId}
                   disabled={requestingAlbum === missingReleasePick.releaseGroupId}
+                  label="Add to Lidarr"
                 />
               </div>
             )}

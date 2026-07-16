@@ -18,6 +18,11 @@ async function processImagePrefetch(payload = {}) {
     IMAGE_PREFETCH_CONCURRENCY,
     (mbid) => {
       const cached = dbOps.getImage(mbid);
+      const negativeCacheIsFresh =
+        cached?.imageUrl === "NOT_FOUND" &&
+        cached.cacheAge &&
+        Date.now() - cached.cacheAge < 7 * 24 * 60 * 60 * 1000;
+      if (negativeCacheIsFresh) return null;
       return getArtistImage(mbid, {
         artistName: typeof artistNames[mbid] === "string" ? artistNames[mbid] : null,
         forceRefresh: cached?.imageUrl === "NOT_FOUND",

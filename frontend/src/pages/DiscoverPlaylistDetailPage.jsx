@@ -65,6 +65,10 @@ export default function DiscoverPlaylistDetailPage() {
     () => (playlist ? mapPlaylistTracks(playlist.tracks || [], playlist.presetId) : []),
     [playlist],
   );
+  const hasAlbumMetadata = useMemo(
+    () => tracks.some((track) => String(track?.albumName || "").trim()),
+    [tracks],
+  );
 
   const [adoptingFlowId, setAdoptingFlowId] = useState(null);
   const [adoptingPlaylistId, setAdoptingPlaylistId] = useState(null);
@@ -321,6 +325,7 @@ export default function DiscoverPlaylistDetailPage() {
         tracks={tracks}
         loading={false}
         showPlaybackControls={false}
+        hideAlbumColumn={!hasAlbumMetadata}
         hideStatusColumn
         emptyMessage="No tracks in this playlist."
         playlistTriggerVariant="expand"

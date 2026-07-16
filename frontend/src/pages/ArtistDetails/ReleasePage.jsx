@@ -15,11 +15,12 @@ import {
   getReleaseGroupTracks,
 } from "../../utils/api/endpoints/artists.js";
 import { useSharedPlaylists } from "../../hooks/useSharedPlaylists";
+import { useWebSocketChannel } from "../../hooks/useWebSocket";
 
 import { Link, useLocation, useParams } from "react-router-dom";
 import { CornerUpLeft, ExternalLink, Music } from "lucide-react";
 import SearchLibraryCheck from "../../components/SearchLibraryCheck";
-import AddAlbumButton from "../../components/AddAlbumButton";
+import AddActionButton from "../../components/AddActionButton";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
@@ -162,6 +163,23 @@ function ReleasePage() {
   const triggerSearch = libraryDisplay.triggerSearch;
   const lastfmUrl = artistName && releaseTitle ? buildLastfmAlbumUrl(artistName, releaseTitle) : "";
 
+  const { isConnected: downloadStatusWsConnected } = useWebSocketChannel(
+    "downloads",
+    async (msg) => {
+      if (msg?.type !== "download_statuses" || !libraryInfo?.libraryAlbumId) return;
+      const next = msg.statuses?.[String(libraryInfo.libraryAlbumId)];
+      if (!next) return;
+      setDownloadStatus(next);
+      if (next.status !== "added") return;
+      try {
+        const lookup = await lookupAlbumsInLibraryBatch([releaseMbid]);
+        const entry = lookup?.[releaseMbid];
+        if (entry?.inLibrary) setLibraryInfo(entry);
+      } catch {}
+    },
+    { enabled: Boolean(libraryInfo?.libraryAlbumId) && !isComplete },
+  );
+
   const releaseMeta = [
     releaseDateLabel,
     releaseTypeLabel,
@@ -231,14 +249,15 @@ function ReleasePage() {
   }, [releaseMbid]);
 
   useEffect(() => {
-    if (!libraryInfo?.libraryAlbumId || isComplete) return undefined;
+    if (!libraryInfo?.libraryAlbumId || isComplete || downloadStatusWsConnected) return undefined;
     const status = String(downloadStatus?.status || "");
     if (!ACTIVE_DOWNLOAD_STATUSES.has(status) && status !== "failed") {
       return undefined;
     }
 
     let cancelled = false;
-    const interval = window.setInterval(async () => {
+    const pollDownloadStatus = async () => {
+      if (document.hidden) return;
       if (downloadStatusPollInFlightRef.current) return;
       downloadStatusPollInFlightRef.current = true;
       try {
@@ -257,13 +276,20 @@ function ReleasePage() {
       } finally {
         downloadStatusPollInFlightRef.current = false;
       }
-    }, 5000);
+    };
+    const interval = window.setInterval(pollDownloadStatus, 15000);
 
     return () => {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [downloadStatus?.status, isComplete, libraryInfo?.libraryAlbumId, releaseMbid]);
+  }, [
+    downloadStatus?.status,
+    downloadStatusWsConnected,
+    isComplete,
+    libraryInfo?.libraryAlbumId,
+    releaseMbid,
+  ]);
 
   useEffect(() => {
     if (!releaseMbid || coverUrl) return undefined;
@@ -557,7 +583,7 @@ function ReleasePage() {
               </span>
             ) : null}
             {canAddAlbum && !isComplete ? (
-              <AddAlbumButton
+              <AddActionButton
                 onClick={handleAlbumAction}
                 isLoading={requestingAlbum}
                 disabled={requestingAlbum}

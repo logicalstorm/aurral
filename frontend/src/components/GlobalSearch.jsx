@@ -39,8 +39,7 @@ import { useDebouncedTask } from "../hooks/useDebouncedTask";
 import { useSharedPlaylists } from "../hooks/useSharedPlaylists";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Clock, Loader2, Search } from "lucide-react";
-import AddAlbumButton from "./AddAlbumButton";
-import AddToLibraryButton from "./AddToLibraryButton";
+import AddActionButton from "./AddActionButton";
 import SearchLibraryCheck from "./SearchLibraryCheck";
 import { TrackPlaylistMenu } from "../pages/ArtistDetails/components/TrackPlaylistMenu";
 import { useAuth } from "../contexts/AuthContext";
@@ -200,12 +199,13 @@ function GlobalSearch() {
       return;
     }
 
-    scheduleSuggest(async (isCurrent) => {
+    scheduleSuggest(async (isCurrent, signal) => {
       setLoadingSuggestions(true);
       try {
         const data = await searchUnified(trimmed, {
           mode: "suggest",
           limit: SUGGEST_LIMIT,
+          signal,
         });
         if (!isCurrent()) return;
         setLocalSearchConfigured(!!data?.localSearchConfigured);
@@ -451,11 +451,14 @@ function GlobalSearch() {
         const artistId = getArtistRecordId(item);
         if (!canAddArtist || !artistId) return null;
         return (
-          <AddToLibraryButton
-            className="btn-add-library--suggestion"
+          <AddActionButton
             disabled={!!pendingArtistIds[artistId]}
             isLoading={!!pendingArtistIds[artistId]}
-            onClick={() => handleArtistAction(item)}
+            label="Add to Lidarr"
+            onClick={(event) => {
+              event.stopPropagation();
+              handleArtistAction(item);
+            }}
           />
         );
       }
@@ -464,7 +467,7 @@ function GlobalSearch() {
         if (!canAddAlbum || !item.id) return null;
         const pending = !!pendingAlbumIds[item.id];
         return (
-          <AddAlbumButton
+          <AddActionButton
             onClick={(event) => {
               event.stopPropagation();
               handleAlbumAction(item);

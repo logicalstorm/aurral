@@ -8,6 +8,7 @@ import {
   FIXED_DISCOVER_PLAYLIST_ARTWORK_COLORS,
 } from "../../config/discoverPlaylistPresets.js";
 import { generateEditorialPlaylists, enrichTracksWithAlbums } from "./editorialPlaylistBuilder.js";
+import { enrichPlaylistTracksForAdoption } from "./playlistAdoptionEnrichment.js";
 
 const PLAYLIST_BUILD_CONCURRENCY = Math.max(
   1,
@@ -145,17 +146,11 @@ const resolveListeningHistoryPreset = ({ basedOn = [], historyTopArtists = [] })
   return uniqueStrings([...explicit, ...fromBasedOn], 3);
 };
 
-async function enrichPlaylistTracks(playlist) {
-  if (!playlist || !Array.isArray(playlist.tracks) || playlist.tracks.length === 0) return playlist;
-  const needAlbum = playlist.tracks
-    .map((t, i) => ({ track: t, index: i }))
-    .filter(({ track }) => !track.albumName);
-  if (needAlbum.length === 0) return playlist;
-  const enriched = await enrichTracksWithAlbums(needAlbum.map(({ track }) => track));
-  for (let i = 0; i < needAlbum.length; i += 1) {
-    playlist.tracks[needAlbum[i].index].albumName = enriched[i]?.albumName || null;
-  }
-  return playlist;
+export async function enrichDiscoverPlaylistForAdoption(
+  playlist,
+  { enrichTracks = enrichTracksWithAlbums } = {},
+) {
+  return enrichPlaylistTracksForAdoption(playlist, enrichTracks);
 }
 
 export async function generateDiscoverPlaylists({
@@ -231,17 +226,12 @@ export async function generateDiscoverPlaylists({
     }
   }
 
-  const [_, editorialPlaylists] = await Promise.all([
-    Promise.all(playlists.map(enrichPlaylistTracks)),
-    (async () => {
-      try {
-        return await generateEditorialPlaylists();
-      } catch (error) {
-        console.warn(`[DiscoverPlaylists] Editorial playlists failed: ${error.message}`);
-        return [];
-      }
-    })(),
-  ]);
+  let editorialPlaylists = [];
+  try {
+    editorialPlaylists = await generateEditorialPlaylists();
+  } catch (error) {
+    console.warn(`[DiscoverPlaylists] Editorial playlists failed: ${error.message}`);
+  }
   playlists.push(...editorialPlaylists);
 
   onProgress?.({ completed: totalSteps, total: totalSteps });
