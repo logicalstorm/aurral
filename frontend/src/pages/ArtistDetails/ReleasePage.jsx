@@ -456,30 +456,39 @@ function ReleasePage() {
         artistName,
         triggerSearch,
       });
-      if (result?.queued) {
-        showSuccess(`Adding ${release.title || "album"}...`);
-        for (let attempt = 0; attempt < 20; attempt += 1) {
-          const lookup = await lookupAlbumsInLibraryBatch([releaseMbid]);
-          const entry = lookup?.[releaseMbid];
-          if (entry?.inLibrary) {
-            setLibraryInfo(entry);
-            if (entry.libraryAlbumId) {
-              const statuses = await getDownloadStatus([entry.libraryAlbumId]);
-              setDownloadStatus(statuses?.[entry.libraryAlbumId] || null);
-            }
-            return;
-          }
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-        }
-        return;
+      const addedAlbum = result?.album;
+      let entry = null;
+      if (addedAlbum?.id != null) {
+        const statistics = addedAlbum.statistics || {};
+        const sizeOnDisk = Number(statistics.sizeOnDisk || 0);
+        const trackFileCount = Number(statistics.trackFileCount || 0);
+        entry = {
+          inLibrary: true,
+          libraryAlbumId: String(addedAlbum.id),
+          libraryArtistId:
+            addedAlbum.artistId != null ? String(addedAlbum.artistId) : null,
+          status:
+            sizeOnDisk > 0 || trackFileCount > 0
+              ? "available"
+              : addedAlbum.monitored
+                ? "monitored"
+                : "unmonitored",
+          monitored: Boolean(addedAlbum.monitored),
+          percentOfTracks: Number(statistics.percentOfTracks || 0),
+          sizeOnDisk,
+          trackCount: Number(statistics.trackCount || 0),
+          trackFileCount,
+          albumName: addedAlbum.albumName || release.title || "",
+          releaseDate: addedAlbum.releaseDate || "",
+        };
+      } else {
+        const lookup = await lookupAlbumsInLibraryBatch([releaseMbid]);
+        entry = lookup?.[releaseMbid] || null;
       }
-      const lookup = await lookupAlbumsInLibraryBatch([releaseMbid]);
-      const entry = lookup?.[releaseMbid];
       if (entry?.inLibrary) {
         setLibraryInfo(entry);
         if (entry.libraryAlbumId) {
-          const statuses = await getDownloadStatus([entry.libraryAlbumId]);
-          setDownloadStatus(statuses?.[entry.libraryAlbumId] || null);
+          setDownloadStatus({ status: result?.status || "searching" });
         }
       }
       showSuccess(

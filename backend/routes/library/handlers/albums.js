@@ -75,38 +75,35 @@ export function registerAlbums(router) {
         const settings = dbOps.getSettings();
         const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
 
-        res.status(202).json({
-          queued: true,
-          artistId,
-          releaseGroupMbid: mbid,
-          albumName,
+        const album = await libraryManager.addAlbum(artistId, mbid, albumName, {
+          triggerSearch: searchOnAdd,
         });
-
-        (async () => {
-          const album = await libraryManager.addAlbum(artistId, mbid, albumName, {
-            triggerSearch: searchOnAdd,
+        if (album?.error) {
+          logger.error("library", `Failed to add album ${albumName}:`, {
+            message: album.error,
           });
-          if (album?.error) {
-            logger.error("library", `Failed to add album ${albumName}:`, { message: album.error });
-            return;
-          }
-          if (album.artistName && album.albumName) {
-            playlistManager
-              .removeDiscoverSymlinksForAlbum(album.artistName, album.albumName)
-              .catch(() => {});
-          }
-          const { recordAlbumRequested } = await import(
-            "../../../services/aurralHistoryService.js"
-          );
-          recordAlbumRequested({
-            albumId: album.id,
-            albumName: album.albumName || albumName,
-            artistName: album.artistName,
-            artistMbid: album.mbid || album.foreignAlbumId,
-            searching: searchOnAdd,
-            user: req.user,
+          return res.status(503).json({
+            error: "Failed to add album",
+            message: album.error,
           });
-        })();
+        }
+        if (album.artistName && album.albumName) {
+          playlistManager
+            .removeDiscoverSymlinksForAlbum(album.artistName, album.albumName)
+            .catch(() => {});
+        }
+        const { recordAlbumRequested } = await import(
+          "../../../services/aurralHistoryService.js"
+        );
+        recordAlbumRequested({
+          albumId: album.id,
+          albumName: album.albumName || albumName,
+          artistName: album.artistName,
+          artistMbid: album.mbid || album.foreignAlbumId,
+          searching: searchOnAdd,
+          user: req.user,
+        });
+        return res.status(201).json({ ...album, queued: false });
       } catch (error) {
         res.status(500).json({
           error: "Failed to add album",
@@ -136,47 +133,32 @@ export function registerAlbums(router) {
           });
         }
 
-        res.status(202).json({
-          queued: true,
+        const result = await libraryManager.requestAlbumFromSearch({
           albumMbid,
           albumName,
-          artistMbid,
           artistName,
+          artistMbid,
+          triggerSearch,
+          user: req.user,
         });
-
-        (async () => {
-          try {
-            const result = await libraryManager.requestAlbumFromSearch({
-              albumMbid,
-              albumName,
-              artistName,
-              artistMbid,
-              triggerSearch,
-              user: req.user,
-            });
-            const settings = dbOps.getSettings();
-            const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
-            const searching =
-              triggerSearch === true ||
-              searchOnAdd ||
-              result?.status === "searching";
-            const { recordAlbumRequested } = await import(
-              "../../../services/aurralHistoryService.js"
-            );
-            recordAlbumRequested({
-              albumId: result?.id,
-              albumName: result?.albumName || albumName,
-              artistName: result?.artistName || artistName,
-              artistMbid: result?.mbid || artistMbid,
-              searching,
-              user: req.user,
-            });
-          } catch (error) {
-            logger.error("library", `Failed to request album ${albumName}:`, {
-              message: error.message,
-            });
-          }
-        })();
+        const settings = dbOps.getSettings();
+        const searchOnAdd = settings.integrations?.lidarr?.searchOnAdd ?? false;
+        const searching =
+          triggerSearch === true ||
+          searchOnAdd ||
+          result?.status === "searching";
+        const { recordAlbumRequested } = await import(
+          "../../../services/aurralHistoryService.js"
+        );
+        recordAlbumRequested({
+          albumId: result?.album?.id || result?.id,
+          albumName: result?.album?.albumName || result?.albumName || albumName,
+          artistName: result?.artist?.artistName || result?.artistName || artistName,
+          artistMbid: result?.artist?.mbid || result?.mbid || artistMbid,
+          searching,
+          user: req.user,
+        });
+        return res.status(201).json({ ...result, queued: false });
       } catch (error) {
         const statusCode =
           Number.isInteger(error?.statusCode) && error.statusCode >= 400

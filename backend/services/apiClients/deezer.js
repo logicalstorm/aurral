@@ -238,38 +238,37 @@ function getTrackTitle(track) {
 export async function getDeezerAlbumsForArtist(artist) {
   if (!artist?.id) return [];
   const cacheKey = `dz-albums:${artist.id}`;
-  const cached = deezerAlbumCache.get(cacheKey);
-  if (cached) return cached;
+  return cachedOrInflight(deezerAlbumCache, cacheKey, deezerInflightRequests, async () => {
+    const res = await axios.get(
+      `https://api.deezer.com/artist/${artist.id}/albums`,
+      { params: { limit: 100 }, timeout: 3000 },
+    );
+    const raw = res.data?.data || [];
+    const allowed = ["album", "ep", "single"];
+    const albums = raw
+      .filter((a) =>
+        allowed.includes((a.record_type || a.type || "").toLowerCase()),
+      )
+      .map((a) => {
+        const primaryType = normalizeDeezerPrimaryType(a.record_type || a.type);
+        const title = a.title || "";
+        const releaseDate = a.release_date || "";
+        return {
+          id: a.id,
+          title,
+          "first-release-date": releaseDate ? releaseDate.slice(0, 4) : null,
+          "primary-type": primaryType,
+          "secondary-types": [],
+          _coverUrl: a.cover_big || a.cover_medium || a.cover || null,
+          fans: typeof a.fans === "number" ? a.fans : 0,
+          _normalizedTitle: normalizeTitle(title),
+          _releaseDate: releaseDate,
+        };
+      });
 
-  const res = await axios.get(
-    `https://api.deezer.com/artist/${artist.id}/albums`,
-    { params: { limit: 100 }, timeout: 3000 },
-  );
-  const raw = res.data?.data || [];
-  const allowed = ["album", "ep", "single"];
-  const albums = raw
-    .filter((a) =>
-      allowed.includes((a.record_type || a.type || "").toLowerCase()),
-    )
-    .map((a) => {
-      const primaryType = normalizeDeezerPrimaryType(a.record_type || a.type);
-      const title = a.title || "";
-      const releaseDate = a.release_date || "";
-      return {
-        id: a.id,
-        title,
-        "first-release-date": releaseDate ? releaseDate.slice(0, 4) : null,
-        "primary-type": primaryType,
-        "secondary-types": [],
-        _coverUrl: a.cover_big || a.cover_medium || a.cover || null,
-        fans: typeof a.fans === "number" ? a.fans : 0,
-        _normalizedTitle: normalizeTitle(title),
-        _releaseDate: releaseDate,
-      };
-    });
-
-  deezerAlbumCache.set(cacheKey, albums);
-  return albums;
+    deezerAlbumCache.set(cacheKey, albums);
+    return albums;
+  });
 }
 
 export function selectBestDeezerAlbumMatch(

@@ -332,7 +332,10 @@ export class LidarrClient {
       endpoint === "/queue" ||
       endpoint.startsWith("/history?") ||
       endpoint === "/command";
-    const dedupeKey = method === "GET" && shouldDedupeGet ? endpoint : null;
+    const dedupeKey =
+      method === "GET" && shouldDedupeGet
+        ? `${options.forceRefresh ? "refresh:" : "cached:"}${endpoint}`
+        : null;
     if (!dedupeKey) {
       return this._request(endpoint, method, data, skipConfigUpdate, options);
     }
@@ -355,12 +358,16 @@ export class LidarrClient {
     }
 
     const now = Date.now();
-    if (method === "GET" && endpoint === "/artist") {
+    if (method === "GET" && endpoint === "/artist" && !options.forceRefresh) {
       if (this._artistListCache && now - this._artistListCache.at < LIDARR_LIST_CACHE_MS) {
         return this._artistListCache.data;
       }
     }
-    if (method === "GET" && (endpoint === "/album" || endpoint.startsWith("/album?"))) {
+    if (
+      method === "GET" &&
+      !options.forceRefresh &&
+      (endpoint === "/album" || endpoint.startsWith("/album?"))
+    ) {
       const cached = this._albumCache.get(endpoint);
       if (cached && now - cached.at < LIDARR_LIST_CACHE_MS) {
         return cached.data;
@@ -1094,14 +1101,14 @@ export class LidarrClient {
     }
   }
 
-  async getAllAlbums() {
-    const albums = await this.request("/album");
+  async getAllAlbums(options = {}) {
+    const albums = await this.request("/album", "GET", null, false, options);
     return Array.isArray(albums) ? albums : [];
   }
 
-  async getAlbumMbidIndex() {
-    const albums = await this.getAllAlbums();
-    if (this._albumMbidIndex && this._albumMbidIndex.source === albums) {
+  async getAlbumMbidIndex(options = {}) {
+    const albums = await this.getAllAlbums(options);
+    if (!options.forceRefresh && this._albumMbidIndex && this._albumMbidIndex.source === albums) {
       return this._albumMbidIndex.map;
     }
     const map = new Map();
@@ -1113,8 +1120,8 @@ export class LidarrClient {
     return map;
   }
 
-  async getAlbumByMbid(albumMbid) {
-    const index = await this.getAlbumMbidIndex();
+  async getAlbumByMbid(albumMbid, options = {}) {
+    const index = await this.getAlbumMbidIndex(options);
     return index.get(String(albumMbid || "").trim());
   }
 

@@ -5,6 +5,8 @@ import { useAudioQueue } from "../contexts/audioQueueContext";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuth } from "../contexts/AuthContext";
 import { useFlowWorkerActivity } from "./flows/useFlowWorkerActivity";
+import { useWebSocketChannel } from "../hooks/useWebSocket";
+import { getActivityPollIntervalMs } from "../utils/requestScheduling.js";
 import { PageSectionMobileNav } from "../components/PageSectionMobileNav";
 import {
   ACTIVITY_VIEWS,
@@ -23,8 +25,6 @@ import ActivityRequestRow from "./activity/ActivityRequestRow";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { Loader, AlertCircle, Music } from "lucide-react";
 const ACTIVITY_PAGE_SIZE = 25;
-const ACTIVE_POLL_INTERVAL_MS = 15000;
-const HISTORY_POLL_INTERVAL_MS = 60000;
 
 const QUEUE_EMPTY_STATE = {
   title: "Queue is empty",
@@ -105,7 +105,7 @@ function ActivityPage() {
     setVisibleCount(ACTIVITY_PAGE_SIZE);
   }, [activeView]);
 
-  const fetchRequests = useCallback(async ({ silent = false } = {}) => {
+  const fetchRequests = useCallback(async ({ silent = false, refresh = false } = {}) => {
     if (fetchRequestsInFlightRef.current) return;
     fetchRequestsInFlightRef.current = true;
     if (!silent) {
@@ -113,7 +113,7 @@ function ActivityPage() {
     }
 
     try {
-      const data = await getRequests();
+      const data = await getRequests({ refresh });
       setRequests((previous) => mergeActivityRequests(previous, data));
       setError(null);
     } catch {
@@ -127,6 +127,26 @@ function ActivityPage() {
       }
     }
   }, []);
+
+  const refreshFromStatusEvent = useCallback(() => {
+    if (document.hidden) return;
+    fetchRequests({ silent: true, refresh: true });
+  }, [fetchRequests]);
+
+  const { isConnected: downloadsWsConnected } = useWebSocketChannel(
+    "downloads",
+    (message) => {
+      if (message?.type === "download_statuses") refreshFromStatusEvent();
+    },
+  );
+  const { isConnected: playlistsWsConnected } = useWebSocketChannel(
+    "weekly-flow",
+    (message) => {
+      if (message?.type === "playlist_status") refreshFromStatusEvent();
+    },
+    { enabled: hasFlowAccess },
+  );
+  const activityWsConnected = downloadsWsConnected && (!hasFlowAccess || playlistsWsConnected);
 
   useEffect(() => {
     fetchRequests();
@@ -151,13 +171,16 @@ function ActivityPage() {
   }, [fetchRequests]);
 
   useEffect(() => {
-    const intervalMs = isListLikeView ? ACTIVE_POLL_INTERVAL_MS : HISTORY_POLL_INTERVAL_MS;
+    const intervalMs = getActivityPollIntervalMs({
+      isConnected: activityWsConnected,
+      isListLikeView,
+    });
     const interval = setInterval(() => {
       if (document.hidden) return;
       fetchRequests({ silent: true });
     }, intervalMs);
     return () => clearInterval(interval);
-  }, [isListLikeView, fetchRequests]);
+  }, [activityWsConnected, isListLikeView, fetchRequests]);
 
   const navigateToArtist = useCallback(
     (request, isAlbum, artistMbid, artistName, displayName) => {

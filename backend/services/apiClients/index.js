@@ -10,6 +10,7 @@ export { musicbrainzRequest } from "./musicbrainz.js";
 export {
   musicbrainzGetArtistReleaseGroups,
   musicbrainzGetArtistAppearsOnReleaseGroups,
+  getMusicbrainzAppearsOnScanState,
   musicbrainzGetArtistNameByMbid,
   musicbrainzGetCachedArtistMbidByName,
   musicbrainzResolveArtistMbidByName,

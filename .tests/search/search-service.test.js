@@ -91,7 +91,7 @@ test("requestAlbumFromSearch resolves artist add settings and triggers search", 
   }
 });
 
-test("requestAlbumFromSearch waits for Lidarr to populate a new artist album", async () => {
+test("requestAlbumFromSearch delegates a new artist album directly to addAlbum", async () => {
   const originalIsConfigured = lidarrClient.isConfigured;
   const originalGetAlbumByMbid = lidarrClient.getAlbumByMbid;
   const originalGetArtist = libraryManager.getArtist;
@@ -102,7 +102,7 @@ test("requestAlbumFromSearch waits for Lidarr to populate a new artist album", a
     libraryManager.waitForAlbumByMbidForArtist;
   const originalAddAlbum = libraryManager.addAlbum;
 
-  let waitCall = null;
+  let waitCalls = 0;
 
   lidarrClient.isConfigured = () => true;
   lidarrClient.getAlbumByMbid = async () => null;
@@ -120,20 +120,12 @@ test("requestAlbumFromSearch waits for Lidarr to populate a new artist album", a
     artistName: "Boards of Canada",
     monitorOption: "none",
   });
-  libraryManager.waitForAlbumByMbidForArtist = async (albumMbid, artistId) => {
-    waitCall = { albumMbid, artistId };
-    return {
-      id: 42,
-      artistId: 7,
-      foreignAlbumId: "album-mbid",
-      title: "Geogaddi",
-    };
+  libraryManager.waitForAlbumByMbidForArtist = async () => {
+    waitCalls += 1;
+    return null;
   };
   libraryManager.addAlbum = async (artistId, albumMbid, albumName, options) => {
-    assert.deepEqual(waitCall, {
-      albumMbid: "album-mbid",
-      artistId: "7",
-    });
+    assert.equal(waitCalls, 0);
     assert.equal(artistId, "7");
     assert.equal(albumMbid, "album-mbid");
     assert.equal(albumName, "Geogaddi");
@@ -167,7 +159,7 @@ test("requestAlbumFromSearch waits for Lidarr to populate a new artist album", a
 
     assert.equal(result.success, true);
     assert.equal(result.createdArtist, true);
-    assert.equal(result.createdAlbum, false);
+    assert.equal(result.createdAlbum, true);
     assert.equal(result.triggeredSearch, true);
     assert.equal(result.album.id, "42");
   } finally {

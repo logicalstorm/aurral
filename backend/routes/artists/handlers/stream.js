@@ -9,7 +9,7 @@ import {
 import { dbOps } from "../../../db/helpers/index.js";
 import { noCache } from "../../../middleware/cache.js";
 import { verifyTokenAuth } from "../../../middleware/auth.js";
-import { buildArtistRequestKey, sendSSE, pendingArtistRequests } from "../utils.js";
+import { sendSSE } from "../utils.js";
 import { logger } from "../../../services/logger.js";
 import { getArtistImage } from "../../../services/imageService.js";
 import { buildImageProxyUrl } from "../../../services/imageProxyService.js";
@@ -62,8 +62,10 @@ export function registerStream(router) {
       res.setHeader("X-Accel-Buffering", "no");
 
       let clientDisconnected = false;
+      const requestController = new AbortController();
       req.on("close", () => {
         clientDisconnected = true;
+        requestController.abort();
       });
 
       const isClientConnected = () => !clientDisconnected && !req.socket.destroyed;
@@ -72,12 +74,6 @@ export function registerStream(router) {
 
       const override = dbOps.getArtistOverride(mbid);
       const resolvedMbid = override?.musicbrainzId || mbid;
-      const requestKey = buildArtistRequestKey({
-        mbid,
-        mode: "full",
-        selectedReleaseTypes,
-        appearsOnLimit,
-      });
       const initialName = streamArtistName || "Unknown Artist";
       const sendArtist = (payload) => {
         if (!isClientConnected()) return;
@@ -92,24 +88,19 @@ export function registerStream(router) {
 
       try {
         const tasks = [];
-        let fullArtistPromise = null;
-        const pendingPromise = pendingArtistRequests.has(requestKey)
-          ? pendingArtistRequests.get(requestKey)
-          : null;
-        const metadataArtistPromise = getArtistByMbid(resolvedMbid).catch(() => null);
-        const namePromise = pendingPromise
-          ? streamArtistName
-            ? Promise.resolve(streamArtistName)
-            : pendingPromise
-                .then((data) => data?.name || streamArtistName || "Unknown Artist")
-                .catch(() => streamArtistName || "Unknown Artist")
-          : (async () => {
-              const metadataArtist = await metadataArtistPromise;
-              if (metadataArtist?.name) return metadataArtist.name;
-              if (streamArtistName) return streamArtistName;
-              const name = (await musicbrainzGetArtistNameByMbid(resolvedMbid)) || "Unknown Artist";
-              return name;
-            })();
+        const metadataArtistPromise = getArtistByMbid(resolvedMbid, {
+          signal: requestController.signal,
+        }).catch(() => null);
+        const namePromise = (async () => {
+          const metadataArtist = await metadataArtistPromise;
+          if (metadataArtist?.name) return metadataArtist.name;
+          if (streamArtistName) return streamArtistName;
+          const name =
+            (await musicbrainzGetArtistNameByMbid(resolvedMbid, {
+              signal: requestController.signal,
+            })) || "Unknown Artist";
+          return name;
+        })();
         tasks.push(
           Promise.all([metadataArtistPromise, namePromise]).then(async ([metadataArtist, name]) => {
             if (!metadataArtist || !isClientConnected()) return;
@@ -194,27 +185,16 @@ export function registerStream(router) {
         })();
         tasks.push(libraryTask);
 
-        if (pendingPromise) {
-          logger.info("stream", `Request for ${requestKey} already in progress, waiting...`);
-          pendingPromise
-            .then((data) => {
-              if (data) sendArtist(data);
-            })
-            .catch((error) => {
-              sendSSE(res, "error", {
-                error: "Failed to fetch artist details",
-                message: error.response?.data?.error || error.message,
-              });
-            });
-          tasks.push(pendingPromise.catch(() => null));
-        }
-
-        if (!pendingPromise) {
-          const includeTrackCounts = !appearsOnLimit;
+        {
+          const includeTrackCounts = false;
           const releaseGroupsPromise = musicbrainzGetArtistReleaseGroups(
             resolvedMbid,
             selectedReleaseTypes,
-            { includeTrackCounts },
+            {
+              includeTrackCounts,
+              hydrateLimit: appearsOnLimit ? 6 : 0,
+              signal: requestController.signal,
+            },
           ).catch(() => []);
           const discographyTask = Promise.all([
             metadataArtistPromise,
@@ -240,6 +220,7 @@ export function registerStream(router) {
             if (prefetchItems.length) {
               resolveReleaseGroupCoversBatch(prefetchItems, {
                 concurrency: 6,
+                signal: requestController.signal,
               }).catch(() => {});
             }
             return { metadataArtist, name, releaseGroups: releaseGroupsWithCovers };
@@ -247,11 +228,11 @@ export function registerStream(router) {
           tasks.push(discographyTask);
 
           const appearsOnTask = discographyTask.then(async (ctx) => {
-            if (!ctx) return [];
+            if (!ctx || !isClientConnected()) return [];
             const appearsOnReleaseGroups = await musicbrainzGetArtistAppearsOnReleaseGroups(
               resolvedMbid,
               ctx.releaseGroups,
-              { limit: appearsOnLimit },
+              { limit: appearsOnLimit, signal: requestController.signal },
             ).catch(() => []);
             if (!isClientConnected()) return appearsOnReleaseGroups;
             const appearsOnWithCovers = attachCachedCoverUrls(
@@ -281,40 +262,13 @@ export function registerStream(router) {
             if (prefetchAppearsOnItems.length) {
               resolveReleaseGroupCoversBatch(prefetchAppearsOnItems, {
                 concurrency: 6,
+                signal: requestController.signal,
               }).catch(() => {});
             }
             return appearsOnWithCovers;
           });
           tasks.push(appearsOnTask);
 
-          const metadataCorePromise = Promise.all([discographyTask, appearsOnTask]).then(
-            async ([ctx, appearsOnReleaseGroups]) => {
-              if (!ctx) return null;
-              const tagPayload = await getArtistTagPayload(
-                resolvedMbid,
-                ctx.name,
-                ctx.metadataArtist,
-              );
-              return {
-                ...buildArtistBase(ctx.name, resolvedMbid, ctx.metadataArtist),
-                tags: tagPayload.tags,
-                genres: tagPayload.genres,
-                "release-groups": ctx.releaseGroups,
-                "appears-on-release-groups": appearsOnReleaseGroups,
-                "release-group-count": ctx.releaseGroups.length,
-                "release-count": ctx.releaseGroups.length,
-              };
-            },
-          );
-
-          fullArtistPromise = metadataCorePromise
-            .then((artistPayload) => artistPayload)
-            .catch(() => null);
-
-          pendingArtistRequests.set(requestKey, fullArtistPromise);
-          fullArtistPromise.finally(() => {
-            pendingArtistRequests.delete(requestKey);
-          });
         }
         const coverTask = (async () => {
           if (!isClientConnected()) return;
@@ -322,6 +276,7 @@ export function registerStream(router) {
             const cachedImage = dbOps.getImage(mbid);
             if (cachedImage && cachedImage.imageUrl && cachedImage.imageUrl !== "NOT_FOUND") {
               const artistName = (await namePromise.catch(() => null)) || streamArtistName || null;
+              if (!isClientConnected()) return;
               const cachedCover = await getArtistImage(mbid, {
                 artistName,
               }).catch(() => null);
@@ -340,6 +295,7 @@ export function registerStream(router) {
             }
 
             const artistName = (await namePromise.catch(() => null)) || streamArtistName || null;
+            if (!isClientConnected()) return;
             const negativeCacheIsFresh =
               cachedImage?.imageUrl === "NOT_FOUND" &&
               cachedImage.cacheAge &&
@@ -377,21 +333,25 @@ export function registerStream(router) {
               let similarData = await lastfmRequest("artist.getSimilar", {
                 mbid: resolvedMbid,
                 limit: 10,
-              });
+              }, { signal: requestController.signal });
+
+              if (!isClientConnected()) return;
 
               if (!similarData?.similarartists?.artist) {
                 const fallbackArtistName =
                   streamArtistName ||
                   (await metadataArtistPromise.catch(() => null))?.name ||
                   (await namePromise.catch(() => null)) ||
-                  (await musicbrainzGetArtistNameByMbid(resolvedMbid).catch(() => null)) ||
+                  (await musicbrainzGetArtistNameByMbid(resolvedMbid, {
+                    signal: requestController.signal,
+                  }).catch(() => null)) ||
                   "";
 
                 if (fallbackArtistName) {
                   similarData = await lastfmRequest("artist.getSimilar", {
                     artist: fallbackArtistName,
                     limit: 10,
-                  });
+                  }, { signal: requestController.signal });
                 }
               }
 

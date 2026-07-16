@@ -273,7 +273,7 @@ async function waitForPostedArtist(mbid) {
   throw new Error(`Timed out waiting for fake Lidarr add for ${mbid}`);
 }
 
-async function postLibraryArtist(body, { status = 202, wait = status === 202 } = {}) {
+async function postLibraryArtist(body, { status = 201, wait = status === 201 } = {}) {
   const { response, payload } = await apiFetch("/api/library/artists", {
     method: "POST",
     body: JSON.stringify(body),

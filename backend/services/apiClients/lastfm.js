@@ -5,6 +5,7 @@ import createCache from "./simpleCache.js";
 import { logger } from "../logger.js";
 import { LASTFM_API } from "../../config/constants.js";
 import { getLastfmApiKey } from "./config.js";
+import { runSharedInflight } from "../sharedInflight.js";
 
 const lastfmCache = createCache(300);
 
@@ -32,8 +33,6 @@ export async function lastfmRequest(method, params = {}, options = {}) {
   const cacheKey = `lfm:${method}:${JSON.stringify(params)}`;
   const cached = lastfmCache.get(cacheKey);
   if (cached !== undefined) return cached;
-  const inflight = lastfmInflightRequests.get(cacheKey);
-  if (inflight) return inflight;
   const timeoutMs = Number.isFinite(Number(options?.timeoutMs))
     ? Math.max(500, Math.floor(Number(options.timeoutMs)))
     : LASTFM_TIMEOUT_MS;
@@ -41,7 +40,7 @@ export async function lastfmRequest(method, params = {}, options = {}) {
     ? Math.max(0, Math.floor(Number(options.maxRetries)))
     : LASTFM_MAX_RETRIES;
 
-  const requestPromise = (async () => {
+  return runSharedInflight(lastfmInflightRequests, cacheKey, async (sharedSignal) => {
     const isRetryable = (error) => {
       const status = error.response?.status;
       const code = error.code;
@@ -66,6 +65,7 @@ export async function lastfmRequest(method, params = {}, options = {}) {
     };
     let lastError = null;
     for (let retryCount = 0; retryCount <= maxRetries; retryCount++) {
+      sharedSignal.throwIfAborted?.();
       try {
         const response = await lastfmLimiter.schedule(() =>
           axios.get(LASTFM_API, {
@@ -77,11 +77,13 @@ export async function lastfmRequest(method, params = {}, options = {}) {
             },
             timeout: timeoutMs,
             httpsAgent: lastfmHttpsAgent,
+            signal: sharedSignal,
           }),
         );
         lastfmCache.set(cacheKey, response.data);
         return response.data;
       } catch (error) {
+        if (sharedSignal.aborted) throw sharedSignal.reason || error;
         lastError = error;
         if (retryCount < maxRetries && isRetryable(error)) {
           const backoffMs = 300 * Math.pow(2, retryCount) + retryCount * 200;
@@ -109,13 +111,7 @@ export async function lastfmRequest(method, params = {}, options = {}) {
       logError(`Last.fm API error (${method})`, details);
     }
     return null;
-  })();
-  lastfmInflightRequests.set(cacheKey, requestPromise);
-  try {
-    return await requestPromise;
-  } finally {
-    lastfmInflightRequests.delete(cacheKey);
-  }
+  }, { signal: options.signal });
 }
 
 export { lastfmCache };

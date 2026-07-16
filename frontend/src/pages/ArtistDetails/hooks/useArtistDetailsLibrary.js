@@ -6,16 +6,17 @@ import {
   deleteAlbumFromLibrary,
   updateLibraryArtist,
   getLibraryArtist,
-  downloadAlbum,
   triggerAlbumSearch,
   refreshLibraryArtist,
   getDownloadStatus,
   addArtistToLibrary,
   lookupArtistInLibrary,
+  requestAlbumFromSearch,
 } from "../../../utils/api/endpoints/library.js";
 import { getMyLidarrPreferences } from "../../../utils/api/endpoints/auth.js";
 import { deduplicateAlbums } from "../utils";
 import { useWebSocketChannel } from "../../../hooks/useWebSocket";
+import { shouldPollSocketFallback } from "../../../utils/requestScheduling.js";
 
 const DELETE_FILES_PREFERENCE_KEY = "aurral:library-delete-files";
 
@@ -72,10 +73,10 @@ export function useArtistDetailsLibrary({
   const downloadStatusesRef = useRef({});
   const unmonitoredAtRef = useRef({});
   const libraryAlbumIdsRef = useRef([]);
+  const libraryAlbumsRef = useRef(libraryAlbums);
   const viewedArtistIdRef = useRef(artist?.id || null);
   const currentLibraryArtistIdRef = useRef(libraryArtist?.id || null);
   const libraryRefreshTimeoutsRef = useRef(new Set());
-  const lastDownloadWebSocketAtRef = useRef(0);
 
   useEffect(() => {
     viewedArtistIdRef.current = artist?.id || null;
@@ -90,6 +91,7 @@ export function useArtistDetailsLibrary({
   }, [libraryArtist?.id]);
 
   useEffect(() => {
+    libraryAlbumsRef.current = libraryAlbums;
     libraryAlbumIdsRef.current = libraryAlbums.map((album) => String(album.id)).filter(Boolean);
   }, [libraryAlbums]);
 
@@ -99,9 +101,8 @@ export function useArtistDetailsLibrary({
     setDeleteAlbumFilesState(value);
   };
 
-  useWebSocketChannel("downloads", (msg) => {
+  const { isConnected: downloadStatusWsConnected } = useWebSocketChannel("downloads", (msg) => {
     if (msg?.type !== "download_statuses") return;
-    lastDownloadWebSocketAtRef.current = Date.now();
     const albumIds = libraryAlbumIdsRef.current;
     if (!albumIds.length) return;
     const incoming = msg.statuses || {};
@@ -110,7 +111,7 @@ export function useArtistDetailsLibrary({
       if (incoming[id]) next[id] = incoming[id];
     }
     if (requestingAlbum) {
-      const album = libraryAlbums.find(
+      const album = libraryAlbumsRef.current.find(
         (a) => a.mbid === requestingAlbum || a.foreignAlbumId === requestingAlbum,
       );
       if (album && incoming[String(album.id)]) {
@@ -263,45 +264,6 @@ export function useArtistDetailsLibrary({
     });
   };
 
-  const waitForLibraryArtist = async (
-    mbid,
-    { attempts = 20, delayMs = 1500, refresh = true, hydrateAlbums = true } = {},
-  ) => {
-    for (let i = 0; i < attempts; i++) {
-      try {
-        const lookup = await lookupArtistInLibrary(mbid);
-        if (lookup.exists && lookup.artist) {
-          const resolved = await resolveLookupArtist(lookup.artist, {
-            refresh,
-            hydrateAlbums,
-          }).catch(() => null);
-          if (resolved?.id) return resolved;
-        }
-      } catch {}
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-    return null;
-  };
-
-  const waitForLibraryAlbum = async (artistId, releaseGroupId) => {
-    const attempts = 12;
-    for (let i = 0; i < attempts; i++) {
-      try {
-        const albums = await getLibraryAlbums(artistId);
-        const uniqueAlbums = deduplicateAlbums(albums);
-        setLibraryAlbums(uniqueAlbums);
-        const found = uniqueAlbums.find(
-          (a) =>
-            (a.mbid === releaseGroupId || a.foreignAlbumId === releaseGroupId) &&
-            a.artistId === artistId,
-        );
-        if (found) return found;
-      } catch {}
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-    return null;
-  };
-
   const getCurrentMonitorOption = () => {
     if (!libraryArtist) return "none";
     if (libraryArtist.monitored === false) return "none";
@@ -391,10 +353,7 @@ export function useArtistDetailsLibrary({
         refresh: true,
         hydrateAlbums: true,
       });
-      if (result?.queued) {
-        showSuccess(`Adding ${artist.name}...`);
-        fullArtist = await waitForLibraryArtist(artist.id);
-      } else if (!fullArtist) {
+      if (!fullArtist) {
         const lookup = await lookupArtistInLibrary(artist.id);
         if (lookup.exists && lookup.artist) {
           fullArtist = await hydrateLibraryArtist(lookup.artist);
@@ -433,210 +392,61 @@ export function useArtistDetailsLibrary({
 
   const handleRequestAlbum = async (albumId, title) => {
     setRequestingAlbum(albumId);
-    let addedOptimistic = false;
-    let currentLibraryArtist = libraryArtist;
     try {
-      const resolveLibraryArtist = async () => {
-        if (!artist) return libraryArtist;
-        const lookup = await lookupArtistInLibrary(artist.id);
-        if (lookup.exists && lookup.artist) {
-          const artistMbid = lookup.artist.mbid || lookup.artist.foreignArtistId;
-          try {
-            const fullArtist = await getLibraryArtist(artistMbid);
-            setLibraryArtist(fullArtist);
-            setExistsInLibrary(true);
-            return fullArtist;
-          } catch {
-            const fallbackArtist = {
-              ...lookup.artist,
-              foreignArtistId: lookup.artist.foreignArtistId || lookup.artist.mbid,
-            };
-            if (fallbackArtist.id) {
-              setLibraryArtist(fallbackArtist);
-              setExistsInLibrary(true);
-              return fallbackArtist;
-            }
-          }
-        }
-        return libraryArtist;
-      };
-
-      if (!existsInLibrary || !libraryArtist?.id) {
-        if (!artist) {
-          showError("Artist information not available");
-          return;
-        }
-        const result = await addArtistToLibrary({
-          foreignArtistId: artist.id,
-          artistName: artist.name,
-          quality: appSettings?.quality || "standard",
-          releaseGroupMbid: albumId,
-        });
-        let fullArtist = await resolveArtistFromAddResponse(result, {
-          refresh: false,
-          hydrateAlbums: false,
-        });
-        if (result?.queued) {
-          showSuccess(`Adding ${artist.name}...`);
-          fullArtist = await waitForLibraryArtist(artist.id, {
-            attempts: 40,
-            delayMs: 1500,
-            refresh: false,
-            hydrateAlbums: false,
-          });
-        } else if (!fullArtist) {
-          const lookup = await lookupArtistInLibrary(artist.id);
-          if (lookup.exists && lookup.artist) {
-            fullArtist = await resolveLookupArtist(lookup.artist, {
-              refresh: false,
-              hydrateAlbums: false,
-            });
-          }
-        }
-        if (!fullArtist) {
-          fullArtist = await resolveLibraryArtist();
-        }
-        if (!fullArtist) {
-          fullArtist = await waitForLibraryArtist(artist.id, {
-            attempts: 20,
-            delayMs: 1500,
-            refresh: false,
-            hydrateAlbums: false,
-          });
-        }
-        if (!fullArtist) {
-          throw new Error("Failed to get library artist");
-        }
-        currentLibraryArtist = fullArtist;
+      if (!artist?.id || !artist?.name) {
+        throw new Error("Artist information not available");
       }
 
-      if (!currentLibraryArtist?.id) {
-        currentLibraryArtist = await resolveLibraryArtist();
-      }
-      if (!currentLibraryArtist?.id && artist?.id) {
-        currentLibraryArtist = await waitForLibraryArtist(artist.id);
-      }
-      if (!currentLibraryArtist?.id) {
-        throw new Error("Failed to get library artist");
+      const result = await requestAlbumFromSearch({
+        albumMbid: albumId,
+        albumName: title,
+        artistMbid: artist.id,
+        artistName: artist.name,
+        triggerSearch: true,
+      });
+      const addedArtist = result?.artist;
+      const addedAlbum = result?.album;
+      if (!addedArtist?.id || !addedAlbum?.id) {
+        throw new Error("Lidarr did not return the completed album request");
       }
 
-      let libraryAlbum = libraryAlbums.find(
-        (a) =>
-          (a.mbid === albumId || a.foreignAlbumId === albumId) &&
-          a.artistId === currentLibraryArtist.id,
+      setLibraryArtist({
+        ...addedArtist,
+        foreignArtistId: addedArtist.foreignArtistId || addedArtist.mbid || artist.id,
+      });
+      setExistsInLibrary(true);
+      setLibraryAlbums((previous) =>
+        deduplicateAlbums([
+          ...previous.filter(
+            (album) =>
+              album.id !== `pending-${albumId}` &&
+              album.mbid !== albumId &&
+              album.foreignAlbumId !== albumId,
+          ),
+          {
+            ...addedAlbum,
+            mbid: addedAlbum.mbid || addedAlbum.foreignAlbumId || albumId,
+            foreignAlbumId: addedAlbum.foreignAlbumId || addedAlbum.mbid || albumId,
+            monitored: true,
+          },
+        ]),
       );
-
-      if (!libraryAlbum) {
-        const pendingId = `pending-${albumId}`;
-        const optimisticAlbum = {
-          id: pendingId,
-          mbid: albumId,
-          foreignAlbumId: albumId,
-          albumName: title,
-          artistId: currentLibraryArtist.id,
-          releaseDate: null,
-          albumType: null,
-          statistics: null,
-          monitored: true,
+      setDownloadStatuses((previous) => {
+        const { [`pending-${albumId}`]: _pending, ...remaining } = previous;
+        return {
+          ...remaining,
+          [addedAlbum.id]: { status: result.status || "searching" },
         };
-        setLibraryAlbums((prev) => [...prev, optimisticAlbum]);
-        setDownloadStatuses((prev) => ({
-          ...prev,
-          [pendingId]: { status: "processing" },
-        }));
-        addedOptimistic = true;
-
-        const { addLibraryAlbum } = await import("../../../utils/api/endpoints/library.js");
-        let addedAlbum = null;
-        try {
-          addedAlbum = await addLibraryAlbum(currentLibraryArtist.id, albumId, title);
-          if (addedAlbum?.queued) {
-            showSuccess(`Adding ${title}...`);
-            libraryAlbum = await waitForLibraryAlbum(currentLibraryArtist.id, albumId);
-          } else if (addedAlbum?.id) {
-            setDownloadStatuses((prev) => ({
-              ...prev,
-              [addedAlbum.id]: { status: "processing" },
-            }));
-          }
-          const refreshedAlbums = await getLibraryAlbums(currentLibraryArtist.id);
-          const uniqueAlbums = deduplicateAlbums(refreshedAlbums);
-          setLibraryAlbums(uniqueAlbums);
-          libraryAlbum =
-            uniqueAlbums.find(
-              (a) =>
-                (a.mbid === albumId || a.foreignAlbumId === albumId) &&
-                a.artistId === currentLibraryArtist.id,
-            ) ?? addedAlbum;
-          if (!libraryAlbum) {
-            libraryAlbum = await waitForLibraryAlbum(currentLibraryArtist.id, albumId);
-          }
-        } catch {
-          await refreshLibraryArtist(
-            currentLibraryArtist.mbid || currentLibraryArtist.foreignArtistId,
-          );
-          const albums = await getLibraryAlbums(currentLibraryArtist.id);
-          const uniqueAlbums = deduplicateAlbums(albums);
-          setLibraryAlbums(uniqueAlbums);
-          libraryAlbum = uniqueAlbums.find(
-            (a) =>
-              (a.mbid === albumId || a.foreignAlbumId === albumId) &&
-              a.artistId === currentLibraryArtist.id,
-          );
-          if (!libraryAlbum) {
-            libraryAlbum = await waitForLibraryAlbum(currentLibraryArtist.id, albumId);
-          }
-          if (!libraryAlbum) {
-            throw new Error("Album not found for this artist. Please try again.");
-          }
-        }
-      }
-
-      if (String(libraryAlbum.id).startsWith("pending-")) {
-        const resolvedAlbum = await waitForLibraryAlbum(currentLibraryArtist.id, albumId);
-        if (resolvedAlbum) {
-          libraryAlbum = resolvedAlbum;
-        }
-      }
-
-      await updateLibraryAlbum(libraryAlbum.id, {
-        ...libraryAlbum,
-        monitored: true,
       });
-      setLibraryAlbums((prev) =>
-        prev.map((a) => (a.id === libraryAlbum.id ? { ...a, monitored: true } : a)),
-      );
-      await downloadAlbum(currentLibraryArtist.id, libraryAlbum.id, {
-        artistMbid: currentLibraryArtist.mbid || currentLibraryArtist.foreignArtistId,
-        artistName: currentLibraryArtist.artistName,
-      });
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      const refreshedAlbums = await getLibraryAlbums(currentLibraryArtist.id);
-      setLibraryAlbums(deduplicateAlbums(refreshedAlbums));
-      const artistMbid = currentLibraryArtist.mbid || currentLibraryArtist.foreignArtistId;
-      if (artistMbid) {
-        const refreshedArtist = await getLibraryArtist(artistMbid);
-        if (refreshedArtist) {
-          setLibraryArtist(refreshedArtist);
-        }
-      }
       showSuccess(`Downloading album: ${title}`);
     } catch (err) {
+      showError(
+        `Failed to add album: ${
+          err.response?.data?.message || err.response?.data?.error || err.message
+        }`,
+      );
+    } finally {
       setRequestingAlbum(null);
-      if (addedOptimistic) {
-        if (currentLibraryArtist?.id) {
-          try {
-            const refreshedAlbums = await getLibraryAlbums(currentLibraryArtist.id);
-            setLibraryAlbums(deduplicateAlbums(refreshedAlbums));
-          } catch {
-            setLibraryAlbums((prev) => prev.filter((a) => a.id !== `pending-${albumId}`));
-          }
-        } else {
-          setLibraryAlbums((prev) => prev.filter((a) => a.id !== `pending-${albumId}`));
-        }
-        setDownloadStatuses(({ [`pending-${albumId}`]: _, ...prev }) => prev);
-      }
-      showError(`Failed to add album: ${err.message}`);
     }
   };
 
@@ -845,19 +655,16 @@ export function useArtistDetailsLibrary({
     const viewedArtistId = artist?.id || null;
     const libraryArtistId = libraryArtist.id;
     const refreshTimeouts = libraryRefreshTimeoutsRef.current;
-    const pollDownloadStatus = async ({ force = false } = {}) => {
-      if (
-        !force &&
-        Date.now() - lastDownloadWebSocketAtRef.current < 30000
-      ) {
-        return;
-      }
+    let stopped = false;
+    let pollTimeoutId = null;
+    const pollDownloadStatus = async () => {
+      let hasTrackedItems = Boolean(requestingAlbum);
       try {
         const albumIds = libraryAlbumIdsRef.current;
         if (albumIds.length > 0) {
           const statuses = await getDownloadStatus(albumIds);
           if (requestingAlbum) {
-            const album = libraryAlbums.find(
+            const album = libraryAlbumsRef.current.find(
               (a) => a.mbid === requestingAlbum || a.foreignAlbumId === requestingAlbum,
             );
             if (album && statuses[album.id]) {
@@ -900,6 +707,15 @@ export function useArtistDetailsLibrary({
             }
           }
 
+          const hasActiveDownloads = Object.values(nextStatuses).some(
+            (status) =>
+              status &&
+              (status.status === "downloading" ||
+                status.status === "processing" ||
+                status.status === "adding"),
+          );
+          hasTrackedItems = hasTrackedItems || hasActiveDownloads;
+
           setDownloadStatuses((prevStatuses) => {
             const mergedStatuses = { ...prevStatuses, ...nextStatuses };
             const hasNewlyAdded = Object.keys(nextStatuses).some((albumId) => {
@@ -907,11 +723,6 @@ export function useArtistDetailsLibrary({
               const previousStatus = prevStatuses[albumId]?.status;
               return currentStatus === "added" && previousStatus !== "added";
             });
-            const hasActiveDownloads = Object.values(nextStatuses).some(
-              (s) =>
-                s &&
-                (s.status === "downloading" || s.status === "processing" || s.status === "adding"),
-            );
             if (hasNewlyAdded || hasActiveDownloads) {
               const timeoutId = setTimeout(
                 async () => {
@@ -953,17 +764,41 @@ export function useArtistDetailsLibrary({
       } catch (error) {
         console.error("Failed to fetch download status:", error);
       }
+      return hasTrackedItems;
     };
-    pollDownloadStatus({ force: true });
-    const interval = setInterval(pollDownloadStatus, 15000);
+
+    const runFallbackPoll = async () => {
+      const hasTrackedItems = await pollDownloadStatus();
+      if (
+        stopped ||
+        !shouldPollSocketFallback({
+          isConnected: downloadStatusWsConnected,
+          hasTrackedItems,
+          documentHidden: document.hidden,
+        })
+      ) {
+        return;
+      }
+      pollTimeoutId = setTimeout(runFallbackPoll, 15000);
+    };
+
+    // Seed the page once because download broadcasts only fire when their payload changes.
+    runFallbackPoll();
     return () => {
-      clearInterval(interval);
+      stopped = true;
+      if (pollTimeoutId) clearTimeout(pollTimeoutId);
       for (const timeoutId of refreshTimeouts) {
         clearTimeout(timeoutId);
       }
       refreshTimeouts.clear();
     };
-  }, [artist?.id, libraryArtist, libraryAlbums, requestingAlbum, setLibraryAlbums]);
+  }, [
+    artist?.id,
+    downloadStatusWsConnected,
+    libraryArtist,
+    requestingAlbum,
+    setLibraryAlbums,
+  ]);
 
   useEffect(() => {
     downloadStatusesRef.current = downloadStatuses;

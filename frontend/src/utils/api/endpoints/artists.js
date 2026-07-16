@@ -34,6 +34,19 @@ export const getArtistDetails = async (
 export const getReleaseGroupDetails = (mbid) =>
   getData(`/artists/release-group/${mbid}`);
 
+export const getArtistAppearsOnPage = (
+  mbid,
+  { offset = 0, limit = 24, excludeIds = [] } = {},
+) =>
+  postData(`/artists/${mbid}/appears-on`, {
+    offset,
+    limit,
+    excludeIds: Array.isArray(excludeIds) ? excludeIds : [],
+  });
+
+export const getReleaseGroupRatingsBatch = (ids = []) =>
+  postData("/artists/release-groups/ratings", { ids });
+
 export const getReleaseGroupTracks = async (mbid, context = {}) => {
   const params = {};
   if (context.artistMbid) params.artistMbid = context.artistMbid;

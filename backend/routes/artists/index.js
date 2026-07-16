@@ -5,6 +5,7 @@ import { registerDetails } from "./handlers/details.js";
 import { registerCover } from "./handlers/cover.js";
 import { registerSimilar } from "./handlers/similar.js";
 import { registerVideo } from "./handlers/video.js";
+import { registerAppearsOn } from "./handlers/appearsOn.js";
 import mountRoutes from "../shared/mountRoutes.js";
 
 export default mountRoutes([
@@ -15,4 +16,5 @@ export default mountRoutes([
   registerCover,
   registerSimilar,
   registerVideo,
+  registerAppearsOn,
 ]);

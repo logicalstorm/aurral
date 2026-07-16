@@ -121,23 +121,31 @@ export function registerArtists(router) {
         });
       }
 
-      res.status(202).json({
-        queued: true,
+      const artist = await libraryManager.addArtistWithResolvedOptions(
+        mbid,
+        artistName,
+        preparedAddOptions,
+      );
+      if (artist?.error) {
+        logger.error("library", `Failed to add artist ${artistName}:`, {
+          message: artist.error,
+        });
+        return res.status(503).json({
+          error: "Failed to add artist",
+          message: artist.error,
+        });
+      }
+
+      return res.status(201).json({
+        queued: false,
         foreignArtistId: mbid,
         artistName,
+        artist: {
+          ...artist,
+          foreignArtistId: artist.foreignArtistId || artist.mbid || mbid,
+          added: artist.addedAt,
+        },
       });
-
-      (async () => {
-        const artist = await libraryManager.addArtistWithResolvedOptions(
-          mbid,
-          artistName,
-          preparedAddOptions,
-        );
-        if (artist?.error) {
-          logger.error("library", `Failed to add artist ${artistName}:`, { message: artist.error });
-          return;
-        }
-      })();
     } catch (error) {
       res.status(500).json({
         error: "Failed to add artist",

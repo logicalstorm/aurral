@@ -175,7 +175,10 @@ export const attachCachedCoverUrls = (releaseGroups = [], limit = null) => {
   });
 };
 
-export const resolveReleaseGroupCoversBatch = async (items = [], { concurrency = 6 } = {}) => {
+export const resolveReleaseGroupCoversBatch = async (
+  items = [],
+  { concurrency = 6, signal } = {},
+) => {
   const seen = new Set();
   const normalized = items
     .map(normalizeBatchItem)
@@ -213,6 +216,7 @@ export const resolveReleaseGroupCoversBatch = async (items = [], { concurrency =
   const safeConcurrency = Math.min(12, Math.max(1, Number.parseInt(concurrency, 10) || 6));
 
   for (let index = 0; index < missing.length; index += safeConcurrency) {
+    signal?.throwIfAborted?.();
     const batch = missing.slice(index, index + safeConcurrency);
     const results = await Promise.allSettled(
       batch.map((item) =>

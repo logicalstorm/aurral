@@ -4,18 +4,20 @@ import {
 } from "./spotifyConfig.js";
 import { spotifyConnectionStore } from "./spotifyConnectionStore.js";
 import createCache from "../apiClients/simpleCache.js";
+import { runSharedInflight } from "../sharedInflight.js";
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 const playlistTrackCache = createCache(2 * 60, 200);
 const playlistTrackInflight = new Map();
+const tokenRefreshInflight = new Map();
 
 const playlistTrackCacheKey = (userId, playlistId) =>
   `${String(userId)}:${String(playlistId)}`;
 
-async function renewAccessToken(refreshToken) {
+async function renewAccessToken(refreshToken, signal) {
   const url = new URL(SPOTIFY_RENEW_URI);
   url.searchParams.set("refresh_token", refreshToken);
-  const response = await fetch(url, { method: "GET" });
+  const response = await fetch(url, { method: "GET", signal });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     throw new Error(body || `Spotify token refresh failed (${response.status})`);
@@ -36,6 +38,20 @@ async function renewAccessToken(refreshToken) {
   };
 }
 
+const refreshConnection = (userId, refreshToken, { force = false } = {}) =>
+  runSharedInflight(
+    tokenRefreshInflight,
+    String(userId),
+    async (signal) => {
+      const latest = spotifyConnectionStore.getConnection(userId);
+      if (!force && latest?.expiresAt - TOKEN_REFRESH_BUFFER_MS > Date.now()) {
+        return latest;
+      }
+      const renewed = await renewAccessToken(latest?.refreshToken || refreshToken, signal);
+      return spotifyConnectionStore.updateTokens(userId, renewed);
+    },
+  );
+
 async function getValidConnection(userId) {
   let connection = spotifyConnectionStore.getConnection(userId);
   if (!connection) {
@@ -46,9 +62,7 @@ async function getValidConnection(userId) {
   if (connection.expiresAt - TOKEN_REFRESH_BUFFER_MS > Date.now()) {
     return connection;
   }
-  const renewed = await renewAccessToken(connection.refreshToken);
-  connection = spotifyConnectionStore.updateTokens(userId, renewed);
-  return connection;
+  return refreshConnection(userId, connection.refreshToken);
 }
 
 async function spotifyRequest(userId, path, { searchParams, url: absoluteUrl } = {}) {
@@ -67,8 +81,11 @@ async function spotifyRequest(userId, path, { searchParams, url: absoluteUrl } =
     },
   });
   if (response.status === 401) {
-    const renewed = await renewAccessToken(connection.refreshToken);
-    const nextConnection = spotifyConnectionStore.updateTokens(userId, renewed);
+    const latest = spotifyConnectionStore.getConnection(userId);
+    const nextConnection =
+      latest?.accessToken && latest.accessToken !== connection.accessToken
+        ? latest
+        : await refreshConnection(userId, connection.refreshToken, { force: true });
     response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${nextConnection.accessToken}`,

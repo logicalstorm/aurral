@@ -14,6 +14,7 @@ import {
 } from "../../../utils/api/endpoints/settings.js";
 import { useWebSocketChannel } from "../../../hooks/useWebSocket";
 import { DISCOVERY_MANUAL_REFRESH_KEY } from "../../../utils/discoverRecentNavigation.js";
+import { shouldPollDiscoveryHealth } from "../../../utils/requestScheduling.js";
 import { allReleaseTypes } from "../constants";
 import {
   DEFAULT_METADATA_BASE_URL,
@@ -188,7 +189,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
 
   const lastDiscoveryWsMessageAtRef = useRef(0);
 
-  useWebSocketChannel("discovery", (msg) => {
+  const { isConnected: discoveryWsConnected } = useWebSocketChannel("discovery", (msg) => {
     if (msg.type !== "discovery_update") return;
 
     if (msg.phase === "error") {
@@ -266,7 +267,12 @@ export function useSettingsData(showSuccess, showError, showInfo) {
   }, [fetchSettings]);
 
   useEffect(() => {
-    if (!refreshingDiscovery) return;
+    if (
+      !refreshingDiscovery ||
+      !shouldPollDiscoveryHealth({ isConnected: discoveryWsConnected })
+    ) {
+      return;
+    }
 
     let stopped = false;
     let timeoutId = null;
@@ -291,7 +297,7 @@ export function useSettingsData(showSuccess, showError, showInfo) {
       stopped = true;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [refreshingDiscovery, refreshHealth]);
+  }, [discoveryWsConnected, refreshingDiscovery, refreshHealth]);
 
   const updateSettings = useCallback(
     (newSettings) => {

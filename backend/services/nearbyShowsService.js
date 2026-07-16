@@ -1,10 +1,12 @@
 import axios from "../../lib/axiosFetch.js";
 import createCache from "./apiClients/simpleCache.js";
 import { getTicketmasterApiKey } from "./apiClients/index.js";
+import { runSharedInflight } from "./sharedInflight.js";
 
 const ticketmasterEventCache = createCache(15 * 60);
 const ipLocationCache = createCache(30 * 60);
 const zipLocationCache = createCache(24 * 60 * 60);
+const nearbyShowsInflight = new Map();
 
 const DEFAULT_RADIUS_MILES = 250;
 const MAX_EVENT_RESULTS = 200;
@@ -187,70 +189,74 @@ const resolveZipLocation = async (zipCode) => {
   const normalizedZip = isLikelyUsZip(zip) ? normalizeUsZip(zip) : zip;
   const cached = zipLocationCache.get(normalizedZip);
   if (cached) return cached;
-  try {
-    if (isLikelyUsZip(normalizedZip)) {
-      const response = await axios.get(
-        `https://api.zippopotam.us/us/${encodeURIComponent(normalizedZip)}`,
-        {
-          timeout: 5000,
-          headers: {
-            Accept: "application/json",
-            "User-Agent": "Aurral/1.0 (+https://github.com/leekelly/aurral)",
+  return runSharedInflight(nearbyShowsInflight, `zip:${normalizedZip}`, async (signal) => {
+    try {
+      if (isLikelyUsZip(normalizedZip)) {
+        const response = await axios.get(
+          `https://api.zippopotam.us/us/${encodeURIComponent(normalizedZip)}`,
+          {
+            timeout: 5000,
+            headers: {
+              Accept: "application/json",
+              "User-Agent": "Aurral/1.0 (+https://github.com/leekelly/aurral)",
+            },
+            signal,
           },
-        },
-      );
-      const place = response.data?.places?.[0];
-      if (place) {
-        const location = {
-          source: "zip",
-          postalCode: normalizedZip,
-          city: place["place name"] || null,
-          region: place.state || null,
-          regionCode: place["state abbreviation"] || null,
-          countryCode: "US",
-          latitude: place.latitude != null ? Number(place.latitude) : null,
-          longitude: place.longitude != null ? Number(place.longitude) : null,
-        };
-        location.label = buildLocationLabel(location);
-        zipLocationCache.set(normalizedZip, location);
-        return location;
+        );
+        const place = response.data?.places?.[0];
+        if (place) {
+          const location = {
+            source: "zip",
+            postalCode: normalizedZip,
+            city: place["place name"] || null,
+            region: place.state || null,
+            regionCode: place["state abbreviation"] || null,
+            countryCode: "US",
+            latitude: place.latitude != null ? Number(place.latitude) : null,
+            longitude: place.longitude != null ? Number(place.longitude) : null,
+          };
+          location.label = buildLocationLabel(location);
+          zipLocationCache.set(normalizedZip, location);
+          return location;
+        }
       }
+    } catch {}
+    try {
+      const response = await axios.get("https://nominatim.openstreetmap.org/search", {
+        params: {
+          postalcode: normalizedZip,
+          countrycodes: isLikelyUsZip(normalizedZip) ? "us" : undefined,
+          format: "jsonv2",
+          addressdetails: 1,
+          limit: 1,
+        },
+        timeout: 6000,
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "Aurral/1.0 (+https://github.com/leekelly/aurral)",
+        },
+        signal,
+      });
+      const result = Array.isArray(response.data) ? response.data[0] : null;
+      if (!result) return null;
+      const address = result.address || {};
+      const location = {
+        source: "zip",
+        postalCode: normalizedZip,
+        city: address.city || address.town || address.village || null,
+        region: address.state || null,
+        regionCode: null,
+        countryCode: address.country_code ? String(address.country_code).toUpperCase() : null,
+        latitude: result.lat != null ? Number(result.lat) : null,
+        longitude: result.lon != null ? Number(result.lon) : null,
+      };
+      location.label = buildLocationLabel(location);
+      zipLocationCache.set(normalizedZip, location);
+      return location;
+    } catch {
+      return null;
     }
-  } catch {}
-  try {
-    const response = await axios.get("https://nominatim.openstreetmap.org/search", {
-      params: {
-        postalcode: normalizedZip,
-        countrycodes: isLikelyUsZip(normalizedZip) ? "us" : undefined,
-        format: "jsonv2",
-        addressdetails: 1,
-        limit: 1,
-      },
-      timeout: 6000,
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "Aurral/1.0 (+https://github.com/leekelly/aurral)",
-      },
-    });
-    const result = Array.isArray(response.data) ? response.data[0] : null;
-    if (!result) return null;
-    const address = result.address || {};
-    const location = {
-      source: "zip",
-      postalCode: normalizedZip,
-      city: address.city || address.town || address.village || null,
-      region: address.state || null,
-      regionCode: null,
-      countryCode: address.country_code ? String(address.country_code).toUpperCase() : null,
-      latitude: result.lat != null ? Number(result.lat) : null,
-      longitude: result.lon != null ? Number(result.lon) : null,
-    };
-    location.label = buildLocationLabel(location);
-    zipLocationCache.set(normalizedZip, location);
-    return location;
-  } catch {
-    return null;
-  }
+  });
 };
 
 const resolveIpLocation = async (ipAddress) => {
@@ -259,29 +265,32 @@ const resolveIpLocation = async (ipAddress) => {
   const cached = ipLocationCache.get(cacheKey);
   if (cached) return cached;
   const endpoint = ip && !isPrivateIpAddress(ip) ? `/${ip}/json/` : "/json/";
-  const response = await axios.get(`https://ipapi.co${endpoint}`, {
-    timeout: 5000,
-    headers: {
-      Accept: "application/json",
-      "User-Agent": "Aurral/1.0 (+https://github.com/leekelly/aurral)",
-    },
+  return runSharedInflight(nearbyShowsInflight, `ip:${cacheKey}`, async (signal) => {
+    const response = await axios.get(`https://ipapi.co${endpoint}`, {
+      timeout: 5000,
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "Aurral/1.0 (+https://github.com/leekelly/aurral)",
+      },
+      signal,
+    });
+    if (response.data?.error) {
+      throw new Error(response.data.reason || "IP lookup failed");
+    }
+    const location = {
+      source: "ip",
+      postalCode: sanitizeZipCode(response.data?.postal),
+      city: response.data?.city || null,
+      region: response.data?.region || null,
+      regionCode: response.data?.region_code || null,
+      countryCode: response.data?.country_code || null,
+      latitude: response.data?.latitude != null ? Number(response.data.latitude) : null,
+      longitude: response.data?.longitude != null ? Number(response.data.longitude) : null,
+    };
+    location.label = buildLocationLabel(location);
+    ipLocationCache.set(cacheKey, location);
+    return location;
   });
-  if (response.data?.error) {
-    throw new Error(response.data.reason || "IP lookup failed");
-  }
-  const location = {
-    source: "ip",
-    postalCode: sanitizeZipCode(response.data?.postal),
-    city: response.data?.city || null,
-    region: response.data?.region || null,
-    regionCode: response.data?.region_code || null,
-    countryCode: response.data?.country_code || null,
-    latitude: response.data?.latitude != null ? Number(response.data.latitude) : null,
-    longitude: response.data?.longitude != null ? Number(response.data.longitude) : null,
-  };
-  location.label = buildLocationLabel(location);
-  ipLocationCache.set(cacheKey, location);
-  return location;
 };
 
 const fetchTicketmasterEvents = async ({ location, radiusMiles }) => {
@@ -295,23 +304,26 @@ const fetchTicketmasterEvents = async ({ location, radiusMiles }) => {
   });
   const cached = ticketmasterEventCache.get(cacheKey);
   if (cached) return cached;
-  const response = await axios.get(`${TICKETMASTER_BASE_URL}/events.json`, {
-    params: {
-      apikey: apiKey,
-      classificationName: "music",
-      size: MAX_EVENT_RESULTS,
-      locale: "*",
-      includeTBA: "no",
-      includeTBD: "no",
-      source: "ticketmaster",
-      ...buildDateRange(),
-      ...getTicketmasterLocationParams(location, radiusMiles),
-    },
-    timeout: 10000,
+  return runSharedInflight(nearbyShowsInflight, `events:${cacheKey}`, async (signal) => {
+    const response = await axios.get(`${TICKETMASTER_BASE_URL}/events.json`, {
+      params: {
+        apikey: apiKey,
+        classificationName: "music",
+        size: MAX_EVENT_RESULTS,
+        locale: "*",
+        includeTBA: "no",
+        includeTBD: "no",
+        source: "ticketmaster",
+        ...buildDateRange(),
+        ...getTicketmasterLocationParams(location, radiusMiles),
+      },
+      timeout: 10000,
+      signal,
+    });
+    const events = response.data?._embedded?.events || [];
+    ticketmasterEventCache.set(cacheKey, events);
+    return events;
   });
-  const events = response.data?._embedded?.events || [];
-  ticketmasterEventCache.set(cacheKey, events);
-  return events;
 };
 
 const buildShowRecord = (event, artist) => {

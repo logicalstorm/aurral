@@ -27,6 +27,45 @@ function extractDeezerArtistIdFromLinks(links = []) {
 }
 
 export function registerReleaseGroup(router) {
+  router.post("/release-groups/ratings", async (req, res) => {
+    const ids = [...new Set(Array.isArray(req.body?.ids) ? req.body.ids : [])]
+      .map((id) => String(id || "").trim())
+      .filter((id) => UUID_REGEX.test(id))
+      .slice(0, 24);
+    if (!ids.length) return res.json({ ratings: {} });
+
+    const controller = new AbortController();
+    res.on("close", () => {
+      if (!res.writableEnded) controller.abort();
+    });
+    const ratings = {};
+    try {
+      for (let index = 0; index < ids.length; index += 6) {
+        controller.signal.throwIfAborted?.();
+        const batch = ids.slice(index, index + 6);
+        const results = await Promise.allSettled(
+          batch.map((id) => getAlbumByMbid(id, { signal: controller.signal })),
+        );
+        batch.forEach((id, batchIndex) => {
+          const result = results[batchIndex];
+          if (result.status !== "fulfilled") return;
+          ratings[id] = {
+            rating: result.value?.rating || null,
+            firstReleaseDate: result.value?.releaseDate || null,
+          };
+        });
+      }
+      if (controller.signal.aborted) return;
+      return res.json({ ratings });
+    } catch (error) {
+      if (controller.signal.aborted || error?.name === "AbortError") return;
+      return res.status(502).json({
+        error: "Failed to load release ratings",
+        message: error.message,
+      });
+    }
+  });
+
   router.post("/release-groups/covers", async (req, res) => {
     try {
       const items = Array.isArray(req.body?.items) ? req.body.items : [];

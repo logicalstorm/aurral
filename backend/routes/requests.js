@@ -113,7 +113,8 @@ router.get("/", requireAuth, noCache, async (req, res) => {
       return res.json(aurralOnly);
     }
 
-    if (lastRequestsResponse && Date.now() - lastRequestsAt < REQUESTS_CACHE_MS) {
+    const forceRefresh = req.query.refresh === "1" || req.query.refresh === "true";
+    if (!forceRefresh && lastRequestsResponse && Date.now() - lastRequestsAt < REQUESTS_CACHE_MS) {
       return res.json(filterDismissedRequests(lastRequestsResponse));
     }
 

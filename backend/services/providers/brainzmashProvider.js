@@ -19,6 +19,7 @@ import {
   toNormalizedArtistAlbum,
 } from "./brainzmashMappers.js";
 import { selectBestAlbumImage } from "../imageService.js";
+import { runSharedInflight } from "../sharedInflight.js";
 
 const providerCache = createCache(300);
 const releaseCache = createCache(300);
@@ -74,18 +75,15 @@ function getUserAgent() {
   return `${APP_NAME}/${APP_VERSION}`;
 }
 
-async function request(path, params = {}) {
+async function request(path, params = {}, { signal } = {}) {
   const baseUrl = getMetadataBaseUrl();
   const cacheKey = `${baseUrl}${path}:${JSON.stringify(params)}`;
   const cached = providerCache.get(cacheKey);
   if (cached) return cached;
-  const inflight = providerInflightRequests.get(cacheKey);
-  if (inflight) return inflight;
-
   healthState.activeBaseUrl = baseUrl;
   healthState.lastCheckedAt = nowIso();
 
-  const requestPromise = (async () => {
+  return runSharedInflight(providerInflightRequests, cacheKey, async (sharedSignal) => {
     try {
       const response = await axios.get(`${baseUrl}${path}`, {
         params,
@@ -93,6 +91,7 @@ async function request(path, params = {}) {
         headers: {
           "User-Agent": getUserAgent(),
         },
+        signal: sharedSignal,
       });
       providerCache.set(cacheKey, response.data);
       healthState.lastSuccessAt = healthState.lastCheckedAt;
@@ -106,14 +105,7 @@ async function request(path, params = {}) {
           : error?.code || error?.message || "Unknown error";
       throw error;
     }
-  })();
-
-  providerInflightRequests.set(cacheKey, requestPromise);
-  try {
-    return await requestPromise;
-  } finally {
-    providerInflightRequests.delete(cacheKey);
-  }
+  }, { signal });
 }
 
 function applyReleaseTypeFilter(albums, releaseTypes = []) {
@@ -156,13 +148,13 @@ function storeAlbumReleaseMappings(album) {
     );  }
 }
 
-export async function getArtistByMbid(mbid) {
-  const data = await request(`/artist/${mbid}`);
+export async function getArtistByMbid(mbid, { signal } = {}) {
+  const data = await request(`/artist/${mbid}`, {}, { signal });
   return toNormalizedArtist(data);
 }
 
-export async function getAlbumByMbid(albumMbid) {
-  const data = await request(`/album/${albumMbid}`);
+export async function getAlbumByMbid(albumMbid, { signal } = {}) {
+  const data = await request(`/album/${albumMbid}`, {}, { signal });
   const normalized = toNormalizedAlbum(data);
   storeAlbumReleaseMappings(normalized);
   return normalized;
@@ -336,9 +328,9 @@ export async function resolveAlbumByArtistAndTitle({
 
 export async function listArtistAlbums(
   artistMbid,
-  { releaseTypes = [], includeTrackCounts = false, hydrateLimit = 30 } = {},
+  { releaseTypes = [], includeTrackCounts = false, hydrateLimit = 30, signal } = {},
 ) {
-  const rawArtist = await request(`/artist/${artistMbid}`);
+  const rawArtist = await request(`/artist/${artistMbid}`, {}, { signal });
   const artist = toNormalizedArtist(rawArtist);
   let albums = (Array.isArray(rawArtist?.Albums) ? rawArtist.Albums : []).map((entry) =>
     toNormalizedArtistAlbum(entry),
@@ -356,7 +348,7 @@ export async function listArtistAlbums(
   });
 
   const safeHydrateLimit =
-    Number.isFinite(Number(hydrateLimit)) && Number(hydrateLimit) > 0
+    Number.isFinite(Number(hydrateLimit)) && Number(hydrateLimit) >= 0
       ? Math.min(100, Math.floor(Number(hydrateLimit)))
       : 30;
   await Promise.all(
@@ -366,7 +358,7 @@ export async function listArtistAlbums(
         const needsRating = includeTrackCounts;
         if (!needsDate && !needsRating) return;
 
-        const hydrated = await getAlbumByMbid(album.id);
+        const hydrated = await getAlbumByMbid(album.id, { signal });
         if (needsDate) {
           album.firstReleaseDate = hydrated.releaseDate || album.firstReleaseDate;
         }
@@ -389,8 +381,8 @@ export async function getArtistGenres(artistMbid) {
   return artist.genres || [];
 }
 
-export async function getArtistNameByMbid(artistMbid) {
-  const artist = await getArtistByMbid(artistMbid);
+export async function getArtistNameByMbid(artistMbid, { signal } = {}) {
+  const artist = await getArtistByMbid(artistMbid, { signal });
   return artist.name || null;
 }
 

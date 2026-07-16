@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useDiscoverNavigation } from "../../hooks/useDiscoverNavigation";
 import {
@@ -29,8 +29,12 @@ import {
   writeReleaseListViewMode,
 } from "./utils";
 import { getAlbumAddButtonLabel } from "../../utils/albumAddAction";
+import {
+  getArtistAppearsOnPage,
+  getReleaseGroupRatingsBatch,
+} from "../../utils/api/endpoints/artists.js";
 
-const APPEARS_ON_LIMIT = 250;
+const RELEASE_PAGE_SIZE = 24;
 
 const sortOptions = [
   { value: "date", label: "Date", defaultDirection: "desc" },
@@ -98,7 +102,11 @@ function ArtistReleaseListPage({ mode = "releases" }) {
   const [viewMode, setViewMode] = useState(() => readReleaseListViewMode());
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [visibleCoverIds, setVisibleCoverIds] = useState([]);
+  const [visibleReleaseCount, setVisibleReleaseCount] = useState(RELEASE_PAGE_SIZE);
+  const [hasMoreAppearances, setHasMoreAppearances] = useState(true);
+  const [loadingMoreAppearances, setLoadingMoreAppearances] = useState(false);
   const optionsMenuRef = useRef(null);
+  const requestedRatingIdsRef = useRef(new Set());
   const artistNameFromNav = state?.artistName || "";
   const canAddAlbum = hasPermission("addAlbum");
 
@@ -108,11 +116,12 @@ function ArtistReleaseListPage({ mode = "releases" }) {
       existsInLibrary: typeof state?.inLibrary === "boolean" ? state.inLibrary : undefined,
       libraryArtist: state?.libraryArtist || null,
     },
-    appearsOnLimit: isAppearsOn ? APPEARS_ON_LIMIT : null,
+    appearsOnLimit: isAppearsOn ? RELEASE_PAGE_SIZE : null,
   });
 
   const {
     artist,
+    setArtist,
     libraryArtist,
     setLibraryArtist,
     libraryAlbums,
@@ -164,6 +173,10 @@ function ArtistReleaseListPage({ mode = "releases" }) {
       ),
     [releaseGroups, selectedTab, sortDirection, sortKey],
   );
+  const renderedReleaseGroups = useMemo(
+    () => filteredReleaseGroups.slice(0, visibleReleaseCount),
+    [filteredReleaseGroups, visibleReleaseCount],
+  );
 
   useArtistSearchFocus({
     navigate,
@@ -172,8 +185,97 @@ function ArtistReleaseListPage({ mode = "releases" }) {
   });
 
   useEffect(() => {
-    setVisibleCoverIds(filteredReleaseGroups.map((item) => item.id).filter(Boolean));
-  }, [filteredReleaseGroups]);
+    setVisibleCoverIds(renderedReleaseGroups.map((item) => item.id).filter(Boolean));
+  }, [renderedReleaseGroups]);
+
+  useEffect(() => {
+    setVisibleReleaseCount(RELEASE_PAGE_SIZE);
+    setHasMoreAppearances(true);
+    setLoadingMoreAppearances(false);
+    requestedRatingIdsRef.current = new Set();
+  }, [isAppearsOn, mbid]);
+
+  useEffect(() => {
+    if (isAppearsOn || loadingReleases) return;
+    const ids = renderedReleaseGroups
+      .map((item) => item?.id)
+      .filter((id) => id && !requestedRatingIdsRef.current.has(id));
+    if (!ids.length) return;
+    ids.forEach((id) => requestedRatingIdsRef.current.add(id));
+    let cancelled = false;
+    getReleaseGroupRatingsBatch(ids)
+      .then((data) => {
+        if (cancelled) return;
+        const ratings = data?.ratings || {};
+        setArtist((previous) => {
+          if (!previous) return previous;
+          return {
+            ...previous,
+            "release-groups": (previous["release-groups"] || []).map((releaseGroup) => {
+              const update = ratings[releaseGroup.id];
+              if (!update) return releaseGroup;
+              return {
+                ...releaseGroup,
+                rating: update.rating || releaseGroup.rating || null,
+                "first-release-date":
+                  releaseGroup["first-release-date"] || update.firstReleaseDate || null,
+              };
+            }),
+          };
+        });
+      })
+      .catch(() => {
+        ids.forEach((id) => requestedRatingIdsRef.current.delete(id));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAppearsOn, loadingReleases, renderedReleaseGroups, setArtist]);
+
+  const loadNextPage = useCallback(async () => {
+    if (visibleReleaseCount < filteredReleaseGroups.length) {
+      setVisibleReleaseCount((current) => current + RELEASE_PAGE_SIZE);
+      return;
+    }
+    if (!isAppearsOn || !hasMoreAppearances || loadingMoreAppearances) return;
+
+    setLoadingMoreAppearances(true);
+    try {
+      const data = await getArtistAppearsOnPage(mbid, {
+        offset: releaseGroups.length,
+        limit: RELEASE_PAGE_SIZE,
+        excludeIds: releaseGroups.map((item) => item.id).filter(Boolean),
+      });
+      const items = Array.isArray(data?.items) ? data.items : [];
+      if (items.length) {
+        setArtist((previous) => {
+          if (!previous) return previous;
+          const existing = previous["appears-on-release-groups"] || [];
+          const byId = new Map(existing.map((item) => [item.id, item]));
+          items.forEach((item) => byId.set(item.id, item));
+          return {
+            ...previous,
+            "appears-on-release-groups": [...byId.values()],
+          };
+        });
+        setVisibleReleaseCount((current) => current + items.length);
+      }
+      setHasMoreAppearances(Boolean(data?.hasMore));
+    } catch {
+      // Keep the button available so the user can retry a transient failure.
+    } finally {
+      setLoadingMoreAppearances(false);
+    }
+  }, [
+    filteredReleaseGroups.length,
+    hasMoreAppearances,
+    isAppearsOn,
+    loadingMoreAppearances,
+    mbid,
+    releaseGroups,
+    setArtist,
+    visibleReleaseCount,
+  ]);
 
   useEffect(() => {
     if (!optionsOpen) return undefined;
@@ -459,8 +561,24 @@ function ArtistReleaseListPage({ mode = "releases" }) {
       </div>
 
       <div className={viewMode === "grid" ? "artist-albums-grid" : "artist-release-list"}>
-        {filteredReleaseGroups.map((releaseGroup) => renderReleaseCard(releaseGroup))}
+        {renderedReleaseGroups.map((releaseGroup) => renderReleaseCard(releaseGroup))}
       </div>
+      {visibleReleaseCount < filteredReleaseGroups.length ||
+      (isAppearsOn && hasMoreAppearances) ? (
+        <div className="artist-loading" aria-live="polite">
+          <button
+            type="button"
+            className="btn btn-surface"
+            onClick={loadNextPage}
+            disabled={loadingMoreAppearances}
+          >
+            {loadingMoreAppearances ? (
+              <Loader className="artist-icon-sm animate-spin" />
+            ) : null}
+            Load more
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -142,7 +142,8 @@ export const getDownloadStatus = async (albumIds) => {
 export const refreshLibraryArtist = (mbid) =>
   postData(`/library/artists/${mbid}/refresh`);
 
-export const getRequests = () => getData("/requests");
+export const getRequests = ({ refresh = false } = {}) =>
+  getData("/requests", { params: refresh ? { refresh: 1 } : {} });
 
 export const getRecentlyAdded = () => getData("/library/recent");
 
