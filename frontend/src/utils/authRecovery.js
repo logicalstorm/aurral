@@ -10,6 +10,14 @@ const REAUTH_MAX_ATTEMPTS = 3;
 export const isProxyAuthActive = () =>
   globalThis?.sessionStorage?.getItem(PROXY_AUTH_KEY) === "1";
 
+export const syncProxyAuthFromBootstrap = (bootstrap) => {
+  if (bootstrap?.proxyAuthEnabled) {
+    globalThis?.sessionStorage?.setItem(PROXY_AUTH_KEY, "1");
+  } else {
+    globalThis?.sessionStorage?.removeItem(PROXY_AUTH_KEY);
+  }
+};
+
 export const registerReauthAttempt = () => {
   const storage = globalThis?.sessionStorage;
   if (!storage) return true;

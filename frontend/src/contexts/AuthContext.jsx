@@ -11,7 +11,7 @@ import {
   loginApi,
   logoutApi,
 } from "../utils/api/endpoints/auth.js";
-import { PROXY_AUTH_KEY, isProxyAuthActive } from "../utils/authRecovery.js";
+import { isProxyAuthActive, syncProxyAuthFromBootstrap } from "../utils/authRecovery.js";
 
 const AuthContext = createContext(null);
 
@@ -41,14 +41,14 @@ export const AuthProvider = ({ children }) => {
       setAuthRequired(isRequired);
 
       if (isRequired && bootstrap.user) {
-        globalThis?.sessionStorage?.setItem(PROXY_AUTH_KEY, "1");
+        syncProxyAuthFromBootstrap(bootstrap);
         setUser(bootstrap.user);
         setIsAuthenticated(true);
         setIsLoading(false);
         return;
       }
 
-      globalThis?.sessionStorage?.removeItem(PROXY_AUTH_KEY);
+      syncProxyAuthFromBootstrap();
 
       if (!isRequired) {
         setUser(

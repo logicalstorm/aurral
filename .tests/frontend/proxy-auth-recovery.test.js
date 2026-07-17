@@ -11,6 +11,29 @@ const createStorage = (initial = {}) => {
   };
 };
 
+test("bearer-authenticated bootstrap does not enable proxy auth", async (t) => {
+  const originalSessionStorage = globalThis.sessionStorage;
+  const vite = await createServer({
+    root: "frontend",
+    server: { middlewareMode: true },
+    appType: "custom",
+    optimizeDeps: { noDiscovery: true },
+  });
+
+  t.after(async () => {
+    await vite.close();
+    globalThis.sessionStorage = originalSessionStorage;
+  });
+
+  globalThis.sessionStorage = createStorage({ "aurral:proxy-auth": "1" });
+  const { isProxyAuthActive, syncProxyAuthFromBootstrap } = await vite.ssrLoadModule(
+    "/src/utils/authRecovery.js",
+  );
+
+  syncProxyAuthFromBootstrap({ proxyAuthEnabled: false, user: { id: 1 } });
+  assert.equal(isProxyAuthActive(), false);
+});
+
 test("proxy-auth API 401 navigates the top-level page through the reauth route", async (t) => {
   const originalGlobals = {
     fetch: globalThis.fetch,
