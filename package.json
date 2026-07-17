@@ -35,5 +35,11 @@
     "request"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "allowScripts": {
+    "bcrypt@6.0.0": true,
+    "better-sqlite3@12.10.0": true,
+    "fsevents@2.3.3": true,
+    "sharp@0.34.5": true
+  }
 }
