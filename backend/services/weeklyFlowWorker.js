@@ -21,7 +21,13 @@ import {
 
 const DEFAULT_CONCURRENCY = 3;
 const MIN_CONCURRENCY = 1;
-const MAX_CONCURRENCY = 3;
+// GOJ customization: raised from upstream's 3 to 5, temporarily, for the
+// initial big-library ingest (2026-07-18 through ~2026-08-17 — Ryan's own
+// time-boxed call). Revert to 3 after that window — this exists upstream to
+// avoid the Soulseek network flagging/banning an account for too many
+// simultaneous connections, not an arbitrary number. See weeklyFlow.js's
+// matching route-level validation, which was raised alongside this.
+const MAX_CONCURRENCY = 5;
 const DEFAULT_PREFERRED_FORMAT = "flac";
 const DEFAULT_PREFERRED_FORMAT_STRICT = false;
 const FLOW_WORKER_RETRY_CYCLE_OPTIONS_MINUTES = [15, 30, 60, 360, 720, 1440];

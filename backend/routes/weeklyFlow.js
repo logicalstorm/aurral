@@ -1620,9 +1620,15 @@ router.put("/worker/settings", requireAdmin, async (req, res) => {
   } = req.body || {};
   if (concurrency !== undefined) {
     const parsed = Number(concurrency);
-    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 3) {
+    // GOJ customization: raised from the upstream 1-3 ceiling to 1-5,
+    // temporarily, for the initial big-library ingest (2026-07-18 through
+    // ~2026-08-17 — Ryan's own explicit, time-boxed call). The original
+    // upstream cap exists to avoid the Soulseek network flagging/banning an
+    // account for too many simultaneous connections — revert this back to
+    // 1-3 after that window, don't leave it raised indefinitely.
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
       return res.status(400).json({
-        error: "concurrency must be an integer between 1 and 3",
+        error: "concurrency must be an integer between 1 and 5",
       });
     }
   }
