@@ -197,6 +197,30 @@ export function normalizeAlbumSearchItem(item, lookup = {}) {
   return normalized;
 }
 
+// GOJ customization: MusicBrainz classifies live recordings, bootlegs,
+// broadcasts, and compilations under the same primary "Album"/"EP"/"Single"
+// type as genuine studio releases — for heavily-taped artists this can mean
+// hundreds of non-studio entries outnumbering the real discography 30-to-1.
+// Aurral's own releaseTypes setting only restricts primaryType and never
+// reliably reached the frontend's rendered list in practice, so this is a
+// hard default applied server-side regardless of any releaseTypes query —
+// "studio releases only" is the out-of-box experience here, not opt-in.
+export function isStudioRelease(item) {
+  // Field names vary by call site: raw MusicBrainz release-groups use
+  // "primary-type"/"secondary-types", the brainzmash provider's search
+  // results use bare "type", and normalizeAlbumItem's own output uses
+  // "primaryType"/"secondaryTypes" — check all three rather than assume one.
+  const primaryType = String(
+    item?.primaryType || item?.["primary-type"] || item?.type || "",
+  ).trim();
+  const secondaryTypes = Array.isArray(
+    item?.secondaryTypes || item?.["secondary-types"],
+  )
+    ? item.secondaryTypes || item["secondary-types"]
+    : [];
+  return PRIMARY_RELEASE_TYPES.has(primaryType) && secondaryTypes.length === 0;
+}
+
 export function matchesAlbumReleaseTypeFilter(item, selectedReleaseTypes = []) {
   const selected = normalizeAlbumReleaseTypesFilter(selectedReleaseTypes);
   if (selected.length === 0) return true;
@@ -277,7 +301,14 @@ export async function searchAlbums(
     releaseTypes: selectedReleaseTypes,
     sort: normalizedSort,
   });
-  const albumLookup = await getAlbumLibraryLookup(result.items.map((item) => item.id));
+  // Filtering happens after the provider's own pagination, so a page that
+  // was mostly bootlegs/live sets can come back thin — a known tradeoff of
+  // doing this post-fetch rather than pushing it into the provider query.
+  // hasMore still reflects the provider's real remaining-page state (not
+  // recomputed against the filtered count), so pagination continues to
+  // advance correctly even on a page that filtered down hard.
+  const studioItems = result.items.filter(isStudioRelease);
+  const albumLookup = await getAlbumLibraryLookup(studioItems.map((item) => item.id));
   return {
     scope: "album",
     query,
@@ -285,7 +316,7 @@ export async function searchAlbums(
     count: result.count,
     offset: result.offset,
     hasMore: result.offset + result.items.length < result.count,
-    items: result.items.map((item) =>
+    items: studioItems.map((item) =>
       normalizeAlbumItem(item, albumLookup.get(item.id)),
     ),
   };

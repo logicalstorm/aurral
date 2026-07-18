@@ -10,6 +10,7 @@ import { cacheMiddleware } from "../../../middleware/cache.js";
 import { requireAuth } from "../../../middleware/requirePermission.js";
 import { pendingArtistRequests } from "../utils.js";
 import { getArtistByMbid } from "../../../services/metadataProvider.js";
+import { isStudioRelease } from "../../../services/searchService.js";
 
 export default function registerDetails(router) {
   const toLegacyRelations = (metadataArtist) =>
@@ -223,7 +224,9 @@ export default function registerDetails(router) {
         const metadataArtist = coreOnly
           ? null
           : await getArtistByMbid(artistMbid).catch(() => null);
-        const releaseGroups = await musicbrainzGetArtistReleaseGroups(artistMbid, selectedReleaseTypes);
+        const releaseGroups = (
+          await musicbrainzGetArtistReleaseGroups(artistMbid, selectedReleaseTypes)
+        ).filter(isStudioRelease);
         const tagPayload = coreOnly
           ? { tags: [], genres: [] }
           : await getArtistTagPayload(
@@ -277,11 +280,12 @@ export default function registerDetails(router) {
         const tagPayload = coreOnly
           ? { tags: [], genres: [] }
           : await getArtistTagPayload(resolvedMbid, name, metadataArtist);
-        const releaseGroups =
+        const releaseGroups = (
           await musicbrainzGetArtistReleaseGroups(
             resolvedMbid,
             selectedReleaseTypes,
-          );
+          )
+        ).filter(isStudioRelease);
         return {
           id: resolvedMbid,
           name,
